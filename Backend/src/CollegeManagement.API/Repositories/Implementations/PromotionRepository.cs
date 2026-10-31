@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Promotion;
@@ -23,17 +24,14 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        private Task OpenAsync() => Task.CompletedTask;
-
         // ============================================================
         // 1. GET ELIGIBLE STUDENTS
         // ============================================================
         public async Task<IEnumerable<EligibleStudentDto>> GetEligibleStudentsAsync(
-            PromotionEligibilityQuery q)
+            PromotionEligibilityQuery q,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
-            return await Connection.QueryAsync<EligibleStudentDto>(
+            var command = new CommandDefinition(
                 "sp_GetEligiblePromotionStudents",
                 new
                 {
@@ -53,14 +51,18 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_EligibilityStatus = q.EligibilityStatus,
                     p_CampusId = q.CampusId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            return await Connection.QueryAsync<EligibleStudentDto>(command);
         }
 
         // ============================================================
         // 2. PREVIEW
         // ============================================================
         public async Task<PromotionPreviewResponse> PreviewAsync(
-            PromotionPreviewRequest request)
+            PromotionPreviewRequest request,
+            CancellationToken cancellationToken = default)
         {
             var students = await GetEligibleStudentsAsync(
                 new PromotionEligibilityQuery
@@ -78,7 +80,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     TargetGroupId = request.TargetGroupId,
                     TargetSection = request.TargetSection,
                     TargetMedium = request.TargetMedium
-                });
+                },
+                cancellationToken);
 
             var byId = students.ToDictionary(x => x.StudentId);
 
@@ -108,33 +111,27 @@ namespace CollegeManagement.API.Repositories.Implementations
                             StudentId = studentId,
                             StudentName = string.Empty,
                             EligibilityStatus = "Not Eligible",
-                            EligibilityReason =
-                                "Student is not available in the selected source cohort or already has an active promotion."
+                            EligibilityReason = "Student is not available in the selected source cohort or already has an active promotion."
                         });
                 }
             }
 
-            response.EligibleCount =
-                response.Students.Count(x =>
-                    x.EligibilityStatus.Equals(
-                        "Eligible",
-                        StringComparison.OrdinalIgnoreCase));
+            response.EligibleCount = response.Students.Count(x =>
+                x.EligibilityStatus.Equals("Eligible", StringComparison.OrdinalIgnoreCase));
 
-            response.NotEligibleCount =
-                response.Students.Count - response.EligibleCount;
+            response.NotEligibleCount = response.Students.Count - response.EligibleCount;
 
             return response;
         }
 
         // ============================================================
-        // 3. EXECUTE PROMOTION
+        // 3. EXECUTE PROMOTION (BULK ATOMIC OPERATION)
         // ============================================================
         public async Task<PromotionExecutionResponse> PromoteStudentsAsync(
             PromoteStudentsRequest request,
-            string performedBy = "System")
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
             var preview = await PreviewAsync(
                 new PromotionPreviewRequest
                 {
@@ -153,7 +150,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     TargetMedium = request.TargetMedium,
 
                     StudentIds = request.StudentIds
-                });
+                },
+                cancellationToken);
 
             var response = new PromotionExecutionResponse
             {
@@ -168,21 +166,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         StudentId = item.StudentId,
                         StudentName = item.StudentName,
-                        PromotionStatus =
-                            item.EligibilityStatus.Equals(
-                                "Eligible",
-                                StringComparison.OrdinalIgnoreCase)
-                                ? "Promoted"
-                                : "Failed",
+                        PromotionStatus = item.EligibilityStatus.Equals("Eligible", StringComparison.OrdinalIgnoreCase)
+                            ? "Promoted"
+                            : "Failed",
                         Message = item.EligibilityReason
                     });
             }
 
             var eligibleIds = preview.Students
-                .Where(x =>
-                    x.EligibilityStatus.Equals(
-                        "Eligible",
-                        StringComparison.OrdinalIgnoreCase))
+                .Where(x => x.EligibilityStatus.Equals("Eligible", StringComparison.OrdinalIgnoreCase))
                 .Select(x => x.StudentId)
                 .Distinct()
                 .ToList();
@@ -193,76 +185,43 @@ namespace CollegeManagement.API.Repositories.Implementations
                 return response;
             }
 
-            using var transaction = Connection.BeginTransaction();
-
-            try
-            {
-                int? targetAcademicLevelId = request.TargetAcademicLevelId;
-                int? targetSectionId = request.TargetSectionId;
-
-                foreach (var studentId in eligibleIds)
+            // Atomic batch execution via JSON stored procedure
+            var idsJson = JsonSerializer.Serialize(eligibleIds);
+            var command = new CommandDefinition(
+                "sp_PromoteStudents",
+                new
                 {
-                    var student = await Connection.QuerySingleOrDefaultAsync<dynamic>(
-                        "sp_GetStudentById",
-                        new { p_StudentId = studentId },
-                        transaction,
-                        commandType: CommandType.StoredProcedure);
+                    p_StudentIdsJson = idsJson,
+                    p_PromotionBatchId = response.PromotionBatchId,
+                    p_TargetAcademicYearId = request.TargetAcademicYearId,
+                    p_TargetBoardId = request.TargetBoardId,
+                    p_TargetAcademicLevelId = request.TargetAcademicLevelId,
+                    p_TargetAcademicLevel = request.TargetAcademicLevel,
+                    p_TargetGroupId = request.TargetGroupId,
+                    p_TargetSectionId = request.TargetSectionId,
+                    p_TargetSection = request.TargetSection,
+                    p_TargetMedium = request.TargetMedium,
+                    p_PromotedBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
 
-                    if (student == null)
-                    {
-                        continue;
-                    }
+            await Connection.ExecuteAsync(command);
 
-                    await Connection.ExecuteAsync(
-                        "sp_PromoteSingleStudent",
-                        new
-                        {
-                            p_StudentId = studentId,
-                            p_PromotionBatchId = response.PromotionBatchId,
-                            p_FromBoardId = student.BoardId != null ? (int?)student.BoardId : null,
-                            p_ToBoardId = request.TargetBoardId,
-                            p_FromAcademicYearId = (int)student.AcademicYearId,
-                            p_ToAcademicYearId = request.TargetAcademicYearId,
-                            p_FromClassId = student.AcademicLevelId != null ? (int?)student.AcademicLevelId : null,
-                            p_ToClassId = targetAcademicLevelId,
-                            p_FromSectionId = student.SectionId != null ? (int?)student.SectionId : null,
-                            p_ToSectionId = targetSectionId,
-                            p_FromGroupId = (int)student.GroupId,
-                            p_ToGroupId = request.TargetGroupId,
-                            p_FromAcademicLevel = (string)student.AcademicLevelName,
-                            p_ToAcademicLevel = request.TargetAcademicLevel,
-                            p_FromSection = (string)student.SectionName,
-                            p_ToSection = request.TargetSection,
-                            p_PromotedBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
-                            p_TargetMedium = request.TargetMedium
-                        },
-                        transaction,
-                        commandType: CommandType.StoredProcedure);
-                }
+            response.PromotedCount = eligibleIds.Count;
+            response.FailedCount = response.TotalRequested - response.PromotedCount;
 
-                transaction.Commit();
-
-                response.PromotedCount = eligibleIds.Count;
-                response.FailedCount = response.TotalRequested - response.PromotedCount;
-
-                return response;
-            }
-            catch
-            {
-                transaction.Rollback();
-                throw;
-            }
+            return response;
         }
 
         // ============================================================
         // 4. PROMOTION HISTORY
         // ============================================================
         public async Task<IEnumerable<PromotionHistoryDto>> GetHistoryAsync(
-            PromotionHistoryQuery q)
+            PromotionHistoryQuery q,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
-            return await Connection.QueryAsync<PromotionHistoryDto>(
+            var command = new CommandDefinition(
                 "sp_GetPromotionHistory",
                 new
                 {
@@ -279,81 +238,61 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_ToDate = q.ToDate,
                     p_CampusId = q.CampusId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            return await Connection.QueryAsync<PromotionHistoryDto>(command);
         }
 
         // ============================================================
-        // 5. ROLLBACK
+        // 5. ROLLBACK (DIRECT INDEX LOOKUP - NO TABLE SCAN)
         // ============================================================
         public async Task<RollbackResponse> RollbackAsync(
             RollbackPromotionRequest request,
-            string performedBy = "System")
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
+            var fetchCommand = new CommandDefinition(
+                "sp_GetPromotionHistoryById",
+                new { p_PromotionId = request.PromotionId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
 
-            using var transaction = Connection.BeginTransaction();
+            var history = await Connection.QuerySingleOrDefaultAsync<PromotionHistoryDto>(fetchCommand);
 
-            try
+            if (history == null)
             {
-                var history = (await Connection.QueryAsync<PromotionHistoryDto>(
-                    "sp_GetPromotionHistory",
-                    new
-                    {
-                        p_AcademicYearId = (int?)null,
-                        p_TargetAcademicYearId = (int?)null,
-                        p_AcademicLevel = (string?)null,
-                        p_TargetAcademicLevel = (string?)null,
-                        p_GroupId = (int?)null,
-                        p_Section = (string?)null,
-                        p_StudentId = (int?)null,
-                        p_Search = (string?)null,
-                        p_PromotionStatus = (string?)null,
-                        p_FromDate = (DateTime?)null,
-                        p_ToDate = (DateTime?)null
-                    },
-                    transaction,
-                    commandType: CommandType.StoredProcedure))
-                    .FirstOrDefault(x => x.PromotionId == request.PromotionId);
-
-                if (history == null)
-                {
-                    throw new InvalidOperationException("Promotion was not found.");
-                }
-
-                if (history.RollbackStatus)
-                {
-                    throw new InvalidOperationException("Promotion has already been rolled back.");
-                }
-
-                await Connection.ExecuteAsync(
-                    "sp_RollbackPromotionRecord",
-                    new
-                    {
-                        p_PromotionId = request.PromotionId,
-                        p_RollbackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
-                        p_Reason = request.Reason
-                    },
-                    transaction,
-                    commandType: CommandType.StoredProcedure);
-
-                transaction.Commit();
-
-                return new RollbackResponse
-                {
-                    PromotionId = request.PromotionId,
-                    StudentId = history.StudentId,
-                    StudentName = history.StudentName,
-                    RollbackStatus = "RolledBack",
-                    RollbackReason = request.Reason,
-                    RolledBackAt = DateTime.UtcNow,
-                    RolledBackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
-                };
+                throw new InvalidOperationException("Promotion was not found.");
             }
-            catch
+
+            if (history.RollbackStatus)
             {
-                transaction.Rollback();
-                throw;
+                throw new InvalidOperationException("Promotion has already been rolled back.");
             }
+
+            var rollbackCommand = new CommandDefinition(
+                "sp_RollbackPromotionRecord",
+                new
+                {
+                    p_PromotionId = request.PromotionId,
+                    p_RollbackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
+                    p_Reason = request.Reason
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            await Connection.ExecuteAsync(rollbackCommand);
+
+            return new RollbackResponse
+            {
+                PromotionId = request.PromotionId,
+                StudentId = history.StudentId,
+                StudentName = history.StudentName,
+                RollbackStatus = "RolledBack",
+                RollbackReason = request.Reason,
+                RolledBackAt = DateTime.UtcNow,
+                RolledBackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
+            };
         }
 
         // ============================================================
@@ -362,14 +301,16 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<PromotionHistoryDto?> PromoteSingleStudentAsync(
             int studentId,
             PromoteSingleStudentRequest request,
-            string performedBy = "System")
+            string performedBy = "System",
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
-            var student = await Connection.QuerySingleOrDefaultAsync<dynamic>(
+            var studentCommand = new CommandDefinition(
                 "sp_GetStudentById",
                 new { p_StudentId = studentId },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            var student = await Connection.QuerySingleOrDefaultAsync<dynamic>(studentCommand);
 
             if (student == null)
             {
@@ -397,7 +338,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     TargetSection = request.TargetSection,
                     TargetMedium = request.TargetMedium,
                     StudentIds = new List<int> { studentId }
-                });
+                },
+                cancellationToken);
 
             if (preview.EligibleCount == 0)
             {
@@ -405,40 +347,52 @@ namespace CollegeManagement.API.Repositories.Implementations
                 throw new CollegeManagement.API.Exceptions.ValidationException(reason);
             }
 
-            await PromoteStudentsAsync(
-                new PromoteStudentsRequest
+            var batchId = Guid.NewGuid().ToString("N");
+            var promoteCommand = new CommandDefinition(
+                "sp_PromoteSingleStudent",
+                new
                 {
-                    StudentIds = new List<int> { studentId },
-                    SourceAcademicYearId = sourceYearId,
-                    SourceBoardId = student.BoardId != null ? Convert.ToInt32(student.BoardId) : (int?)null,
-                    SourceAcademicLevel = sourceLevel,
-                    SourceGroupId = sourceGroupId,
-                    SourceSection = sourceSection,
-                    SourceMedium = student.Medium != null ? Convert.ToString(student.Medium) : (string?)null,
-                    TargetAcademicYearId = request.TargetAcademicYearId,
-                    TargetBoardId = request.TargetBoardId,
-                    TargetAcademicLevel = request.TargetAcademicLevel,
-                    TargetGroupId = request.TargetGroupId,
-                    TargetSection = request.TargetSection,
-                    TargetMedium = request.TargetMedium
+                    p_StudentId = studentId,
+                    p_PromotionBatchId = batchId,
+                    p_FromBoardId = student.BoardId != null ? (int?)student.BoardId : null,
+                    p_ToBoardId = request.TargetBoardId,
+                    p_FromAcademicYearId = sourceYearId,
+                    p_ToAcademicYearId = request.TargetAcademicYearId,
+                    p_FromClassId = student.AcademicLevelId != null ? (int?)student.AcademicLevelId : null,
+                    p_ToClassId = (int?)null,
+                    p_FromSectionId = student.SectionId != null ? (int?)student.SectionId : null,
+                    p_ToSectionId = (int?)null,
+                    p_FromGroupId = sourceGroupId,
+                    p_ToGroupId = request.TargetGroupId,
+                    p_FromAcademicLevel = sourceLevel,
+                    p_ToAcademicLevel = request.TargetAcademicLevel,
+                    p_FromSection = sourceSection,
+                    p_ToSection = request.TargetSection,
+                    p_PromotedBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
+                    p_TargetMedium = request.TargetMedium
                 },
-                performedBy);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
 
-            return (await GetHistoryAsync(
+            await Connection.ExecuteAsync(promoteCommand);
+
+            var historyList = await GetHistoryAsync(
                 new PromotionHistoryQuery
                 {
                     StudentId = studentId
-                })).FirstOrDefault();
+                },
+                cancellationToken);
+
+            return historyList.FirstOrDefault();
         }
 
         // ============================================================
         // 7. GROUP ALLOCATION
         // ============================================================
         public async Task<AllocationResponse> AllocateGroupAsync(
-            GroupAllocationRequest request)
+            GroupAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
             var response = new AllocationResponse();
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
@@ -446,7 +400,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 try
                 {
                     var json = JsonSerializer.Serialize(ids);
-                    await Connection.ExecuteAsync(
+                    var command = new CommandDefinition(
                         "sp_AllocateStudentGroup",
                         new
                         {
@@ -455,7 +409,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_TargetAcademicLevelId = request.TargetAcademicLevelId,
                             p_TargetGroupId = request.TargetGroupId
                         },
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken);
+
+                    await Connection.ExecuteAsync(command);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -487,13 +444,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         // ============================================================
-        // 7b. PROGRAM ALLOCATION
+        // 8. PROGRAM ALLOCATION
         // ============================================================
         public async Task<AllocationResponse> AllocateProgramAsync(
-            ProgramAllocationRequest request)
+            ProgramAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
             var response = new AllocationResponse();
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
@@ -501,7 +457,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 try
                 {
                     var json = JsonSerializer.Serialize(ids);
-                    await Connection.ExecuteAsync(
+                    var command = new CommandDefinition(
                         "sp_AllocateStudentProgram",
                         new
                         {
@@ -511,7 +467,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_TargetGroupId = request.TargetGroupId,
                             p_TargetProgramId = request.TargetProgramId
                         },
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken);
+
+                    await Connection.ExecuteAsync(command);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -543,13 +502,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         // ============================================================
-        // 8. SECTION ALLOCATION
+        // 9. SECTION ALLOCATION
         // ============================================================
         public async Task<AllocationResponse> AllocateSectionAsync(
-            SectionAllocationRequest request)
+            SectionAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
             var response = new AllocationResponse();
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
@@ -557,7 +515,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 try
                 {
                     var json = JsonSerializer.Serialize(ids);
-                    await Connection.ExecuteAsync(
+                    var command = new CommandDefinition(
                         "sp_AllocateStudentSection",
                         new
                         {
@@ -567,7 +525,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_TargetGroupId = request.TargetGroupId,
                             p_TargetSectionId = request.TargetSectionId
                         },
-                        commandType: CommandType.StoredProcedure);
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken);
+
+                    await Connection.ExecuteAsync(command);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -599,15 +560,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         // ============================================================
-        // 9. PROMOTION REPORT
+        // 10. PROMOTION REPORT (100% SP & DAPPER - NO EF CORE LINQ)
         // ============================================================
         public async Task<PromotionReportResponse> GetPromotionReportAsync(
-            PromotionReportQuery q)
+            PromotionReportQuery q,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
-
-            var historyItems = await Connection.QueryAsync<PromotionHistoryDto>(
-                "sp_GetPromotionHistory",
+            var command = new CommandDefinition(
+                "sp_GetPromotionReport",
                 new
                 {
                     p_AcademicYearId = q.AcademicYearId,
@@ -616,32 +576,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_TargetAcademicLevel = q.TargetAcademicLevel,
                     p_GroupId = q.GroupId,
                     p_Section = q.Section,
-                    p_StudentId = (int?)null,
-                    p_Search = (string?)null,
                     p_PromotionStatus = q.PromotionStatus,
-                    p_FromDate = (DateTime?)null,
-                    p_ToDate = (DateTime?)null
+                    p_CampusId = q.CampusId
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
 
-            if (q.CampusId.HasValue) { var validStudents = await _context.Students.Where(s => s.CampusId == q.CampusId.Value).Select(s => s.StudentId).ToListAsync(); historyItems = historyItems.Where(x => validStudents.Contains(x.StudentId)).ToList(); } var details = historyItems.Select(x => new PromotionReportDetailDto
-            {
-                PromotionId = x.PromotionId,
-                StudentId = x.StudentId,
-                AdmissionNo = x.AdmissionNo,
-                StudentName = x.StudentName,
-                SourceAcademicYear = x.SourceAcademicYear,
-                SourceLevel = x.SourceAcademicLevel,
-                TargetAcademicYear = x.TargetAcademicYear,
-                TargetLevel = x.TargetAcademicLevel,
-                SourceGroup = x.SourceGroup,
-                TargetGroup = x.TargetGroup,
-                SourceSection = x.SourceSection,
-                TargetSection = x.TargetSection,
-                EligibilityStatus = x.RollbackStatus ? "Not Eligible" : "Eligible",
-                PromotionStatus = x.PromotionStatus,
-                PromotionDate = x.PromotionDate
-            }).ToList();
+            var details = (await Connection.QueryAsync<PromotionReportDetailDto>(command)).ToList();
 
             return new PromotionReportResponse
             {

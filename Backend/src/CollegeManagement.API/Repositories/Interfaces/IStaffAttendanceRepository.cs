@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using CollegeManagement.API.DTOs.Attendance.Responses;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
 using CollegeManagement.API.Enums;
@@ -28,5 +29,10 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
         Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId);
         Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId);
+
+        // Helper & Overview contracts
+        Task<int> ResolveStaffIdByUserIdAsync(int userId);
+        Task<YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId, int? campusId = null);
+        Task<StaffImportLookupContext> GetStaffImportContextAsync(int? campusId = null);
     }
 }

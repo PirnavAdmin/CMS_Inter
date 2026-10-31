@@ -1,289 +1,248 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Interfaces;
-using System.Threading.Tasks;
-using System.Linq;
-using CollegeManagement.API.Models.Transport;
+using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Transport;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
 {
+    public class DriverStudentAttendanceRequest
+    {
+        public long? TripId { get; set; }
+        public string Status { get; set; } = "Picked Up";
+    }
+
+    public class DriverBulkAttendanceRequest
+    {
+        public string? Stop { get; set; }
+        public string? StopName { get; set; }
+        public string Status { get; set; } = "Picked Up";
+    }
+
+    public class DriverGpsTelemetryRequest
+    {
+        public decimal? Lat { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Lng { get; set; }
+        public decimal? Longitude { get; set; }
+        public decimal? Speed { get; set; }
+        public decimal? Heading { get; set; }
+    }
+
+    public class DriverContactUpdateRequest
+    {
+        public string? FullName { get; set; }
+        public string? Mobile { get; set; }
+        public string? PersonalEmail { get; set; }
+        public string? Address { get; set; }
+        public string? EmergencyContactName { get; set; }
+        public string? EmergencyContactPhone { get; set; }
+    }
+
     [ApiController]
-    [Route("api/v1/transport/driver")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/transport/driver")]
     [Authorize(Roles = "Driver,Bus Driver")]
     public class TransportDriverDashboardController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ITransportDriverDashboardService _driverDashboardService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public TransportDriverDashboardController(AppDbContext context, IJwtTokenHelper jwtTokenHelper)
+        public TransportDriverDashboardController(
+            ITransportDriverDashboardService driverDashboardService,
+            IJwtTokenHelper jwtTokenHelper)
         {
-            _context = context;
+            _driverDashboardService = driverDashboardService;
             _jwtTokenHelper = jwtTokenHelper;
         }
 
-        private async Task<long?> GetDriverIdAsync()
-        {
-            var staffId = _jwtTokenHelper.GetStaffId(User);
-            if (staffId == null) return null;
-
-            var driver = await _context.TransportDrivers
-                .FirstOrDefaultAsync(d => d.StaffId == staffId.Value);
-
-            return driver?.DriverId;
-        }
-
         [HttpGet("notifications")]
-        public async Task<IActionResult> GetNotifications()
+        public async Task<IActionResult> GetNotifications(CancellationToken ct = default)
         {
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId == null) return Unauthorized();
 
-            var notifications = await _context.DriverNotifications
-                .Where(n => n.StaffId == staffId.Value)
-                .OrderByDescending(n => n.CreatedTime)
-                .ToListAsync();
-
+            var notifications = await _driverDashboardService.GetNotificationsAsync(staffId.Value, ct);
             return Ok(new { success = true, data = notifications });
         }
 
         [HttpPost("notifications/read-all")]
-        public async Task<IActionResult> MarkNotificationsAsRead()
+        public async Task<IActionResult> MarkNotificationsAsRead(CancellationToken ct = default)
         {
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId == null) return Unauthorized();
 
-            var unread = await _context.DriverNotifications
-                .Where(n => n.StaffId == staffId.Value && n.ReadTime == null)
-                .ToListAsync();
-
-            foreach (var n in unread)
-            {
-                n.ReadTime = DateTime.UtcNow;
-            }
-
-            if (unread.Any())
-            {
-                await _context.SaveChangesAsync();
-            }
-
+            await _driverDashboardService.MarkNotificationsAsReadAsync(staffId.Value, ct);
             return Ok(new { success = true, message = "Notifications marked as read." });
         }
 
         [HttpGet("dashboard")]
-        public async Task<IActionResult> GetDashboard()
+        public async Task<IActionResult> GetDashboard(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new { assignedVehicle = (object)null, route = (object)null } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            var today = DateTime.UtcNow;
-            var assignment = await _context.TransportVehicleAssignments
-                .Include(a => a.Vehicle)
-                .Include(a => a.Route)
-                .FirstOrDefaultAsync(a => a.DriverId == driverId.Value && a.Status && !a.IsDeleted &&
-                                          (a.EffectiveFrom <= today) && (a.EffectiveTo == null || a.EffectiveTo >= today));
-
-            if (assignment == null)
+            var data = await _driverDashboardService.GetDashboardDataAsync(staffId.Value, ct);
+            if (data == null)
             {
-                return Ok(new { success = true, message = "No active assignment found.", data = new { assignedVehicle = (object)null, route = (object)null } });
+                return Ok(new { success = true, message = "No active assignment found.", data = new { assignedVehicle = (object?)null, route = (object?)null } });
             }
-
-            var data = new
-            {
-                assignedVehicle = new
-                {
-                    vehicleId = assignment.Vehicle?.VehicleId,
-                    registrationNumber = assignment.Vehicle?.RegistrationNumber,
-                    vehicleType = assignment.Vehicle?.VehicleType,
-                    capacity = assignment.Vehicle?.Capacity,
-                    assignedDate = assignment.EffectiveFrom
-                },
-                route = new
-                {
-                    routeId = assignment.Route?.RouteId,
-                    routeName = assignment.Route?.RouteName,
-                    routeCode = assignment.Route?.RouteCode,
-                    StartLocation = assignment.Route?.StartLocation,
-                    EndLocation = assignment.Route?.EndLocation
-                },
-                attendant = assignment.Attendant == null ? null : new
-                {
-                    attendantId = assignment.Attendant.AttendantId,
-                    attendantName = "Attendant " + assignment.Attendant.StaffId, // Would join to staff for real name
-                    contactNumber = "N/A"
-                },
-                assignmentId = assignment.AssignmentId
-            };
 
             return Ok(new { success = true, message = "Dashboard retrieved.", data = data });
         }
 
         [HttpGet("route")]
-        public async Task<IActionResult> GetRoute()
+        public async Task<IActionResult> GetRoute(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new { route = (object)null, pickupPoints = new object[] { } } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            var today = DateTime.UtcNow;
-            var assignment = await _context.TransportVehicleAssignments
-                .Include(a => a.Route)
-                .FirstOrDefaultAsync(a => a.DriverId == driverId.Value && a.Status && !a.IsDeleted &&
-                                          (a.EffectiveFrom <= today) && (a.EffectiveTo == null || a.EffectiveTo >= today));
-
-            if (assignment == null || assignment.Route == null)
+            var data = await _driverDashboardService.GetRouteDetailsAsync(staffId.Value, ct);
+            if (data == null)
             {
-                return Ok(new { success = true, message = "No active route found.", data = new { route = (object)null, pickupPoints = new object[] { } } });
+                return Ok(new { success = true, message = "No active route found.", data = new { route = (object?)null, pickupPoints = new object[] { } } });
             }
 
-            var pickupPoints = await _context.PickupPoints
-                .Where(p => p.RouteId == assignment.RouteId)
-                .OrderBy(p => p.PickupPointId)
-                .Select(p => new {
-                    pickupPointId = p.PickupPointId,
-                    stopName = p.PickupPointName,
-                    pickupTime = p.PickupTime,
-                    dropTime = p.DropTime
-                })
-                .ToListAsync();
-
-            var routeData = new
-            {
-                routeId = assignment.Route.RouteId,
-                routeName = assignment.Route.RouteName,
-                routeCode = assignment.Route.RouteCode,
-                StartLocation = assignment.Route.StartLocation,
-                EndLocation = assignment.Route.EndLocation,
-                DistanceKm = assignment.Route.DistanceKm,
-                EstimatedDurationMinutes = assignment.Route.EstimatedDurationMinutes
-            };
-
-            return Ok(new { success = true, message = "Route retrieved.", data = new { route = routeData, pickupPoints = pickupPoints } });
+            return Ok(new { success = true, message = "Route retrieved.", data = data });
         }
 
         [HttpGet("trips")]
-        public async Task<IActionResult> GetTrips()
+        public async Task<IActionResult> GetTrips([FromQuery] DateTime? tripDate, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new object[] { } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Trips retrieved.", driverId = driverId });
+            var data = await _driverDashboardService.GetTripsAsync(staffId.Value, tripDate, ct);
+            return Ok(new { success = true, message = "Trips retrieved.", data = data });
         }
 
         [HttpPost("trips/{tripId}/start")]
-        public async Task<IActionResult> StartTrip(long tripId)
+        public async Task<IActionResult> StartTrip(long tripId, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = $"Trip {tripId} started.", driverId = driverId });
+            var success = await _driverDashboardService.StartTripAsync(tripId, staffId.Value, ct);
+            return Ok(new { success = success, message = $"Trip {tripId} started." });
         }
 
         [HttpPost("trips/{tripId}/end")]
-        public async Task<IActionResult> EndTrip(long tripId)
+        public async Task<IActionResult> EndTrip(long tripId, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = $"Trip {tripId} ended.", driverId = driverId });
+            var success = await _driverDashboardService.EndTripAsync(tripId, staffId.Value, ct);
+            return Ok(new { success = success, message = $"Trip {tripId} ended." });
         }
 
         [HttpGet("students")]
-        public async Task<IActionResult> GetStudents()
+        public async Task<IActionResult> GetStudents(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new object[] { } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Students retrieved.", driverId = driverId });
+            var data = await _driverDashboardService.GetRouteStudentsAsync(staffId.Value, ct);
+            return Ok(new { success = true, message = "Students retrieved.", data = data });
         }
 
         [HttpPost("students/{studentId}/attendance")]
-        public async Task<IActionResult> MarkAttendance(long studentId, [FromBody] object request)
+        public async Task<IActionResult> MarkAttendance(long studentId, [FromBody] DriverStudentAttendanceRequest request, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = $"Attendance for student {studentId} marked.", driverId = driverId });
+            var success = await _driverDashboardService.UpdateStudentAttendanceAsync(
+                studentId,
+                request?.TripId ?? 0L,
+                request?.Status ?? "Picked Up",
+                ct);
+            return Ok(new { success = success, message = $"Attendance for student {studentId} marked." });
         }
 
         [HttpPost("students/attendance/bulk")]
-        public async Task<IActionResult> MarkBulkAttendance([FromBody] object request)
+        public async Task<IActionResult> MarkBulkAttendance([FromBody] DriverBulkAttendanceRequest request, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Bulk attendance marked.", driverId = driverId });
+            var stop = !string.IsNullOrWhiteSpace(request?.Stop) ? request.Stop : (request?.StopName ?? string.Empty);
+            var success = await _driverDashboardService.UpdateStudentAttendanceBulkAsync(
+                staffId.Value,
+                stop,
+                request?.Status ?? "Picked Up",
+                ct);
+            return Ok(new { success = success, message = "Bulk attendance marked." });
         }
 
         [HttpGet("gps/current")]
-        public async Task<IActionResult> GetCurrentGps()
+        public async Task<IActionResult> GetCurrentGps(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new { lat = 0, lng = 0 } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Current GPS location retrieved.", driverId = driverId });
+            var data = await _driverDashboardService.GetCurrentGpsAsync(staffId.Value, ct);
+            return Ok(new { success = true, message = "Current GPS location retrieved.", data = data });
         }
 
         [HttpPost("gps/location")]
-        public async Task<IActionResult> UpdateGpsLocation([FromBody] object request)
+        public async Task<IActionResult> UpdateGpsLocation([FromBody] DriverGpsTelemetryRequest request, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "GPS location updated.", driverId = driverId });
+            decimal lat = request?.Lat ?? request?.Latitude ?? 0m;
+            decimal lng = request?.Lng ?? request?.Longitude ?? 0m;
+            decimal speed = request?.Speed ?? 0m;
+            decimal heading = request?.Heading ?? 0m;
+
+            var success = await _driverDashboardService.UpdateGpsLocationAsync(staffId.Value, lat, lng, speed, heading, ct);
+            return Ok(new { success = success, message = "GPS location updated." });
         }
 
         [HttpGet("reports")]
-        public async Task<IActionResult> GetReports()
+        public async Task<IActionResult> GetReports(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new object[] { } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Reports retrieved.", driverId = driverId });
+            var data = await _driverDashboardService.GetReportsAsync(staffId.Value, ct);
+            return Ok(new { success = true, message = "Reports retrieved.", data = data });
         }
 
         [HttpGet("profile")]
-        public async Task<IActionResult> GetProfile()
+        public async Task<IActionResult> GetProfile(CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = true, message = "No vehicle assigned yet.", data = new { } });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            var driver = await _context.TransportDrivers.FirstOrDefaultAsync(d => d.DriverId == driverId.Value);
-            if (driver == null) return NotFound(new { message = "Driver not found" });
+            var profile = await _driverDashboardService.GetProfileAsync(staffId.Value, ct);
+            if (profile == null) return NotFound(new { message = "Driver profile not found" });
 
-            // Just return basic DB info since we don't have full staff join here yet
-            var profileData = new
-            {
-                driverId = driver.DriverId,
-                licenseNumber = driver.LicenseNumber,
-                licenseExpiryDate = driver.LicenceExpiry,
-                experienceYears = driver.Experience,
-                emergencyContact = driver.EmergencyContactNumber,
-                bloodGroup = driver.BloodGroup,
-                isActive = driver.Status,
-                remarks = "N/A"
-            };
-
-            return Ok(new { success = true, message = "Profile retrieved.", data = profileData });
+            return Ok(new { success = true, message = "Profile retrieved.", data = profile });
         }
 
         [HttpPut("profile/contact")]
-        public async Task<IActionResult> UpdateProfileContact([FromBody] object request)
+        public async Task<IActionResult> UpdateProfileContact([FromBody] DriverContactUpdateRequest request, CancellationToken ct = default)
         {
-            var driverId = await GetDriverIdAsync();
-            if (driverId == null) return Ok(new { success = false, message = "No vehicle assigned yet." });
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
 
-            return Ok(new { success = true, message = "Profile contact updated.", driverId = driverId });
+            var updateDto = new DriverProfileUpdateRequestDto
+            {
+                FullName = !string.IsNullOrWhiteSpace(request?.FullName) ? request.FullName : "Driver",
+                Mobile = request?.Mobile ?? "",
+                PersonalEmail = request?.PersonalEmail ?? "",
+                Address = request?.Address ?? ""
+            };
+
+            var success = await _driverDashboardService.UpdateProfileAsync(staffId.Value, updateDto, ct);
+            return Ok(new { success = success, message = "Profile contact updated.", driverId = staffId });
         }
     }
 }
-
-
-
-
-
-
-
-

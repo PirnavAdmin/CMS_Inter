@@ -1,11 +1,11 @@
-using CollegeManagement.API.Services.Interfaces;
-using Microsoft.Extensions.Caching.Memory;
 using System;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using CollegeManagement.API.Services.Interfaces;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -49,7 +49,17 @@ namespace CollegeManagement.API.Services.Implementations
             var value = await factory();
             if (value != null)
             {
-                _memoryCache.Set(key, value, TimeSpan.FromMinutes(5));
+                var cacheEntryOptions = new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(5))
+                    .RegisterPostEvictionCallback((k, _, _, _) =>
+                    {
+                        if (k is string keyString)
+                        {
+                            _keys.TryRemove(keyString, out _);
+                        }
+                    });
+
+                _memoryCache.Set(key, value, cacheEntryOptions);
                 _keys.TryAdd(key, 0);
             }
             return value;

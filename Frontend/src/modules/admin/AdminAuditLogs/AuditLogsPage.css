@@ -31,9 +31,11 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border: 1.5px solid var(--cms-border);
+  --stat-accent: var(--cms-primary);
+  border: 1.5px solid color-mix(in srgb, var(--stat-accent) 22%, var(--cms-border));
   border-radius: 10px;
-  background: var(--cms-surface);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--stat-accent) 9%, var(--cms-surface)), var(--cms-surface) 75%);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--stat-accent) 6%, transparent);
   cursor: pointer;
   text-align: left;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -62,11 +64,18 @@
   flex-shrink: 0;
 }
 
-.audit-stat-green .audit-stat-icon-wrap {
-  background: rgba(22, 163, 74, 0.1);
-  color: #16a34a;
+.audit-stat-green,
+.audit-stat-theme {
+  --stat-accent: var(--cms-primary);
 }
-.audit-stat-green svg { color: #16a34a; }
+
+.audit-stat-green .audit-stat-icon-wrap,
+.audit-stat-theme .audit-stat-icon-wrap {
+  background: var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary) 14%, var(--cms-surface)));
+  color: var(--cms-primary);
+}
+.audit-stat-green svg,
+.audit-stat-theme svg { color: var(--cms-primary); }
 
 .audit-stat-amber .audit-stat-icon-wrap {
   background: rgba(217, 119, 6, 0.1);
@@ -136,12 +145,15 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
 
-.audit-stat-green.is-active {
-  border-color: #16a34a;
-  background: rgba(22, 163, 74, 0.06);
+.audit-stat-green.is-active,
+.audit-stat-theme.is-active {
+  border-color: var(--cms-primary);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--cms-primary) 18%, var(--cms-surface)), var(--cms-surface) 65%);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--cms-primary) 24%, transparent);
 }
-.audit-stat-green .audit-stat-active-badge {
-  background: #16a34a;
+.audit-stat-green .audit-stat-active-badge,
+.audit-stat-theme .audit-stat-active-badge {
+  background: var(--cms-primary);
   color: #ffffff;
 }
 
@@ -1227,4 +1239,11 @@
 }
 .audit-copy-tag:hover {
   background: var(--cms-border);
+}
+
+
+[data-theme="dark"] .audit-stat,
+.dark-theme .audit-stat {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--stat-accent) 14%, var(--cms-surface)), var(--cms-surface) 80%);
+  border-color: color-mix(in srgb, var(--stat-accent) 28%, var(--cms-border));
 }

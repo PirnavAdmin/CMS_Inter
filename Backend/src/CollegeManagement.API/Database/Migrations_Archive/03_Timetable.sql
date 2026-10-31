@@ -536,7 +536,7 @@ BEGIN
     DECLARE v_SectionId INT;
     DECLARE v_AcademicYearId INT;
 
-    SELECT GroupId, AcademicYearId INTO v_SectionId, v_AcademicYearId FROM Students WHERE StudentId = p_StudentId;
+    SELECT SectionId, AcademicYearId INTO v_SectionId, v_AcademicYearId FROM Students WHERE StudentId = p_StudentId;
     IF v_SectionId IS NULL THEN
         SET v_SectionId = 1;
     END IF;

@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2 } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2, Palette, Pipette } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
+import themeLightImage from "@/assets/navbar-3d/theme-light.png";
 import campusConfigImage from "@/assets/settings-3d/campus-configuration.png";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
@@ -14,6 +17,29 @@ import "./SettingsPage.css";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { palette, customColor, themePolicy, updateThemePolicy } = useTheme();
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
+  const [policyUpdating, setPolicyUpdating] = useState(false);
+
+  const currentTheme = THEME_OPTIONS.find((t) => t.id === palette);
+  const currentThemeName = palette === "custom" ? "Custom Color" : currentTheme ? currentTheme.name : "Olive";
+  const currentThemeColor = palette === "custom" ? (customColor || "#00b4d8") : currentTheme ? currentTheme.swatches[0] : "var(--cms-primary)";
+
+  const handlePolicyModeChange = async (mode) => {
+    if (policyUpdating || themePolicy?.themeMode === mode) return;
+    setPolicyUpdating(true);
+    try {
+      await updateThemePolicy({
+        themeMode: mode,
+        adminPalette: palette,
+        adminCustomColor: customColor,
+      });
+    } catch (err) {
+      console.error("Failed to update theme policy:", err);
+    } finally {
+      setPolicyUpdating(false);
+    }
+  };
 
   const settingsCards = [
     {
@@ -52,7 +78,7 @@ export default function SettingsPage() {
       description: "Create, edit and manage education boards, board codes, academic years, date ranges and status.",
       icon: Landmark,
       image: boardAcademicYearImage,
-      to: "/dashboard/board-academic-year",
+      to: "/dashboard/settings/board-academic-year",
       buttonText: "Manage Board & Academic Year",
       primary: true,
     },
@@ -87,7 +113,7 @@ export default function SettingsPage() {
       primary: true,
     },
     {
-      id: "leave-types",
+      id: "leave-types-policy",
       title: "Leave Types & Policy Configuration",
       description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
       icon: CalendarDays,
@@ -117,6 +143,16 @@ export default function SettingsPage() {
       primary: true,
     },
     {
+      id: "theme-configuration",
+      title: "Theme & Appearance",
+      description: "Select the primary color theme to style your sidebar, navbar and dashboard.",
+      icon: Palette,
+      image: themeLightImage,
+      buttonText: "Change Theme",
+      primary: true,
+      isThemeCard: true,
+    },
+    {
       id: "audit",
       title: "Audit Logs",
       description: "View system audit trail, security events and administrator activity logs.",
@@ -124,7 +160,7 @@ export default function SettingsPage() {
       image: auditLogsImage,
       to: "/dashboard/settings/audit-logs",
       buttonText: "View Audit Logs",
-      primary: false,
+      primary: true,
     },
   ];
 
@@ -140,27 +176,79 @@ export default function SettingsPage() {
             const Icon = card.icon;
             return (
               <article key={card.id} className={`settings-card ${card.primary ? "is-featured" : ""}`}>
-                <div className="settings-card-header">
-                  <div className="settings-card-icon">
-                    {card.image ? <img className="settings-card-image" src={card.image} alt="" aria-hidden="true" /> : <Icon size={20} />}
+                <div className="settings-card-body">
+                  <div className="settings-card-header">
+                    <div className="settings-card-icon">
+                      {card.image ? <img className="settings-card-image" src={card.image} alt="" aria-hidden="true" /> : <Icon size={20} />}
+                    </div>
+                    <h3>{card.title}</h3>
                   </div>
-                  <h3>{card.title}</h3>
+                  <p>{card.description}</p>
+                  {card.isThemeCard && (
+                    <div className="settings-theme-policy-bar" onClick={(e) => e.stopPropagation()}>
+                      <span className="settings-theme-policy-caption">Policy:</span>
+                      <div className="settings-theme-segmented-pill" role="radiogroup" aria-label="Theme Control Policy">
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={themePolicy?.themeMode !== "admin"}
+                          className={`settings-theme-seg-tab ${themePolicy?.themeMode !== "admin" ? "is-active" : ""}`}
+                          onClick={() => handlePolicyModeChange("independent")}
+                          disabled={policyUpdating}
+                          title="Independent: Users choose their own theme"
+                        >
+                          User Choice
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={themePolicy?.themeMode === "admin"}
+                          className={`settings-theme-seg-tab ${themePolicy?.themeMode === "admin" ? "is-active" : ""}`}
+                          onClick={() => handlePolicyModeChange("admin")}
+                          disabled={policyUpdating}
+                          title="Admin Enforced: Admin sets global theme for all users"
+                        >
+                          Admin Enforced
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <p>{card.description}</p>
                 <div className="settings-card-footer">
                   <button
                     type="button"
-                    className={`cms-btn ${card.primary ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                    onClick={() => navigate(card.to)}
+                    className="cms-btn cms-btn-primary"
+                    onClick={() => {
+                      if (card.isThemeCard) {
+                        setThemeModalOpen(true);
+                      } else {
+                        navigate(card.to);
+                      }
+                    }}
                   >
-                    {card.buttonText} <ArrowRight size={14} />
+                    {card.isThemeCard ? (themePolicy?.themeMode === "admin" ? "Global Theme" : "Change Theme") : card.buttonText} <ArrowRight size={14} />
                   </button>
+                  {card.isThemeCard ? (
+                    <span
+                      className="settings-selected-theme-pill"
+                      title={`Active: ${currentThemeName} (${themePolicy?.themeMode === "admin" ? "Admin Enforced" : "User Choice"})`}
+                    >
+                      <span className="settings-selected-theme-dot" style={{ backgroundColor: currentThemeColor }} />
+                      <span className="settings-selected-theme-name">{currentThemeName}</span>
+                    </span>
+                  ) : null}
                 </div>
               </article>
             );
           })}
         </section>
       </main>
+      <ThemePalettePicker
+        open={themeModalOpen}
+        onOpenChange={setThemeModalOpen}
+        hideTrigger={true}
+        isAdmin={true}
+      />
     </DashboardLayout>
   );
 }

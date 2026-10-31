@@ -95,7 +95,7 @@ export function InventoryDataProvider({ children }) {
     const visible = () => {
       if (document.visibilityState === "visible") refresh();
     };
-    const timer = setInterval(visible, 30000);
+    const timer = setInterval(visible, 120000);
     window.addEventListener("focus", visible);
     return () => {
       mounted.current = false;

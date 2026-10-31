@@ -160,7 +160,7 @@ namespace CollegeManagement.API.Repositories
                     p_GroupCode = request.GroupCode.Trim(),
                     p_Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                     p_IsActive = request.IsActive,
-                    p_MasterGroupId = request.MasterGroupId
+                    p_MasterGroupId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -303,6 +303,7 @@ namespace CollegeManagement.API.Repositories
 
         public async Task<bool> GroupCodeExistsAsync(
             string groupCode,
+            int? boardId = null,
             int? excludeGroupId = null,
             CancellationToken cancellationToken = default)
         {
@@ -312,6 +313,7 @@ namespace CollegeManagement.API.Repositories
                 "sp_ValidateGroupCode",
                 new
                 {
+                    p_BoardId = boardId,
                     p_GroupCode = groupCode.Trim(),
                     p_ExcludeGroupId = excludeGroupId
                 },
@@ -524,6 +526,16 @@ namespace CollegeManagement.API.Repositories
                     ? programs
                     : new List<GroupProgramDto>();
             }
+        }
+
+        public async Task<bool> UpdateProgramsAsync(
+            int groupId,
+            List<int> programIds,
+            CancellationToken cancellationToken = default)
+        {
+            if (groupId <= 0) return false;
+            await SyncGroupProgramsAsync(groupId, programIds, cancellationToken);
+            return true;
         }
     }
 }

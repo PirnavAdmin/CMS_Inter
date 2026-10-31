@@ -90,22 +90,19 @@ namespace CollegeManagement.API.Services.Implementations
 
                     foreach (var uid in studentUserIds) targetUserIds.Add(uid);
 
-                    // 3. Add Mapped Parent User Accounts
-                    var parentUserIds = await _context.ParentStudentMappings.AsNoTracking()
-                        .Where(m => matchedStudentIds.Contains(m.StudentId))
-                        .Select(m => m.ParentUserId)
-                        .Distinct()
-                        .ToListAsync();
-
-                    if (parentUserIds.Any())
+                    // 3. Add Mapped Parent User Accounts via Stored Procedure
+                    var conn = _context.Database.GetDbConnection();
+                    if (conn.State != System.Data.ConnectionState.Open)
                     {
-                        var activeParentUserIds = await _context.Users.AsNoTracking()
-                            .Where(u => u.IsActive && parentUserIds.Contains(u.UserId))
-                            .Select(u => u.UserId)
-                            .ToListAsync();
-
-                        foreach (var uid in activeParentUserIds) targetUserIds.Add(uid);
+                        await conn.OpenAsync();
                     }
+                    var activeParentUserIds = (await Dapper.SqlMapper.QueryAsync<int>(
+                        conn,
+                        "sp_GetParentUserIdsForStudents",
+                        new { p_StudentIds = string.Join(",", matchedStudentIds) },
+                        commandType: System.Data.CommandType.StoredProcedure)).ToList();
+
+                    foreach (var uid in activeParentUserIds) targetUserIds.Add(uid);
                 }
 
                 // 4. Resolve Matching Staff

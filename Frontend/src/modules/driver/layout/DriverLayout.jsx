@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import DriverSidebar from "../components/DriverSidebar.jsx";
 import DriverTopbar from "../components/DriverTopbar.jsx";
+import useTheme from "@/hooks/useTheme.js";
 import "./DriverLayout.css";
 
 export default function DriverLayout({
@@ -10,10 +11,11 @@ export default function DriverLayout({
   onSyncData,
   children,
 }) {
+  const { palette } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="dp-shell">
+    <div className="dp-shell" data-dashboard-palette={palette}>
       <DriverSidebar
         activeTab={activeTab}
         onSelectTab={onSelectTab}

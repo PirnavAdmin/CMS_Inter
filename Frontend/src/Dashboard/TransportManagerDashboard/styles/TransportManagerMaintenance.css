@@ -1,0 +1,7 @@
+/* Transport Manager Maintenance Styles */
+
+.tm-maintenance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}

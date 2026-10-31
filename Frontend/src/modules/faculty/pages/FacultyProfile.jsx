@@ -532,7 +532,7 @@ export default function FacultyProfile() {
 
       // Guide border
       ctx.save();
-      ctx.strokeStyle = "#6F8400";
+      ctx.strokeStyle = "var(--cms-primary)";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(left + r, top);

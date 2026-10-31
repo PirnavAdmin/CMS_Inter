@@ -89,28 +89,32 @@
   height: calc(var(--cms-header-height, 68px) - 16px);
   object-fit: contain;
   object-position: center;
-  filter: brightness(1.08) contrast(1.18) saturate(1.12) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+  filter: brightness(1.02) contrast(1.06) saturate(1.08) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08)) !important;
+}
+
+[data-theme="dark"] .cms-sidebar .cms-brand-logo {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.75)) brightness(1.05) !important;
 }
 
 /* ---------- Staff Sidebar Navigation (Exact Admin Replica) ---------- */
 .cms-sidebar {
-  background: linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%) !important;
-  border-right: 1px solid rgba(91, 111, 45, 0.38) !important;
+  background: var(--cms-sidebar-surface-bg) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border) !important;
 }
 
 [data-theme="dark"] .cms-sidebar {
-  background: linear-gradient(180deg, #252d21 0%, #20271d 100%) !important;
-  border-right: 1px solid #3a4534 !important;
+  background: var(--cms-sidebar-surface-bg) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border) !important;
 }
 
 .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #fffdf5 0%, #f3f2dc 48%, #dbe5b8 100%) !important;
-  border-bottom: 1px solid rgba(91, 111, 45, 0.35) !important;
+  background: transparent !important;
+  border-bottom: 1px solid var(--cms-nav-chrome-border) !important;
 }
 
 [data-theme="dark"] .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #263221 0%, #1f2b1d 52%, #182318 100%) !important;
-  border-bottom-color: rgba(187, 204, 148, 0.24) !important;
+  background: transparent !important;
+  border-bottom-color: var(--cms-nav-chrome-border) !important;
 }
 
 .cms-sidebar .cms-nav-group {
@@ -119,11 +123,11 @@
   font-weight: 800 !important;
   letter-spacing: 1.4px !important;
   text-transform: uppercase !important;
-  color: #3b4816 !important;
+  color: var(--cms-sidebar-group-color, #3b4816) !important;
 }
 
 [data-theme="dark"] .cms-sidebar .cms-nav-group {
-  color: #a3bd7b !important;
+  color: var(--cms-sidebar-group-color, #a3bd7b) !important;
 }
 
 /* Nav links - blend into background seamlessly without white overlay */
@@ -158,7 +162,7 @@
   background: var(--cms-primary-soft, #F1F4E2) !important;
   color: var(--cms-primary-dark, #3b4800) !important;
   transform: translateX(3px) !important;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.12) !important;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.12) !important;
 }
 
 [data-theme="dark"] .cms-sidebar .cms-nav-link:hover {
@@ -172,7 +176,7 @@
   background: linear-gradient(90deg, #6F8400, #576800) !important;
   color: #ffffff !important;
   font-weight: 700 !important;
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.32) !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.32) !important;
   transform: none !important;
 }
 
@@ -244,7 +248,7 @@
   font-size: 20px;
   color: #fff;
   border: 3px solid #f4f6fb;
-  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 .sp-punch-title {
   font-size: 18px;
@@ -299,7 +303,7 @@
   align-items: center;
   gap: 8px;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.28);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.28);
 }
 .sp-punch-btn:hover {
   background: var(--cms-primary-dark, #566900);
@@ -500,7 +504,7 @@
 /* ---------- Active Lecture Hero Card ---------- */
 .sp-hero-lecture {
   background: linear-gradient(135deg, var(--cms-primary-soft, #F1F4E2) 0%, #fff 100%);
-  border: 1.5px solid rgba(111, 132, 0, 0.25);
+  border: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.25);
   border-radius: 14px;
   padding: 18px 22px;
   margin-bottom: 20px;
@@ -516,7 +520,7 @@
   letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--cms-primary-dark, #566900);
-  background: rgba(111, 132, 0, 0.15);
+  background: color-mix(in srgb, var(--cms-primary)  0.15);
   padding: 3px 8px;
   border-radius: 6px;
   display: inline-block;
@@ -587,7 +591,7 @@
 .sp-tt-cell:hover {
   border-color: var(--cms-primary, #6F8400);
   transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.18);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.18);
 }
 .sp-tt-cell strong { display: block; font-size: 12px; color: var(--cms-primary-dark, #566900); }
 .sp-tt-cell span { font-size: 10.5px; color: var(--cms-muted); }
@@ -1215,7 +1219,7 @@
 .sp-preview-edit-pill {
   background: var(--cms-primary-soft, #eef4d8);
   color: var(--cms-primary-dark, #3b4800);
-  border: 1px solid rgba(111, 132, 0, 0.28);
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.28);
   border-radius: 999px;
   padding: 6px 20px;
   font-weight: 700;

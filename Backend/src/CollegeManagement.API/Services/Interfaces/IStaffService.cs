@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Staff;
 using Microsoft.AspNetCore.Http;
@@ -21,6 +22,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto);
         Task<StaffResponseDto> UpdateStaffAsync(int id, UpdateStaffDto dto);
         Task<bool> DeleteStaffAsync(int id);
+        Task<bool> UpdateCurrentStaffContactAsync(ClaimsPrincipal user, UpdateStaffContactDto dto);
 
         Task<SendProfileLinkResponseDto> SendProfileLinkAsync(int id, SendProfileLinkRequestDto dto);
         Task<StaffBulkSendResultDto> BulkSendProfileLinksAsync(StaffBulkSendLinksDto dto);
@@ -49,6 +51,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<StaffSubjectAllocationResponseDto> AssignSubjectAsync(AssignStaffSubjectDto dto);
         Task<StaffSubjectAllocationResponseDto> UpdateSubjectAllocationAsync(int id, UpdateStaffSubjectAllocationDto dto);
         Task<bool> DeleteSubjectAllocationAsync(int id);
+        Task<bool> UnassignSubjectAsync(int staffId, string? subjectName, int? subjectId);
         Task<List<StaffSubjectAllocationResponseDto>> GetStaffSubjectAllocationsAsync(int staffId);
         Task<StaffWorkloadResponseDto?> GetStaffWorkloadAsync(int staffId);
         Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id);

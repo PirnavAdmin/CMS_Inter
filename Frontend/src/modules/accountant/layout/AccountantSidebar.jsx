@@ -1,6 +1,6 @@
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
-import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards } from "lucide-react";
+import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards, Settings } from "lucide-react";
 import logo from "@/assets/pirnav-colleges-logo.png";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 
@@ -14,7 +14,10 @@ const groups = [
     ["Attendance Impact", "payroll/attendance-impact", CalendarCheck],
     ["Financial Reports", "reports", BarChart3],
   ]],
-  ["ACCOUNT", [["My Profile", "profile", CircleUserRound]]],
+  ["ACCOUNT", [
+    ["My Profile", "profile", CircleUserRound],
+    ["Settings", "settings", Settings],
+  ]],
 ];
 
 export default function AccountantSidebar({ open, onClose }) {

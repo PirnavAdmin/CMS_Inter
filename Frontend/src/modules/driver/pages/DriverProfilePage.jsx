@@ -82,11 +82,15 @@ export default function DriverProfilePage() {
     e.preventDefault();
     try {
       setSaving(true);
-      await updateProfileContact(profileData);
+      await updateProfileContact({
+        ...profileData,
+        fullName: driverProfile.name || driverProfile.fullName || "",
+        personalEmail: driverProfile.email || "",
+      });
       triggerToast("Driver contact details updated successfully!");
       setDriverProfile((prev) => ({ ...prev, ...profileData }));
     } catch (err) {
-      triggerToast("Failed to update contact details");
+      triggerToast(err.response?.data?.message || "Failed to update contact details");
     } finally {
       setSaving(false);
     }

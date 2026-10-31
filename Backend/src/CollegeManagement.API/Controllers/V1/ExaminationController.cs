@@ -64,6 +64,12 @@ namespace CollegeManagement.API.Controllers.V1
                 return headerCampusId;
             }
 
+            var claimCampus = User?.FindFirst("CampusId")?.Value;
+            if (int.TryParse(claimCampus, out var cId) && cId > 0)
+            {
+                return cId;
+            }
+
             return 1;
         }
 

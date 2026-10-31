@@ -1,0 +1,130 @@
+/* Transport Manager Drivers Page Styles */
+
+.tm-drivers-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 0.85rem 1.25rem;
+  flex-wrap: wrap;
+}
+
+.tm-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.tm-filter-label {
+  font-weight: 600;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-filter-select {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text-primary, #0f172a);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+/* Driver Details Drawer */
+.tm-driver-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-driver-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.tm-driver-detail__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cms-primary, #3b82f6), #1d4ed8);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.tm-driver-detail__name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--cms-text-primary, #0f172a);
+  margin: 0;
+}
+
+.tm-driver-detail__id {
+  font-size: 0.825rem;
+  color: var(--cms-text-secondary, #64748b);
+  margin: 0.15rem 0 0 0;
+}
+
+.tm-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tm-detail-section__title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cms-text-secondary, #94a3b8);
+  margin: 0;
+}
+
+.tm-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.tm-detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.tm-detail-field__label {
+  font-size: 0.75rem;
+  color: var(--cms-text-secondary, #64748b);
+  font-weight: 500;
+}
+
+.tm-detail-field__value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--cms-text-primary, #0f172a);
+}
+
+.tm-assignment-card {
+  background: var(--cms-surface-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

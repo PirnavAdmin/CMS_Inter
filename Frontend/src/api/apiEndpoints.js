@@ -141,12 +141,12 @@ export const apiEndpoints = {
     list: "/api/v1/break-types",
   },
   masterGroups: {
-    list: "/api/v1/master-groups",
-    create: "/api/v1/master-groups",
-    getById: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    update: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    delete: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    status: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}/status`,
+    list: "/api/v1/groups",
+    create: "/api/v1/groups",
+    getById: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    update: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    delete: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    status: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}/status`,
   },
   groups: {
     getAll: "/api/v1/groups",
@@ -376,6 +376,8 @@ export const apiEndpoints = {
     updateStatus: (attendanceId) => `/api/v1/attendance/${attendanceId}/status`,
     lockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/lock`,
     unlockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/unlock`,
+    studentSubjects: (studentId) => `/api/v1/attendance/student/${studentId}/subjects`,
+    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${studentId}/daily-logs`,
   },
   staffAttendance: {
     load: "/api/v1/staff-attendance/load",
@@ -555,6 +557,8 @@ export const apiEndpoints = {
   promotions: {
     eligible: "/api/v1/promotions/eligible",
     preview: "/api/v1/promotions/preview",
+    feePreview: "/api/v1/promotions/fee-preview",
+    programFeePreview: (studentId, targetProgramId) => `/api/v1/promotions/program-fee-preview?studentId=${studentId}&targetProgramId=${targetProgramId}`,
     create: "/api/v1/promotions",
     student: (studentId) => `/api/v1/promotions/student/${studentId}`,
     groupAllocation: "/api/v1/promotions/group-allocation",
@@ -570,6 +574,7 @@ export const apiEndpoints = {
     received: "/api/v1/promotions/campus-transfers/received",
     approve: (id) => `/api/v1/promotions/campus-transfers/${id}/approve`,
     reject: (id) => `/api/v1/promotions/campus-transfers/${id}/reject`,
+    feePreview: (id) => `/api/v1/promotions/campus-transfers/${id}/fee-preview`,
   },
   reports: {
     dashboard: "/api/reports/dashboard",

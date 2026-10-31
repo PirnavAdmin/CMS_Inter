@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Inventory;
-using CollegeManagement.API.Models.Inventory;
 using CollegeManagement.API.Repositories.Interfaces.Inventory;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -14,21 +13,21 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
 {
     public class InventoryRepository : IInventoryRepository
     {
-        private readonly IDbConnection _dbConnection;
         private readonly AppDbContext _dbContext;
 
-        public InventoryRepository(IDbConnection dbConnection, AppDbContext dbContext)
+        public InventoryRepository(AppDbContext dbContext)
         {
-            _dbConnection = dbConnection;
-            _dbContext = dbContext;
+            _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         }
+
+        private IDbConnection Connection => _dbContext.Database.GetDbConnection();
 
         #region Dashboard
         public async Task<InventoryDashboardDto> GetDashboardSummaryAsync()
         {
             var result = new InventoryDashboardDto();
 
-            using var multi = await _dbConnection.QueryMultipleAsync(
+            using var multi = await Connection.QueryMultipleAsync(
                 "sp_Inventory_GetDashboardSummary",
                 commandType: CommandType.StoredProcedure);
 
@@ -53,7 +52,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_Status", filter.Status);
             parameters.Add("p_StockStatus", filter.StockStatus);
 
-            return await _dbConnection.QueryAsync<ItemDto>(
+            return await Connection.QueryAsync<ItemDto>(
                 "sp_Inventory_GetItems",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -61,7 +60,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
 
         public async Task<ItemDetailDto?> GetItemByIdAsync(int itemId)
         {
-            var item = await _dbConnection.QueryFirstOrDefaultAsync<ItemDetailDto>(
+            var item = await Connection.QueryFirstOrDefaultAsync<ItemDetailDto>(
                 "sp_Inventory_GetItemById",
                 new { p_ItemId = itemId },
                 commandType: CommandType.StoredProcedure);
@@ -83,523 +82,348 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_FromDate", fromDate);
             parameters.Add("p_ToDate", toDate);
 
-            return await _dbConnection.QueryAsync<ItemLedgerEntryDto>(
+            return await Connection.QueryAsync<ItemLedgerEntryDto>(
                 "sp_Inventory_GetItemLedger",
                 parameters,
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId)
+        public async Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId, string userName)
         {
-            // Verify code uniqueness
-            bool exists = await _dbContext.InventoryItems.AnyAsync(i => i.Code.ToLower() == request.Code.Trim().ToLower());
-            if (exists)
-            {
-                throw new InvalidOperationException("This item code already exists.");
-            }
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Code", request.Code.Trim());
+            parameters.Add("p_Name", request.Name.Trim());
+            parameters.Add("p_CategoryId", request.CategoryId);
+            parameters.Add("p_Unit", request.Unit?.Trim() ?? "Pieces");
+            parameters.Add("p_Type", request.Type?.Trim() ?? "Consumable");
+            parameters.Add("p_Description", request.Description?.Trim());
+            parameters.Add("p_Brand", request.Brand?.Trim());
+            parameters.Add("p_Model", request.Model?.Trim());
+            parameters.Add("p_Sku", request.Sku?.Trim());
+            parameters.Add("p_Department", request.Department?.Trim());
+            parameters.Add("p_Location", request.Location?.Trim());
+            parameters.Add("p_Rack", request.Rack?.Trim());
+            parameters.Add("p_OpeningQuantity", request.OpeningQuantity);
+            parameters.Add("p_OpeningCost", request.UnitCost);
+            parameters.Add("p_MinStock", request.MinStock);
+            parameters.Add("p_MaxStock", request.MaxStock);
+            parameters.Add("p_ReorderQty", request.ReorderQty);
+            parameters.Add("p_IssueValue", request.IssueValue);
+            parameters.Add("p_SupplierId", request.SupplierId);
+            parameters.Add("p_SupplierItemCode", request.SupplierItemCode?.Trim());
+            parameters.Add("p_PurchaseDate", request.PurchaseDate?.Date);
+            parameters.Add("p_WarrantyDate", request.WarrantyDate?.Date);
+            parameters.Add("p_Status", string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim());
+            parameters.Add("p_Remarks", request.Remarks?.Trim());
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            var item = new InventoryItem
-            {
-                Code = request.Code.Trim(),
-                Name = request.Name.Trim(),
-                CategoryId = request.CategoryId,
-                Unit = request.Unit,
-                Type = request.Type,
-                Description = request.Description,
-                Brand = request.Brand,
-                Model = request.Model,
-                Sku = request.Sku,
-                Department = request.Department,
-                Location = request.Location,
-                Rack = request.Rack,
-                OpeningQuantity = request.OpeningQuantity,
-                OpeningCost = request.UnitCost,
-                Quantity = request.OpeningQuantity,
-                UnitCost = request.UnitCost,
-                MinStock = request.MinStock,
-                MaxStock = request.MaxStock,
-                ReorderQty = request.ReorderQty,
-                IssueValue = request.IssueValue,
-                SupplierId = request.SupplierId,
-                SupplierItemCode = request.SupplierItemCode,
-                PurchaseDate = request.PurchaseDate,
-                WarrantyDate = request.WarrantyDate,
-                Status = request.Status,
-                Remarks = request.Remarks,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+            int newItemId = await Connection.QuerySingleAsync<int>(
+                "sp_Inventory_CreateItem",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            _dbContext.InventoryItems.Add(item);
-            await _dbContext.SaveChangesAsync();
-
-            // Log activity
-            _dbContext.InventoryActivities.Add(new InventoryActivity
-            {
-                ActivityDate = DateTime.UtcNow.Date,
-                ActivityText = $"Created item: {item.Name}",
-                UserId = userId,
-                CreatedAt = DateTime.UtcNow
-            });
-            await _dbContext.SaveChangesAsync();
-
-            return (await GetItemByIdAsync(item.ItemId))!;
+            return (await GetItemByIdAsync(newItemId))!;
         }
 
-        public async Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId)
+        public async Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId, string userName)
         {
-            var item = await _dbContext.InventoryItems.FindAsync(itemId);
-            if (item == null)
-            {
-                throw new KeyNotFoundException("Item not found.");
-            }
+            var parameters = new DynamicParameters();
+            parameters.Add("p_ItemId", itemId);
+            parameters.Add("p_Code", request.Code.Trim());
+            parameters.Add("p_Name", request.Name.Trim());
+            parameters.Add("p_CategoryId", request.CategoryId);
+            parameters.Add("p_Unit", request.Unit?.Trim() ?? "Pieces");
+            parameters.Add("p_Type", request.Type?.Trim() ?? "Consumable");
+            parameters.Add("p_Description", request.Description?.Trim());
+            parameters.Add("p_Brand", request.Brand?.Trim());
+            parameters.Add("p_Model", request.Model?.Trim());
+            parameters.Add("p_Sku", request.Sku?.Trim());
+            parameters.Add("p_Department", request.Department?.Trim());
+            parameters.Add("p_Location", request.Location?.Trim());
+            parameters.Add("p_Rack", request.Rack?.Trim());
+            parameters.Add("p_MinStock", request.MinStock);
+            parameters.Add("p_MaxStock", request.MaxStock);
+            parameters.Add("p_ReorderQty", request.ReorderQty);
+            parameters.Add("p_IssueValue", request.IssueValue);
+            parameters.Add("p_SupplierId", request.SupplierId);
+            parameters.Add("p_SupplierItemCode", request.SupplierItemCode?.Trim());
+            parameters.Add("p_PurchaseDate", request.PurchaseDate?.Date);
+            parameters.Add("p_WarrantyDate", request.WarrantyDate?.Date);
+            parameters.Add("p_Status", string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim());
+            parameters.Add("p_Remarks", request.Remarks?.Trim());
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            // Verify unique code
-            bool codeTaken = await _dbContext.InventoryItems.AnyAsync(i => i.ItemId != itemId && i.Code.ToLower() == request.Code.Trim().ToLower());
-            if (codeTaken)
-            {
-                throw new InvalidOperationException("This item code already exists.");
-            }
+            await Connection.ExecuteAsync(
+                "sp_Inventory_UpdateItem",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            item.Code = request.Code.Trim();
-            item.Name = request.Name.Trim();
-            item.CategoryId = request.CategoryId;
-            item.Unit = request.Unit;
-            item.Type = request.Type;
-            item.Description = request.Description;
-            item.Brand = request.Brand;
-            item.Model = request.Model;
-            item.Sku = request.Sku;
-            item.Department = request.Department;
-            item.Location = request.Location;
-            item.Rack = request.Rack;
-            item.MinStock = request.MinStock;
-            item.MaxStock = request.MaxStock;
-            item.ReorderQty = request.ReorderQty;
-            item.IssueValue = request.IssueValue;
-            item.SupplierId = request.SupplierId;
-            item.SupplierItemCode = request.SupplierItemCode;
-            item.PurchaseDate = request.PurchaseDate;
-            item.WarrantyDate = request.WarrantyDate;
-            item.Status = request.Status;
-            item.Remarks = request.Remarks;
-            item.UpdatedAt = DateTime.UtcNow;
-
-            await _dbContext.SaveChangesAsync();
-
-            // Log activity
-            _dbContext.InventoryActivities.Add(new InventoryActivity
-            {
-                ActivityDate = DateTime.UtcNow.Date,
-                ActivityText = $"Updated item: {item.Name}",
-                UserId = userId,
-                CreatedAt = DateTime.UtcNow
-            });
-            await _dbContext.SaveChangesAsync();
-
-            return (await GetItemByIdAsync(item.ItemId))!;
+            return (await GetItemByIdAsync(itemId))!;
         }
 
-        public async Task<bool> DeleteItemAsync(int itemId)
+        public async Task<bool> DeleteItemAsync(int itemId, int userId, string userName)
         {
-            var item = await _dbContext.InventoryItems.FindAsync(itemId);
-            if (item == null)
-            {
-                throw new KeyNotFoundException("Item not found.");
-            }
+            var parameters = new DynamicParameters();
+            parameters.Add("p_ItemId", itemId);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            // In accordance with inventory rules:
-            // Items with stock or transaction history cannot be deleted.
-            if (item.Quantity > 0)
-            {
-                throw new InvalidOperationException("Items with available stock cannot be deleted. Deactivate the item instead.");
-            }
+            var affected = await Connection.ExecuteScalarAsync<int?>(
+                "sp_Inventory_DeleteItem",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            bool hasMovements = await _dbContext.InventoryTransactions.AnyAsync(t => t.ItemId == itemId);
-            if (hasMovements)
-            {
-                throw new InvalidOperationException("Items with transaction history cannot be deleted. Deactivate the item instead.");
-            }
-
-            _dbContext.InventoryItems.Remove(item);
-            await _dbContext.SaveChangesAsync();
-            return true;
+            return (affected ?? 1) > 0;
         }
 
-        public async Task<bool> DeactivateItemAsync(int itemId)
+        public async Task<bool> DeactivateItemAsync(int itemId, int userId, string userName)
         {
-            var item = await _dbContext.InventoryItems.FindAsync(itemId);
-            if (item == null)
-            {
-                throw new KeyNotFoundException("Item not found.");
-            }
+            var parameters = new DynamicParameters();
+            parameters.Add("p_ItemId", itemId);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            item.Status = "Inactive";
-            item.UpdatedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
+            var affected = await Connection.ExecuteScalarAsync<int?>(
+                "sp_Inventory_DeactivateItem",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            _dbContext.InventoryActivities.Add(new InventoryActivity
-            {
-                ActivityDate = DateTime.UtcNow.Date,
-                ActivityText = $"Deactivated item: {item.Name}",
-                CreatedAt = DateTime.UtcNow
-            });
-            await _dbContext.SaveChangesAsync();
-
-            return true;
+            return (affected ?? 1) > 0;
         }
         #endregion
 
         #region Categories
         public async Task<IEnumerable<CategoryDto>> GetCategoriesAsync(bool includeInactive = false)
         {
-            var categories = await _dbContext.InventoryCategories
-                .Where(c => includeInactive || c.Status == "Active")
-                .Select(c => new CategoryDto
-                {
-                    CategoryId = c.CategoryId,
-                    Code = c.Code,
-                    Name = c.Name,
-                    Description = c.Description,
-                    Department = c.Department,
-                    Status = c.Status,
-                    Count = c.Items.Count,
-                    Value = c.Items.Sum(i => i.Quantity * i.UnitCost),
-                    Alerts = c.Items.Count(i => i.Status == "Active" && i.Quantity < i.MinStock),
-                    CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt
-                })
-                .OrderBy(c => c.Name)
-                .ToListAsync();
-
-            return categories;
+            return await Connection.QueryAsync<CategoryDto>(
+                "sp_Inventory_GetCategories",
+                new { p_IncludeInactive = includeInactive ? 1 : 0 },
+                commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<CategoryDto> SaveCategoryAsync(int? categoryId, CreateCategoryRequest request)
+        public async Task<CategoryDto> SaveCategoryAsync(int? categoryId, CreateCategoryRequest request, int userId, string userName)
         {
-            string cleanCode = request.Code.Trim();
-            string cleanName = request.Name.Trim();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CategoryId", categoryId);
+            parameters.Add("p_Code", request.Code.Trim());
+            parameters.Add("p_Name", request.Name.Trim());
+            parameters.Add("p_Description", request.Description?.Trim());
+            parameters.Add("p_Department", string.IsNullOrWhiteSpace(request.Department) ? "Administration" : request.Department.Trim());
+            parameters.Add("p_Status", string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim());
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            bool codeExists = await _dbContext.InventoryCategories
-                .AnyAsync(c => (!categoryId.HasValue || c.CategoryId != categoryId.Value) && c.Code.ToLower() == cleanCode.ToLower());
-            if (codeExists)
-            {
-                throw new InvalidOperationException("This category code already exists.");
-            }
+            int savedId = await Connection.QuerySingleAsync<int>(
+                "sp_Inventory_SaveCategory",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            bool nameExists = await _dbContext.InventoryCategories
-                .AnyAsync(c => (!categoryId.HasValue || c.CategoryId != categoryId.Value) && c.Name.ToLower() == cleanName.ToLower());
-            if (nameExists)
-            {
-                throw new InvalidOperationException("This category name already exists.");
-            }
-
-            InventoryCategory category;
-            if (categoryId.HasValue && categoryId.Value > 0)
-            {
-                category = await _dbContext.InventoryCategories.FindAsync(categoryId.Value)
-                    ?? throw new KeyNotFoundException("Category not found.");
-
-                category.Code = cleanCode;
-                category.Name = cleanName;
-                category.Description = request.Description;
-                category.Department = request.Department;
-                category.Status = request.Status;
-                category.UpdatedAt = DateTime.UtcNow;
-            }
-            else
-            {
-                category = new InventoryCategory
-                {
-                    Code = cleanCode,
-                    Name = cleanName,
-                    Description = request.Description,
-                    Department = request.Department,
-                    Status = request.Status,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                _dbContext.InventoryCategories.Add(category);
-            }
-
-            await _dbContext.SaveChangesAsync();
-
-            return (await GetCategoriesAsync(true)).First(c => c.CategoryId == category.CategoryId);
+            var categories = await GetCategoriesAsync(true);
+            return categories.First(c => c.CategoryId == savedId);
         }
 
-        public async Task<bool> DeactivateCategoryAsync(int categoryId)
+        public async Task<bool> DeactivateCategoryAsync(int categoryId, int userId, string userName)
         {
-            var category = await _dbContext.InventoryCategories.FindAsync(categoryId);
-            if (category == null) throw new KeyNotFoundException("Category not found.");
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CategoryId", categoryId);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
 
-            category.Status = "Inactive";
-            category.UpdatedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
-            return true;
+            var affected = await Connection.ExecuteScalarAsync<int?>(
+                "sp_Inventory_DeactivateCategory",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            return (affected ?? 1) > 0;
         }
         #endregion
 
         #region Suppliers
         public async Task<IEnumerable<SupplierDto>> GetSuppliersAsync(bool includeInactive = false)
         {
-            var suppliers = await _dbContext.InventorySuppliers
-                .Include(s => s.SupplierCategories)
-                    .ThenInclude(sc => sc.Category)
-                .Where(s => includeInactive || s.Status == "Active")
-                .ToListAsync();
+            var rawRows = await Connection.QueryAsync<dynamic>(
+                "sp_Inventory_GetSuppliers",
+                new { p_IncludeInactive = includeInactive ? 1 : 0 },
+                commandType: CommandType.StoredProcedure);
 
-            var supplierIds = suppliers.Select(s => s.SupplierId).ToList();
-
-            var purchases = await _dbContext.InventoryTransactions
-                .Where(t => t.SupplierId.HasValue && supplierIds.Contains(t.SupplierId.Value) &&
-                            t.MovementType == "Stock In" && t.Status == "Posted" &&
-                            t.ReturnOfId == null && t.CorrectionOfId == null)
-                .GroupBy(t => t.SupplierId!.Value)
-                .Select(g => new { SupplierId = g.Key, Total = g.Sum(t => t.TotalAmount) })
-                .ToDictionaryAsync(g => g.SupplierId, g => g.Total);
-
-            return suppliers.Select(s => new SupplierDto
+            var result = new List<SupplierDto>();
+            foreach (var r in rawRows)
             {
-                SupplierId = s.SupplierId,
-                Code = s.Code,
-                Name = s.Name,
-                ContactPerson = s.ContactPerson,
-                Phone = s.Phone,
-                AlternatePhone = s.AlternatePhone,
-                Email = s.Email,
-                Gstin = s.Gstin,
-                Pan = s.Pan,
-                Address1 = s.Address1,
-                Address2 = s.Address2,
-                City = s.City,
-                State = s.State,
-                PostalCode = s.PostalCode,
-                Country = s.Country,
-                Address = string.Join(", ", new[] { s.Address1, s.Address2, s.City, s.State, s.PostalCode, s.Country }.Where(x => !string.IsNullOrWhiteSpace(x))),
-                PaymentTerms = s.PaymentTerms,
-                BankName = s.BankName,
-                AccountHolder = s.AccountHolder,
-                AccountNumber = s.AccountNumber,
-                Ifsc = s.Ifsc,
-                Notes = s.Notes,
-                Status = s.Status,
-                CategoryIds = s.SupplierCategories.Select(sc => sc.CategoryId).ToList(),
-                SuppliedCategories = s.SupplierCategories.Select(sc => sc.Category.Name).ToList(),
-                TotalPurchases = purchases.TryGetValue(s.SupplierId, out var sum) ? sum : 0.00m,
-                CreatedAt = s.CreatedAt,
-                UpdatedAt = s.UpdatedAt
-            }).OrderBy(s => s.Name);
-        }
-
-        public async Task<SupplierDto> SaveSupplierAsync(int? supplierId, CreateSupplierRequest request)
-        {
-            string cleanCode = request.Code.Trim();
-            string cleanName = request.Name.Trim();
-
-            bool codeExists = await _dbContext.InventorySuppliers
-                .AnyAsync(s => (!supplierId.HasValue || s.SupplierId != supplierId.Value) && s.Code.ToLower() == cleanCode.ToLower());
-            if (codeExists)
-            {
-                throw new InvalidOperationException("This supplier code already exists.");
-            }
-
-            InventorySupplier supplier;
-            if (supplierId.HasValue && supplierId.Value > 0)
-            {
-                supplier = await _dbContext.InventorySuppliers
-                    .Include(s => s.SupplierCategories)
-                    .FirstOrDefaultAsync(s => s.SupplierId == supplierId.Value)
-                    ?? throw new KeyNotFoundException("Supplier not found.");
-
-                supplier.Code = cleanCode;
-                supplier.Name = cleanName;
-                supplier.ContactPerson = request.ContactPerson.Trim();
-                supplier.Phone = request.Phone.Trim();
-                supplier.AlternatePhone = request.AlternatePhone?.Trim();
-                supplier.Email = request.Email?.Trim();
-                supplier.Gstin = request.Gstin?.Trim();
-                supplier.Pan = request.Pan?.Trim();
-                supplier.Address1 = request.Address1?.Trim();
-                supplier.Address2 = request.Address2?.Trim();
-                supplier.City = request.City?.Trim();
-                supplier.State = request.State?.Trim();
-                supplier.PostalCode = request.PostalCode?.Trim();
-                supplier.Country = string.IsNullOrWhiteSpace(request.Country) ? "India" : request.Country.Trim();
-                supplier.PaymentTerms = request.PaymentTerms?.Trim();
-                supplier.BankName = request.BankName?.Trim();
-                supplier.AccountHolder = request.AccountHolder?.Trim();
-                supplier.AccountNumber = request.AccountNumber?.Trim();
-                supplier.Ifsc = request.Ifsc?.Trim();
-                supplier.Notes = request.Notes;
-                supplier.Status = request.Status;
-                supplier.UpdatedAt = DateTime.UtcNow;
-
-                // Sync categories
-                _dbContext.InventorySupplierCategories.RemoveRange(supplier.SupplierCategories);
-            }
-            else
-            {
-                supplier = new InventorySupplier
+                var s = new SupplierDto
                 {
-                    Code = cleanCode,
-                    Name = cleanName,
-                    ContactPerson = request.ContactPerson.Trim(),
-                    Phone = request.Phone.Trim(),
-                    AlternatePhone = request.AlternatePhone?.Trim(),
-                    Email = request.Email?.Trim(),
-                    Gstin = request.Gstin?.Trim(),
-                    Pan = request.Pan?.Trim(),
-                    Address1 = request.Address1?.Trim(),
-                    Address2 = request.Address2?.Trim(),
-                    City = request.City?.Trim(),
-                    State = request.State?.Trim(),
-                    PostalCode = request.PostalCode?.Trim(),
-                    Country = string.IsNullOrWhiteSpace(request.Country) ? "India" : request.Country.Trim(),
-                    PaymentTerms = request.PaymentTerms?.Trim(),
-                    BankName = request.BankName?.Trim(),
-                    AccountHolder = request.AccountHolder?.Trim(),
-                    AccountNumber = request.AccountNumber?.Trim(),
-                    Ifsc = request.Ifsc?.Trim(),
-                    Notes = request.Notes,
-                    Status = request.Status,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    SupplierId = (int)r.SupplierId,
+                    Code = (string)r.Code,
+                    Name = (string)r.Name,
+                    ContactPerson = (string)r.ContactPerson,
+                    Phone = (string)r.Phone,
+                    AlternatePhone = (string?)r.AlternatePhone,
+                    Email = (string?)r.Email,
+                    Gstin = (string?)r.Gstin,
+                    Pan = (string?)r.Pan,
+                    Address1 = (string?)r.Address1,
+                    Address2 = (string?)r.Address2,
+                    City = (string?)r.City,
+                    State = (string?)r.State,
+                    PostalCode = (string?)r.PostalCode,
+                    Country = (string)(r.Country ?? "India"),
+                    PaymentTerms = (string?)r.PaymentTerms,
+                    BankName = (string?)r.BankName,
+                    AccountHolder = (string?)r.AccountHolder,
+                    AccountNumber = (string?)r.AccountNumber,
+                    Ifsc = (string?)r.Ifsc,
+                    Notes = (string?)r.Notes,
+                    Status = (string)r.Status,
+                    TotalPurchases = (decimal)(r.TotalPurchases ?? 0.00m),
+                    CreatedAt = (DateTime)r.CreatedAt,
+                    UpdatedAt = (DateTime)r.UpdatedAt
                 };
-                _dbContext.InventorySuppliers.Add(supplier);
-            }
 
-            await _dbContext.SaveChangesAsync();
+                s.Address = string.Join(", ", new[] { s.Address1, s.Address2, s.City, s.State, s.PostalCode }
+                    .Where(p => !string.IsNullOrWhiteSpace(p)));
 
-            // Insert categories
-            if (request.CategoryIds != null && request.CategoryIds.Any())
-            {
-                foreach (var catId in request.CategoryIds.Distinct())
+                string? catIdsStr = (string?)r.CategoryIdsString;
+                if (!string.IsNullOrWhiteSpace(catIdsStr))
                 {
-                    _dbContext.InventorySupplierCategories.Add(new InventorySupplierCategory
-                    {
-                        SupplierId = supplier.SupplierId,
-                        CategoryId = catId
-                    });
+                    s.CategoryIds = catIdsStr.Split(',')
+                        .Select(id => int.TryParse(id.Trim(), out int val) ? val : 0)
+                        .Where(val => val > 0)
+                        .ToList();
                 }
-                await _dbContext.SaveChangesAsync();
+
+                string? suppliedCatsStr = (string?)r.SuppliedCategoriesString;
+                if (!string.IsNullOrWhiteSpace(suppliedCatsStr))
+                {
+                    s.SuppliedCategories = suppliedCatsStr.Split(',')
+                        .Select(name => name.Trim())
+                        .Where(name => !string.IsNullOrEmpty(name))
+                        .ToList();
+                }
+
+                result.Add(s);
             }
 
-            return (await GetSuppliersAsync(true)).First(s => s.SupplierId == supplier.SupplierId);
+            return result;
         }
 
-        public async Task<bool> DeactivateSupplierAsync(int supplierId)
+        public async Task<SupplierDto> SaveSupplierAsync(int? supplierId, CreateSupplierRequest request, int userId, string userName)
         {
-            var supplier = await _dbContext.InventorySuppliers.FindAsync(supplierId);
-            if (supplier == null) throw new KeyNotFoundException("Supplier not found.");
+            string categoryIdsCsv = request.CategoryIds != null && request.CategoryIds.Any()
+                ? string.Join(",", request.CategoryIds.Distinct())
+                : string.Empty;
 
-            supplier.Status = "Inactive";
-            supplier.UpdatedAt = DateTime.UtcNow;
-            await _dbContext.SaveChangesAsync();
-            return true;
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SupplierId", supplierId);
+            parameters.Add("p_Code", request.Code.Trim());
+            parameters.Add("p_Name", request.Name.Trim());
+            parameters.Add("p_ContactPerson", request.ContactPerson.Trim());
+            parameters.Add("p_Phone", request.Phone.Trim());
+            parameters.Add("p_AlternatePhone", request.AlternatePhone?.Trim());
+            parameters.Add("p_Email", request.Email?.Trim());
+            parameters.Add("p_Gstin", request.Gstin?.Trim());
+            parameters.Add("p_Pan", request.Pan?.Trim());
+            parameters.Add("p_Address1", request.Address1?.Trim());
+            parameters.Add("p_Address2", request.Address2?.Trim());
+            parameters.Add("p_City", request.City?.Trim());
+            parameters.Add("p_State", request.State?.Trim());
+            parameters.Add("p_PostalCode", request.PostalCode?.Trim());
+            parameters.Add("p_Country", string.IsNullOrWhiteSpace(request.Country) ? "India" : request.Country.Trim());
+            parameters.Add("p_PaymentTerms", request.PaymentTerms?.Trim());
+            parameters.Add("p_BankName", request.BankName?.Trim());
+            parameters.Add("p_AccountHolder", request.AccountHolder?.Trim());
+            parameters.Add("p_AccountNumber", request.AccountNumber?.Trim());
+            parameters.Add("p_Ifsc", request.Ifsc?.Trim());
+            parameters.Add("p_Notes", request.Notes);
+            parameters.Add("p_Status", string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim());
+            parameters.Add("p_CategoryIds", categoryIdsCsv);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
+
+            int savedId = await Connection.QuerySingleAsync<int>(
+                "sp_Inventory_SaveSupplier",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            var suppliers = await GetSuppliersAsync(true);
+            return suppliers.First(s => s.SupplierId == savedId);
+        }
+
+        public async Task<bool> DeactivateSupplierAsync(int supplierId, int userId, string userName)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SupplierId", supplierId);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_UserName", string.IsNullOrWhiteSpace(userName) ? "Store Administrator" : userName.Trim());
+
+            var affected = await Connection.ExecuteScalarAsync<int?>(
+                "sp_Inventory_DeactivateSupplier",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+
+            return (affected ?? 1) > 0;
         }
         #endregion
 
         #region Movements
         public async Task<IEnumerable<TransactionDto>> GetMovementsAsync(MovementFilterRequest filter)
         {
-            var query = _dbContext.InventoryTransactions
-                .Include(t => t.Item)
-                .Include(t => t.Supplier)
-                .Include(t => t.CorrectionOf)
-                .Include(t => t.ReturnOf)
-                .AsQueryable();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_FromDate", filter.FromDate?.Date);
+            parameters.Add("p_ToDate", filter.ToDate?.Date);
+            parameters.Add("p_ItemId", filter.ItemId);
+            parameters.Add("p_CategoryId", filter.CategoryId);
+            parameters.Add("p_Department", filter.Department);
+            parameters.Add("p_SupplierId", filter.SupplierId);
+            parameters.Add("p_Type", filter.Type);
+            parameters.Add("p_Search", filter.Search);
+            parameters.Add("p_TransactionId", (int?)null);
+            parameters.Add("p_TransactionNumber", (string?)null);
 
-            if (filter.FromDate.HasValue)
-                query = query.Where(t => t.TransactionDate >= filter.FromDate.Value.Date);
-
-            if (filter.ToDate.HasValue)
-                query = query.Where(t => t.TransactionDate <= filter.ToDate.Value.Date);
-
-            if (filter.ItemId.HasValue && filter.ItemId.Value > 0)
-                query = query.Where(t => t.ItemId == filter.ItemId.Value);
-
-            if (filter.CategoryId.HasValue && filter.CategoryId.Value > 0)
-                query = query.Where(t => t.Item.CategoryId == filter.CategoryId.Value);
-
-            if (!string.IsNullOrWhiteSpace(filter.Department))
-                query = query.Where(t => t.Department == filter.Department);
-
-            if (filter.SupplierId.HasValue && filter.SupplierId.Value > 0)
-                query = query.Where(t => t.SupplierId == filter.SupplierId.Value);
-
-            if (!string.IsNullOrWhiteSpace(filter.Type))
-                query = query.Where(t => t.MovementType == filter.Type);
-
-            if (!string.IsNullOrWhiteSpace(filter.Search))
-            {
-                string s = filter.Search.Trim().ToLower();
-                query = query.Where(t =>
-                    t.TransactionNumber.ToLower().Contains(s) ||
-                    t.Item.Name.ToLower().Contains(s) ||
-                    t.Item.Code.ToLower().Contains(s) ||
-                    (t.RecipientName != null && t.RecipientName.ToLower().Contains(s)) ||
-                    (t.Supplier != null && t.Supplier.Name.ToLower().Contains(s)) ||
-                    (t.ReferenceNumber != null && t.ReferenceNumber.ToLower().Contains(s)) ||
-                    t.PerformedBy.ToLower().Contains(s));
-            }
-
-            var list = await query
-                .OrderByDescending(t => t.TransactionDate)
-                .ThenByDescending(t => t.Sequence)
-                .Select(t => new TransactionDto
-                {
-                    TransactionId = t.TransactionId,
-                    TransactionNumber = t.TransactionNumber,
-                    Sequence = t.Sequence,
-                    TransactionDate = t.TransactionDate,
-                    MovementType = t.MovementType,
-                    ItemId = t.ItemId,
-                    ItemName = t.Item.Name,
-                    ItemCode = t.Item.Code,
-                    Unit = t.Item.Unit,
-                    Quantity = t.Quantity,
-                    UnitCost = t.UnitCost,
-                    TotalAmount = t.TotalAmount,
-                    PreviousUnitCost = t.PreviousUnitCost,
-                    Status = t.Status,
-                    CorrectionOfId = t.CorrectionOfId,
-                    CorrectionOfNumber = t.CorrectionOf != null ? t.CorrectionOf.TransactionNumber : null,
-                    ReturnOfId = t.ReturnOfId,
-                    ReturnOfNumber = t.ReturnOf != null ? t.ReturnOf.TransactionNumber : null,
-                    SupplierId = t.SupplierId,
-                    SupplierName = t.Supplier != null ? t.Supplier.Name : null,
-                    SupplierInvoice = t.SupplierInvoice,
-                    InvoiceNumber = t.InvoiceNumber,
-                    PurchaseOrderNumber = t.PurchaseOrderNumber,
-                    ReferenceNumber = t.ReferenceNumber,
-                    Location = t.Location,
-                    Condition = t.Condition,
-                    BatchNumber = t.BatchNumber,
-                    ExpiryDate = t.ExpiryDate,
-                    IssueType = t.IssueType,
-                    Department = t.Department,
-                    RecipientName = t.RecipientName,
-                    RecipientId = t.RecipientId,
-                    Destination = t.Destination,
-                    Purpose = t.Purpose,
-                    ApprovedBy = t.ApprovedBy,
-                    IsReturnable = t.IsReturnable,
-                    ExpectedReturnDate = t.ExpectedReturnDate,
-                    PerformedBy = t.PerformedBy,
-                    Partner = t.Supplier != null ? t.Supplier.Name : (t.RecipientName ?? "—"),
-                    Remarks = t.Remarks,
-                    CreatedAt = t.CreatedAt
-                })
-                .ToListAsync();
-
-            return list;
+            return await Connection.QueryAsync<TransactionDto>(
+                "sp_Inventory_GetMovements",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransactionDto?> GetMovementByIdAsync(int transactionId)
         {
-            var filter = new MovementFilterRequest();
-            var list = await GetMovementsAsync(filter);
-            return list.FirstOrDefault(t => t.TransactionId == transactionId);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_FromDate", (DateTime?)null);
+            parameters.Add("p_ToDate", (DateTime?)null);
+            parameters.Add("p_ItemId", (int?)null);
+            parameters.Add("p_CategoryId", (int?)null);
+            parameters.Add("p_Department", (string?)null);
+            parameters.Add("p_SupplierId", (int?)null);
+            parameters.Add("p_Type", (string?)null);
+            parameters.Add("p_Search", (string?)null);
+            parameters.Add("p_TransactionId", transactionId);
+            parameters.Add("p_TransactionNumber", (string?)null);
+
+            return await Connection.QueryFirstOrDefaultAsync<TransactionDto>(
+                "sp_Inventory_GetMovements",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<TransactionDto?> GetMovementByNumberAsync(string transactionNumber)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_FromDate", (DateTime?)null);
+            parameters.Add("p_ToDate", (DateTime?)null);
+            parameters.Add("p_ItemId", (int?)null);
+            parameters.Add("p_CategoryId", (int?)null);
+            parameters.Add("p_Department", (string?)null);
+            parameters.Add("p_SupplierId", (int?)null);
+            parameters.Add("p_Type", (string?)null);
+            parameters.Add("p_Search", (string?)null);
+            parameters.Add("p_TransactionId", (int?)null);
+            parameters.Add("p_TransactionNumber", transactionNumber);
+
+            return await Connection.QueryFirstOrDefaultAsync<TransactionDto>(
+                "sp_Inventory_GetMovements",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransactionDto> PostMovementAsync(PostMovementRequest request, int userId, string performedBy)
@@ -632,7 +456,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_Remarks", request.Remarks);
             parameters.Add("p_UserId", userId);
 
-            var postResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+            var postResult = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_Inventory_PostMovement",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -648,14 +472,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_PerformedBy", performedBy);
             parameters.Add("p_UserId", userId);
 
-            var revResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+            var revResult = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_Inventory_ReverseMovement",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
             string correctionNumber = (string)revResult.CorrectionTransactionNumber;
-            var correctionTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == correctionNumber);
-            return (await GetMovementByIdAsync(correctionTxn.TransactionId))!;
+            return (await GetMovementByNumberAsync(correctionNumber))!;
         }
 
         public async Task<TransactionDto> RecordReturnAsync(int transactionId, int userId, string performedBy)
@@ -665,14 +488,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             parameters.Add("p_PerformedBy", performedBy);
             parameters.Add("p_UserId", userId);
 
-            var retResult = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+            var retResult = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_Inventory_RecordReturn",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
             string returnNumber = (string)retResult.ReturnTransactionNumber;
-            var returnTxn = await _dbContext.InventoryTransactions.FirstAsync(t => t.TransactionNumber == returnNumber);
-            return (await GetMovementByIdAsync(returnTxn.TransactionId))!;
+            return (await GetMovementByNumberAsync(returnNumber))!;
         }
         #endregion
 
@@ -711,7 +533,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "stockStatus", "Stock Status" },
                         new() { "status", "Item Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<StockSummaryReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<StockSummaryReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -732,7 +554,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "performedBy", "Performed By" },
                         new() { "status", "Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<MovementReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<MovementReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -746,7 +568,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "suggestedReorder", "Suggested Reorder Quantity" },
                         new() { "supplier", "Preferred Supplier" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<LowStockReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<LowStockReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -763,7 +585,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "total", "Issue Value", "money" },
                         new() { "status", "Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<DepartmentIssueReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<DepartmentIssueReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -779,7 +601,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "total", "Total Amount", "money" },
                         new() { "status", "Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<SupplierPurchaseReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<SupplierPurchaseReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -791,7 +613,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "value", "Stock Value", "money" },
                         new() { "alerts", "Minimum Stock Alerts" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<CategoryValueReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<CategoryValueReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -806,7 +628,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "days", "Days Remaining" },
                         new() { "status", "Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<ExpiryWarrantyReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<ExpiryWarrantyReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 
@@ -822,7 +644,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
                         new() { "expectedReturnDate", "Expected Return" },
                         new() { "returnStatus", "Return Status" }
                     };
-                    result.Rows = await _dbConnection.QueryAsync<ReturnableItemsReportRowDto>(
+                    result.Rows = await Connection.QueryAsync<ReturnableItemsReportRowDto>(
                         "sp_Inventory_GetReport", parameters, commandType: CommandType.StoredProcedure);
                     break;
 

@@ -1200,7 +1200,7 @@ export const ScreenVisualMockup = React.memo(function ScreenVisualMockup({
   isHovered = false,
   isSelected = false,
 }) {
-  const { layoutType = "table", accentColor = "#6F8400", badgeIcon, route } = preview;
+  const { layoutType = "table", accentColor = "var(--cms-primary)", badgeIcon, route } = preview;
 
   return (
     <div
@@ -1362,7 +1362,7 @@ export const ScreenVisualMockup = React.memo(function ScreenVisualMockup({
                     height: "8px",
                     borderRadius: "2px",
                     background: row === 2 ? "#eef5e7" : `${accentColor}18`,
-                    border: `1px solid ${row === 2 ? "#6F8400" : accentColor}`,
+                    border: `1px solid ${row === 2 ? "var(--cms-primary)" : accentColor}`,
                   }}
                 />
               </div>

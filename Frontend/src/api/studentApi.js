@@ -45,7 +45,7 @@ export const adminGroupRows = (payload, scope = {}) => {
     if (!Number.isInteger(Number(id)) || Number(id) <= 0 || seen.has(id)
       || flagIsFalse(value(row, "isActive", "IsActive", "active", "Active"))
       || flagIsTrue(value(row, "isDeleted", "IsDeleted")) || ["inactive", "deleted"].includes(status)) return false;
-    if (!["boardId", "academicYearId", "campusId"].every((key) => {
+    if (!["boardId", "campusId"].every((key) => {
       const actual = value(row, key, key[0].toUpperCase() + key.slice(1));
       return !scope[key] || actual == null || String(actual) === String(scope[key]);
     })) return false;
@@ -64,11 +64,10 @@ export const adminGroupRows = (payload, scope = {}) => {
 
 export const fetchAdminGroups = async (scope, { signal } = {}) => {
   if (!scope.boardId) return [];
-  const response = await apiClient.get(apiEndpoints.groups.getAll, {
-    params: { boardId: scope.boardId, academicYearId: scope.academicYearId, isActive: true }, signal,
+  const response = await apiClient.get(apiEndpoints.groups.dropdown, {
+    params: { boardId: scope.boardId, academicYearId: scope.academicYearId, academicLevelId: scope.academicLevelId },
+    signal,
   });
-  // Admission deliberately does not restrict its groups by academic level.
-  // Do not change the returned record's level or substitute another ID.
   return adminGroupRows(response.data, { ...scope, academicLevelId: undefined });
 };
 
