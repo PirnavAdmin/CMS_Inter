@@ -899,6 +899,11 @@ namespace CollegeManagement.API.Services.Implementations
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
                 if (subNames != null)
                 {
+                    var deptDict = DeserializeObject<Dictionary<string, object>>(existingStaff.DepartmentSpecificJson) ?? new Dictionary<string, object>();
+                    deptDict["allocatedSubjects"] = subNames;
+                    deptDict["subjects"] = subNames;
+                    existingStaff.DepartmentSpecificJson = JsonSerializer.Serialize(deptDict);
+                    await _context.SaveChangesAsync();
                     await SyncStaffSubjectAllocationsAsync(existingStaff.Id, subNames);
                 }
 
@@ -1687,14 +1692,23 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateTemplateExcelAsync(string? staffType = null)
         {
             using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("Staff Import Template");
+            var isNonTeaching = string.Equals(staffType?.Trim(), "Non-Teaching", StringComparison.OrdinalIgnoreCase);
+            var sheetTitle = isNonTeaching ? "Non-Teaching Template" : "Teaching Template";
+            var worksheet = workbook.Worksheets.Add(sheetTitle);
 
-            var headers = new[]
-            {
-                "Employee ID", "First Name", "Middle Name", "Last Name", "Staff Type",
-                "Department", "Designation", "Board", "Gender", "Date of Birth",
-                "Mobile", "Email", "Joining Date", "Experience (Years)", "Status"
-            };
+            var headers = isNonTeaching
+                ? new[]
+                {
+                    "Board Name", "Employee ID", "First Name", "Middle Name", "Last Name",
+                    "Date of Birth", "Gender", "Mobile", "Email", "Department",
+                    "Designation", "Date of Joining", "Employment Type", "Status"
+                }
+                : new[]
+                {
+                    "Board Name", "Employee ID", "First Name", "Middle Name", "Last Name",
+                    "Date of Birth", "Gender", "Mobile", "Email", "Department",
+                    "Designation", "Subject Allocation", "Date of Joining", "Employment Type", "Status"
+                };
 
             for (int i = 0; i < headers.Length; i++)
             {
@@ -1705,48 +1719,13 @@ namespace CollegeManagement.API.Services.Implementations
                 cell.Style.Font.FontColor = XLColor.White;
             }
 
-            // Sample rows
-            var sType1 = !string.IsNullOrWhiteSpace(staffType) ? staffType : "Teaching";
-            var sType2 = !string.IsNullOrWhiteSpace(staffType) ? staffType : "Non-Teaching";
-
-            worksheet.Cell(2, 1).Value = "PCTCH0001";
-            worksheet.Cell(2, 2).Value = "Rahul";
-            worksheet.Cell(2, 3).Value = "Kumar";
-            worksheet.Cell(2, 4).Value = "Sharma";
-            worksheet.Cell(2, 5).Value = sType1;
-            worksheet.Cell(2, 6).Value = "Mathematics";
-            worksheet.Cell(2, 7).Value = "Lecturer";
-            worksheet.Cell(2, 8).Value = "Board of Intermediate Education";
-            worksheet.Cell(2, 9).Value = "Male";
-            worksheet.Cell(2, 10).Value = "1990-05-15";
-            worksheet.Cell(2, 11).Value = "9876543210";
-            worksheet.Cell(2, 12).Value = "rahul.sharma@example.com";
-            worksheet.Cell(2, 13).Value = "2024-06-01";
-            worksheet.Cell(2, 14).Value = 4.5;
-            worksheet.Cell(2, 15).Value = "Active";
-
-            worksheet.Cell(3, 1).Value = "PCNT0001";
-            worksheet.Cell(3, 2).Value = "Priya";
-            worksheet.Cell(3, 3).Value = "";
-            worksheet.Cell(3, 4).Value = "Reddy";
-            worksheet.Cell(3, 5).Value = sType2;
-            worksheet.Cell(3, 6).Value = "Administration";
-            worksheet.Cell(3, 7).Value = "Administrative Officer";
-            worksheet.Cell(3, 8).Value = "Board of Intermediate Education";
-            worksheet.Cell(3, 9).Value = "Female";
-            worksheet.Cell(3, 10).Value = "1992-08-20";
-            worksheet.Cell(3, 11).Value = "9876543211";
-            worksheet.Cell(3, 12).Value = "priya.reddy@example.com";
-            worksheet.Cell(3, 13).Value = "2024-06-01";
-            worksheet.Cell(3, 14).Value = 3.0;
-            worksheet.Cell(3, 15).Value = "Active";
-
+            // Zero prefilled data rows: template contains column headers only
             worksheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             var bytes = stream.ToArray();
-            var filename = $"Staff_Import_Template_{staffType ?? "Universal"}.xlsx";
+            var filename = $"{sheetTitle.Replace(" ", "_")}.xlsx";
             return (bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
 
@@ -2173,6 +2152,44 @@ namespace CollegeManagement.API.Services.Implementations
                     .ToList();
             }
 
+            if ((dto.AllocatedSubjects == null || !dto.AllocatedSubjects.Any()) && !string.IsNullOrWhiteSpace(staff.DepartmentSpecificJson))
+            {
+                try
+                {
+                    using var jsonDoc = JsonDocument.Parse(staff.DepartmentSpecificJson);
+                    if (jsonDoc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        if (jsonDoc.RootElement.TryGetProperty("allocatedSubjects", out var allocEl) ||
+                            jsonDoc.RootElement.TryGetProperty("subjects", out allocEl))
+                        {
+                            if (allocEl.ValueKind == JsonValueKind.Array)
+                            {
+                                dto.AllocatedSubjects = allocEl.EnumerateArray()
+                                    .Select(e => e.GetString())
+                                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                                    .Select(s => s!)
+                                    .Distinct()
+                                    .ToList();
+                            }
+                            else if (allocEl.ValueKind == JsonValueKind.String)
+                            {
+                                var str = allocEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(str))
+                                {
+                                    dto.AllocatedSubjects = str.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                        .Select(s => s.Trim())
+                                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                                        .Distinct()
+                                        .ToList();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            dto.Subjects = dto.AllocatedSubjects;
+
             // Educational Qualifications
             var eduList = dto.EducationList != null && dto.EducationList.Any() ? dto.EducationList : DeserializeList<StaffEducationItem>(staff.EducationJson);
             dto.EducationList = eduList;
@@ -2389,7 +2406,7 @@ namespace CollegeManagement.API.Services.Implementations
             string? aadhaarDoc, string? panDoc, string? qualCert, string? expCert, string? resume, string? bankProof, string? drivingLicence, string? otherDocs, string? photo, string? signature,
             string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson,
             Dictionary<string, object>? departmentSpecific = null,
-            Dictionary<string, string>? documentsMap = null,
+            object? documentsMap = null,
             string? rawDeptSpecificJson = null)
         {
             // 1. Bank Details
@@ -2534,13 +2551,40 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("Signature", signature);
 
                 // Dynamic documents from frontend map
-                if (documentsMap != null && documentsMap.Count > 0)
+                if (documentsMap != null)
                 {
-                    foreach (var kvp in documentsMap)
+                    if (documentsMap is Dictionary<string, string> dictStr)
                     {
-                        if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                        foreach (var kvp in dictStr)
                         {
-                            AddOrUpdateDoc(kvp.Key, kvp.Value);
+                            if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                            {
+                                AddOrUpdateDoc(kvp.Key, kvp.Value);
+                            }
+                        }
+                    }
+                    else if (documentsMap is Dictionary<string, object> dictObj)
+                    {
+                        foreach (var kvp in dictObj)
+                        {
+                            if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
+                            {
+                                AddOrUpdateDoc(kvp.Key, kvp.Value.ToString() ?? "");
+                            }
+                        }
+                    }
+                    else if (documentsMap is JsonElement el && el.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in el.EnumerateObject())
+                        {
+                            if (!string.IsNullOrWhiteSpace(prop.Name))
+                            {
+                                var val = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() : prop.Value.ToString();
+                                if (!string.IsNullOrWhiteSpace(val))
+                                {
+                                    AddOrUpdateDoc(prop.Name, val);
+                                }
+                            }
                         }
                     }
                 }
@@ -2588,7 +2632,35 @@ namespace CollegeManagement.API.Services.Implementations
                         string.Equals(s.SubjectName, name, StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(s.SubjectCode, name, StringComparison.OrdinalIgnoreCase));
 
-                    if (subject != null)
+                    if (subject == null)
+                    {
+                        var cleanCode = "SUB-" + (name.Length > 4 ? name.Substring(0, 4).ToUpper() : name.ToUpper()) + "-" + new Random().Next(100, 999);
+                        var newSubject = new Subject
+                        {
+                            SubjectName = name,
+                            SubjectCode = cleanCode,
+                            BoardId = 1,
+                            GroupId = 1,
+                            AcademicLevelId = 1,
+                            SubjectType = "Theory",
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Subjects.Add(newSubject);
+                        await _context.SaveChangesAsync();
+
+                        var allocation = new StaffSubjectAllocation
+                        {
+                            StaffId = staffId,
+                            SubjectId = newSubject.SubjectId,
+                            AcademicYearId = 1,
+                            MaxWeeklyHours = 18,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        await _allocationRepository.AddAsync(allocation);
+                    }
+                    else
                     {
                         var allocation = new StaffSubjectAllocation
                         {

@@ -109,6 +109,16 @@ const summaryCardConfig = [
   { key: "toppers", sourceKey: "toppersIdentified", reportType: "toppers", label: "Toppers Identified", icon: Trophy, image: toppersImage, tone: "amber" },
 ];
 
+function flagIsFalse(val) {
+  if (val === undefined || val === null) return false;
+  return val === false || val === 0 || val === "0" || String(val).trim().toLowerCase() === "false";
+}
+
+function flagIsTrue(val) {
+  if (val === undefined || val === null) return false;
+  return val === true || val === 1 || val === "1" || String(val).trim().toLowerCase() === "true";
+}
+
 function positiveId(value) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -913,7 +923,11 @@ export default function ReportsPage() {
 
   // Use the same academic identifiers and board/year group catalog as Student Management.
   useEffect(() => {
-    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year) };
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+    };
     const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0].join(":");
     const controller = beginRequest("academicLevels");
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey);
@@ -923,12 +937,13 @@ export default function ReportsPage() {
       return () => controller.abort();
     }
     setLevelLoading(true);
-    const params = boardId ? { boardId } : {};
+    const params = scope.boardId ? { boardId: scope.boardId } : {};
     getReportAcademicLevels(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
+      const rows = res?.data;
       if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load academic levels.");
       const levels = activeFilterOptions(rows, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey, levels);
@@ -941,12 +956,17 @@ export default function ReportsPage() {
       finishRequest("academicLevels", controller);
     });
     return () => controller.abort();
-  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year]);
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
   useEffect(() => {
-    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year) };
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+      academicLevelId: positiveId(filters.level),
+    };
     // Groups are board/year catalog records in Student Management, not year-specific copies.
-    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0].join(":");
+    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0, scope.academicLevelId || 0].join(":");
     const controller = beginRequest("groups");
     setGroupsError("");
     if (groupScopeRef.current !== cacheKey) setMasterOptions((current) => ({ ...current, groups: [] }));
@@ -962,14 +982,15 @@ export default function ReportsPage() {
     }
     setGroupsLoading(true);
     const params = {};
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    if (scope.academicLevelId) params.academicLevelId = scope.academicLevelId;
     getReportGroups(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
+      const rows = res?.data;
       if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load groups.");
       const groups = activeFilterOptions(rows, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.groups, cacheKey, groups);
@@ -984,10 +1005,16 @@ export default function ReportsPage() {
       finishRequest("groups", controller);
     });
     return () => controller.abort();
-  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level]);
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
   useEffect(() => {
-    const scope = { campusId: positiveId(filters.campus), boardId: positiveId(filters.board), academicYearId: positiveId(filters.year), academicLevelId: positiveId(filters.level), groupId: positiveId(filters.group) };
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+      academicLevelId: positiveId(filters.level),
+      groupId: positiveId(filters.group),
+    };
     const cacheKey = Object.values(scope).map((id) => id || 0).join(":");
     const controller = beginRequest("sections");
     setSectionsError("");
@@ -1004,17 +1031,18 @@ export default function ReportsPage() {
     }
     setSectionsLoading(true);
     const params = {};
-    if (groupId) params.groupId = groupId;
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
+    if (scope.groupId) params.groupId = scope.groupId;
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    if (scope.academicLevelId) params.academicLevelId = scope.academicLevelId;
     getReportSections(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      if (response.data?.success === false || response.data?.Success === false) throw new Error(response.data.message || response.data.Message || "Unable to load sections.");
-      const rows = collection(response.data, ["sections", "Sections"]).filter((row) => {
+      const responseData = res?.data;
+      if (responseData?.success === false || responseData?.Success === false) throw new Error(responseData.message || responseData.Message || "Unable to load sections.");
+      const rows = collection(responseData, ["sections", "Sections"]).filter((row) => {
         if (flagIsFalse(read(row, "isActive", "IsActive")) || flagIsTrue(read(row, "isDeleted", "IsDeleted")) || String(read(row, "status", "Status") || "").toLowerCase() === "deleted") return false;
         return Object.entries(scope).every(([key, expected]) => {
           const actual = read(row, key, key[0].toUpperCase() + key.slice(1));
@@ -1034,7 +1062,7 @@ export default function ReportsPage() {
       finishRequest("sections", controller);
     });
     return () => controller.abort();
-  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, filters.group]);
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, filters.group, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
   const availableCampuses = useMemo(() => {
     const list = (activeCampuses && activeCampuses.length > 0)

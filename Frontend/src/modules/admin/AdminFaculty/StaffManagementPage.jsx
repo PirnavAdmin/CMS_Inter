@@ -43,6 +43,8 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
 import { loadCachedDepartments, loadCachedDesignations } from "../AdminDepartments/DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -372,7 +374,7 @@ const seed = [];
 const initialActivities = [];
 
 const read = (key, fallback = []) => fallback;
-const write = () => {};
+const write = () => { };
 const boardOptions = [];
 
 export const normalizeStaffRecord = (raw) => {
@@ -1498,7 +1500,7 @@ function getBoardsForCampus(campusObj, allBoardsList = []) {
       if (typeof b === "string") {
         const match = allBoardsList.find(
           (ab) => (ab.name || ab.boardName || "").toLowerCase() === b.toLowerCase() ||
-                  (ab.code || ab.boardCode || "").toLowerCase() === b.toLowerCase()
+            (ab.code || ab.boardCode || "").toLowerCase() === b.toLowerCase()
         );
         return match || { id: b, name: b, boardName: b, code: b, boardCode: b };
       }
@@ -1528,7 +1530,7 @@ function getBoardsForCampus(campusObj, allBoardsList = []) {
       }
       const match = (allBoardsList || []).find(
         (ab) => (ab.name || ab.boardName || "").toLowerCase() === String(b).toLowerCase() ||
-                (ab.code || ab.boardCode || "").toLowerCase() === String(b).toLowerCase()
+          (ab.code || ab.boardCode || "").toLowerCase() === String(b).toLowerCase()
       );
       return {
         id: match?.id || match?.boardId || b,
@@ -1889,7 +1891,7 @@ export function PrincipalCampusBoardAssignment({
           });
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Check assignedCampuses
     if (Array.isArray(values.assignedCampuses) && values.assignedCampuses.length > 0) {
@@ -1961,7 +1963,7 @@ export function PrincipalCampusBoardAssignment({
       const allCampuses = validAssignments.map(a => a.campusName).filter(Boolean);
       const allBoards = [...new Set(validAssignments.flatMap(a => a.boardNames || []).filter(Boolean))];
       const allBoardIds = [...new Set(validAssignments.flatMap(a => a.boardIds || []).map(Number).filter(Boolean))];
-      
+
       setValues(prev => ({
         ...prev,
         campusBoardAssignmentsJson: jsonStr,
@@ -2055,17 +2057,17 @@ export function PrincipalCampusBoardAssignment({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
       </div>
-      
+
       {assignments.map((assignment, index) => {
         const selectedCampusObj = campusList.find(c => String(c.id || c.campusId) === String(assignment.campusId)) || {};
         const availableBoards = getBoardsForCampus(selectedCampusObj, boardsList);
-        
+
         return (
           <div key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
             {/* Select Campus */}
             <div className="cms-principal-field" style={{ flex: 1, marginBottom: 0 }}>
               <label>Select Campus</label>
-              <select 
+              <select
                 className="cms-input"
                 value={assignment.campusId || ""}
                 onChange={(e) => {
@@ -2114,8 +2116,8 @@ export function PrincipalCampusBoardAssignment({
 
             {/* Remove Row Button */}
             {assignments.length > 1 && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => removeAssignmentRow(assignment.id)}
                 style={{ marginTop: "24px", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: "6px", cursor: "pointer" }}
                 title="Remove Assignment"
@@ -3545,75 +3547,16 @@ function Dashboard({ records = [], loadingRecords = false }) {
       {isDataLoading ? (
         <StaffDashboardSkeleton />
       ) : (
-      <main className="staff-mock-page">
-        <section className="staff-kpis">
-          {[
-            ["Total Staff", totalCount, totalStaffIcon, "/dashboard/staff/list"],
-            ["Teaching Staff", teachingCount, teachingStaffIcon, "/dashboard/staff/teaching"],
-            ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
-            ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
-            ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
-          ].map(([l, v, icon, to]) => (
-            <article
-              key={l}
-              onClick={() => {
-                if (to === "modal:credentials") {
-                  setCredModalOpen(true);
-                } else {
-                  n(to);
-                }
-              }}
-              title={l === "Credentials Generator" ? "Click to configure employee credentials format and default password" : undefined}
-            >
-              <img className="staff-kpi-icon" src={icon} alt="" aria-hidden="true" width={32} height={32} />
-              <span>
-                {l}
-                <strong>{v}</strong>
-              </span>
-            </article>
-          ))}
-        </section>
-        <section className="staff-dashboard-grid">
-          <article className="staff-panel">
-            <header>
-              <div>
-                <h2>Profile Completion Overview</h2>
-                <p>Live staff profile completion metrics</p>
-              </div>
-            </header>
-            <div className="staff-donut-wrap">
-              <div className="staff-donut" style={{ "--pct": `${pct * 3.6}deg` }}>
-                <span>
-                  <strong>{totalCount}</strong>Total Staff
-                </span>
-              </div>
-              <div>
-                <p>
-                  <i className="done" />
-                  Completed <strong>{completedCount}</strong>
-                </p>
-                <p>
-                  <i />
-                  Pending <strong>{pendingCount}</strong>
-                </p>
-              </div>
-            </div>
-          </article>
-          <article className="staff-panel quick">
-            <header>
-              <div>
-                <h2>Quick Actions</h2>
-                <p>Common staff workflows</p>
-              </div>
-            </header>
+        <main className="staff-mock-page">
+          <section className="staff-kpis">
             {[
-              ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
-              ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
-              ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
-              ["View Pending Submissions", "/dashboard/staff/pending"],
-              ["View All Staff", "/dashboard/staff/list"],
-            ].map(([l, to]) => (
-              <button
+              ["Total Staff", totalCount, totalStaffIcon, "/dashboard/staff/list"],
+              ["Teaching Staff", teachingCount, teachingStaffIcon, "/dashboard/staff/teaching"],
+              ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
+              ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
+              ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
+            ].map(([l, v, icon, to]) => (
+              <article
                 key={l}
                 onClick={() => {
                   if (to === "modal:credentials") {
@@ -3622,14 +3565,73 @@ function Dashboard({ records = [], loadingRecords = false }) {
                     n(to);
                   }
                 }}
+                title={l === "Credentials Generator" ? "Click to configure employee credentials format and default password" : undefined}
               >
-                {l}
-                <ChevronRight />
-              </button>
+                <img className="staff-kpi-icon" src={icon} alt="" aria-hidden="true" width={32} height={32} />
+                <span>
+                  {l}
+                  <strong>{v}</strong>
+                </span>
+              </article>
             ))}
-          </article>
-        </section>
-      </main>
+          </section>
+          <section className="staff-dashboard-grid">
+            <article className="staff-panel">
+              <header>
+                <div>
+                  <h2>Profile Completion Overview</h2>
+                  <p>Live staff profile completion metrics</p>
+                </div>
+              </header>
+              <div className="staff-donut-wrap">
+                <div className="staff-donut" style={{ "--pct": `${pct * 3.6}deg` }}>
+                  <span>
+                    <strong>{totalCount}</strong>Total Staff
+                  </span>
+                </div>
+                <div>
+                  <p>
+                    <i className="done" />
+                    Completed <strong>{completedCount}</strong>
+                  </p>
+                  <p>
+                    <i />
+                    Pending <strong>{pendingCount}</strong>
+                  </p>
+                </div>
+              </div>
+            </article>
+            <article className="staff-panel quick">
+              <header>
+                <div>
+                  <h2>Quick Actions</h2>
+                  <p>Common staff workflows</p>
+                </div>
+              </header>
+              {[
+                ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
+                ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
+                ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
+                ["View Pending Submissions", "/dashboard/staff/pending"],
+                ["View All Staff", "/dashboard/staff/list"],
+              ].map(([l, to]) => (
+                <button
+                  key={l}
+                  onClick={() => {
+                    if (to === "modal:credentials") {
+                      setCredModalOpen(true);
+                    } else {
+                      n(to);
+                    }
+                  }}
+                >
+                  {l}
+                  <ChevronRight />
+                </button>
+              ))}
+            </article>
+          </section>
+        </main>
       )}
       <StaffCredentialsGeneratorModal
         isOpen={credModalOpen}
@@ -3857,6 +3859,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const [designationFilter, setDesignationFilter] = useState("");
   const [staffTypeFilter, setStaffTypeFilter] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [page, setPage] = useState(1);
   const [size] = useState(5);
   const [toast, setToast] = useState(null);
@@ -4183,73 +4186,562 @@ function StaffList({ records = [], setRecords, forced }) {
     }
   };
 
+  // Helper to retrieve the complete staff dataset across all pages matching the active filter criteria
+  const getCompleteStaffDataset = async () => {
+    const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+    const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+    const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+    const currentTab = forced || tab;
+    const isNonTeaching = currentTab === "Non-Teaching" || (!forced && tab === "Non-Teaching") || forced === "Non-Teaching";
+    const effectiveStaffType = isNonTeaching ? "Non-Teaching" : (currentTab === "Teaching" || forced === "Teaching" ? "Teaching" : (staffTypeFilter || undefined));
+
+    let apiStaffRecords = [];
+    try {
+      const response = await apiClient.get(apiEndpoints.faculty.list, {
+        params: {
+          PageNumber: 1,
+          PageSize: 10000,
+          SearchTerm: q || undefined,
+          Department: departmentFilter || undefined,
+          Designation: designationFilter || undefined,
+          StaffType: effectiveStaffType,
+          ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
+          BoardCode: activeBoardCode || undefined,
+          BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+        },
+      });
+      if (response?.data) {
+        const items = response.data.items || response.data.data || (Array.isArray(response.data) ? response.data : []);
+        if (Array.isArray(items) && items.length > 0) {
+          apiStaffRecords = items;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn("Could not fetch full staff list from API, using local records:", fetchErr);
+    }
+
+    const itemMap = new Map();
+    (list || []).forEach((r) => {
+      if (!r) return;
+      const key = String(r.id ?? r.employeeId ?? "");
+      if (key) itemMap.set(key, r);
+      if (r.employeeId) itemMap.set(String(r.employeeId).trim().toLowerCase(), r);
+    });
+
+    const mergedList = [];
+    const seenKeys = new Set();
+
+    if (apiStaffRecords.length > 0) {
+      apiStaffRecords.forEach((apiItem) => {
+        if (!apiItem) return;
+        const idKey = apiItem.id !== undefined && apiItem.id !== null ? String(apiItem.id) : "";
+        const empKey = apiItem.employeeId ? String(apiItem.employeeId).trim().toLowerCase() : "";
+
+        const localMatch = (idKey && itemMap.get(idKey)) || (empKey && itemMap.get(empKey));
+        const finalItem = localMatch ? { ...localMatch, ...apiItem } : apiItem;
+
+        const uniqueKey = idKey || empKey || String(finalItem.id ?? finalItem.employeeId ?? "");
+        if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+          if (uniqueKey) seenKeys.add(uniqueKey);
+          if (idKey) seenKeys.add(idKey);
+          if (empKey) seenKeys.add(empKey);
+          mergedList.push(finalItem);
+        }
+      });
+    }
+
+    (list || []).forEach((r) => {
+      if (!r) return;
+      const idKey = r.id !== undefined && r.id !== null ? String(r.id) : "";
+      const empKey = r.employeeId ? String(r.employeeId).trim().toLowerCase() : "";
+
+      const isAlreadyIncluded = (idKey && seenKeys.has(idKey)) || (empKey && seenKeys.has(empKey));
+      if (!isAlreadyIncluded) {
+        const uniqueKey = idKey || empKey || String(r.id ?? r.employeeId ?? "");
+        if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+          if (uniqueKey) seenKeys.add(uniqueKey);
+          if (idKey) seenKeys.add(idKey);
+          if (empKey) seenKeys.add(empKey);
+          mergedList.push(r);
+        }
+      }
+    });
+
+    return mergedList.filter((r) => {
+      if (!r) return false;
+      if (!isStaffMatchingBoard(r, selectedBoard, boards)) return false;
+      if (!isStaffMatchingCampus(r, selectedCampus)) return false;
+      if (
+        currentTab !== "All" &&
+        (currentTab === "Pending"
+          ? r.staffType !== "Teaching" || r.profileStatus === "Completed"
+          : currentTab === "Completed"
+            ? r.profileStatus !== "Completed"
+            : r.staffType !== currentTab)
+      ) {
+        return false;
+      }
+      if (departmentFilter && r.department !== departmentFilter) return false;
+      if (designationFilter && r.designation !== designationFilter) return false;
+      if (staffTypeFilter && r.staffType !== staffTypeFilter) return false;
+
+      const staffFullName = r.fullName || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.name || "";
+      return [staffFullName, r.firstName, r.middleName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
+        String(v || "").toLowerCase().includes((q || "").toLowerCase())
+      );
+    });
+  };
+
   // GET /api/v1/staff/export-excel
   const handleExportExcel = async () => {
     setExportOpen(false);
+    const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+    const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+    const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+    const currentTab = forced || tab;
+    const effectiveStaffType = forced !== "All" && forced ? forced : (currentTab !== "All" && currentTab !== "Completed" && currentTab !== "Pending" ? currentTab : (staffTypeFilter || undefined));
+
     try {
       const response = await apiClient.get(apiEndpoints.faculty.exportExcel, {
-        params: { SearchTerm: q, Department: departmentFilter, Designation: designationFilter, StaffType: forced },
+        params: {
+          SearchTerm: q || undefined,
+          Department: departmentFilter || undefined,
+          Designation: designationFilter || undefined,
+          StaffType: effectiveStaffType,
+          BoardCode: activeBoardCode || undefined,
+          BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+        },
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Staff_Export_${new Date().toISOString().split("T")[0]}.xlsx`);
+      link.setAttribute("download", `Staff_Export_${effectiveStaffType || "All"}_${new Date().toISOString().split("T")[0]}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       setToast("Exported staff data to Excel (.xlsx) successfully.");
     } catch (err) {
-      setToast("Exported staff data to Excel successfully.");
+      console.warn("Backend Excel export endpoint unavailable, generating from full staff records:", err);
+      try {
+        const isNonTeaching = effectiveStaffType === "Non-Teaching";
+        const excelCols = isNonTeaching ? NON_TEACHING_EXCEL_COLUMNS : TEACHING_EXCEL_COLUMNS;
+        const completeRows = await getCompleteStaffDataset();
+        const excelRows = completeRows.map((r) => {
+          const rawSubs = r.allocatedSubjects ?? r.subjects;
+          const subsStr = Array.isArray(rawSubs)
+            ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean).join(", ")
+            : (typeof rawSubs === "string" ? rawSubs : "");
+
+          if (isNonTeaching) {
+            return [
+              resolveBoardCode(r, boards) || selectedBoard?.name || "Main Campus",
+              r.employeeId || "",
+              r.firstName || "",
+              r.middleName || "",
+              r.lastName || "",
+              r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "",
+              r.gender || "Other",
+              r.mobile || "",
+              r.email || "",
+              r.department || "",
+              r.designation || "",
+              r.dateOfJoining ? String(r.dateOfJoining).split("T")[0] : "",
+              r.employmentType || "Full Time",
+              r.status || "Active",
+            ];
+          }
+
+          return [
+            resolveBoardCode(r, boards) || selectedBoard?.name || "Main Campus",
+            r.employeeId || "",
+            r.firstName || "",
+            r.middleName || "",
+            r.lastName || "",
+            r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "",
+            r.gender || "Other",
+            r.mobile || "",
+            r.email || "",
+            r.department || "",
+            r.designation || "",
+            subsStr,
+            r.dateOfJoining ? String(r.dateOfJoining).split("T")[0] : "",
+            r.employmentType || "Full Time",
+            r.status || "Active",
+          ];
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet([excelCols, ...excelRows]);
+        ws["!cols"] = excelCols.map(() => ({ wch: 22 }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Staff Directory");
+        XLSX.writeFile(wb, `Staff_Export_${effectiveStaffType || "All"}_${new Date().toISOString().split("T")[0]}.xlsx`);
+        setToast("Exported staff data to Excel (.xlsx) successfully.");
+      } catch (fallbackErr) {
+        console.error("Local Excel export failed:", fallbackErr);
+        setToast("Failed to export staff data to Excel.");
+      }
     }
   };
 
-  // Download Excel Template with full 15 headings for Teaching Staff or 14 headings for Non-Teaching Staff
+  // Black-and-white professional PDF table export covering ALL staff records and complete details
+  const handleExportPdf = async () => {
+    setExportOpen(false);
+    setExportingPdf(true);
+    setToast("Preparing complete PDF export...");
+
+    try {
+      const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+      const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+      const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+      const currentTab = forced || tab;
+      const isNonTeaching = currentTab === "Non-Teaching" || (!forced && tab === "Non-Teaching") || forced === "Non-Teaching";
+      const staffTitle = isNonTeaching
+        ? "Non-Teaching Staff Directory"
+        : currentTab === "Teaching" || forced === "Teaching"
+          ? "Teaching Staff Directory"
+          : "Staff Directory";
+      const effectiveStaffType = isNonTeaching ? "Non-Teaching" : (currentTab === "Teaching" || forced === "Teaching" ? "Teaching" : (staffTypeFilter || undefined));
+      const boardLabel = selectedBoard?.name || selectedBoard?.code || "Main Campus";
+      const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+      // 1. Fetch complete staff records from API across all pages (PageSize: 10000)
+      let apiStaffRecords = [];
+      try {
+        const response = await apiClient.get(apiEndpoints.faculty.list, {
+          params: {
+            PageNumber: 1,
+            PageSize: 10000,
+            SearchTerm: q || undefined,
+            Department: departmentFilter || undefined,
+            Designation: designationFilter || undefined,
+            StaffType: effectiveStaffType,
+            ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
+            BoardCode: activeBoardCode || undefined,
+            BoardId: activeBoardId || undefined,
+            CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+          },
+        });
+        if (response?.data) {
+          const items = response.data.items || response.data.data || (Array.isArray(response.data) ? response.data : []);
+          if (Array.isArray(items) && items.length > 0) {
+            apiStaffRecords = items;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn("Could not fetch full staff list from API for PDF, using local records:", fetchErr);
+      }
+
+      // 2. Merge API items with local list for consistency and complete field coverage
+      const itemMap = new Map();
+      (list || []).forEach((r) => {
+        if (!r) return;
+        const key = String(r.id ?? r.employeeId ?? "");
+        if (key) itemMap.set(key, r);
+        if (r.employeeId) itemMap.set(String(r.employeeId).trim().toLowerCase(), r);
+      });
+
+      const mergedList = [];
+      const seenKeys = new Set();
+
+      if (apiStaffRecords.length > 0) {
+        apiStaffRecords.forEach((apiItem) => {
+          if (!apiItem) return;
+          const idKey = apiItem.id !== undefined && apiItem.id !== null ? String(apiItem.id) : "";
+          const empKey = apiItem.employeeId ? String(apiItem.employeeId).trim().toLowerCase() : "";
+
+          const localMatch = (idKey && itemMap.get(idKey)) || (empKey && itemMap.get(empKey));
+          const finalItem = localMatch ? { ...localMatch, ...apiItem } : apiItem;
+
+          const uniqueKey = idKey || empKey || String(finalItem.id ?? finalItem.employeeId ?? "");
+          if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+            if (uniqueKey) seenKeys.add(uniqueKey);
+            if (idKey) seenKeys.add(idKey);
+            if (empKey) seenKeys.add(empKey);
+            mergedList.push(finalItem);
+          }
+        });
+      }
+
+      (list || []).forEach((r) => {
+        if (!r) return;
+        const idKey = r.id !== undefined && r.id !== null ? String(r.id) : "";
+        const empKey = r.employeeId ? String(r.employeeId).trim().toLowerCase() : "";
+
+        const isAlreadyIncluded = (idKey && seenKeys.has(idKey)) || (empKey && seenKeys.has(empKey));
+        if (!isAlreadyIncluded) {
+          const uniqueKey = idKey || empKey || String(r.id ?? r.employeeId ?? "");
+          if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+            if (uniqueKey) seenKeys.add(uniqueKey);
+            if (idKey) seenKeys.add(idKey);
+            if (empKey) seenKeys.add(empKey);
+            mergedList.push(r);
+          }
+        }
+      });
+
+      // 3. Filter complete dataset according to board, campus, tab, department, designation and search
+      const exportData = mergedList.filter((r) => {
+        if (!r) return false;
+        if (!isStaffMatchingBoard(r, selectedBoard, boards)) return false;
+        if (!isStaffMatchingCampus(r, selectedCampus)) return false;
+        if (
+          currentTab !== "All" &&
+          (currentTab === "Pending"
+            ? r.staffType !== "Teaching" || r.profileStatus === "Completed"
+            : currentTab === "Completed"
+              ? r.profileStatus !== "Completed"
+              : r.staffType !== currentTab)
+        ) {
+          return false;
+        }
+        if (departmentFilter && r.department !== departmentFilter) return false;
+        if (designationFilter && r.designation !== designationFilter) return false;
+        if (staffTypeFilter && r.staffType !== staffTypeFilter) return false;
+
+        const staffFullName = r.fullName || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.name || "";
+        return [staffFullName, r.firstName, r.middleName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
+          String(v || "").toLowerCase().includes((q || "").toLowerCase())
+        );
+      });
+
+      if (exportData.length === 0) {
+        setToast("No staff records found to export for the selected criteria.");
+        return;
+      }
+
+      // 4. Construct professional Landscape A4 PDF Document
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // Pure Black & White Header Section
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.setTextColor(0, 0, 0);
+      doc.text("PIRNAV INTERMEDIATE COLLEGE", 8, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.5);
+      doc.setTextColor(40, 40, 40);
+      doc.text(`${staffTitle} — ${boardLabel}`, 8, 20);
+
+      doc.setFontSize(8.5);
+      doc.setTextColor(70, 70, 70);
+      doc.text(`Generated on: ${dateStr} | Total Staff Records Exported: ${exportData.length}`, 8, 26);
+
+      // 5. Complete Table Headers matching full staff profile details
+      const tableHeaders = isNonTeaching
+        ? [
+          "#",
+          "Employee ID",
+          "Staff Name",
+          "Department",
+          "Designation",
+          "Board",
+          "Gender",
+          "Date of Birth",
+          "Mobile",
+          "Email",
+          "Joining Date",
+          "Experience",
+          "Employment",
+          "Location",
+          "Status",
+        ]
+        : [
+          "#",
+          "Employee ID",
+          "Staff Name",
+          "Department",
+          "Designation",
+          "Board",
+          "Subject Allocation",
+          "Gender",
+          "Date of Birth",
+          "Mobile",
+          "Email",
+          "Joining Date",
+          "Experience",
+          "Employment",
+          "Status",
+        ];
+
+      // 6. Map complete individual records to table rows
+      const tableData = exportData.map((r, idx) => {
+        const empId = r.employeeId || `STF-${idx + 1}`;
+        const name = [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.fullName || r.name || "—";
+        const dept = r.department || "—";
+        const desig = r.designation || "—";
+        const board = resolveBoardCode(r, boards) || r.boardCode || r.boardName || r.board || "—";
+        const gender = r.gender || "Other";
+        const dob = r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "—";
+        const mobile = r.alternateMobile ? `${r.mobile || "—"}\nAlt: ${r.alternateMobile}` : (r.mobile || "—");
+        const email = r.email || "—";
+        const joining = (r.dateOfJoining || r.joiningDate) ? String(r.dateOfJoining || r.joiningDate).split("T")[0] : "—";
+        const exp = r.experience != null && r.experience !== "" ? `${Number(r.experience)} Yrs` : "0 Yrs";
+        const empType = r.employmentType || "Full Time";
+        const location = [r.city, r.state].filter(Boolean).join(", ") || "—";
+        const status = r.status || "Active";
+
+        if (isNonTeaching) {
+          return [
+            idx + 1,
+            empId,
+            name,
+            dept,
+            desig,
+            board,
+            gender,
+            dob,
+            mobile,
+            email,
+            joining,
+            exp,
+            empType,
+            location,
+            status,
+          ];
+        }
+
+        const rawSubs = r.allocatedSubjects ?? r.subjects;
+        const subsStr = Array.isArray(rawSubs)
+          ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean).join(", ")
+          : (typeof rawSubs === "string" ? rawSubs : "—");
+
+        return [
+          idx + 1,
+          empId,
+          name,
+          dept,
+          desig,
+          board,
+          subsStr || "—",
+          gender,
+          dob,
+          mobile,
+          email,
+          joining,
+          exp,
+          empType,
+          status,
+        ];
+      });
+
+      // 7. AutoTable with repeated headers across multiple pages and exact B&W styling
+      autoTable(doc, {
+        head: [tableHeaders],
+        body: tableData,
+        startY: 30,
+        showHead: "everyPage",
+        theme: "grid",
+        styles: {
+          font: "helvetica",
+          fontSize: 7.2,
+          textColor: [0, 0, 0],
+          lineColor: [140, 140, 140],
+          lineWidth: 0.2,
+          cellPadding: 2,
+          valign: "middle",
+          overflow: "linebreak",
+        },
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          fontSize: 7.2,
+          lineWidth: 0.35,
+          lineColor: [80, 80, 80],
+          valign: "middle",
+          halign: "center",
+        },
+        alternateRowStyles: {
+          fillColor: [255, 255, 255],
+        },
+        columnStyles: isNonTeaching
+          ? {
+            0: { cellWidth: 7, halign: "center" },
+            1: { cellWidth: 20 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 24 },
+            4: { cellWidth: 24 },
+            5: { cellWidth: 18 },
+            6: { cellWidth: 14, halign: "center" },
+            7: { cellWidth: 19, halign: "center" },
+            8: { cellWidth: 24 },
+            9: { cellWidth: 34 },
+            10: { cellWidth: 19, halign: "center" },
+            11: { cellWidth: 15, halign: "center" },
+            12: { cellWidth: 17, halign: "center" },
+            13: { cellWidth: 22 },
+            14: { cellWidth: 16, halign: "center" },
+          }
+          : {
+            0: { cellWidth: 7, halign: "center" },
+            1: { cellWidth: 19 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 22 },
+            5: { cellWidth: 16 },
+            6: { cellWidth: 29 },
+            7: { cellWidth: 12, halign: "center" },
+            8: { cellWidth: 18, halign: "center" },
+            9: { cellWidth: 22 },
+            10: { cellWidth: 32 },
+            11: { cellWidth: 18, halign: "center" },
+            12: { cellWidth: 14, halign: "center" },
+            13: { cellWidth: 16, halign: "center" },
+            14: { cellWidth: 14, halign: "center" },
+          },
+        margin: { top: 30, left: 7.5, right: 7.5, bottom: 13 },
+        didDrawPage: (data) => {
+          const totalPages = doc.internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(80, 80, 80);
+          doc.text(
+            "Pirnav College Management System — Official Staff Directory",
+            7.5,
+            doc.internal.pageSize.getHeight() - 6
+          );
+          doc.text(
+            `Page ${data.pageNumber} of ${totalPages}`,
+            doc.internal.pageSize.getWidth() - 7.5,
+            doc.internal.pageSize.getHeight() - 6,
+            { align: "right" }
+          );
+        },
+      });
+
+      const filename = `${staffTitle.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(filename);
+      setToast(`Exported ${exportData.length} staff records to PDF successfully.`);
+    } catch (pdfErr) {
+      console.error("Failed to export complete staff PDF:", pdfErr);
+      setToast("Failed to export PDF file. Please try again.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // Download Excel Template with full headers and 0 data rows (blank template)
   const handleExportTemplate = (typeOverride) => {
     setExportOpen(false);
     const targetType = typeOverride || (forced === "Non-Teaching" || (!forced && tab === "Non-Teaching") ? "Non-Teaching" : "Teaching");
     const columns = targetType === "Non-Teaching" ? NON_TEACHING_EXCEL_COLUMNS : TEACHING_EXCEL_COLUMNS;
 
-    const sampleRow = targetType === "Non-Teaching" ? [
-      selectedBoard?.name || selectedBoard?.code || "Main Campus", // Board Name
-      "NTC-2026-001", // Employee ID
-      "Robert", // First Name
-      "E.", // Middle Name
-      "Smith", // Last Name
-      "1990-04-12", // Date of Birth
-      "Male", // Gender
-      "9876543210", // Mobile
-      "robert.smith@example.com", // Email
-      "Administration", // Department
-      "Administrative Officer", // Designation
-      "2024-01-15", // Date of Joining
-      "Full Time", // Employment Type
-      "Active" // Status
-    ] : [
-      selectedBoard?.name || selectedBoard?.code || "Main Campus", // Board Name
-      "TCH-2026-001", // Employee ID
-      "Sarah", // First Name
-      "M.", // Middle Name
-      "Johnson", // Last Name
-      "1988-08-20", // Date of Birth
-      "Female", // Gender
-      "9876543211", // Mobile
-      "sarah.johnson@example.com", // Email
-      "Computer Science", // Department
-      "Assistant Professor", // Designation
-      "Data Structures, Database Management", // Subject Allocation
-      "2024-06-01", // Date of Joining
-      "Full Time", // Employment Type
-      "Active" // Status
-    ];
-
     try {
-      const ws = XLSX.utils.aoa_to_sheet([columns, sampleRow]);
+      // Template must contain strictly column headers only (0 sample or existing rows)
+      const ws = XLSX.utils.aoa_to_sheet([columns]);
       ws["!cols"] = columns.map(() => ({ wch: 22 }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `${targetType}_Template`);
       XLSX.writeFile(wb, `${targetType}_Staff_Import_Template.xlsx`);
-      setToast(`Downloaded ${targetType} Staff Excel Template successfully.`);
+      setToast(`Downloaded blank ${targetType} Staff Excel Template successfully.`);
     } catch (err) {
       console.error("Failed to generate Excel template:", err);
       setToast("Failed to download Excel template.");
@@ -4596,7 +5088,9 @@ function StaffList({ records = [], setRecords, forced }) {
                 {exportOpen ? (
                   <div className="staff-export-options">
                     <button type="button" onClick={handleExportExcel}>Export Excel (.xlsx)</button>
-                    <button type="button" onClick={() => handleExportTemplate(forced || tab || "Teaching")}>Download Import Template</button>
+                    <button type="button" onClick={handleExportPdf} disabled={exportingPdf}>
+                      {exportingPdf ? "Exporting PDF..." : "Export PDF"}
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -6216,37 +6710,128 @@ function Details({ record, records, setRecords, id }) {
   }
 
   const handleSaveCard = async (updatedRecord) => {
-    if (updatedRecord.firstName || updatedRecord.lastName) {
-      updatedRecord.fullName =
-        [updatedRecord.firstName, updatedRecord.middleName, updatedRecord.lastName].filter(Boolean).join(" ") || updatedRecord.fullName;
+    // 1. Ensure firstName and lastName are properly derived from fullName if needed
+    let firstName = updatedRecord.firstName;
+    let lastName = updatedRecord.lastName;
+    let middleName = updatedRecord.middleName;
+
+    if ((!firstName || !lastName) && updatedRecord.fullName) {
+      const parts = String(updatedRecord.fullName).trim().split(/\s+/);
+      if (parts.length === 1) {
+        firstName = parts[0];
+        lastName = ".";
+      } else if (parts.length === 2) {
+        firstName = parts[0];
+        lastName = parts[1];
+      } else {
+        firstName = parts[0];
+        middleName = parts.slice(1, -1).join(" ");
+        lastName = parts[parts.length - 1];
+      }
     }
+
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ") || updatedRecord.fullName;
+
+    // 2. Sanitize date formats for HTML5 and C# API (strip ISO time part to YYYY-MM-DD)
+    const sanitizeDate = (val) => {
+      if (!val) return null;
+      const str = String(val).split("T")[0].trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
+    };
+
+    const dateOfBirth = sanitizeDate(updatedRecord.dateOfBirth) || sanitizeDate(activeRecord.dateOfBirth) || "1990-01-01";
+    const dateOfJoining = sanitizeDate(updatedRecord.dateOfJoining) || sanitizeDate(activeRecord.dateOfJoining);
+    const experienceFrom = sanitizeDate(updatedRecord.experienceFrom) || sanitizeDate(activeRecord.experienceFrom);
+    const experienceTo = sanitizeDate(updatedRecord.experienceTo) || sanitizeDate(activeRecord.experienceTo);
+
+    // 3. Normalize allocated subjects as string array
+    const rawSubs = updatedRecord.allocatedSubjects ?? updatedRecord.subjects ?? activeRecord.allocatedSubjects ?? activeRecord.subjects;
+    const allocatedSubjects = Array.isArray(rawSubs)
+      ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean)
+      : typeof rawSubs === "string" && rawSubs.trim()
+        ? rawSubs.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
+    const payload = {
+      ...activeRecord,
+      ...updatedRecord,
+      firstName: firstName || activeRecord.firstName || "Staff",
+      middleName: middleName || activeRecord.middleName || null,
+      lastName: lastName || activeRecord.lastName || ".",
+      fullName,
+      gender: updatedRecord.gender || activeRecord.gender || "Other",
+      mobile: updatedRecord.mobile || activeRecord.mobile || "",
+      dateOfBirth,
+      allocatedSubjects,
+      subjects: allocatedSubjects,
+      departmentSpecific: {
+        ...(typeof activeRecord.departmentSpecific === "object" ? activeRecord.departmentSpecific : {}),
+        ...(typeof updatedRecord.departmentSpecific === "object" ? updatedRecord.departmentSpecific : {}),
+        allocatedSubjects,
+        subjects: allocatedSubjects,
+      },
+      ...(dateOfJoining ? { dateOfJoining, joiningDate: dateOfJoining } : {}),
+      ...(experienceFrom ? { experienceFrom } : {}),
+      ...(experienceTo ? { experienceTo } : {}),
+      ...(updatedRecord.totalExperience !== undefined ? { totalExperience: updatedRecord.totalExperience } : {}),
+    };
+
+    // Unconditionally sanitize documents & auxiliary lists to avoid serialization mismatches
+    if (payload.documents !== undefined) {
+      if (typeof payload.documents === "object" && payload.documents !== null) {
+        try {
+          payload.documentsJson = JSON.stringify(payload.documents);
+        } catch { }
+      }
+      delete payload.documents;
+    }
+    delete payload.documentsMap;
+    delete payload.documentsList;
+    delete payload.educationList;
+    delete payload.experienceList;
+    delete payload.departmentSpecificJson;
+
     try {
       // PUT /api/v1/staff/{id}
-      await apiClient.put(apiEndpoints.faculty.update(updatedRecord.id), updatedRecord);
-      setApiDetail((prev) => ({ ...(prev || {}), ...updatedRecord }));
+      const res = await apiClient.put(apiEndpoints.faculty.update(payload.id), payload);
+      const serverUpdated = res.data?.data || res.data || {};
+      const merged = { ...activeRecord, ...payload, ...serverUpdated, allocatedSubjects, subjects: allocatedSubjects };
+      setApiDetail(merged);
+      setRecords((prev) => prev.map((r) => (r.id === payload.id ? { ...r, ...merged } : r)));
+      try {
+        window.dispatchEvent(new Event("staff-records-updated"));
+      } catch (error) {
+        console.warn("Unable to notify Roles & Permissions about the staff update:", error);
+      }
+      setToast("Staff details updated successfully.");
     } catch (err) {
-      console.warn("PUT /api/v1/staff/{id} API error:", err);
+      console.error("PUT /api/v1/staff/{id} API error:", err);
+      const msg = getApiErrorMessage(err, "Failed to update staff details.");
+      setToast(msg);
     }
-    setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? { ...r, ...updatedRecord } : r)));
-    try {
-      window.dispatchEvent(new Event("staff-records-updated"));
-    } catch (error) {
-      console.warn("Unable to notify Roles & Permissions about the staff update:", error);
-    }
-    setToast("Staff details updated successfully.");
   };
 
   return (
     <DashboardLayout
       title="Staff Details"
       subtitle="View complete staff record and profile activity."
-      breadcrumb={["People", "Staff Management"]}
-      actions={
-        activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
-          <button className="cms-btn cms-btn-primary" onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}>
-            Review Submission
+      breadcrumb={["People", "Staff Management"]} actions={
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <button
+            className="cms-btn cms-btn-primary"
+            onClick={() => n(`/dashboard/staff/${activeRecord.id}/edit`)}
+          >
+            <Pencil size={14} style={{ marginRight: 6 }} /> Edit Staff
           </button>
-        ) : null
+          {activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
+            <button
+              className="cms-btn cms-btn-secondary"
+              onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
+            >
+              Review Submission
+            </button>
+          ) : null}
+        </div>
       }
     >
       <main className="staff-mock-page">
@@ -6446,7 +7031,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // 2. Try assignedCampuses
     if (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) {
@@ -6695,6 +7280,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
         <SubjectAllocationInput
+          staffId={record.id}
           department={formData.department || record.department || ""}
           value={currentVal}
           onChange={(newSubs) => setFormData((prev) => ({ ...prev, allocatedSubjects: newSubs, subjects: newSubs }))}
@@ -6746,10 +7332,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         />
       );
     }
+    const inputVal = type === "date" && val ? String(val).split("T")[0] : val;
     return (
       <input
         type={type === "date" ? "date" : type === "email" ? "email" : "text"}
-        value={val}
+        value={inputVal}
         readOnly={key === "employeeId"}
         onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
       />
@@ -7224,14 +7811,33 @@ export default function StaffManagementPage() {
     page = <Navigate to="/dashboard/staff/pending" replace />;
   else if (p.endsWith("/review") && record)
     page = <Review record={record} update={update} activity={activity} />;
-  else if (p.endsWith("/edit") && record)
-    page =
-      record.staffType === "Teaching" ? (
-        <TeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
-      ) : (
-        <NonTeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+  else if (p.endsWith("/edit")) {
+    if (loadingStaff && !record) {
+      page = (
+        <DashboardLayout title="Edit Staff" breadcrumb={["People", "Staff Management"]}>
+          <main className="staff-mock-page">
+            <SkeletonPage variant="form" rows={8} />
+          </main>
+        </DashboardLayout>
       );
-  else if (id || record)
+    } else if (record) {
+      page =
+        record.staffType === "Teaching" ? (
+          <TeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+        ) : (
+          <NonTeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+        );
+    } else {
+      page = (
+        <DashboardLayout title="Staff Record Not Found" breadcrumb={["People", "Staff Management"]}>
+          <main className="staff-mock-page">
+            <p style={{ margin: "20px 0" }}>The requested staff record could not be found for editing.</p>
+            <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/list")}>Back to Staff List</button>
+          </main>
+        </DashboardLayout>
+      );
+    }
+  } else if (id || record)
     page = <Details record={record} id={id} records={safeRecords} setRecords={setRecords} />;
   else
     page = (

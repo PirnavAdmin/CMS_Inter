@@ -268,7 +268,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Id", id);
             parameters.Add("p_CampusId", campusId);
 
-            var rows = await conn.ExecuteAsync(
+            var rows = await conn.ExecuteScalarAsync<int>(
                 new CommandDefinition(
                     "sp_DeleteTemplate",
                     parameters,
@@ -285,7 +285,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Id", id);
             parameters.Add("p_CampusId", campusId);
 
-            var rows = await conn.ExecuteAsync(
+            var rows = await conn.ExecuteScalarAsync<int>(
                 new CommandDefinition(
                     "sp_ToggleTemplateActive",
                     parameters,

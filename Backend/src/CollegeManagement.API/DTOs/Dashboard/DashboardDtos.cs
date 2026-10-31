@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace CollegeManagement.API.DTOs.Dashboard;
@@ -179,6 +179,8 @@ public class StudentsOverviewResponseDto
 {
     public int TotalStudents { get; set; }
     public int TotalCount => TotalStudents;
+    public int MarkedStudents { get; set; }
+    public int MarkedCount => MarkedStudents;
     public int ActiveStudents { get; set; }
     public int InactiveStudents { get; set; }
     public int MaleStudents { get; set; }
@@ -291,6 +293,8 @@ public class StudentsAttendanceTodayResponseDto
     public int TotalStudents { get; set; }
     public int Total => TotalStudents;
     public int TotalCount => TotalStudents;
+    public int MarkedStudents { get; set; }
+    public int MarkedCount => MarkedStudents;
     public int Present { get; set; }
     public int PresentCount => Present;
     public int Absent { get; set; }
@@ -338,6 +342,8 @@ public class StaffAttendanceTodayResponseDto
     public int TotalStaff { get; set; }
     public int Total => TotalStaff;
     public int TotalCount => TotalStaff;
+    public int MarkedStaff { get; set; }
+    public int MarkedCount => MarkedStaff;
     public int Present { get; set; }
     public int PresentCount => Present;
     public int Absent { get; set; }
@@ -581,14 +587,62 @@ public class UpcomingHolidayItemDto
     public string DateType { get; set; } = "Single Day";
     public DateTime StartDate { get; set; }
     public DateTime EndDate { get; set; }
-    public string FormattedDateRange { get; set; } = string.Empty;
+
+    private string? _formattedDateRange;
+    public string FormattedDateRange
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_formattedDateRange)) return _formattedDateRange;
+            if (StartDate == default) return "Scheduled";
+            if (EndDate == default || StartDate.Date == EndDate.Date)
+            {
+                return StartDate.ToString("dd MMM yyyy");
+            }
+            return $"{StartDate:dd MMM yyyy} - {EndDate:dd MMM yyyy}";
+        }
+        set => _formattedDateRange = value;
+    }
     public string DateRange => FormattedDateRange;
-    public string DayOfWeek { get; set; } = string.Empty;
+
+    private string? _dayOfWeek;
+    public string DayOfWeek
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_dayOfWeek)) return _dayOfWeek;
+            return StartDate != default ? StartDate.ToString("ddd") : string.Empty;
+        }
+        set => _dayOfWeek = value;
+    }
+
     public int TotalDays { get; set; } = 1;
     public string DurationText => TotalDays > 1 ? $"{TotalDays} Days" : "1 Day";
     public string Status { get; set; } = "Active";
     public string LifecycleStatus { get; set; } = "Upcoming";
-    public string CountdownText { get; set; } = string.Empty;
+
+    private string? _countdownText;
+    public string CountdownText
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_countdownText)) return _countdownText;
+            var today = DateTime.UtcNow.Date;
+            if (StartDate != default && EndDate != default && today >= StartDate.Date && today <= EndDate.Date)
+            {
+                return "Ongoing";
+            }
+            if (StartDate != default)
+            {
+                var diff = (StartDate.Date - today).Days;
+                if (diff == 0) return "Today";
+                if (diff == 1) return "Tomorrow";
+                if (diff > 1) return $"{diff} Days";
+            }
+            return LifecycleStatus;
+        }
+        set => _countdownText = value;
+    }
     public string? Description { get; set; }
     public int? AcademicYearId { get; set; }
     public int? BoardId { get; set; }

@@ -406,26 +406,40 @@ const normalizeStudentRecord = (raw) => {
   const studentId = Number(pick(raw, ["studentId", "StudentId", "student_id", "id", "Id"])) || null;
   const name = String(pick(raw, ["studentName", "StudentName", "name", "Name", "fullName", "FullName"]) || "").trim();
   const admissionNo = String(pick(raw, ["admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "admission_no"]) || "").trim();
-  const rollNo = String(pick(raw, ["rollNo", "RollNo", "roll", "Roll", "rollNumber", "RollNumber", "roll_no"]) || "").trim();
+  const rawRoll = pick(raw, ["rollNo", "RollNo", "roll", "Roll", "rollNumber", "RollNumber", "roll_no"]);
+  const rollNo = rawRoll !== null && rawRoll !== undefined ? String(rawRoll).trim() : "";
   const explicitFather = String(pick(raw, ["fatherName", "FatherName", "father_name", "father", "Father", "parentName", "ParentName", "guardianName", "GuardianName", "fatherOrGuardianName"]) || "").trim();
   const motherName = String(pick(raw, ["motherName", "MotherName", "mother_name", "mother", "Mother"]) || "").trim();
 
   const resolvedFather = explicitFather || deriveFatherNameFromStudent(name);
   const cleanStudentId = studentId || (admissionNo ? admissionNo.replace(/\D/g, "") : null) || (rollNo && rollNo !== "-" ? rollNo : "518");
 
+  const boardId = Number(pick(raw, ["boardId", "BoardId"])) || null;
+  const academicYearId = Number(pick(raw, ["academicYearId", "AcademicYearId"])) || null;
+  const sectionId = Number(pick(raw, ["sectionId", "SectionId"])) || null;
+  const rawSection = pick(raw, ["section", "Section", "sectionName", "SectionName"]);
+  const section = rawSection !== null && rawSection !== undefined ? String(rawSection).trim() : "";
+  const status = String(pick(raw, ["status", "Status"]) || "").trim();
+  const isActive = pick(raw, ["isActive", "IsActive"]) !== false;
+
   return {
     id: studentId || null,
     studentId: cleanStudentId,
     admissionNo: admissionNo,
-    rollNo: rollNo || "-",
+    rollNo: rollNo,
     name: name,
     fatherName: resolvedFather,
     motherName: motherName || "Anita Devi",
     group: String(pick(raw, ["groupName", "GroupName", "group", "Group", "courseName", "CourseName"]) || "").trim(),
     academicYear: String(pick(raw, ["academicYear", "AcademicYear", "academicYearName", "AcademicYearName", "yearName", "YearName"]) || "").trim(),
+    academicYearId,
     level: String(pick(raw, ["academicLevel", "AcademicLevel", "level", "Level", "year", "Year"]) || "").trim(),
-    section: String(pick(raw, ["section", "Section", "sectionName", "SectionName"]) || "").trim(),
+    section: section,
+    sectionId,
     board: String(pick(raw, ["boardName", "BoardName", "board", "Board"]) || "").trim(),
+    boardId,
+    status,
+    isActive,
   };
 };
 
@@ -619,7 +633,7 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
               onClick={() => choose(student)}
             >
               <strong>{student.admissionNo}</strong>
-              <span>{student.name || "Student"}{student.rollNo ? ` · Roll ${student.rollNo}` : ""}</span>
+              <span>{student.name || "Student"}{student.rollNo ? ` · Roll ${student.rollNo}` : ""}{student.section ? ` · Sec ${student.section}` : ""}</span>
             </button>
           )) : <p>No matching students found.</p>}
         </div>
@@ -1980,7 +1994,12 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       if (!raw) {
         try {
           const sRes = await apiClient.get("/api/v1/students", {
-            params: { campusId: selectedCampusId || 1, pageSize: 500 },
+            params: {
+              ...(selectedCampusId ? { campusId: selectedCampusId } : {}),
+              ...(selectedBoardId ? { boardId: selectedBoardId } : {}),
+              ...(selectedAcademicYearId ? { academicYearId: selectedAcademicYearId } : {}),
+              pageSize: 500,
+            },
             skipGlobalLoader: true,
             silent: true,
             skipErrorLog: true,
@@ -1992,36 +2011,41 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         }
       }
 
-      if (!raw) {
-        try {
-          const aRes = await apiClient.get("/api/v1/student-admissions", {
-            params: { campusId: selectedCampusId || 1, pageSize: 500 },
-            skipGlobalLoader: true,
-            silent: true,
-            skipErrorLog: true,
-          });
-          raw = aRes?.data;
-        } catch {
-          raw = mockStudents;
-        }
-      }
-      const rawList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);
+      const rawList = unwrapStudentPayload(raw).map(normalizeStudentRecord);
+
+      // Strict validation of all 3 mandatory conditions:
+      // Condition 1: Student admission must be successfully completed
+      // Condition 2: Student must be allocated to a valid section
+      // Condition 3: Student must have a generated roll number
+      const eligibleStudents = rawList.filter((s) => {
+        if (!s.admissionNo || s.admissionNo === "-") return false;
+        if (s.isActive === false) return false;
+        if (["rejected", "cancelled", "pending", "submitted"].includes((s.status || "").toLowerCase())) return false;
+        if (!s.section || s.section === "-" || s.section.toLowerCase() === "unallocated") return false;
+        if (!s.rollNo || s.rollNo === "-" || s.rollNo.toLowerCase() === "null") return false;
+
+        // Context filtering by Board and Academic Year
+        if (selectedBoardId && s.boardId && Number(s.boardId) !== Number(selectedBoardId)) return false;
+        if (selectedAcademicYearId && s.academicYearId && Number(s.academicYearId) !== Number(selectedAcademicYearId)) return false;
+
+        return true;
+      });
+
       const seenAdmissions = new Set();
-      const mapped = rawList.filter((s) => {
+      const mapped = eligibleStudents.filter((s) => {
         const key = String(s.admissionNo).trim().toLowerCase();
         if (!key || seenAdmissions.has(key)) return false;
         seenAdmissions.add(key);
         return true;
       });
+
       if (requestId !== studentRequestRef.current) return [];
-      const finalStudents = mapped.length ? mapped : mockStudents.map(normalizeStudentRecord);
-      setStudentRows(finalStudents);
-      return finalStudents;
+      setStudentRows(mapped);
+      return mapped;
     } catch (error) {
       if (requestId !== studentRequestRef.current) return [];
-      const fallbackStudents = mockStudents.map(normalizeStudentRecord);
-      setStudentRows(fallbackStudents);
-      return fallbackStudents;
+      setStudentRows([]);
+      return [];
     } finally {
       if (requestId === studentRequestRef.current) setLoadingStudents(false);
     }
@@ -2113,7 +2137,9 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
   useEffect(() => {
     const statusParam = searchParams?.get("status");
     const tabParam = searchParams?.get("tab");
-    if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested") {
+    const reqIdParam = searchParams?.get("requestId") || searchParams?.get("id");
+    const admNoParam = searchParams?.get("admissionNo");
+    if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested" || reqIdParam) {
       setActiveTab("actions");
     } else if (tabParam === "certificates" || tabParam === "records") {
       setActiveTab("certificates");
@@ -2124,8 +2150,33 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     if (statusParam && ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(statusParam)) {
       setWorkflowStatusFilter(statusParam);
       setActionPage(1);
+    } else if (reqIdParam || statusParam === "Requested") {
+      setWorkflowStatusFilter("Requested");
+      setActionPage(1);
+    }
+
+    if (reqIdParam || admNoParam) {
+      setWorkflowQuery(reqIdParam || admNoParam);
+      setActionPage(1);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    // Clear student form selection on board or academic year switch to guarantee dropdown consistency
+    setForm((prev) => {
+      if (!prev.admissionNo) return prev;
+      return {
+        ...prev,
+        admissionNo: "",
+        student: "",
+        group: "",
+        level: "",
+        academicYear: "",
+        rollNo: "",
+        section: "",
+      };
+    });
+  }, [selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
     if (!filtersReadyRef.current) return undefined;
@@ -2437,7 +2488,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
           await refreshCertificateData({ showLoader: false });
           setActiveTab("actions");
           setWorkflowStatusFilter("Generated");
-          setActionPage(1);
+    
           return;
         } catch (patchErr) {
           console.warn("generateFromRequest failed, falling back to standard generate", patchErr);
@@ -2875,7 +2926,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       if (action === "review") {
         setPrintPreview(null);
         setActiveTab("actions");
-        setActionPage(1);
+  
       }
       if (action === "approve" || action === "issue") {
         try {
@@ -3053,7 +3104,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       await refreshCertificateData({ showLoader: false });
       setPrintPreview(null);
       setActiveTab("actions");
-      setActionPage(1);
+
       setToast(`Certificate ${row.number || ""} reissued successfully.`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, "Failed to reissue certificate. Please try again."));
@@ -3485,31 +3536,107 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         } catch {
           const { jsPDF } = await import("jspdf");
           const { autoTable } = await import("jspdf-autotable");
-          const doc = new jsPDF({ orientation: "landscape" });
-          doc.setFontSize(16);
-          doc.text("PIRNAV COLLEGE - CERTIFICATE RECORDS", 14, 15);
-          doc.setFontSize(10);
-          doc.text(`Generated on: ${formatDateDdMmYyyy(todayIso())} | Total Records: ${targetRecords.length}`, 14, 22);
+          const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(15);
+          doc.setTextColor(0, 0, 0);
+          doc.text("PIRNAV COLLEGE - CERTIFICATE RECORDS", 10, 14);
 
-          const tableHeaders = [["#", "Cert No.", "Adm No.", "Student Name", "Type", "Request Date", "Issue Date", "Status"]];
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          doc.setTextColor(60, 60, 60);
+          doc.text(`Generated on: ${formatDateDdMmYyyy(todayIso())} | Total Records Exported: ${targetRecords.length}`, 10, 20);
+
+          const tableHeaders = [
+            "#",
+            "Certificate Number",
+            "Admission No.",
+            "Student Name",
+            "Father Name",
+            "Level / Group",
+            "Type",
+            "Request Date",
+            "Issue Date",
+            "Status",
+            "Issued By",
+            "Purpose"
+          ];
           const tableData = targetRecords.map((r, i) => [
             i + 1,
             r.number || "-",
             r.admissionNo || "-",
             r.student || "-",
+            r.fatherName || "-",
+            [r.level, r.group].filter(Boolean).join(" / ") || "-",
             r.type || "-",
             formatDateDdMmYyyy(r.requestDate),
             formatDateDdMmYyyy(r.issue || r.issueDate),
             r.status || "-",
+            r.issuedBy || "Principal",
+            r.purpose || "-"
           ]);
 
           (autoTable || doc.autoTable).call(doc, {
-            head: tableHeaders,
+            head: [tableHeaders],
             body: tableData,
-            startY: 28,
-            theme: "striped",
-            styles: { fontSize: 9, cellPadding: 3 },
-            headStyles: { fillColor: [111, 132, 0] },
+            startY: 25,
+            showHead: "everyPage",
+            theme: "grid",
+            styles: {
+              font: "helvetica",
+              fontSize: 7.2,
+              textColor: [0, 0, 0],
+              lineColor: [140, 140, 140],
+              lineWidth: 0.2,
+              cellPadding: 2,
+              valign: "middle",
+              overflow: "linebreak",
+            },
+            headStyles: {
+              fillColor: [240, 240, 240],
+              textColor: [0, 0, 0],
+              fontStyle: "bold",
+              fontSize: 7.2,
+              lineWidth: 0.35,
+              lineColor: [80, 80, 80],
+              valign: "middle",
+              halign: "center",
+            },
+            alternateRowStyles: {
+              fillColor: [255, 255, 255],
+            },
+            columnStyles: {
+              0: { cellWidth: 8, halign: "center" },
+              1: { cellWidth: 26 },
+              2: { cellWidth: 20 },
+              3: { cellWidth: 30 },
+              4: { cellWidth: 26 },
+              5: { cellWidth: 24 },
+              6: { cellWidth: 28 },
+              7: { cellWidth: 20, halign: "center" },
+              8: { cellWidth: 20, halign: "center" },
+              9: { cellWidth: 18, halign: "center" },
+              10: { cellWidth: 20 },
+              11: { cellWidth: 37 },
+            },
+            margin: { top: 25, left: 10, right: 10, bottom: 12 },
+            didDrawPage: (data) => {
+              const totalPages = doc.internal.getNumberOfPages();
+              doc.setFontSize(8);
+              doc.setFont("helvetica", "normal");
+              doc.setTextColor(80, 80, 80);
+              doc.text(
+                "Pirnav College Management System — Official Certificate Records Report",
+                10,
+                doc.internal.pageSize.getHeight() - 6
+              );
+              doc.text(
+                `Page ${data.pageNumber} of ${totalPages}`,
+                doc.internal.pageSize.getWidth() - 10,
+                doc.internal.pageSize.getHeight() - 6,
+                { align: "right" }
+              );
+            },
           });
 
           pdfBlob = doc.output("blob");
@@ -3811,6 +3938,8 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                             group: selectedStudent?.group || "",
                             level: selectedStudent?.level || "",
                             academicYear: selectedStudent?.academicYear || "",
+                            rollNo: selectedStudent?.rollNo || "",
+                            section: selectedStudent?.section || "",
                           }));
                           setErrors((prev) => ({ ...prev, admissionNo: undefined }));
                           return;
@@ -4166,7 +4295,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                     onClick={() => {
                       setActiveTab("actions");
                       setWorkflowStatusFilter("Requested");
-                      setActionPage(1);
+                
                       setLiveAlert(null);
                     }}
                   >
@@ -4207,7 +4336,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                   aria-pressed={workflowStatusFilter === label}
                   onClick={() => {
                     setWorkflowStatusFilter((current) => current === label ? "All" : label);
-                    setActionPage(1);
+              
                   }}
                   title={`${workflowStatusFilter === label ? "Clear" : "Filter by"} ${label} status`}
                 >
@@ -4225,7 +4354,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                   value={workflowQuery}
                   onChange={(event) => {
                     setWorkflowQuery(event.target.value);
-                    setActionPage(1);
+              
                   }}
                   placeholder="Search certificate no., admission no., student, type, status or date"
                 />

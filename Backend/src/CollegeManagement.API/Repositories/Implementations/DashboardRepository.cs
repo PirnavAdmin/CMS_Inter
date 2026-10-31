@@ -168,6 +168,78 @@ public class DashboardRepository : IDashboardRepository
 
             if (summary != null)
             {
+                // Ensure TotalStudents strictly reflects Student Management (Students table)
+                try
+                {
+                    var studentManagementCount = await conn.ExecuteScalarAsync<int?>(@"
+                        SELECT COUNT(*)
+                        FROM `Students` s
+                        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
+                          AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId);",
+                        new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
+
+                    if (studentManagementCount.HasValue && studentManagementCount.Value > 0)
+                    {
+                        summary.TotalStudents = studentManagementCount.Value;
+                    }
+                }
+                catch (Exception countEx)
+                {
+                    _logger?.LogWarning(countEx, "Could not fetch direct Student Management count");
+                }
+
+                // Ensure Teaching & Non-Teaching Staff counts strictly match Staff Management (Staff table)
+                try
+                {
+                    var staffCounts = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
+                        SELECT 
+                            COUNT(CASE WHEN (st.StaffType = 'Teaching' OR (LOWER(st.StaffType) LIKE '%teach%' AND LOWER(st.StaffType) NOT LIKE '%non%') OR st.StaffType IS NULL OR st.StaffType = '') THEN 1 END) AS TeachingCount,
+                            COUNT(CASE WHEN (LOWER(st.StaffType) LIKE '%non%' OR (st.StaffType IS NOT NULL AND st.StaffType != '' AND LOWER(st.StaffType) NOT LIKE '%teach%')) THEN 1 END) AS NonTeachingCount
+                        FROM `Staff` st
+                        WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                          AND (st.Status = 'Active' OR st.Status IS NULL)
+                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR st.CampusId = @p_CampusId)
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR st.BoardId = @p_BoardId OR st.BoardId IS NULL);",
+                        new { p_CampusId = campusId, p_BoardId = boardId });
+
+                    if (staffCounts != null)
+                    {
+                        var tCount = Convert.ToInt32(staffCounts.TeachingCount ?? 0);
+                        var ntCount = Convert.ToInt32(staffCounts.NonTeachingCount ?? 0);
+                        if (tCount > 0 || ntCount > 0)
+                        {
+                            summary.TeachingStaff = tCount;
+                            summary.NonTeachingStaff = ntCount;
+                        }
+                    }
+                }
+                catch (Exception staffEx)
+                {
+                    _logger?.LogWarning(staffEx, "Could not fetch direct Staff Management count");
+                }
+
+                // If no prior year baseline exists (first recorded academic year), ensure last year staff counts are 0
+                if (summary.LastYearTotalStudents == 0 && summary.LastYearTotalGroups == 0 && summary.LastYearTotalSections == 0)
+                {
+                    summary.LastYearTeachingStaff = 0;
+                    summary.LastYearNonTeachingStaff = 0;
+                    summary.TeachingStaffVsLastYearPercentage = 0;
+                    summary.NonTeachingStaffVsLastYearPercentage = 0;
+                }
+                else
+                {
+                    if (summary.LastYearTeachingStaff > 0)
+                    {
+                        summary.TeachingStaffVsLastYearPercentage = Math.Round(((summary.TeachingStaff - summary.LastYearTeachingStaff) * 100.0m) / summary.LastYearTeachingStaff, 1);
+                    }
+                    if (summary.LastYearNonTeachingStaff > 0)
+                    {
+                        summary.NonTeachingStaffVsLastYearPercentage = Math.Round(((summary.NonTeachingStaff - summary.LastYearNonTeachingStaff) * 100.0m) / summary.LastYearNonTeachingStaff, 1);
+                    }
+                }
+
                 return summary;
             }
         }
@@ -669,11 +741,11 @@ public class DashboardRepository : IDashboardRepository
         // Construct DTO
         var studentAttendance = new StudentsAttendanceTodayResponseDto
         {
-            Present = (int)(studentAttSummary?.Present ?? 0),
-            Absent = (int)(studentAttSummary?.Absent ?? 0),
-            HalfDay = (int)(studentAttSummary?.HalfDay ?? 0),
-            TotalStudents = (int)(studentAttSummary?.TotalStudents ?? 0),
-            AttendancePercentage = (decimal)(studentAttSummary?.AttendancePercentage ?? 0m)
+            Present = Convert.ToInt32(studentAttSummary?.Present ?? 0),
+            Absent = Convert.ToInt32(studentAttSummary?.Absent ?? 0),
+            HalfDay = Convert.ToInt32(studentAttSummary?.HalfDay ?? 0),
+            TotalStudents = Convert.ToInt32(studentAttSummary?.TotalStudents ?? 0),
+            AttendancePercentage = Convert.ToDecimal(studentAttSummary?.AttendancePercentage ?? 0m)
         };
 
         if (sectionRows.Any())
@@ -681,53 +753,53 @@ public class DashboardRepository : IDashboardRepository
             studentAttendance.Breakdown = sectionRows.Select(r => new AttendanceCategoryBreakdownDto
             {
                 CategoryName = (string)(r.SectionName ?? r.Name ?? ""),
-                Present = (int)(r.Present ?? 0),
-                Absent = (int)(r.Absent ?? 0),
-                TotalStudents = (int)(r.Total ?? r.TotalStudents ?? 0),
-                AttendancePercentage = (decimal)(r.Percentage ?? 0m)
+                Present = Convert.ToInt32(r.Present ?? 0),
+                Absent = Convert.ToInt32(r.Absent ?? 0),
+                TotalStudents = Convert.ToInt32(r.Total ?? r.TotalStudents ?? 0),
+                AttendancePercentage = Convert.ToDecimal(r.Percentage ?? 0m)
             }).ToList();
         }
 
         var staffAttendance = new StaffAttendanceTodayResponseDto
         {
-            Present = (int)(staffAttSummary?.Present ?? 0),
-            Absent = (int)(staffAttSummary?.Absent ?? 0),
-            Late = (int)(staffAttSummary?.Late ?? 0),
-            OnLeave = (int)(staffAttSummary?.OnLeave ?? staffAttSummary?.Leave ?? 0),
-            TotalStaff = (int)(staffAttSummary?.TotalStaff ?? 0),
-            AttendancePercentage = (decimal)(staffAttSummary?.AttendancePercentage ?? 0m)
+            Present = Convert.ToInt32(staffAttSummary?.Present ?? 0),
+            Absent = Convert.ToInt32(staffAttSummary?.Absent ?? 0),
+            Late = Convert.ToInt32(staffAttSummary?.Late ?? 0),
+            OnLeave = Convert.ToInt32(staffAttSummary?.OnLeave ?? staffAttSummary?.Leave ?? 0),
+            TotalStaff = Convert.ToInt32(staffAttSummary?.TotalStaff ?? 0),
+            AttendancePercentage = Convert.ToDecimal(staffAttSummary?.AttendancePercentage ?? 0m)
         };
 
         var upcomingExams = examsRaw.Select(e => new DashboardUpcomingExaminationDto
         {
-            Id = (int)(e.Id ?? 0),
+            Id = Convert.ToInt32(e.Id ?? 0),
             ExamName = (string)(e.ExamName ?? ""),
             SubjectName = (string)(e.SubjectName ?? e.Subject ?? e.ExamName ?? ""),
             Date = (string)(e.Date ?? ""),
             FormattedDate = (string)(e.FormattedDate ?? ""),
             GroupName = (string)(e.GroupName ?? ""),
             Hall = (string)(e.HallName ?? "Main Hall"),
-            StudentCount = (int)(e.StudentCount ?? 0)
+            StudentCount = Convert.ToInt32(e.StudentCount ?? 0)
         }).ToList();
 
         var summary = new DashboardSummaryResponseDto
         {
-            TotalStudents = (int)(summaryKpi?.TotalStudents ?? 0),
-            TeachingStaff = (int)(summaryKpi?.TeachingStaff ?? 0),
-            NonTeachingStaff = (int)(summaryKpi?.NonTeachingStaff ?? 0),
-            TotalSections = (int)(summaryKpi?.TotalSections ?? 0),
-            TotalGroups = (int)(summaryKpi?.TotalGroups ?? 0),
-            UpcomingExams = (int)(summaryKpi?.UpcomingExams ?? 0),
-            Admissions = (int)(summaryKpi?.Admissions ?? 0),
+            TotalStudents = Convert.ToInt32(summaryKpi?.TotalStudents ?? 0),
+            TeachingStaff = Convert.ToInt32(summaryKpi?.TeachingStaff ?? 0),
+            NonTeachingStaff = Convert.ToInt32(summaryKpi?.NonTeachingStaff ?? 0),
+            TotalSections = Convert.ToInt32(summaryKpi?.TotalSections ?? 0),
+            TotalGroups = Convert.ToInt32(summaryKpi?.TotalGroups ?? 0),
+            UpcomingExams = Convert.ToInt32(summaryKpi?.UpcomingExams ?? 0),
+            Admissions = Convert.ToInt32(summaryKpi?.Admissions ?? 0),
             StudentsVsLastYearPercentage = Convert.ToDecimal(summaryKpi?.StudentsVsLastYearPercentage ?? 2.5m),
             TeachingStaffVsLastYearPercentage = Convert.ToDecimal(summaryKpi?.TeachingStaffVsLastYearPercentage ?? 1.2m)
         };
 
         var feeSummary = new PrincipalFeeSummaryDto
         {
-            Collected = (decimal)(summaryKpi?.TotalCollected ?? 0m),
-            Pending = (decimal)(summaryKpi?.TotalOutstanding ?? 0m),
-            CollectionRate = (decimal)(summaryKpi?.CollectionPercentage ?? 0m),
+            Collected = Convert.ToDecimal(summaryKpi?.TotalCollected ?? 0m),
+            Pending = Convert.ToDecimal(summaryKpi?.TotalOutstanding ?? 0m),
+            CollectionRate = Convert.ToDecimal(summaryKpi?.CollectionPercentage ?? 0m),
             Chart = feeTrendRaw
         };
 

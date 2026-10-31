@@ -261,13 +261,25 @@ CREATE PROCEDURE `sp_GetNumberSeriesConfigurations`(
     IN p_IncludeSubCounters TINYINT
 )
 BEGIN
+    WITH Ranked AS (
+        SELECT 
+            `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
+            `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
+            `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`,
+            ROW_NUMBER() OVER (
+                PARTITION BY `SeriesCode` 
+                ORDER BY (`CampusId` = p_CampusId) DESC, (`CampusId` IS NOT NULL) DESC, `Id` DESC
+            ) AS rn
+        FROM `NumberSeriesConfigurations`
+        WHERE (p_CampusId IS NULL OR `CampusId` = p_CampusId OR `CampusId` IS NULL)
+          AND (COALESCE(p_IncludeSubCounters, 0) = 1 OR `SeriesCode` NOT LIKE '%|%')
+    )
     SELECT 
         `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
         `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
         `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`
-    FROM `NumberSeriesConfigurations`
-    WHERE (p_CampusId IS NULL OR `CampusId` = p_CampusId OR `CampusId` IS NULL)
-      AND (COALESCE(p_IncludeSubCounters, 0) = 1 OR `SeriesCode` NOT LIKE '%|%')
+    FROM Ranked
+    WHERE rn = 1
     ORDER BY `Id` ASC;
 END //
 

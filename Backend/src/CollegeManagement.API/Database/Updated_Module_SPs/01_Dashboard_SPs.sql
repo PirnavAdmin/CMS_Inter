@@ -84,22 +84,22 @@ BEGIN
         END IF;
     END IF;
 
-    -- 1. Total Students mapped to StudentAdmissions (fallback to Students table)
+    -- 1. Total Students mapped to Students table (Student Management count with fallback to StudentAdmissions)
     SELECT COUNT(*) INTO v_TotalStudents
-    FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
-      AND (sa.Status IS NULL OR sa.Status = '' OR sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active'))
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
-      AND (v_EffectiveAcademicYearId IS NULL OR sa.AcademicYearId = v_EffectiveAcademicYearId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
+    FROM `Students` s
+    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+      AND (v_EffectiveAcademicYearId IS NULL OR s.AcademicYearId = v_EffectiveAcademicYearId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
 
     IF v_TotalStudents = 0 THEN
         SELECT COUNT(*) INTO v_TotalStudents
-        FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-          AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
-          AND (v_EffectiveAcademicYearId IS NULL OR s.AcademicYearId = v_EffectiveAcademicYearId)
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
+        FROM `StudentAdmissions` sa
+        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+          AND (sa.Status IS NULL OR sa.Status = '' OR sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active'))
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
+          AND (v_EffectiveAcademicYearId IS NULL OR sa.AcademicYearId = v_EffectiveAcademicYearId)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
     END IF;
 
     -- 2. Teaching Staff Count
@@ -181,19 +181,19 @@ BEGIN
 
     IF v_PriorAcademicYearId IS NOT NULL THEN
         SELECT COUNT(*) INTO v_LastYearStudents
-        FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
-          AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
-          AND sa.AcademicYearId = v_PriorAcademicYearId
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
+        FROM `Students` s
+        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+          AND s.AcademicYearId = v_PriorAcademicYearId
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
 
         IF v_LastYearStudents = 0 THEN
             SELECT COUNT(*) INTO v_LastYearStudents
-            FROM `Students` s
-            WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-              AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
-              AND s.AcademicYearId = v_PriorAcademicYearId
-              AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
+            FROM `StudentAdmissions` sa
+            WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+              AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
+              AND sa.AcademicYearId = v_PriorAcademicYearId
+              AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
         END IF;
 
         SELECT COUNT(*) INTO v_LastYearGroups
@@ -209,8 +209,34 @@ BEGIN
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR sec.BoardId = p_BoardId)
           AND sec.AcademicYearId = v_PriorAcademicYearId;
 
-        SET v_LastYearTeaching = v_TeachingStaff;
-        SET v_LastYearNonTeaching = v_NonTeachingStaff;
+        IF v_PriorYearEndDate IS NOT NULL THEN
+            SELECT COUNT(*) INTO v_LastYearTeaching
+            FROM `Staff` st
+            WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+              AND (st.Status = 'Active' OR st.Status IS NULL)
+              AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+              AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+              AND st.JoiningDate <= v_PriorYearEndDate
+              AND (
+                  st.StaffType = 'Teaching' 
+                  OR st.StaffType = 'Both' 
+                  OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching'
+                  OR st.StaffType IS NULL
+                  OR LOWER(st.StaffType) NOT LIKE '%non%'
+              );
+
+            SELECT COUNT(*) INTO v_LastYearNonTeaching
+            FROM `Staff` st
+            WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+              AND (st.Status = 'Active' OR st.Status IS NULL)
+              AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+              AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+              AND st.JoiningDate <= v_PriorYearEndDate
+              AND (LOWER(st.StaffType) LIKE '%non%');
+        ELSE
+            SET v_LastYearTeaching = 0;
+            SET v_LastYearNonTeaching = 0;
+        END IF;
     END IF;
 
     -- Calculate Growth %
@@ -218,6 +244,18 @@ BEGIN
         SET v_StudentsGrowth = ROUND(((v_TotalStudents - v_LastYearStudents) * 100.0) / v_LastYearStudents, 1);
     ELSE
         SET v_StudentsGrowth = 0.0;
+    END IF;
+
+    IF v_LastYearTeaching > 0 THEN
+        SET v_TeachingGrowth = ROUND(((v_TeachingStaff - v_LastYearTeaching) * 100.0) / v_LastYearTeaching, 1);
+    ELSE
+        SET v_TeachingGrowth = 0.0;
+    END IF;
+
+    IF v_LastYearNonTeaching > 0 THEN
+        SET v_NonTeachingGrowth = ROUND(((v_NonTeachingStaff - v_LastYearNonTeaching) * 100.0) / v_LastYearNonTeaching, 1);
+    ELSE
+        SET v_NonTeachingGrowth = 0.0;
     END IF;
 
     IF v_LastYearGroups > 0 THEN
@@ -365,33 +403,16 @@ CREATE PROCEDURE sp_GetDashboardGroupDistribution(
     IN p_CampusId INT
 )
 BEGIN
-    DECLARE v_AdmissionsCount INT DEFAULT 0;
+    DECLARE v_StudentsCount INT DEFAULT 0;
 
-    SELECT COUNT(*) INTO v_AdmissionsCount
-    FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sa.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
+    SELECT COUNT(*) INTO v_StudentsCount
+    FROM `Students` s
+    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
 
-    IF v_AdmissionsCount > 0 THEN
-        SELECT 
-            g.GroupId,
-            COALESCE(NULLIF(g.GroupCode, ''), g.GroupName) AS GroupCode,
-            COALESCE(g.GroupName, g.GroupCode) AS GroupName,
-            COUNT(sa.AdmissionId) AS TotalStudents
-        FROM `Groups` g
-        LEFT JOIN `StudentAdmissions` sa ON sa.GroupId = g.GroupId 
-                               AND (sa.IsActive = 1 OR sa.IsActive IS NULL) 
-                               AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
-                               AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sa.AcademicYearId = p_AcademicYearId) 
-                               AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId)
-        WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId)
-          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR g.AcademicYearId = p_AcademicYearId)
-        GROUP BY g.GroupId, COALESCE(NULLIF(g.GroupCode, ''), g.GroupName), COALESCE(g.GroupName, g.GroupCode)
-        ORDER BY TotalStudents DESC, GroupName ASC;
-    ELSE
+    IF v_StudentsCount > 0 THEN
         SELECT 
             g.GroupId,
             COALESCE(NULLIF(g.GroupCode, ''), g.GroupName) AS GroupCode,
@@ -403,6 +424,23 @@ BEGIN
                                AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
                                AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId) 
                                AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
+        WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId)
+          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR g.AcademicYearId = p_AcademicYearId)
+        GROUP BY g.GroupId, COALESCE(NULLIF(g.GroupCode, ''), g.GroupName), COALESCE(g.GroupName, g.GroupCode)
+        ORDER BY TotalStudents DESC, GroupName ASC;
+    ELSE
+        SELECT 
+            g.GroupId,
+            COALESCE(NULLIF(g.GroupCode, ''), g.GroupName) AS GroupCode,
+            COALESCE(g.GroupName, g.GroupCode) AS GroupName,
+            COUNT(sa.AdmissionId) AS TotalStudents
+        FROM `Groups` g
+        LEFT JOIN `StudentAdmissions` sa ON sa.GroupId = g.GroupId 
+                               AND (sa.IsActive = 1 OR sa.IsActive IS NULL) 
+                               AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
+                               AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sa.AcademicYearId = p_AcademicYearId) 
+                               AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId)
         WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId)
           AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR g.AcademicYearId = p_AcademicYearId)
@@ -426,6 +464,7 @@ CREATE PROCEDURE sp_GetDashboardStudentAttendance(
 BEGIN
     DECLARE v_TargetDate DATE;
     DECLARE v_TotalStudents INT DEFAULT 0;
+    DECLARE v_MarkedStudents INT DEFAULT 0;
     DECLARE v_Present INT DEFAULT 0;
     DECLARE v_Absent INT DEFAULT 0;
     DECLARE v_HalfDay INT DEFAULT 0;
@@ -439,7 +478,7 @@ BEGIN
     SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
     SET v_View = COALESCE(p_ViewBy, 'Overall');
 
-    -- Total Students
+    -- Total Students from Students table (Student Management count with fallback to StudentAdmissions)
     SELECT COUNT(*) INTO v_TotalStudents
     FROM `Students` s
     WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
@@ -451,17 +490,25 @@ BEGIN
         SELECT COUNT(*) INTO v_TotalStudents
         FROM `StudentAdmissions` sa
         WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+          AND (sa.Status IS NULL OR sa.Status = '' OR sa.Status IN ('Approved', 'Request Approved', 'Admitted', 'Active'))
           AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
           AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
     END IF;
 
-    -- Present & Half-Day counts
+    -- Present, Absent & Half-Day counts from actual attendance records
     SELECT 
+        COUNT(DISTINCT dailyAtt.StudentId),
         COALESCE(SUM(CASE 
             WHEN (MorningStatus = 1 AND AfternoonStatus = 1) 
               OR (MorningStatus = 1 AND AfternoonStatus IS NULL) 
               OR (MorningStatus IS NULL AND AfternoonStatus = 1) THEN 1 
+            ELSE 0 
+        END), 0),
+        COALESCE(SUM(CASE 
+            WHEN (MorningStatus = 2 AND AfternoonStatus = 2) 
+              OR (MorningStatus = 2 AND AfternoonStatus IS NULL) 
+              OR (MorningStatus IS NULL AND AfternoonStatus = 2) THEN 1 
             ELSE 0 
         END), 0),
         COALESCE(SUM(CASE 
@@ -471,7 +518,7 @@ BEGIN
               OR AfternoonStatus IN (3,4)) THEN 1 
             ELSE 0 
         END), 0)
-    INTO v_Present, v_HalfDay
+    INTO v_MarkedStudents, v_Present, v_Absent, v_HalfDay
     FROM (
         SELECT 
             s.StudentId,
@@ -498,14 +545,12 @@ BEGIN
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
 
-    IF v_TotalStudents > 0 THEN
-        SET v_Absent = GREATEST(0, v_TotalStudents - v_Present - v_HalfDay);
+    IF v_TotalStudents > 0 AND v_MarkedStudents > 0 THEN
         SET v_PresentPct = ROUND((v_Present * 100.0) / v_TotalStudents, 1);
         SET v_AbsentPct = ROUND((v_Absent * 100.0) / v_TotalStudents, 1);
         SET v_HalfDayPct = ROUND((v_HalfDay * 100.0) / v_TotalStudents, 1);
         SET v_AttPct = ROUND(((v_Present + 0.5 * v_HalfDay) * 100.0) / v_TotalStudents, 1);
     ELSE
-        SET v_Absent = 0;
         SET v_PresentPct = 0.0;
         SET v_AbsentPct = 0.0;
         SET v_HalfDayPct = 0.0;
@@ -516,6 +561,7 @@ BEGIN
     SELECT 
         v_View AS ViewBy,
         v_TotalStudents AS TotalStudents,
+        v_MarkedStudents AS MarkedStudents,
         v_Present AS Present,
         v_Absent AS Absent,
         v_HalfDay AS HalfDay,
@@ -533,7 +579,7 @@ BEGIN
             COALESCE(sec.SectionName, CONCAT('Section ', s.SectionId)) AS CategoryName,
             COUNT(DISTINCT s.StudentId) AS Total,
             COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END) AS Present,
-            GREATEST(0, COUNT(DISTINCT s.StudentId) - COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END)) AS Absent,
+            COUNT(DISTINCT CASE WHEN a.Status = 2 THEN a.StudentId END) AS Absent,
             ROUND(COALESCE((COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END) * 100.0) / NULLIF(COUNT(DISTINCT s.StudentId), 0), 0.0), 1) AS Percentage
         FROM `Students` s
         LEFT JOIN `Sections` sec ON s.SectionId = sec.SectionId
@@ -551,7 +597,7 @@ BEGIN
             COALESCE(g.GroupName, CONCAT('Group ', s.GroupId)) AS CategoryName,
             COUNT(DISTINCT s.StudentId) AS Total,
             COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END) AS Present,
-            GREATEST(0, COUNT(DISTINCT s.StudentId) - COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END)) AS Absent,
+            COUNT(DISTINCT CASE WHEN a.Status = 2 THEN a.StudentId END) AS Absent,
             ROUND(COALESCE((COUNT(DISTINCT CASE WHEN a.Status = 1 THEN a.StudentId END) * 100.0) / NULLIF(COUNT(DISTINCT s.StudentId), 0), 0.0), 1) AS Percentage
         FROM `Students` s
         LEFT JOIN `Groups` g ON s.GroupId = g.GroupId
@@ -567,7 +613,6 @@ BEGIN
     END IF;
 END //
 
--- ----------------------------------------------------------------------------------------------------
 -- 5. sp_GetDashboardStaffAttendance (Today's Faculty Attendance)
 -- ----------------------------------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS sp_GetDashboardStaffAttendance//
@@ -585,9 +630,8 @@ BEGIN
     DECLARE v_TotalStaff INT DEFAULT 0;
     DECLARE v_TeachingCount INT DEFAULT 0;
     DECLARE v_NonTeachingCount INT DEFAULT 0;
-    DECLARE v_FilteredTotal INT DEFAULT 0;
+    DECLARE v_MarkedStaff INT DEFAULT 0;
     DECLARE v_Present INT DEFAULT 0;
-    DECLARE v_ExplicitAbsent INT DEFAULT 0;
     DECLARE v_Absent INT DEFAULT 0;
     DECLARE v_Late INT DEFAULT 0;
     DECLARE v_OnLeave INT DEFAULT 0;
@@ -596,34 +640,36 @@ BEGIN
     DECLARE v_AbsentPct DECIMAL(5,2) DEFAULT 0.0;
     DECLARE v_LatePct DECIMAL(5,2) DEFAULT 0.0;
     DECLARE v_OnLeavePct DECIMAL(5,2) DEFAULT 0.0;
+    DECLARE v_LatestAttTime DATETIME DEFAULT NULL;
 
     SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
     SET v_StaffType = COALESCE(p_StaffType, 'All Staff');
 
-    -- Total Active Teaching & Non-Teaching Staff
+    -- Total Active Teaching & Non-Teaching Staff matching Campus and Board
     SELECT 
-        COUNT(DISTINCT CASE WHEN (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR st.StaffType IS NULL) THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN (st.StaffType = 'Non-Teaching' OR st.StaffType = 'NonTeaching' OR st.StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching') THEN st.Id END)
+        COUNT(DISTINCT CASE WHEN (st.StaffType IS NULL OR st.StaffType = '' OR LOWER(st.StaffType) = 'teaching' OR LOWER(st.StaffType) = 'both' OR (LOWER(st.StaffType) NOT LIKE '%non%teaching%' AND LOWER(st.StaffType) NOT LIKE '%non-teaching%')) THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN (st.StaffType IS NOT NULL AND (LOWER(st.StaffType) LIKE '%non%teaching%' OR LOWER(st.StaffType) LIKE '%non-teaching%')) THEN st.Id END)
     INTO v_TeachingCount, v_NonTeachingCount
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL);
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR st.CampusId IS NULL)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
     SET v_TotalStaff = v_TeachingCount + v_NonTeachingCount;
 
-    -- Attendance metrics
+    -- Actual marked attendance and leaves
     SELECT 
-        COUNT(DISTINCT st.Id),
+        COUNT(DISTINCT CASE WHEN att.Status IS NOT NULL OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
         COUNT(DISTINCT CASE WHEN att.Status = 1 OR att.Status = 'Present' OR att.Status = '1' THEN st.Id END),
         COUNT(DISTINCT CASE WHEN att.Status = 2 OR att.Status = 'Absent' OR att.Status = '2' THEN st.Id END),
         COUNT(DISTINCT CASE WHEN att.Status = 3 OR att.Status = 'Late' OR att.Status = '3' THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN att.Status = 4 OR att.Status = 'Leave' OR att.Status = '4' OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END)
-    INTO v_FilteredTotal, v_Present, v_ExplicitAbsent, v_Late, v_OnLeave
+        COUNT(DISTINCT CASE WHEN att.Status = 4 OR att.Status = 'Leave' OR att.Status = '4' OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
+        MAX(att.UpdatedAt)
+    INTO v_MarkedStaff, v_Present, v_Absent, v_Late, v_OnLeave, v_LatestAttTime
     FROM `Staff` st
     LEFT JOIN (
-        SELECT sa2.FacultyId, sa2.Status
+        SELECT sa2.FacultyId, sa2.Status, COALESCE(sa2.UpdatedAt, sa2.CreatedAt) AS UpdatedAt
         FROM `StaffAttendances` sa2
         JOIN `StaffAttendanceSessions` sas2 ON sa2.StaffSessionId = sas2.StaffSessionId
         WHERE DATE(sas2.AttendanceDate) = v_TargetDate
@@ -638,21 +684,28 @@ BEGIN
     )
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL);
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR st.CampusId IS NULL)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
-    IF v_TotalStaff > 0 THEN
-        SET v_Absent = GREATEST(0, v_TotalStaff - v_Present - v_Late - v_OnLeave);
-        SET v_AttendancePct = ROUND(((v_Present + 0.5 * v_Late) * 100.0) / v_TotalStaff, 1);
+    IF v_TotalStaff > 0 AND v_MarkedStaff > 0 THEN
+        -- Late staff are physically present at college (with late arrival flag)
+        SET v_AttendancePct = ROUND(((v_Present + v_Late) * 100.0) / v_TotalStaff, 1);
         SET v_PresentPct = ROUND((v_Present * 100.0) / v_TotalStaff, 1);
         SET v_AbsentPct = ROUND((v_Absent * 100.0) / v_TotalStaff, 1);
         SET v_LatePct = ROUND((v_Late * 100.0) / v_TotalStaff, 1);
         SET v_OnLeavePct = ROUND((v_OnLeave * 100.0) / v_TotalStaff, 1);
+    ELSE
+        SET v_AttendancePct = 0.0;
+        SET v_PresentPct = 0.0;
+        SET v_AbsentPct = 0.0;
+        SET v_LatePct = 0.0;
+        SET v_OnLeavePct = 0.0;
     END IF;
 
     SELECT 
         v_StaffType AS StaffType,
         v_TotalStaff AS TotalStaff,
+        v_MarkedStaff AS MarkedStaff,
         v_Present AS Present,
         v_Absent AS Absent,
         v_Late AS Late,
@@ -664,10 +717,9 @@ BEGIN
         v_OnLeavePct AS OnLeavePercentage,
         v_TeachingCount AS TeachingCount,
         v_NonTeachingCount AS NonTeachingCount,
-        NOW() AS LastUpdatedTime;
+        v_LatestAttTime AS LastUpdatedTime;
 END //
 
--- ----------------------------------------------------------------------------------------------------
 -- 6. sp_GetDashboardCertificateRequests
 -- ----------------------------------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS sp_GetDashboardCertificateRequests//
@@ -981,9 +1033,18 @@ BEGIN
         COALESCE(h.DateType, 'Single Day') AS DateType,
         h.StartDate,
         h.EndDate,
+        DATE_FORMAT(h.StartDate, '%d %b %Y') AS FormattedDateRange,
+        DATE_FORMAT(h.StartDate, '%a') AS DayOfWeek,
         COALESCE(DATEDIFF(h.EndDate, h.StartDate) + 1, 1) AS TotalDays,
         COALESCE(h.Description, '') AS Description,
-        COALESCE(h.Status, 'Active') AS Status
+        COALESCE(h.Status, 'Active') AS Status,
+        CASE 
+            WHEN CURDATE() BETWEEN h.StartDate AND h.EndDate THEN 'Ongoing'
+            WHEN DATEDIFF(h.StartDate, CURDATE()) = 0 THEN 'Today'
+            WHEN DATEDIFF(h.StartDate, CURDATE()) = 1 THEN 'Tomorrow'
+            WHEN DATEDIFF(h.StartDate, CURDATE()) > 1 THEN CONCAT('In ', DATEDIFF(h.StartDate, CURDATE()), ' Days')
+            ELSE 'Upcoming'
+        END AS CountdownText
     FROM `Holidays` h
     WHERE (h.IsDeleted = 0 OR h.IsDeleted IS NULL)
       AND (h.Status = 'Active' OR h.Status IS NULL)

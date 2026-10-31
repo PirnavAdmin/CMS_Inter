@@ -240,11 +240,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                     st.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
                     st.Equals("Non Teaching", StringComparison.OrdinalIgnoreCase))
                 {
-                    query = query.Where(s => s.StaffType != "Teaching" && s.StaffType != null && s.StaffType != "");
+                    query = query.Where(s => s.StaffType != null && s.StaffType != "" &&
+                        (s.StaffType.ToLower().Contains("non") || !s.StaffType.ToLower().Contains("teach")));
                 }
                 else if (st.Equals("Teaching", StringComparison.OrdinalIgnoreCase))
                 {
-                    query = query.Where(s => s.StaffType == "Teaching" || s.StaffType == null || s.StaffType == "");
+                    query = query.Where(s => s.StaffType == "Teaching" || 
+                        (s.StaffType != null && s.StaffType.ToLower().Contains("teach") && !s.StaffType.ToLower().Contains("non")) || 
+                        s.StaffType == null || s.StaffType == "");
                 }
                 else
                 {
@@ -460,11 +463,17 @@ namespace CollegeManagement.API.Repositories.Implementations
                 query = query.Where(s => s.CampusId == campusId.Value);
             }
 
-            var activeStaff = await query.ToListAsync();
+            var allStaff = await query.ToListAsync();
+            // Filter strictly by Active status (matching Staff Management module)
+            var activeStaff = allStaff.Where(s => string.IsNullOrEmpty(s.Status) || string.Equals(s.Status, "Active", StringComparison.OrdinalIgnoreCase)).ToList();
 
             var totalStaff = activeStaff.Count;
-            var teachingStaff = activeStaff.Count(s => !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
-            var nonTeachingStaff = activeStaff.Count(s => string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
+            var teachingStaff = activeStaff.Count(s =>
+                string.IsNullOrWhiteSpace(s.StaffType) ||
+                string.Equals(s.StaffType.Trim(), "Teaching", StringComparison.OrdinalIgnoreCase) ||
+                (s.StaffType.ToLowerInvariant().Contains("teach") && !s.StaffType.ToLowerInvariant().Contains("non"))
+            );
+            var nonTeachingStaff = totalStaff - teachingStaff;
             
             var completedCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase));
             var pendingCount = totalStaff - completedCount;

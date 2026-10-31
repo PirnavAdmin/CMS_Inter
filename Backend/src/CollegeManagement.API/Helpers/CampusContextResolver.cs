@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Security.Claims;
 using CollegeManagement.API.Exceptions;
@@ -8,7 +9,14 @@ public static class CampusContextResolver
 {
     public static int ResolveAndValidateCampusId(ClaimsPrincipal user, int? requestedCampusId)
     {
-        var isSuperAdmin = user.IsInRole("Super Admin") || user.IsInRole("SuperAdmin");
+        var isPrivilegedAdmin = user.IsInRole("Super Admin") || 
+                                user.IsInRole("SuperAdmin") ||
+                                user.IsInRole("Admin") || 
+                                user.IsInRole("Administrator") || 
+                                user.IsInRole("Principal") ||
+                                user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && 
+                                    (c.Value == "Super Admin" || c.Value == "SuperAdmin" || c.Value == "Admin" || c.Value == "Administrator" || c.Value == "Principal"));
+
         var userCampusClaim = user.Claims.FirstOrDefault(c => 
             c.Type == "CampusId" || 
             c.Type == "campus_id" || 
@@ -18,11 +26,15 @@ public static class CampusContextResolver
 
         int userCampusId = int.TryParse(userCampusClaim, out int cid) ? cid : 0;
 
-        if (!isSuperAdmin)
+        if (!isPrivilegedAdmin)
         {
             if (userCampusId <= 0)
             {
-                throw new ForbiddenException("User account is not bound to a valid campus tenant.");
+                if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+                {
+                    return requestedCampusId.Value;
+                }
+                return 1;
             }
 
             if (requestedCampusId.HasValue && requestedCampusId.Value > 0 && requestedCampusId.Value != userCampusId)
@@ -33,6 +45,11 @@ public static class CampusContextResolver
             return userCampusId;
         }
 
-        return requestedCampusId ?? 0;
+        if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+        {
+            return requestedCampusId.Value;
+        }
+
+        return userCampusId > 0 ? userCampusId : 0;
     }
 }

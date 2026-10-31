@@ -338,6 +338,7 @@ export default function AppRoutes() {
         {/* Reports */}
         <Route element={<ProtectedRoute requiredModule="reports-analytics" />}>
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
+          <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
         {/* Settings General & Admin Profile */}
         <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
@@ -575,7 +576,9 @@ export default function AppRoutes() {
       <Route path="/results" element={<Navigate to="/dashboard/results" replace />} />
       <Route path="/promotion" element={<Navigate to="/dashboard/promotion" replace />} />
       <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
+      <Route path="/certificates" element={<Navigate to="/dashboard/certificates" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
+      <Route path="/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

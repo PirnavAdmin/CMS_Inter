@@ -285,6 +285,9 @@ namespace CollegeManagement.API.DTOs.Staff
         }
 
         // Dynamic Role Documents Dictionary from Frontend
-        public Dictionary<string, string>? Documents { get; set; }
+        public object? Documents { get; set; }
+        public object? DocumentsList { get; set; }
+        public object? EducationList { get; set; }
+        public object? ExperienceList { get; set; }
     }
 }

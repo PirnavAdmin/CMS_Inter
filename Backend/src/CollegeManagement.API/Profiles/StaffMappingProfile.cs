@@ -35,6 +35,8 @@ namespace CollegeManagement.API.Profiles
 
             // UpdateStaffDto -> Staff Entity
             CreateMap<UpdateStaffDto, Staff>()
+                .ForAllMembers(opts => opts.Condition((src, dest, srcMember) => srcMember != null));
+            CreateMap<UpdateStaffDto, Staff>()
                 .ForMember(dest => dest.StaffType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
                 .ForMember(dest => dest.FacultyType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
                 .ForMember(dest => dest.FatherOrHusbandName, opt => opt.MapFrom(src => src.FatherOrHusbandName ?? src.GuardianName))
@@ -59,9 +61,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : (src.BoardName ?? string.Empty)))
                 .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
                 .ForMember(dest => dest.DepartmentSpecific, opt => opt.MapFrom(src => DeserializeDictionary(src.DepartmentSpecificJson)))
-                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
-                    ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
-                    : new List<string>()))
+                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => ResolveAllocatedSubjects(src)))
                 .ForMember(dest => dest.AssignedCampusIds, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => a.CampusId).ToList() : new List<int>()))
                 .ForMember(dest => dest.AssignedCampuses, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => new { id = a.CampusId, name = a.Campus != null ? a.Campus.CampusName : "", code = a.Campus != null ? a.Campus.CampusCode : "" }).Cast<object>().ToList() : new List<object>()))
                 .ForMember(dest => dest.AssignedBoardIds, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => a.BoardId).ToList() : new List<int>()))
@@ -75,9 +75,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : src.BoardName))
                 .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
                 .ForMember(dest => dest.DepartmentSpecific, opt => opt.MapFrom(src => DeserializeDictionary(src.DepartmentSpecificJson)))
-                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
-                    ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
-                    : new List<string>()))
+                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => ResolveAllocatedSubjects(src)))
                 .ForMember(dest => dest.AssignedCampusIds, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => a.CampusId).ToList() : new List<int>()))
                 .ForMember(dest => dest.AssignedCampuses, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => new { id = a.CampusId, name = a.Campus != null ? a.Campus.CampusName : "", code = a.Campus != null ? a.Campus.CampusCode : "" }).Cast<object>().ToList() : new List<object>()))
                 .ForMember(dest => dest.AssignedBoardIds, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => a.BoardId).ToList() : new List<int>()))
@@ -221,6 +219,66 @@ namespace CollegeManagement.API.Profiles
             if (string.IsNullOrWhiteSpace(sizeStr)) return 0;
             if (long.TryParse(sizeStr, out var bytes)) return bytes;
             return 0;
+        }
+        private static List<string> ResolveAllocatedSubjects(Staff src)
+        {
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (src.StaffSubjectAllocations != null)
+            {
+                foreach (var a in src.StaffSubjectAllocations)
+                {
+                    var name = a.Subject != null ? a.Subject.SubjectName : string.Empty;
+                    if (!string.IsNullOrWhiteSpace(name) && seen.Add(name.Trim()))
+                    {
+                        result.Add(name.Trim());
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(src.DepartmentSpecificJson))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(src.DepartmentSpecificJson);
+                    if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        if (doc.RootElement.TryGetProperty("allocatedSubjects", out var prop) ||
+                            doc.RootElement.TryGetProperty("subjects", out prop))
+                        {
+                            if (prop.ValueKind == JsonValueKind.Array)
+                            {
+                                foreach (var el in prop.EnumerateArray())
+                                {
+                                    var val = el.GetString() ?? el.ToString();
+                                    if (!string.IsNullOrWhiteSpace(val) && seen.Add(val.Trim()))
+                                    {
+                                        result.Add(val.Trim());
+                                    }
+                                }
+                            }
+                            else if (prop.ValueKind == JsonValueKind.String)
+                            {
+                                var val = prop.GetString();
+                                if (!string.IsNullOrWhiteSpace(val))
+                                {
+                                    foreach (var part in val.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(part) && seen.Add(part.Trim()))
+                                        {
+                                            result.Add(part.Trim());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return result;
         }
     }
 }

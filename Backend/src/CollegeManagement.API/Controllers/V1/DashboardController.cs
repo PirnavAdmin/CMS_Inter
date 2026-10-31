@@ -226,13 +226,14 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] string? viewBy = "Overall",
+        [FromQuery] DateTime? date = null,
         [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
 
-        var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, campusCheck.EffectiveCampusId, ct);
+        var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
     }
 
@@ -449,7 +450,7 @@ public class DashboardController : ControllerBase
         var summaryRes = await Summary(academicYearId, boardId, null, effectiveCampusId, ct) as OkObjectResult;
         var overviewRes = await StudentsOverview(academicYearId, boardId, null, effectiveCampusId, ct) as OkObjectResult;
         var groupRes = await GroupDistribution(academicYearId, boardId, effectiveCampusId, ct) as OkObjectResult;
-        var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", effectiveCampusId, ct) as OkObjectResult;
+        var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", null, effectiveCampusId, ct) as OkObjectResult;
         var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", null, effectiveCampusId, ct) as OkObjectResult;
         var certRes = await CertificateRequests(academicYearId, boardId, null, effectiveCampusId, ct) as OkObjectResult;
         var examRes = await UpcomingExaminations(academicYearId, boardId, effectiveCampusId, ct) as OkObjectResult;

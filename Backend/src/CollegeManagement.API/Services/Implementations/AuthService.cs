@@ -408,35 +408,58 @@ namespace CollegeManagement.API.Services.Implementations
                     LastLogin = DateTime.UtcNow
                 };
 
-                using (var transaction = connection.BeginTransaction())
+                var existingUserByAdminId = await _userRepository.GetByAdminIdAsync(legacyAdmin.Id, connection);
+                if (existingUserByAdminId != null)
                 {
-                    try
+                    if (!string.Equals(existingUserByAdminId.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
                     {
-                        var newUserId = await _userRepository.CreateUserAsync(newAdminUser, connection, transaction);
-                        transaction.Commit();
-                        newAdminUser.UserId = newUserId;
+                        existingUserByAdminId.Email = normalizedEmail;
+                        await connection.ExecuteAsync("UPDATE Users SET Email = @Email, UpdatedAt = UTC_TIMESTAMP() WHERE UserId = @UserId", new { Email = normalizedEmail, UserId = existingUserByAdminId.UserId });
                     }
-                    catch (Exception ex)
+                    newAdminUser = existingUserByAdminId;
+                    if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
                     {
-                        transaction.Rollback();
-                        _logger.LogWarning(ex, "Concurrency collision during Admin JIT user creation for {Email}. Re-reading Users row.", normalizedEmail);
-
-                        var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, connection);
-                        if (existingUser != null)
+                        newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
+                    }
+                }
+                else
+                {
+                    using (var transaction = connection.BeginTransaction())
+                    {
+                        try
                         {
-                            newAdminUser = existingUser;
-                            if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
-                            {
-                                newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
-                            }
+                            var newUserId = await _userRepository.CreateUserAsync(newAdminUser, connection, transaction);
+                            transaction.Commit();
+                            newAdminUser.UserId = newUserId;
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            return new AuthResult
+                            transaction.Rollback();
+                            _logger.LogWarning(ex, "Concurrency collision during Admin JIT user creation for {Email}. Re-reading Users row.", normalizedEmail);
+
+                            var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, connection)
+                                ?? await _userRepository.GetByAdminIdAsync(legacyAdmin.Id, connection);
+                            if (existingUser != null)
                             {
-                                Status = false,
-                                Message = "Invalid Email or Password"
-                            };
+                                if (!string.Equals(existingUser.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    existingUser.Email = normalizedEmail;
+                                    await connection.ExecuteAsync("UPDATE Users SET Email = @Email, UpdatedAt = UTC_TIMESTAMP() WHERE UserId = @UserId", new { Email = normalizedEmail, UserId = existingUser.UserId });
+                                }
+                                newAdminUser = existingUser;
+                                if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
+                                {
+                                    newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
+                                }
+                            }
+                            else
+                            {
+                                return new AuthResult
+                                {
+                                    Status = false,
+                                    Message = "Invalid Email or Password"
+                                };
+                            }
                         }
                     }
                 }

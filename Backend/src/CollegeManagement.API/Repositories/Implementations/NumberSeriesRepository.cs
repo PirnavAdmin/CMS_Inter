@@ -49,7 +49,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            return result.ToList();
+            var deduped = result
+                .GroupBy(x => x.SeriesCode, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(x => campusId.HasValue && x.CampusId == campusId.Value)
+                              .ThenByDescending(x => x.CampusId.HasValue)
+                              .First())
+                .ToList();
+
+            return deduped;
         }
 
         public async Task<NumberSeriesConfiguration?> GetByCodeAsync(string seriesCode, int? campusId = null)

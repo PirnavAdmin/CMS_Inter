@@ -306,49 +306,33 @@ CREATE PROCEDURE `sp_GetStudentsForCertificateDropdown`(
 )
 BEGIN
     SELECT 
-        StudentId, AdmissionNo, RollNo, StudentName, GroupName, AcademicYear, AcademicLevel, Section
-    FROM (
-        SELECT 
-            s.StudentId AS StudentId,
-            COALESCE(NULLIF(s.AdmissionNo, ''), CONCAT('ADM-', s.StudentId)) AS AdmissionNo,
-            COALESCE(s.RollNo, '') AS RollNo,
-            COALESCE(NULLIF(s.StudentName, ''), 'Student') AS StudentName,
-            COALESCE(g.GroupName, '') AS GroupName,
-            COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-            COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-            COALESCE(sec.SectionName, '') AS Section,
-            COALESCE(s.IsActive, 1) AS IsActive
-        FROM `Students` s
-        LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
-        LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = s.AcademicYearId
-        LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = s.AcademicLevelId
-        LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-        WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
-          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
-
-        UNION ALL
-
-        SELECT 
-            sa.AdmissionId AS StudentId,
-            COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
-            '' AS RollNo,
-            TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
-            COALESCE(g.GroupName, '') AS GroupName,
-            COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-            '1st Year' AS AcademicLevel,
-            '' AS Section,
-            COALESCE(sa.IsActive, 1) AS IsActive
-        FROM `StudentAdmissions` sa
-        LEFT JOIN `Groups` g ON g.GroupId = sa.GroupId
-        LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = sa.AcademicYearId
-        WHERE NOT EXISTS (SELECT 1 FROM `Students` s2 WHERE s2.AdmissionNo COLLATE utf8mb4_unicode_ci = sa.AdmissionNo COLLATE utf8mb4_unicode_ci AND sa.AdmissionNo IS NOT NULL AND sa.AdmissionNo <> '')
-          AND (p_CampusId IS NULL OR p_CampusId = 0 OR sa.CampusId = p_CampusId)
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId)
-          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sa.AcademicYearId = p_AcademicYearId)
-    ) combined
-    WHERE IsActive = 1
-    ORDER BY StudentName ASC;
+        s.StudentId,
+        s.AdmissionNo,
+        s.RollNo,
+        s.StudentName,
+        COALESCE(g.GroupName, '') AS GroupName,
+        COALESCE(ay.AcademicYearName, '') AS AcademicYear,
+        COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
+        COALESCE(sec.SectionName, '') AS Section,
+        s.BoardId,
+        s.AcademicYearId,
+        s.GroupId,
+        s.SectionId,
+        s.CampusId
+    FROM `Students` s
+    INNER JOIN `Sections` sec ON sec.SectionId = s.SectionId AND TRIM(COALESCE(sec.SectionName, '')) <> ''
+    LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
+    LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = s.AcademicYearId
+    LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = s.AcademicLevelId
+    WHERE s.IsActive = 1
+      AND (s.Status IS NULL OR s.Status IN ('Active', 'Admitted', 'Completed'))
+      AND s.AdmissionNo IS NOT NULL AND TRIM(s.AdmissionNo) <> ''
+      AND s.SectionId IS NOT NULL AND s.SectionId > 0
+      AND s.RollNo IS NOT NULL AND TRIM(s.RollNo) <> ''
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
+    ORDER BY s.StudentName ASC;
 END //
 DELIMITER ;
 

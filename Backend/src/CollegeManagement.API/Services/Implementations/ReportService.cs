@@ -703,7 +703,7 @@ public class ReportService : IReportService
             case IReadOnlyList<FacultyWorkloadReportDto> fw:
                 title = "Faculty Workload & Allocation Report";
                 headers = new[] { "S.No", "Employee ID", "Faculty Name", "Department", "Assigned Periods", "Weekly Hours" };
-                var sumHours = fw.Sum(x => x.HoursPerWeek);
+                var sumHours = Math.Round(fw.Sum(x => x.HoursPerWeek), 1);
                 kpis.Add(("Total Faculty", $"{fw.Count}"));
                 kpis.Add(("Total Teaching Hours", $"{sumHours:F1} hrs"));
                 int fwIdx = 1;
