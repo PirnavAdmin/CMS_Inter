@@ -20,25 +20,11 @@ import {
   Printer,
   RotateCcw,
   Search,
-  ShieldCheck,
-  TrendingUp,
   Trophy,
   Users,
   WalletCards,
   X,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  Legend,
-} from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import {
   getReportBoards,
@@ -1769,142 +1755,6 @@ export default function ReportsPage() {
                 </article>
               );
             })}
-          </div>
-
-          {/* Intermediate Board Compliance & Exam Eligibility Norms */}
-          <section className="reports-compliance-section" style={{ marginTop: "24px" }}>
-            <div className="reports-compliance-banner-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "16px", fontWeight: 700 }}>
-                <ShieldCheck size={20} style={{ color: "#2563eb" }} />
-                Board Compliance &amp; Exam Eligibility (BIEAP / TGBIE Norms)
-              </h3>
-              <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--cms-muted)" }}>
-                Official 75% attendance condonation threshold &amp; fee clearance status for IPE Hall Ticket dispatch
-              </p>
-            </div>
-            <div className="reports-compliance-grid" style={{ marginTop: "12px" }}>
-              <div className="reports-compliance-card tone-success">
-                <span>Board Exam Eligible (&ge;75%)</span>
-                <strong>{dashboardData.attendanceEligibleCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-warning">
-                <span>Condonation Range (65-74.9%)</span>
-                <strong>{dashboardData.attendanceCondonationCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-danger">
-                <span>Attendance Detained (&lt;65%)</span>
-                <strong>{dashboardData.attendanceDetainedCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-blue">
-                <span>Hall Ticket Clearance (No Dues)</span>
-                <strong>{dashboardData.studentsClearedCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-warning">
-                <span>Pending Fee Defaulters</span>
-                <strong>{dashboardData.studentsWithDuesCount ?? 0} Students</strong>
-              </div>
-            </div>
-          </section>
-
-          {/* Visual Analytics Trends */}
-          <div className="reports-charts-container" style={{ marginTop: "24px" }}>
-            {/* Monthly Admissions Intake Bar Chart */}
-            <div className="cms-card reports-chart-card" style={{ padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--cms-heading, #172844)" }}>
-                    Monthly Admissions Intake
-                  </h4>
-                  <span style={{ fontSize: "12px", color: "var(--cms-muted, #687791)" }}>
-                    Enrollment volume trend across academic cycles
-                  </span>
-                </div>
-                <span className="reports-badge reports-badge-info" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <TrendingUp size={12} /> {dashboardData.admissions} Total
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "240px" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={
-                      dashboardData.admissionsVsTarget?.length > 0
-                        ? dashboardData.admissionsVsTarget
-                        : [{ label: "Current", value: dashboardData.admissions }]
-                    }
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                      formatter={(val) => [`${val} Admissions`, "Intake"]}
-                    />
-                    <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} name="Admissions" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Student Attendance Rate with 75% Board Threshold */}
-            <div className="cms-card reports-chart-card" style={{ padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--cms-heading, #172844)" }}>
-                    Student Attendance Rate vs Board Threshold
-                  </h4>
-                  <span style={{ fontSize: "12px", color: "var(--cms-muted, #687791)" }}>
-                    Minimum 75% required for IPE Board Exam hall ticket
-                  </span>
-                </div>
-                <span
-                  className={`reports-badge ${
-                    (dashboardData.attendance || 0) >= 75 ? "reports-badge-success" : "reports-badge-warning"
-                  }`}
-                >
-                  Avg: {(dashboardData.attendance || 0).toFixed(1)}%
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "240px" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={
-                      dashboardData.attendanceTrend?.length > 0
-                        ? dashboardData.attendanceTrend
-                        : [
-                            { label: "Cycle 1", value: dashboardData.attendance || 85 },
-                            { label: "Cycle 2", value: Math.max(0, (dashboardData.attendance || 85) - 3) },
-                            { label: "Current", value: dashboardData.attendance || 85 },
-                          ]
-                    }
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="attendanceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} unit="%" />
-                    <Tooltip
-                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                      formatter={(val) => [`${Number(val).toFixed(1)}%`, "Attendance"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#059669"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#attendanceGradient)"
-                      name="Attendance %"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </div>
 
           {/* Interactive In-Page Drilldown Table */}
