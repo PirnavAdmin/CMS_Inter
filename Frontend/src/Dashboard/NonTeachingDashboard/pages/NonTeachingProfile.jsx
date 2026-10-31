@@ -85,6 +85,8 @@ export default function NonTeachingProfile() {
           status: d.status || profile.status || "Active",
           employmentType: d.employmentType || profile.employmentType || "Full-Time Regular",
           campusName: d.campusName || profile.campusName || "Main Campus (HQ)",
+          photoUrl: d.photoUrl || d.photoPath || d.profilePhoto || profile.photoUrl || "",
+          photoPath: d.photoPath || d.photoUrl || d.profilePhoto || profile.photoPath || "",
         };
         setProfile(updated);
         setFormData({
@@ -177,9 +179,20 @@ export default function NonTeachingProfile() {
                 fontSize: 22,
                 fontWeight: 800,
                 boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
+                overflow: "hidden",
+                flexShrink: 0,
               }}
             >
-              {initials}
+              {profile.photoUrl || profile.photoPath ? (
+                <img
+                  src={profile.photoUrl || profile.photoPath}
+                  alt={displayName}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                initials
+              )}
             </div>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

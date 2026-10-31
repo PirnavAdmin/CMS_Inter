@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -8,17 +10,31 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Settings;
 using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class TemplateRepository : ITemplateRepository
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<TemplateRepository>? _logger;
 
-        public TemplateRepository(AppDbContext context)
+        public TemplateRepository(AppDbContext context, ILogger<TemplateRepository>? logger = null)
         {
             _context = context;
+            _logger = logger;
+        }
+
+        private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken ct = default)
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await _context.Database.OpenConnectionAsync(ct);
+            }
+            return conn;
         }
 
         private static List<string> ParsePlaceholders(string? json)
@@ -35,159 +51,58 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        private static TemplateResponseDto MapToDto(Template t)
+        private static TemplateResponseDto MapRowToDto(dynamic row)
         {
+            var dict = (IDictionary<string, object>)row;
             int ver = 1;
-            if (!string.IsNullOrWhiteSpace(t.Version))
+            if (dict.ContainsKey("Version") && dict["Version"] != null)
             {
-                var cleaned = t.Version.Trim().TrimStart('v', 'V');
+                var cleaned = dict["Version"].ToString()?.Trim().TrimStart('v', 'V');
                 int.TryParse(cleaned, out ver);
                 if (ver < 1) ver = 1;
             }
 
+            string placeholdersJson = dict.ContainsKey("PlaceholdersJson") && dict["PlaceholdersJson"] != null
+                ? dict["PlaceholdersJson"].ToString() ?? "[]"
+                : "[]";
+
             return new TemplateResponseDto
             {
-                Id = t.Id,
-                TemplateCode = t.TemplateCode,
-                Title = t.Title,
-                Category = t.Category,
-                ContentBody = t.ContentBody,
-                Placeholders = ParsePlaceholders(t.PlaceholdersJson),
-                IsActive = t.IsActive,
+                Id = Convert.ToInt32(dict["Id"]),
+                TemplateCode = dict["TemplateCode"]?.ToString() ?? string.Empty,
+                Title = dict["Title"]?.ToString() ?? string.Empty,
+                Category = dict["Category"]?.ToString() ?? string.Empty,
+                ContentBody = dict["ContentBody"]?.ToString() ?? string.Empty,
+                Placeholders = ParsePlaceholders(placeholdersJson),
+                IsActive = Convert.ToBoolean(dict["IsActive"]),
                 Version = ver,
-                CreatedAt = t.CreatedAt,
-                UpdatedAt = t.UpdatedAt
+                CreatedAt = Convert.ToDateTime(dict["CreatedAt"]),
+                UpdatedAt = Convert.ToDateTime(dict["UpdatedAt"])
             };
         }
 
-        private static bool _seedsInitialized = false;
+        private static Template MapRowToEntity(dynamic row)
+        {
+            var dict = (IDictionary<string, object>)row;
+            return new Template
+            {
+                Id = Convert.ToInt32(dict["Id"]),
+                TemplateCode = dict["TemplateCode"]?.ToString() ?? string.Empty,
+                Title = dict["Title"]?.ToString() ?? string.Empty,
+                Category = dict["Category"]?.ToString() ?? string.Empty,
+                ContentBody = dict["ContentBody"]?.ToString() ?? string.Empty,
+                PlaceholdersJson = dict.ContainsKey("PlaceholdersJson") && dict["PlaceholdersJson"] != null ? dict["PlaceholdersJson"].ToString() ?? "[]" : "[]",
+                IsActive = Convert.ToBoolean(dict["IsActive"]),
+                Version = dict.ContainsKey("Version") && dict["Version"] != null ? dict["Version"].ToString() ?? "1" : "1",
+                CampusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null && dict["CampusId"] != DBNull.Value ? Convert.ToInt32(dict["CampusId"]) : null,
+                CreatedAt = Convert.ToDateTime(dict["CreatedAt"]),
+                UpdatedAt = Convert.ToDateTime(dict["UpdatedAt"])
+            };
+        }
 
         public async Task EnsureSeedsAsync(CancellationToken ct = default)
         {
-            if (_seedsInitialized) return;
-
-            var anyExist = await _context.Templates.AnyAsync(ct);
-            if (!anyExist)
-            {
-                var defaultTemplates = new List<Template>
-                {
-                    new()
-                    {
-                        TemplateCode = "BONAFIDE_CERT",
-                        Title = "Bonafide Certificate",
-                        Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}}, Section {{section}} during the academic year {{academic_year}}.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string>
-                        {
-                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-                            "{{group_name}}", "{{academic_level}}", "{{academic_year}}", "{{section}}", "{{purpose}}",
-                            "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-                        }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "STUDY_CERT",
-                        Title = "Study Certificate",
-                        Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group (Section {{section}}) and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string>
-                        {
-                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-                            "{{study_from}}", "{{study_to}}", "{{group_name}}", "{{board_name}}", "{{section}}",
-                            "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-                        }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "CONDUCT_CERT",
-                        Title = "Conduct Certificate",
-                        Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this institution from {{study_from}} to {{study_to}} (Section {{section}}).\nDuring his/her tenure in this college, his/her character and conduct have been {{conduct_rating}}.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string>
-                        {
-                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-                            "{{conduct_rating}}", "{{study_from}}", "{{study_to}}", "{{section}}",
-                            "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-                        }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "TRANSFER_CERT",
-                        Title = "Transfer Certificate",
-                        Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} (Section {{section}}).\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string>
-                        {
-                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-                            "{{mother_name}}", "{{dob}}", "{{date_of_admission}}", "{{study_from}}",
-                            "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}", "{{section}}",
-                            "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-                        }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "CUSTOM_CERT",
-                        Title = "Others",
-                        Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}}.\nThis is to certify that {{custom_body}}.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string>
-                        {
-                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
-                            "{{custom_body}}", "{{purpose}}", "{{certificate_number}}",
-                            "{{issue_date}}", "{{place}}", "{{board_name}}", "{{section}}"
-                        }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "STAFF_IMPORT_TEMPLATE",
-                        Title = "Staff Excel Import Template",
-                        Category = "BulkUpload",
-                        ContentBody = "Downloadable 3-column format for Department, Designation and Staff bulk Excel uploads.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string> { "DepartmentName", "DepartmentCode", "StaffType" }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    },
-                    new()
-                    {
-                        TemplateCode = "STUDENT_IMPORT_TEMPLATE",
-                        Title = "Student Excel Import Template",
-                        Category = "BulkUpload",
-                        ContentBody = "Downloadable format for Student Admissions and Enrollment bulk Excel uploads.",
-                        PlaceholdersJson = JsonSerializer.Serialize(new List<string> { "StudentName", "AdmissionNo", "Group", "AcademicYear" }),
-                        IsActive = true,
-                        Version = "1",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    }
-                };
-
-                await _context.Templates.AddRangeAsync(defaultTemplates, ct);
-                await _context.SaveChangesAsync(ct);
-            }
-
-            _seedsInitialized = true;
+            await Task.CompletedTask;
         }
 
         public async Task<TemplatePagedResponseDto> GetAllAsync(
@@ -199,146 +114,200 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? campusId = null,
             CancellationToken ct = default)
         {
-            await EnsureSeedsAsync(ct);
-            var query = _context.Templates.AsNoTracking().Where(t => t.CampusId == campusId || t.CampusId == null).AsQueryable();
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_PageNumber", pageNumber);
+            parameters.Add("p_PageSize", pageSize);
+            parameters.Add("p_Search", string.IsNullOrWhiteSpace(search) ? null : search.Trim());
+            parameters.Add("p_Category", string.IsNullOrWhiteSpace(category) ? null : category.Trim());
+            parameters.Add("p_IsActive", isActive.HasValue ? (isActive.Value ? 1 : 0) : null);
+            parameters.Add("p_CampusId", campusId);
 
-            if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
-            {
-                query = query.Where(t => t.Category == category.Trim());
-            }
+            using var multi = await conn.QueryMultipleAsync(
+                new CommandDefinition(
+                    "sp_GetTemplates",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
-            if (isActive.HasValue)
-            {
-                query = query.Where(t => t.IsActive == isActive.Value);
-            }
+            int totalCount = await multi.ReadFirstOrDefaultAsync<int>();
+            var rows = (await multi.ReadAsync()).ToList();
 
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim().ToLower();
-                query = query.Where(t =>
-                    t.Title.ToLower().Contains(s) ||
-                    t.TemplateCode.ToLower().Contains(s) ||
-                    t.Category.ToLower().Contains(s) ||
-                    t.ContentBody.ToLower().Contains(s));
-            }
-
-            var totalCount = await query.CountAsync(ct);
-
-            var page = pageNumber < 1 ? 1 : pageNumber;
-            var size = pageSize < 1 ? 10 : pageSize;
-
-            var items = await query
-                .OrderBy(t => t.Category)
-                .ThenBy(t => t.Title)
-                .Skip((page - 1) * size)
-                .Take(size)
-                .ToListAsync(ct);
+            var items = rows.Select(MapRowToDto).ToList();
 
             return new TemplatePagedResponseDto
             {
-                Items = items.Select(MapToDto).ToList(),
+                Items = items,
                 TotalCount = totalCount,
-                PageNumber = page,
-                PageSize = size
+                PageNumber = pageNumber < 1 ? 1 : pageNumber,
+                PageSize = pageSize < 1 ? 10 : pageSize
             };
         }
 
         public async Task<IReadOnlyList<Template>> GetActiveByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default)
         {
-            var query = _context.Templates.AsNoTracking().Where(t => t.IsActive && (t.CampusId == campusId || t.CampusId == null));
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Category", string.IsNullOrWhiteSpace(category) ? null : category.Trim());
+            parameters.Add("p_CampusId", campusId);
 
-            if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
-            {
-                query = query.Where(t => t.Category == category.Trim());
-            }
+            var rows = await conn.QueryAsync(
+                new CommandDefinition(
+                    "sp_GetActiveTemplatesByCategory",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
-            return await query.OrderBy(t => t.Title).ToListAsync(ct);
+            return rows.Select(MapRowToEntity).ToList();
         }
 
         public async Task<Template?> GetByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            await EnsureSeedsAsync(ct);
-            return await _context.Templates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_CampusId", campusId);
+
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_GetTemplateById",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return row == null ? null : MapRowToEntity(row);
         }
 
         public async Task<Template?> GetByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return null;
-            await EnsureSeedsAsync(ct);
-            return await _context.Templates
-                .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.TemplateCode == templateCode.Trim() && (t.CampusId == campusId || t.CampusId == null), ct);
+
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_TemplateCode", templateCode.Trim());
+            parameters.Add("p_CampusId", campusId);
+
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_GetTemplateByCode",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return row == null ? null : MapRowToEntity(row);
         }
 
         public async Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return false;
-            var code = templateCode.Trim();
-            var query = _context.Templates.AsNoTracking().Where(t => t.TemplateCode == code && (t.CampusId == campusId || t.CampusId == null));
-            if (excludeId.HasValue && excludeId.Value > 0)
-            {
-                query = query.Where(t => t.Id != excludeId.Value);
-            }
-            return await query.AnyAsync(ct);
+
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_TemplateCode", templateCode.Trim());
+            parameters.Add("p_ExcludeId", excludeId);
+            parameters.Add("p_CampusId", campusId);
+
+            var count = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_CheckTemplateExistsByCode",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return count > 0;
         }
 
         public async Task<Template> CreateAsync(Template template, CancellationToken ct = default)
         {
-            template.Version = "1";
-            template.CreatedAt = DateTime.UtcNow;
-            template.UpdatedAt = DateTime.UtcNow;
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_TemplateCode", template.TemplateCode.Trim());
+            parameters.Add("p_Title", template.Title.Trim());
+            parameters.Add("p_Category", template.Category.Trim());
+            parameters.Add("p_ContentBody", template.ContentBody);
+            parameters.Add("p_PlaceholdersJson", template.PlaceholdersJson);
+            parameters.Add("p_IsActive", template.IsActive ? 1 : 0);
+            parameters.Add("p_CampusId", template.CampusId);
 
-            await _context.Templates.AddAsync(template, ct);
-            await _context.SaveChangesAsync(ct);
-            return template;
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_CreateTemplate",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return row == null ? template : MapRowToEntity(row);
         }
 
         public async Task<Template?> UpdateAsync(int id, Template template, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
-            if (existing == null) return null;
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_Title", template.Title.Trim());
+            parameters.Add("p_Category", template.Category.Trim());
+            parameters.Add("p_ContentBody", template.ContentBody);
+            parameters.Add("p_PlaceholdersJson", template.PlaceholdersJson);
+            parameters.Add("p_IsActive", template.IsActive ? 1 : 0);
+            parameters.Add("p_CampusId", campusId);
 
-            existing.Title = template.Title.Trim();
-            existing.Category = template.Category.Trim();
-            existing.ContentBody = template.ContentBody;
-            existing.PlaceholdersJson = template.PlaceholdersJson;
-            existing.IsActive = template.IsActive;
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_UpdateTemplate",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
 
-            int currentVer = 1;
-            if (!string.IsNullOrWhiteSpace(existing.Version))
-            {
-                var cleaned = existing.Version.Trim().TrimStart('v', 'V');
-                int.TryParse(cleaned, out currentVer);
-                if (currentVer < 1) currentVer = 1;
-            }
-            existing.Version = (currentVer + 1).ToString();
-            existing.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync(ct);
-            return existing;
+            return row == null ? null : MapRowToEntity(row);
         }
 
         public async Task<bool> DeleteAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
-            if (existing == null) return false;
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_CampusId", campusId);
 
-            // Soft-delete by default
-            existing.IsActive = false;
-            existing.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(ct);
-            return true;
+            var rows = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_DeleteTemplate",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return rows > 0;
         }
 
         public async Task<bool> ToggleActiveAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
-            if (existing == null) return false;
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_CampusId", campusId);
 
-            existing.IsActive = !existing.IsActive;
-            existing.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(ct);
-            return true;
+            var rows = await conn.ExecuteScalarAsync<int>(
+                new CommandDefinition(
+                    "sp_ToggleTemplateActive",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return rows > 0;
+        }
+
+        public async Task<StudentTemplateLookupDto?> GetStudentPreviewDetailsAsync(int? studentId, string? admissionNo, CancellationToken ct = default)
+        {
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_StudentId", studentId);
+            parameters.Add("p_AdmissionNo", admissionNo);
+
+            return await conn.QueryFirstOrDefaultAsync<StudentTemplateLookupDto>(
+                new CommandDefinition(
+                    "sp_GetStudentDetailsForTemplatePreview",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
         }
     }
 }

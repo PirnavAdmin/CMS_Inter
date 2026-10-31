@@ -59,24 +59,21 @@ namespace CollegeManagement.API.Services.Implementations
             // 1. Validate AcademicYear exists, is active, and has not ended
             await ValidateAcademicYearAsync(request.AcademicYearId);
 
-            // 2. Resolve Relational Foreign Keys
-            var boardId = await _sectionRepository.ResolveBoardIdAsync(request.BoardId, request.Board);
-            var academicLevelId = await _sectionRepository.ResolveAcademicLevelIdAsync(request.AcademicLevelId, request.AcademicLevel ?? request.YearOfStudy);
-            var groupId = await _sectionRepository.ResolveGroupIdAsync(request.GroupId, request.Group);
-            var programId = await _sectionRepository.ResolveProgramIdAsync(request.ProgramId, request.Programme ?? request.Program, groupId);
+            // 2. Resolve Relational Foreign Keys in a single stored procedure call
+            var (boardId, academicLevelId, groupId, programId, groupProgramId) = await _sectionRepository.ResolveForeignKeysBatchAsync(
+                request.BoardId, request.Board,
+                request.AcademicLevelId, request.AcademicLevel ?? request.YearOfStudy,
+                request.GroupId, request.Group,
+                request.ProgramId, request.Programme ?? request.Program,
+                request.GroupProgramId);
+
             if (!programId.HasValue || programId.Value <= 0) programId = 1;
 
-            // If GroupProgramId is provided directly, resolve GroupId and ProgramId
-            var groupProgramId = request.GroupProgramId;
             if (groupProgramId.HasValue && groupProgramId.Value > 0)
             {
                 var (gpGroupId, gpProgramId) = await _sectionRepository.GetGroupAndProgramByGroupProgramIdAsync(groupProgramId.Value);
                 if (gpGroupId.HasValue) groupId = gpGroupId;
                 if (gpProgramId.HasValue) programId = gpProgramId;
-            }
-            else
-            {
-                groupProgramId = await _sectionRepository.ResolveGroupProgramIdAsync(null, groupId, programId);
             }
 
             // 3. Validate Program belongs to Group (if both provided)
@@ -228,23 +225,26 @@ namespace CollegeManagement.API.Services.Implementations
             // 2. Validate AcademicYear exists, is active, and has not ended
             await ValidateAcademicYearAsync(request.AcademicYearId);
 
-            // 3. Resolve Relational Foreign Keys
-            var boardId = await _sectionRepository.ResolveBoardIdAsync(request.BoardId, request.Board) ?? existingSection.BoardId;
-            var academicLevelId = await _sectionRepository.ResolveAcademicLevelIdAsync(request.AcademicLevelId, request.AcademicLevel ?? request.YearOfStudy) ?? existingSection.AcademicLevelId;
-            var groupId = await _sectionRepository.ResolveGroupIdAsync(request.GroupId, request.Group) ?? existingSection.GroupId;
-            var programId = await _sectionRepository.ResolveProgramIdAsync(request.ProgramId, request.Programme ?? request.Program, groupId) ?? existingSection.ProgramId;
+            // 3. Resolve Relational Foreign Keys in a single stored procedure call
+            var (resolvedBoardId, resolvedLevelId, resolvedGroupId, resolvedProgramId, resolvedGpId) = await _sectionRepository.ResolveForeignKeysBatchAsync(
+                request.BoardId, request.Board,
+                request.AcademicLevelId, request.AcademicLevel ?? request.YearOfStudy,
+                request.GroupId, request.Group,
+                request.ProgramId, request.Programme ?? request.Program,
+                request.GroupProgramId);
+
+            var boardId = resolvedBoardId ?? existingSection.BoardId;
+            var academicLevelId = resolvedLevelId ?? existingSection.AcademicLevelId;
+            var groupId = resolvedGroupId ?? existingSection.GroupId;
+            var programId = resolvedProgramId ?? existingSection.ProgramId;
             if (!programId.HasValue || programId.Value <= 0) programId = 1;
 
-            var groupProgramId = request.GroupProgramId;
+            var groupProgramId = resolvedGpId ?? existingSection.GroupProgramId;
             if (groupProgramId.HasValue && groupProgramId.Value > 0)
             {
                 var (gpGroupId, gpProgramId) = await _sectionRepository.GetGroupAndProgramByGroupProgramIdAsync(groupProgramId.Value);
                 if (gpGroupId.HasValue) groupId = gpGroupId;
                 if (gpProgramId.HasValue) programId = gpProgramId;
-            }
-            else
-            {
-                groupProgramId = await _sectionRepository.ResolveGroupProgramIdAsync(null, groupId, programId) ?? existingSection.GroupProgramId;
             }
 
             // 4. Validate Incharge exists (if provided)
@@ -306,7 +306,8 @@ namespace CollegeManagement.API.Services.Implementations
             var existingSection = await _sectionRepository.GetSectionByIdAsync(id);
             if (existingSection == null)
             {
-                throw new NotFoundException($"Section with ID {id} not found.");
+                _cacheService?.RemoveByPrefix("sections:");
+                return true;
             }
 
             var deleted = await _sectionRepository.DeleteSectionAsync(id);

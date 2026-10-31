@@ -164,11 +164,33 @@ export async function previewNumberSeries(seriesCode, { pattern, numberLength, p
   }
 }
 
+export async function deleteNumberSeries(seriesCode, campusId) {
+  if (!seriesCode) throw new Error("seriesCode is required");
+  const headers = campusId !== undefined && campusId !== null && campusId !== ""
+    ? { "X-Campus-Id": String(campusId) }
+    : {};
+  const params = {};
+  if (campusId !== undefined && campusId !== null && campusId !== "") params.campusId = campusId;
+
+  try {
+    const response = await apiClient.delete(apiEndpoints.numberSeries.delete(seriesCode), { headers, params });
+    return response.data;
+  } catch (err) {
+    try {
+      const fallbackRes = await apiClient.delete(`/api/v1/settings/number-series/${encodeURIComponent(seriesCode)}`, { headers, params });
+      return fallbackRes.data;
+    } catch {
+      throw err;
+    }
+  }
+}
+
 export default {
   getNumberSeriesList,
   getNumberSeriesByCode,
   updateNumberSeries,
   generateNextNumber,
   previewNumberSeries,
+  deleteNumberSeries,
 };
 

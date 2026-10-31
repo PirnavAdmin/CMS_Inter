@@ -15,11 +15,16 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public string Program { get => ProgramName; set => ProgramName = value; }
         public string SectionName { get; set; } = string.Empty;
         public string Section { get => SectionName; set => SectionName = value; }
+        public string BoardName { get; set; } = string.Empty;
+        public string AcademicYearName { get; set; } = string.Empty;
+        public string LevelName { get; set; } = string.Empty;
         public string ExamName { get; set; } = string.Empty;
         public string Examination { get => ExamName; set => ExamName = value; }
+        public string ExaminationName { get => ExamName; set => ExamName = value; }
         public string ExamType { get; set; } = "Written";
         public string ExamPattern { get; set; } = "Regular Academic Pattern";
         public int RequiredSubjects { get; set; } = 4;
+        public int RequiredSubjectCount { get => RequiredSubjects; set => RequiredSubjects = value; }
         public int ApprovedSubjects { get; set; } = 4;
         public decimal TotalMarks { get; set; }
         public decimal Total { get => TotalMarks; set => TotalMarks = value; }
@@ -28,6 +33,7 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public decimal MaxMarks { get; set; }
         public decimal TotalMaximum { get => MaxMarks; set => MaxMarks = value; }
         public decimal Maximum { get => MaxMarks; set => MaxMarks = value; }
+        public decimal MaxTotal { get => MaxMarks; set => MaxMarks = value; }
         public decimal Percentage { get; set; }
         public decimal PassPercentage { get; set; } = 35;
         public int PassingScore { get; set; } = 210;
@@ -62,4 +68,3 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public string? Remarks { get; set; }
     }
 }
-

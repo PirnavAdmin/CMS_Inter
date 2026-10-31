@@ -3,14 +3,15 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Models.Staff;
+using CollegeManagement.API.Repositories;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -23,12 +24,20 @@ namespace CollegeManagement.API.Controllers.V1
     public class StaffSubjectAllocationController : ControllerBase
     {
         private readonly IStaffService _staffService;
-        private readonly AppDbContext _db;
+        private readonly IDepartmentRepository _departmentRepository;
+        private readonly IStaffRepository _staffRepository;
+        private readonly ISubjectRepository _subjectRepository;
 
-        public StaffSubjectAllocationController(IStaffService staffService, AppDbContext db)
+        public StaffSubjectAllocationController(
+            IStaffService staffService,
+            IDepartmentRepository departmentRepository,
+            IStaffRepository staffRepository,
+            ISubjectRepository subjectRepository)
         {
             _staffService = staffService;
-            _db = db;
+            _departmentRepository = departmentRepository;
+            _staffRepository = staffRepository;
+            _subjectRepository = subjectRepository;
         }
 
         private static readonly System.Collections.Generic.Dictionary<string, string[]> DepartmentKeywordMap = new(StringComparer.OrdinalIgnoreCase)
@@ -98,24 +107,22 @@ namespace CollegeManagement.API.Controllers.V1
             }
             else
             {
-                if (c == k || c.StartsWith(k)) return true;
-                var words = n.Split(new[] { ' ', '-', '_', '/', '(', ')' }, StringSplitOptions.RemoveEmptyEntries);
-                if (words.Any(w => w == k || w.StartsWith(k))) return true;
+                var wordBoundRegex = new System.Text.RegularExpressions.Regex($@"\b{System.Text.RegularExpressions.Regex.Escape(k)}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (wordBoundRegex.IsMatch(n) || wordBoundRegex.IsMatch(c)) return true;
             }
+
             return false;
         }
 
         /// <summary>
-        /// 0. GET /api/v1/staff/available-subjects?staffId=97&amp;department=Biology&amp;departmentId=30
-        /// Gets subjects filtered by staff member's department to prevent clutter in Subject Allocation.
+        /// 1. GET /api/v1/staff/auto-matched-subjects
+        /// Returns master subjects intelligently filtered and pre-ranked for a staff member's department.
         /// </summary>
-        [HttpGet("available-subjects")]
-        [HttpGet("lookup/subjects")]
-        [HttpGet("subjects")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetAvailableSubjects(
-            [FromQuery] int? staffId = null,
+        [HttpGet("auto-matched-subjects")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetAutoMatchedSubjects(
             [FromQuery] string? department = null,
+            [FromQuery] int? staffId = null,
             [FromQuery] int? departmentId = null,
             CancellationToken ct = default)
         {
@@ -123,7 +130,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (string.IsNullOrWhiteSpace(deptName) && departmentId.HasValue && departmentId.Value > 0)
             {
-                var dept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(d => d.DepartmentId == departmentId.Value, ct);
+                var dept = await _departmentRepository.GetByIdAsync(departmentId.Value);
                 if (dept != null)
                 {
                     deptName = dept.DepartmentName;
@@ -132,22 +139,15 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (string.IsNullOrWhiteSpace(deptName) && staffId.HasValue && staffId.Value > 0)
             {
-                var staff = await _db.Staffs
-                    .AsNoTracking()
-                    .Include(s => s.DepartmentRef)
-                    .FirstOrDefaultAsync(s => s.Id == staffId.Value, ct);
-
+                var staff = await _staffRepository.GetByIdAsync(staffId.Value);
                 if (staff != null)
                 {
-                    deptName = staff.DepartmentRef?.DepartmentName ?? staff.Department;
+                    deptName = staff.Department;
                 }
             }
 
-            var allSubjects = await _db.Subjects
-                .AsNoTracking()
-                .Where(s => s.IsActive)
-                .ToListAsync(ct);
-
+            var allSubjectsList = await _subjectRepository.GetAllAsync();
+            var allSubjects = allSubjectsList.Where(s => s.IsActive).ToList();
             var filtered = allSubjects.AsEnumerable();
 
             if (!string.IsNullOrWhiteSpace(deptName) && 
@@ -157,7 +157,9 @@ namespace CollegeManagement.API.Controllers.V1
                 var keywords = GetDepartmentKeywords(deptName);
                 if (keywords.Any())
                 {
-                    var matched = allSubjects.Where(s => keywords.Any(k => MatchesKeyword(s.SubjectName, s.SubjectCode, k))).ToList();
+                    var matched = allSubjects.Where(sub =>
+                        keywords.Any(kw => MatchesKeyword(sub.SubjectName, sub.SubjectCode, kw))
+                    ).ToList();
 
                     if (matched.Any())
                     {
@@ -166,46 +168,30 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            // Deduplicate by SubjectName + SubjectCode so identical subjects never duplicate
-            var distinctSubjects = filtered
-                .GroupBy(s => new
-                {
-                    Name = (s.SubjectName ?? string.Empty).Trim().ToLowerInvariant(),
-                    Code = (s.SubjectCode ?? string.Empty).Trim().ToLowerInvariant()
-                })
-                .Select(g => g.OrderBy(x => x.SubjectId).First())
+            var result = filtered
                 .OrderBy(s => s.SubjectName)
-                .ThenBy(s => s.SubjectCode)
                 .Select(s => new
                 {
-                    id = s.SubjectId,
                     subjectId = s.SubjectId,
-                    name = !string.IsNullOrWhiteSpace(s.SubjectCode) ? $"{s.SubjectName} ({s.SubjectCode})" : s.SubjectName,
-                    subjectName = !string.IsNullOrWhiteSpace(s.SubjectCode) ? $"{s.SubjectName} ({s.SubjectCode})" : s.SubjectName,
-                    rawSubjectName = s.SubjectName,
-                    code = s.SubjectCode,
                     subjectCode = s.SubjectCode,
-                    type = s.SubjectType,
+                    subjectName = s.SubjectName,
                     subjectType = s.SubjectType,
                     boardId = s.BoardId,
-                    groupId = s.GroupId,
-                    department = deptName ?? "General"
-                })
-                .ToList();
+                    department = deptName ?? string.Empty
+                });
 
-            return Ok(distinctSubjects);
+            return Ok(result);
         }
 
         /// <summary>
-        /// 1. POST /api/v1/staff/assign-subject
-        /// Assign a subject to a teaching staff member.
+        /// 2. POST /api/v1/staff/assign-subject
+        /// Assign a subject to a staff member.
         /// </summary>
         [HttpPost("assign-subject")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(StaffSubjectAllocationResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> AssignSubject([FromBody] AssignStaffSubjectDto dto)
         {
             var result = await _staffService.AssignSubjectAsync(dto);
@@ -213,15 +199,14 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 2. PUT /api/v1/staff/assign-subject/{id:int}
-        /// Update an existing subject allocation.
+        /// 3. PUT /api/v1/staff/assign-subject/{id}
+        /// Update an existing staff subject allocation.
         /// </summary>
         [HttpPut("assign-subject/{id:int}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(StaffSubjectAllocationResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> UpdateSubjectAllocation(int id, [FromBody] UpdateStaffSubjectAllocationDto dto)
         {
             var result = await _staffService.UpdateSubjectAllocationAsync(id, dto);
@@ -229,11 +214,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 3. DELETE /api/v1/staff/assign-subject/{id:int}
-        /// Delete a subject allocation record.
+        /// 3. DELETE /api/v1/staff/assign-subject/{id}
+        /// Remove a staff subject allocation by primary allocation ID.
         /// </summary>
         [HttpDelete("assign-subject/{id:int}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteSubjectAllocation(int id)
@@ -243,16 +228,44 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// 3b. DELETE /api/v1/staff/{staffId:int}/unassign-subject
+        /// Unassign a subject from a staff member by subject name or subject ID.
+        /// </summary>
+        [HttpDelete("{staffId:int}/unassign-subject")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
+        public async Task<IActionResult> UnassignSubject(
+            int staffId,
+            [FromQuery] string? subjectName = null,
+            [FromQuery] int? subjectId = null)
+        {
+            await _staffService.UnassignSubjectAsync(staffId, subjectName, subjectId);
+            return NoContent();
+        }
+
+        /// <summary>
         /// 4. GET /api/v1/staff/{staffId:int}/subject-allocations
         /// Get all subject allocations for a specific staff member.
         /// </summary>
         [HttpGet("{staffId:int}/subject-allocations")]
-        [AllowAnonymous]
+        [HttpGet("my/subject-allocations")]
+        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
         [ProducesResponseType(typeof(System.Collections.Generic.List<StaffSubjectAllocationResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetStaffSubjectAllocations(int staffId)
+        public async Task<IActionResult> GetStaffSubjectAllocations([FromRoute] int? staffId = null)
         {
-            var result = await _staffService.GetStaffSubjectAllocationsAsync(staffId);
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
+            {
+                staffId = callerStaffId ?? 0;
+            }
+            else if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                staffId = callerStaffId ?? 0;
+            }
+
+            var result = await _staffService.GetStaffSubjectAllocationsAsync(staffId.Value);
             return Ok(result);
         }
 
@@ -261,12 +274,25 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get summary workload details and subject allocations for a staff member.
         /// </summary>
         [HttpGet("workload/{staffId:int}")]
-        [AllowAnonymous]
+        [HttpGet("workload/me")]
+        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
         [ProducesResponseType(typeof(StaffWorkloadResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetStaffWorkload(int staffId)
+        public async Task<IActionResult> GetStaffWorkload([FromRoute] int? staffId = null)
         {
-            var result = await _staffService.GetStaffWorkloadAsync(staffId);
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
+            {
+                staffId = callerStaffId ?? 0;
+            }
+            else if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                staffId = callerStaffId ?? 0;
+            }
+
+            var result = await _staffService.GetStaffWorkloadAsync(staffId.Value);
             return Ok(result);
         }
     }

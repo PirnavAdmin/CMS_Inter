@@ -11,6 +11,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<NumberSeriesConfiguration?> UpdateByCodeAsync(string seriesCode, string prefix, string formatPattern, int numberLength, int startNumber, string? description, int? campusId = null, bool? isActive = null, string? seriesName = null);
         Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null, string? baseSeriesCode = null);
         Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null);
+        Task<bool> DeleteByCodeAsync(string seriesCode, int? campusId = null);
         Task EnsureTableAndSeedsAsync();
     }
 }

@@ -1,19 +1,16 @@
+using CollegeManagement.API.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Reports;
-using CollegeManagement.API.Models;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
-using CollegeManagement.API.Filters;
 
 namespace CollegeManagement.API.Controllers.V1;
 
@@ -26,93 +23,51 @@ namespace CollegeManagement.API.Controllers.V1;
 [Produces("application/json")]
 public class ReportsController : ControllerBase
 {
-    private readonly AppDbContext _db;
     private readonly IReportService _reportService;
 
-    public ReportsController(AppDbContext db, IReportService reportService)
+    public ReportsController(IReportService reportService)
     {
-        _db = db;
         _reportService = reportService;
     }
 
+    
+
+    private int? GetCampusIdFromRequest(int? queryCampusId)
+    {
+        var resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, queryCampusId);
+        return resolvedCampusId > 0 ? resolvedCampusId : null;
+    }
+
+    private ReportFilterDto PrepareFilter(ReportFilterDto? filter)
+    {
+        filter ??= new ReportFilterDto();
+        filter.CampusId = GetCampusIdFromRequest(filter.CampusId);
+        return filter;
+    }
+
     // =========================================================================
-    // 1. FILTER DROPDOWNS
+    // 1. FILTER DROPDOWNS (100% Stored Procedures via Service & Repository)
     // =========================================================================
 
     [HttpGet("filters/boards")]
-    public async Task<IActionResult> GetBoards(CancellationToken ct = default)
+    public async Task<IActionResult> GetBoards([FromQuery] int? campusId = null, CancellationToken ct = default)
     {
-        var result = await _db.Boards
-            .AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.BoardName)
-            .Select(x => new
-            {
-                id = x.BoardId,
-                boardId = x.BoardId,
-                name = x.BoardName,
-                boardName = x.BoardName,
-                code = x.BoardCode
-            })
-            .ToListAsync(ct);
-
+        campusId = GetCampusIdFromRequest(campusId);
+        var result = await _reportService.GetFilterBoardsAsync(campusId, ct);
         return Ok(result);
     }
 
     [HttpGet("filters/academic-years")]
     public async Task<IActionResult> GetAcademicYears([FromQuery] int? boardId = null, CancellationToken ct = default)
     {
-        var query = _db.AcademicYears.AsNoTracking().Where(x => x.IsActive);
-
-        if (boardId.HasValue && boardId.Value > 0)
-        {
-            query = query.Where(x => x.BoardId == boardId.Value);
-        }
-
-        var result = await query
-            .OrderByDescending(x => x.StartDate)
-            .Select(x => new
-            {
-                id = x.AcademicYearId,
-                academicYearId = x.AcademicYearId,
-                name = x.AcademicYearName,
-                academicYearName = x.AcademicYearName,
-                boardId = x.BoardId,
-                startDate = x.StartDate,
-                endDate = x.EndDate
-            })
-            .ToListAsync(ct);
-
+        var result = await _reportService.GetFilterAcademicYearsAsync(boardId, ct);
         return Ok(result);
     }
 
     [HttpGet("filters/academic-levels")]
     public async Task<IActionResult> GetAcademicLevels([FromQuery] int? boardId = null, CancellationToken ct = default)
     {
-        IQueryable<AcademicLevel> query = _db.AcademicLevels.AsNoTracking().Where(x => x.IsActive);
-
-        if (boardId.HasValue && boardId.Value > 0)
-        {
-            query = query.Where(level =>
-                _db.BoardAcademicLevels.Any(map =>
-                    map.BoardId == boardId.Value &&
-                    map.AcademicLevelId == level.AcademicLevelId &&
-                    map.IsActive));
-        }
-
-        var result = await query
-            .OrderBy(x => x.DisplayOrder)
-            .ThenBy(x => x.LevelName)
-            .Select(x => new
-            {
-                id = x.AcademicLevelId,
-                academicLevelId = x.AcademicLevelId,
-                name = x.LevelName,
-                levelName = x.LevelName,
-                code = x.LevelCode
-            })
-            .ToListAsync(ct);
-
+        var result = await _reportService.GetFilterAcademicLevelsAsync(boardId, ct);
         return Ok(result);
     }
 
@@ -123,47 +78,7 @@ public class ReportsController : ControllerBase
         [FromQuery] int? academicLevelId = null,
         CancellationToken ct = default)
     {
-        var query = _db.Groups.AsNoTracking().Where(x => x.IsActive);
-
-        if (boardId.HasValue && boardId.Value > 0)
-        {
-            query = query.Where(x => x.BoardId == boardId.Value);
-        }
-
-        var result = await query
-            .OrderBy(x => x.GroupName)
-            .Select(x => new
-            {
-                id = x.GroupId,
-                groupId = x.GroupId,
-                name = x.GroupName,
-                groupName = x.GroupName,
-                code = x.GroupCode,
-                groupCode = x.GroupCode,
-                academicYearId = x.AcademicYearId,
-                academicLevelId = x.AcademicLevelId,
-                boardId = x.BoardId,
-                academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
-                board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty
-            })
-            .ToListAsync(ct);
-
-        // If level filter was provided and matches exist, refine to that level
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
-        {
-            var levelFiltered = result.Where(x => x.academicLevelId == academicLevelId.Value).ToList();
-            if (levelFiltered.Count > 0)
-                result = levelFiltered;
-        }
-
-        // If year filter was provided and matches exist, refine to that year
-        if (academicYearId.HasValue && academicYearId.Value > 0)
-        {
-            var yearFiltered = result.Where(x => x.academicYearId == academicYearId.Value).ToList();
-            if (yearFiltered.Count > 0)
-                result = yearFiltered;
-        }
-
+        var result = await _reportService.GetFilterGroupsAsync(boardId, academicYearId, academicLevelId, ct);
         return Ok(result);
     }
 
@@ -176,51 +91,8 @@ public class ReportsController : ControllerBase
         [FromQuery] int? academicLevelId = null,
         CancellationToken ct = default)
     {
-        var query = _db.Sections.AsNoTracking().Where(x => x.IsActive);
-
-        if (campusId.HasValue && campusId.Value > 0)
-            query = query.Where(x => x.CampusId == campusId.Value);
-
-        if (groupId.HasValue && groupId.Value > 0)
-            query = query.Where(x => x.GroupId == groupId.Value);
-        else if (boardId.HasValue && boardId.Value > 0)
-            query = query.Where(x => x.BoardId == boardId.Value);
-
-        var result = await query
-            .OrderBy(x => x.SectionName)
-            .Select(x => new
-            {
-                id = x.SectionId,
-                sectionId = x.SectionId,
-                name = x.SectionName,
-                sectionName = x.SectionName,
-                groupId = x.GroupId,
-                groupName = x.GroupNavigation != null ? x.GroupNavigation.GroupName : string.Empty,
-                boardId = x.BoardId,
-                board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty,
-                academicYearId = x.AcademicYearId,
-                academicLevelId = x.AcademicLevelId,
-                academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
-                maximumStrength = x.MaximumStrength
-            })
-            .ToListAsync(ct);
-
-        // If level filter was provided and matches exist, refine to that level
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
-        {
-            var levelFiltered = result.Where(x => x.academicLevelId == academicLevelId.Value).ToList();
-            if (levelFiltered.Count > 0)
-                result = levelFiltered;
-        }
-
-        // If year filter was provided and matches exist, refine to that year
-        if (academicYearId.HasValue && academicYearId.Value > 0)
-        {
-            var yearFiltered = result.Where(x => x.academicYearId == academicYearId.Value).ToList();
-            if (yearFiltered.Count > 0)
-                result = yearFiltered;
-        }
-
+        campusId = GetCampusIdFromRequest(campusId);
+        var result = await _reportService.GetFilterSectionsAsync(campusId, groupId, boardId, academicYearId, academicLevelId, ct);
         return Ok(result);
     }
 
@@ -231,6 +103,7 @@ public class ReportsController : ControllerBase
     [HttpGet("dashboard")]
     public async Task<IActionResult> Dashboard([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.DashboardAsync(filter, ct);
         return Ok(data);
     }
@@ -243,6 +116,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/admissions")]
     public async Task<IActionResult> AdmissionsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.AdmissionsAsync(filter, ct);
         var approved = data.Count(x => x.IsApproved || string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase));
         var rejected = data.Count(x => x.IsRejected || string.Equals(x.Status, "Rejected", StringComparison.OrdinalIgnoreCase));
@@ -262,6 +136,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/attendance")]
     public async Task<IActionResult> AttendanceDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.AttendanceAsync(filter, ct);
         var totalPresent = data.Sum(x => x.Present);
         var totalAbsent = data.Sum(x => x.Absent);
@@ -287,6 +162,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/faculty-attendance")]
     public async Task<IActionResult> FacultyAttendanceDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.FacultyAttendanceAsync(filter, ct);
         var avgPct = data.Any() ? Math.Round(data.Average(x => (double)x.AttendancePercentage), 2) : 0;
         return Ok(new
@@ -301,6 +177,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/fee-collection")]
     public async Task<IActionResult> FeeCollectionDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.FeeCollectionAsync(filter, ct);
         var totalCollected = data.Sum(x => x.PaidAmount > 0 ? x.PaidAmount : x.Collected);
         var totalDiscount = data.Sum(x => x.Discount);
@@ -321,6 +198,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/outstanding-fees")]
     public async Task<IActionResult> DueFeesDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.OutstandingFeesAsync(filter, ct);
         var totalDue = data.Sum(x => x.DueAmount);
         var totalFee = data.Sum(x => x.TotalAmount);
@@ -340,6 +218,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/examinations")]
     public async Task<IActionResult> ExaminationsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.ExaminationsAsync(filter, ct);
         var completed = data.Count(x => string.Equals(x.Status, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "Published", StringComparison.OrdinalIgnoreCase));
         var upcoming = data.Count(x => string.Equals(x.Status, "Upcoming", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "Scheduled", StringComparison.OrdinalIgnoreCase));
@@ -360,6 +239,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/results")]
     public async Task<IActionResult> ResultsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.ResultsAsync(filter, ct);
         var passed = data.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase));
         var failed = data.Count(x => string.Equals(x.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Failed", StringComparison.OrdinalIgnoreCase));
@@ -381,9 +261,10 @@ public class ReportsController : ControllerBase
     [HttpGet("details/faculty-workload")]
     public async Task<IActionResult> FacultyWorkloadDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.FacultyWorkloadAsync(filter, ct);
         var totalStaff = data.Select(x => x.FacultyId).Distinct().Count();
-        var totalHours = data.Sum(x => x.HoursPerWeek);
+        var totalHours = Math.Round(data.Sum(x => x.HoursPerWeek), 1);
         var totalPeriods = data.Sum(x => x.PeriodCount);
         return Ok(new
         {
@@ -400,6 +281,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/student-strength")]
     public async Task<IActionResult> StudentStrengthDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.StudentStrengthAsync(filter, ct);
         var total = data.Sum(x => x.TotalStudents);
         var male = data.Sum(x => x.MaleStudents);
@@ -420,6 +302,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/pass-percentage")]
     public async Task<IActionResult> PassPercentageDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.PassPercentageAsync(filter, ct);
         var totalPassed = data.Sum(x => x.Passed);
         var totalFailed = data.Sum(x => x.Failed);
@@ -439,6 +322,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/toppers")]
     public async Task<IActionResult> TopperDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.ToppersAsync(filter, ct);
         var highestMarks = data.Any() ? data.Max(x => x.TotalMarks) : 0;
         var avgMarks = data.Any() ? Math.Round(data.Average(x => (double)x.TotalMarks), 2) : 0;
@@ -460,6 +344,7 @@ public class ReportsController : ControllerBase
     [HttpGet("details/audit-logs")]
     public async Task<IActionResult> AuditLogs([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         var data = await _reportService.AuditLogsAsync(filter, ct);
         return Ok(new
         {
@@ -480,9 +365,10 @@ public class ReportsController : ControllerBase
         [FromQuery] ReportFilterDto? filter = null,
         CancellationToken ct = default)
     {
+        filter = PrepareFilter(filter);
         bool isPdf = !string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase) 
                   && !string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase);
-        var result = await _reportService.ExportAsync(reportType, filter ?? new ReportFilterDto(), isPdf, ct);
+        var result = await _reportService.ExportAsync(reportType, filter, isPdf, ct);
         return File(result.Content, result.ContentType, result.FileName);
     }
 
@@ -492,7 +378,8 @@ public class ReportsController : ControllerBase
         [FromQuery] ReportFilterDto? filter = null,
         CancellationToken ct = default)
     {
-        var result = await _reportService.ExportAsync(reportType, filter ?? new ReportFilterDto(), true, ct);
+        filter = PrepareFilter(filter);
+        var result = await _reportService.ExportAsync(reportType, filter, true, ct);
         return File(result.Content, result.ContentType, result.FileName);
     }
 
@@ -502,7 +389,9 @@ public class ReportsController : ControllerBase
         [FromQuery] ReportFilterDto? filter = null,
         CancellationToken ct = default)
     {
-        var result = await _reportService.ExportAsync(reportType, filter ?? new ReportFilterDto(), false, ct);
+        filter = PrepareFilter(filter);
+        var result = await _reportService.ExportAsync(reportType, filter, false, ct);
         return File(result.Content, result.ContentType, result.FileName);
     }
 }
+

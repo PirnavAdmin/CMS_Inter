@@ -6,17 +6,17 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
+using CollegeManagement.API.DTOs.Board.Requests;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -30,12 +30,35 @@ namespace CollegeManagement.API.Controllers.V1
     public class StaffController : ControllerBase
     {
         private readonly IStaffService _staffService;
-        private readonly AppDbContext _db;
+        private readonly IStaffRepository _staffRepository;
+        private readonly IBoardRepository _boardRepository;
+        private readonly IDepartmentRepository _departmentRepository;
+        private readonly IDesignationRepository _designationRepository;
 
-        public StaffController(IStaffService staffService, AppDbContext db)
+        public StaffController(
+            IStaffService staffService,
+            IStaffRepository staffRepository,
+            IBoardRepository boardRepository,
+            IDepartmentRepository departmentRepository,
+            IDesignationRepository designationRepository)
         {
             _staffService = staffService;
-            _db = db;
+            _staffRepository = staffRepository;
+            _boardRepository = boardRepository;
+            _departmentRepository = departmentRepository;
+            _designationRepository = designationRepository;
+        }
+
+        private bool IsAdminOrPrincipal()
+        {
+            return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
+        }
+
+        private int? GetCallerStaffId()
+        {
+            var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            if (int.TryParse(staffClaim, out int sId) && sId > 0) return sId;
+            return null;
         }
 
         /// <summary>
@@ -93,7 +116,32 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _staffService.GetPagedStaffAsync(queryParams);
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+            {
+                foreach (var item in result.Items)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.Aadhaar))
+                        item.Aadhaar = "XXXXXXXX" + (item.Aadhaar.Length >= 4 ? item.Aadhaar[^4..] : "****");
+                    if (!string.IsNullOrWhiteSpace(item.PanNumber))
+                        item.PanNumber = "*****" + (item.PanNumber.Length >= 4 ? item.PanNumber[^4..] : "****");
+                }
+            }
             return Ok(result);
+        }
+
+        /// <summary>
+        /// GET /api/v1/staff/{id}/payroll-details
+        /// Restricted to Super Admin, Admin, Principal, and HR roles. Returns detailed banking and payroll information.
+        /// </summary>
+        [HttpGet("{id:int}/payroll-details")]
+        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR")]
+        [ProducesResponseType(typeof(StaffPayrollDetailsDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStaffPayrollDetails([FromRoute] int id)
+        {
+            var details = await _staffService.GetStaffPayrollDetailsAsync(id);
+            if (details == null)
+                return NotFound(new { message = $"Staff payroll details for ID {id} not found." });
+            return Ok(details);
         }
 
         /// <summary>
@@ -185,19 +233,12 @@ namespace CollegeManagement.API.Controllers.V1
             var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
             if (!string.IsNullOrWhiteSpace(emailClaim))
             {
-                var staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
+                var staff = await _staffRepository.GetByEmailAsync(emailClaim);
                 if (staff != null)
                 {
                     var profile = await _staffService.GetStaffProfileFullAsync(staff.Id);
                     return Ok(profile);
                 }
-            }
-
-            var ntsStaff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
-            if (ntsStaff != null)
-            {
-                var profile = await _staffService.GetStaffProfileFullAsync(ntsStaff.Id);
-                return Ok(profile);
             }
 
             return NotFound(new { message = "Staff profile not linked to current authenticated user." });
@@ -211,49 +252,11 @@ namespace CollegeManagement.API.Controllers.V1
         [BypassPermission]
         public async Task<IActionResult> UpdateCurrentStaffContact([FromBody] UpdateStaffContactDto dto)
         {
-            var staffIdClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-            Staff? staff = null;
-            if (int.TryParse(staffIdClaim, out int sId) && sId > 0)
-            {
-                staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Id == sId);
-            }
-
-            if (staff == null)
-            {
-                var empIdClaim = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
-                if (!string.IsNullOrWhiteSpace(empIdClaim))
-                {
-                    staff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == empIdClaim);
-                }
-            }
-
-            if (staff == null)
-            {
-                var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
-                if (!string.IsNullOrWhiteSpace(emailClaim))
-                {
-                    staff = await _db.Staffs.FirstOrDefaultAsync(s => s.Email == emailClaim);
-                }
-            }
-
-            if (staff == null)
-            {
-                staff = await _db.Staffs.FirstOrDefaultAsync(s => s.EmployeeId == "NTS001" || s.Email == "nts001@cms.com");
-            }
-
-            if (staff == null)
+            var success = await _staffService.UpdateCurrentStaffContactAsync(User, dto);
+            if (!success)
             {
                 return NotFound(new { message = "Staff profile not linked to current authenticated user." });
             }
-
-            if (!string.IsNullOrWhiteSpace(dto.Mobile))
-                staff.Mobile = dto.Mobile.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.EmergencyContact))
-                staff.AlternateMobile = dto.EmergencyContact.Trim();
-            if (!string.IsNullOrWhiteSpace(dto.Address))
-                staff.CurrentAddress = dto.Address.Trim();
-
-            await _db.SaveChangesAsync();
             return Ok(new { success = true, message = "Contact information updated successfully." });
         }
 
@@ -266,6 +269,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id)
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _staffService.GetStaffProfileFullAsync(id);
             return Ok(result);
         }
@@ -279,6 +291,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerEmp = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                if (string.IsNullOrWhiteSpace(callerEmp) || !string.Equals(callerEmp, employeeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Forbid();
+                }
+            }
+
             var result = await _staffService.GetStaffProfileByEmployeeIdAsync(employeeId);
             return Ok(result);
         }
@@ -292,6 +313,16 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                var callerEmp = User.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                bool matches = false;
+                if (int.TryParse(identifier, out int pId) && callerId.HasValue && callerId.Value == pId) matches = true;
+                if (!string.IsNullOrWhiteSpace(callerEmp) && string.Equals(callerEmp, identifier, StringComparison.OrdinalIgnoreCase)) matches = true;
+                if (!matches) return Forbid();
+            }
+
             if (int.TryParse(identifier, out int id) && id > 0)
             {
                 var res = await _staffService.GetStaffProfileFullAsync(id);
@@ -328,6 +359,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> CreateStaff([FromBody] CreateStaffDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    dto.CampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        dto.CampusId = claimCampusId;
+                    }
+                }
+            }
+
             var result = await _staffService.CreateStaffAsync(dto);
             return StatusCode(StatusCodes.Status201Created, result);
         }
@@ -343,6 +391,27 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> UpdateStaff(int id, [FromBody] UpdateStaffDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id)
+                {
+                    return Forbid();
+                }
+
+                // Protect institutional & financial fields from unverified employee tampering
+                var existing = await _staffRepository.GetByIdAsync(id);
+                if (existing != null)
+                {
+                    dto.DesignationId = existing.DesignationId;
+                    dto.DepartmentId = existing.DepartmentId;
+                    dto.StaffType = existing.StaffType;
+                    dto.Status = existing.Status;
+                    dto.PanNumber = existing.PanNumber;
+                    dto.Aadhaar = existing.Aadhaar;
+                }
+            }
+
             var result = await _staffService.UpdateStaffAsync(id, dto);
             return Ok(result);
         }
@@ -356,6 +425,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteStaff(int id)
         {
+            if (!IsAdminOrPrincipal()) return Forbid();
             await _staffService.DeleteStaffAsync(id);
             return NoContent();
         }
@@ -374,27 +444,25 @@ namespace CollegeManagement.API.Controllers.V1
             int targetStaffId = 0;
             if (int.TryParse(id, out int parsedId) && parsedId > 0)
             {
-                var exists = await _db.Staffs.AsNoTracking().AnyAsync(s => s.Id == parsedId && !s.IsDeleted);
-                if (exists) targetStaffId = parsedId;
+                var exists = await _staffRepository.GetByIdAsync(parsedId);
+                if (exists != null && !exists.IsDeleted) targetStaffId = parsedId;
             }
 
             if (targetStaffId == 0 && !string.IsNullOrWhiteSpace(dto.Email))
             {
-                var matched = await _db.Staffs.AsNoTracking()
-                    .Where(s => !s.IsDeleted && s.Email.ToLower() == dto.Email.Trim().ToLower())
-                    .OrderByDescending(s => s.Id)
-                    .FirstOrDefaultAsync();
-                if (matched != null) targetStaffId = matched.Id;
+                var matched = await _staffRepository.GetByEmailAsync(dto.Email.Trim());
+                if (matched != null && !matched.IsDeleted) targetStaffId = matched.Id;
             }
 
             if (targetStaffId == 0 && !string.IsNullOrWhiteSpace(dto.Mobile))
             {
                 var cleanMobile = dto.Mobile.Trim().TrimStart('0');
-                var matched = await _db.Staffs.AsNoTracking()
-                    .Where(s => !s.IsDeleted && (s.Mobile == dto.Mobile.Trim() || s.Mobile.EndsWith(cleanMobile)))
-                    .OrderByDescending(s => s.Id)
-                    .FirstOrDefaultAsync();
-                if (matched != null) targetStaffId = matched.Id;
+                var matched = await _staffRepository.GetByMobileAsync(dto.Mobile.Trim());
+                if (matched == null && cleanMobile != dto.Mobile.Trim())
+                {
+                    matched = await _staffRepository.GetByMobileAsync(cleanMobile);
+                }
+                if (matched != null && !matched.IsDeleted) targetStaffId = matched.Id;
             }
 
             if (targetStaffId == 0)
@@ -426,6 +494,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.SaveProfileDraftAsync(id, dto);
             return Ok(result);
         }
@@ -451,6 +525,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitProfile(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.SubmitProfileAsync(id);
             return Ok(result);
         }
@@ -489,6 +569,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] StaffImportExcelRequestDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    dto.CampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        dto.CampusId = claimCampusId;
+                    }
+                }
+            }
+
             var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType, dto.CampusId);
             return Ok(result);
         }
@@ -525,6 +622,12 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{id:int}/print")]
         public async Task<IActionResult> PrintProfilePdf(int id)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var (bytes, contentType, fileName) = await _staffService.GenerateProfilePdfAsync(id);
             return File(bytes, contentType, fileName);
         }
@@ -538,6 +641,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDocument(int id, [FromForm] UploadStaffDocumentDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.UploadDocumentAsync(id, dto.DocumentType, dto.File);
             return Ok(result);
         }
@@ -564,6 +673,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> DeleteDocument(int id, string documentType)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
             var result = await _staffService.DeleteDocumentAsync(id, documentType);
             return Ok(result);
         }
@@ -590,6 +705,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
         {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (callerId.HasValue)
+                {
+                    dto.StaffId = callerId.Value;
+                }
+            }
+            else if (dto.StaffId <= 0)
+            {
+                var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId");
+                if (staffClaim != null && int.TryParse(staffClaim.Value, out int claimStaffId) && claimStaffId > 0)
+                {
+                    dto.StaffId = claimStaffId;
+                }
+            }
+
             var result = await _staffService.UploadPhotoAsync(dto);
             return Ok(result);
         }
@@ -599,12 +731,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// Stream staff member profile photo.
         /// </summary>
         [HttpGet("photo/{id:int}")]
+        [HttpGet("{id:int}/photo")]
+        [HttpGet("{id:int}/profile-photo")]
         [AllowAnonymous]
         public async Task<IActionResult> GetStaffPhoto(int id)
         {
             var (physicalPath, contentType) = await _staffService.GetPhotoAsync(id);
             return PhysicalFile(physicalPath, contentType);
         }
+
 
         // =========================================================================
         // LOOKUP ENDPOINTS (Blood Groups, Boards, Departments, Designations)
@@ -624,14 +759,12 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         public async Task<IActionResult> GetBoards(CancellationToken ct = default)
         {
-            var boards = await _db.Boards
-                .AsNoTracking()
-                .Where(b => b.IsActive)
+            var (boards, _) = await _boardRepository.GetBoardsAsync(new BoardSearchRequest { Status = true, PageSize = 100 });
+            var result = boards
                 .OrderBy(b => b.BoardName)
-                .Select(b => new { id = b.BoardId, name = b.BoardName, code = b.BoardCode, boardName = b.BoardName, boardCode = b.BoardCode })
-                .ToListAsync(ct);
+                .Select(b => new { id = b.BoardId, name = b.BoardName, code = b.BoardCode, boardName = b.BoardName, boardCode = b.BoardCode });
 
-            return Ok(boards);
+            return Ok(result);
         }
 
         [HttpGet("lookup/departments")]
@@ -648,28 +781,29 @@ namespace CollegeManagement.API.Controllers.V1
                 ? staffType
                 : (!string.IsNullOrWhiteSpace(type) ? type : (!string.IsNullOrWhiteSpace(facultyType) ? facultyType : staff_type));
 
-            var query = _db.Departments.AsNoTracking().Where(d => d.IsActive);
+            string? queryStaffType = null;
             if (!string.IsNullOrWhiteSpace(effectiveStaffType) && !effectiveStaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
                 var cleanType = effectiveStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
                 if (cleanType == "teaching" || cleanType == "teachingstaff" || cleanType == "faculty")
                 {
-                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "teaching");
+                    queryStaffType = "Teaching";
                 }
                 else if (cleanType == "nonteaching" || cleanType == "nonteachingstaff")
                 {
-                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "nonteaching");
+                    queryStaffType = "Non-Teaching";
                 }
                 else
                 {
-                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == cleanType);
+                    queryStaffType = effectiveStaffType;
                 }
             }
 
-            var list = await query
+            var depts = await _departmentRepository.GetDepartmentDtosAsync(queryStaffType, includeInactive: false);
+            var list = depts
                 .OrderBy(d => d.DepartmentName)
                 .Select(d => new { id = d.DepartmentId, name = d.DepartmentName, departmentName = d.DepartmentName, code = d.DepartmentCode, departmentCode = d.DepartmentCode, staffType = d.StaffType })
-                .ToListAsync(ct);
+                .ToList();
 
             if (!list.Any())
             {
@@ -703,42 +837,41 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                var query = _db.Designations.AsNoTracking().Where(d => d.IsActive);
-                if (departmentId.HasValue && departmentId.Value > 0)
-                {
-                    query = query.Where(d => d.DepartmentId == departmentId.Value);
-                }
-                else if (!string.IsNullOrWhiteSpace(department))
+                int? deptIdToQuery = departmentId;
+                if ((!deptIdToQuery.HasValue || deptIdToQuery <= 0) && !string.IsNullOrWhiteSpace(department))
                 {
                     var deptName = department.Trim().ToLower();
-                    var matchedDept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(dep => dep.DepartmentName.ToLower() == deptName, ct);
+                    var allDepts = await _departmentRepository.GetDepartmentDtosAsync(null, includeInactive: false);
+                    var matchedDept = allDepts.FirstOrDefault(dep => dep.DepartmentName.Equals(deptName, StringComparison.OrdinalIgnoreCase));
                     if (matchedDept != null)
                     {
-                        query = query.Where(d => d.DepartmentId == matchedDept.DepartmentId || d.DepartmentId == null || d.DepartmentId == 0);
+                        deptIdToQuery = matchedDept.DepartmentId;
                     }
                 }
 
+                string? queryStaffType = null;
                 if (!string.IsNullOrWhiteSpace(effectiveStaffType) && !effectiveStaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
                     var cleanType = effectiveStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
                     if (cleanType == "teaching" || cleanType == "teachingstaff" || cleanType == "faculty")
                     {
-                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "teaching");
+                        queryStaffType = "Teaching";
                     }
                     else if (cleanType == "nonteaching" || cleanType == "nonteachingstaff")
                     {
-                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "nonteaching");
+                        queryStaffType = "Non-Teaching";
                     }
                     else
                     {
-                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == cleanType);
+                        queryStaffType = effectiveStaffType;
                     }
                 }
 
-                var list = await query
+                var dtos = await _designationRepository.GetAllDtosAsync(includeInactive: false, staffType: queryStaffType, departmentId: deptIdToQuery);
+                var list = dtos
                     .OrderBy(d => d.Name)
                     .Select(d => new { id = d.Id, name = d.Name, designationName = d.Name, code = d.Name.ToUpper(), designationCode = d.Name.ToUpper(), staffType = d.StaffType, departmentId = d.DepartmentId })
-                    .ToListAsync(ct);
+                    .ToList();
 
                 if (list.Any())
                 {
@@ -757,3 +890,4 @@ namespace CollegeManagement.API.Controllers.V1
         }
     }
 }
+

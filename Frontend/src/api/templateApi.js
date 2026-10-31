@@ -119,3 +119,17 @@ export async function previewTemplate(previewPayload) {
   return response.data;
 }
 
+const templateApi = {
+  getTemplates,
+  getTemplateCategories,
+  getTemplateById,
+  getTemplateByCode,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  toggleTemplateActive,
+  previewTemplate,
+};
+
+export default templateApi;
+

@@ -14,6 +14,12 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffId = value;
         }
 
+        public int Id
+        {
+            get => StaffId;
+            set => StaffId = value;
+        }
+
         private IFormFile? _photo;
 
         public IFormFile? Photo
@@ -27,5 +33,15 @@ namespace CollegeManagement.API.DTOs.Staff
             get => _photo;
             set => _photo = value ?? _photo;
         }
+
+        public IFormFile? ProfilePhoto
+        {
+            get => _photo;
+            set => _photo = value ?? _photo;
+        }
+
+        public IFormFile? GetFile() => _photo;
     }
 }
+
+

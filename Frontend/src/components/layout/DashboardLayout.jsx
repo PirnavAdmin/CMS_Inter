@@ -6,7 +6,7 @@ import {
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
   ReceiptIndianRupee, Boxes, KeyRound,
 } from "lucide-react";
-import ChangePasswordModal from "@/Dashboard/ExamCellDashboard/components/ChangePasswordModal.jsx";
+import ChangePasswordModal from "@/modules/exam-cell/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import TransparentAvatar from "@/components/common/TransparentAvatar.jsx";
@@ -19,7 +19,7 @@ import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStor
 import { env } from "@/config/env.js";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";

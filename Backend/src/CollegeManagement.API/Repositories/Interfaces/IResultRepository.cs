@@ -1,19 +1,46 @@
 using CollegeManagement.API.DTOs.Result;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Repositories.Interfaces
 {
     public interface IResultRepository
     {
-    
         Task<ProcessResultResponseDto> ProcessResultsAsync(
-    ProcessResultRequestDto request);
+            ProcessResultRequestDto request);
 
         Task<bool> PublishResultsAsync(
             PublishResultRequestDto request);
 
-        Task<GetResultsResponseDto> GetResultsAsync(
-     GetResultsRequestDto request);
+        Task<bool> PublishSectionResultsAsync(
+            int sectionId,
+            int examId,
+            DateTime? publishDate = null,
+            int? campusId = null);
 
+        Task<bool> PublishGroupResultsAsync(
+            int groupId,
+            int examId,
+            DateTime? publishDate = null,
+            int? campusId = null);
+
+        Task<GetResultsResponseDto> GetResultsAsync(
+            GetResultsRequestDto request);
+
+        Task<List<SectionResultSummaryDto>> GetSectionResultSummariesAsync(
+            ProcessResultRequestDto request);
+
+        Task<SectionResultDetailDto?> GetSectionResultDetailAsync(
+            int sectionId,
+            int examId,
+            int? campusId = null);
+
+        Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? groupId = null,
+            int? campusId = null);
 
         Task<StudentResultDto> GetStudentResultAsync(
             int studentId,
@@ -62,7 +89,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         Task<bool> RequestRevaluationAsync(
             RevaluationRequestDto request);
@@ -90,6 +118,10 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int examId,
             int? campusId = null);
 
+        Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId);
+
+        Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId);
+
         Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
             int boardId,
             int academicYearId,
@@ -98,5 +130,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int examId,
             int? campusId = null);
 
+        Task<IEnumerable<int>> GetExamScheduleSubjectsAsync(
+            int examId);
     }
 }

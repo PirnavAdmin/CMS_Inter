@@ -104,24 +104,22 @@ namespace CollegeManagement.API.Repositories.Implementations
             var itemList = items?.ToList();
             if (itemList == null || itemList.Count == 0) return;
 
-            var sb = new System.Text.StringBuilder();
-            var p = new DynamicParameters();
-            sb.Append("INSERT INTO `PeriodStructureItems` (`PeriodStructureId`, `SequenceOrder`, `ItemType`, `PeriodNumber`, `BreakTypeId`, `DurationMinutes`, `Name`) VALUES ");
-            for (int i = 0; i < itemList.Count; i++)
+            foreach (var it in itemList)
             {
-                if (i > 0) sb.Append(", ");
-                sb.Append($"(@strId{i}, @seq{i}, @type{i}, @pNum{i}, @btId{i}, @dur{i}, @name{i})");
-                var it = itemList[i];
-                p.Add($"strId{i}", structureId);
-                p.Add($"seq{i}", it.SequenceOrder);
-                p.Add($"type{i}", it.ItemType);
-                p.Add($"pNum{i}", it.PeriodNumber);
-                p.Add($"btId{i}", it.BreakTypeId);
-                p.Add($"dur{i}", it.DurationMinutes);
-                p.Add($"name{i}", it.Name);
+                await Connection.ExecuteAsync(
+                    "sp_CreatePeriodStructureItem",
+                    new
+                    {
+                        p_PeriodStructureId = structureId,
+                        p_SequenceOrder = it.SequenceOrder,
+                        p_ItemType = it.ItemType,
+                        p_PeriodNumber = it.PeriodNumber,
+                        p_BreakTypeId = it.BreakTypeId,
+                        p_DurationMinutes = it.DurationMinutes,
+                        p_Name = it.Name
+                    },
+                    commandType: CommandType.StoredProcedure);
             }
-            sb.Append(";");
-            await Connection.ExecuteAsync(sb.ToString(), p);
         }
 
         public async Task DeleteItemsByStructureIdAsync(int structureId)

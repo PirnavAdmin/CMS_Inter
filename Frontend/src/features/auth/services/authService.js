@@ -1,7 +1,7 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT, BACKEND_TRANSPORT_MANAGER_JWT } from "@/features/authStorage.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 
 
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
@@ -808,6 +808,27 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     ? rawAssignedBoardIds.map(Number).filter(Boolean)
     : [];
 
+  const photoUrl =
+    data.PhotoUrl ||
+    data.photoUrl ||
+    data.PhotoPath ||
+    data.photoPath ||
+    data.ProfilePhoto ||
+    data.profilePhoto ||
+    data.photo ||
+    data.Photo ||
+    payload.PhotoUrl ||
+    payload.photoUrl ||
+    payload.PhotoPath ||
+    payload.photoPath ||
+    data.user?.photoUrl ||
+    payload.user?.photoUrl ||
+    data.user?.photoPath ||
+    payload.user?.photoPath ||
+    data.user?.photo ||
+    payload.user?.photo ||
+    "";
+
   const user = {
     id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
     userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
@@ -827,10 +848,12 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,
-    photoUrl: data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.PhotoPath || data.photoPath || payload.PhotoPath || payload.photoPath || data.user?.photoUrl || payload.user?.photoUrl || data.user?.photoPath || payload.user?.photoPath || data.user?.photo || payload.user?.photo || null,
-    photoPath: data.PhotoPath || data.photoPath || payload.PhotoPath || payload.photoPath || data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.user?.photoPath || payload.user?.photoPath || data.user?.photoUrl || payload.user?.photoUrl || null,
-    photo: data.Photo || data.photo || data.PhotoUrl || data.photoUrl || payload.PhotoUrl || payload.photoUrl || data.user?.photo || payload.user?.photo || null,
+    photoUrl: photoUrl || null,
+    photoPath: photoUrl || null,
+    profilePhoto: photoUrl || null,
+    photo: photoUrl || null,
   };
+
 
   return {
     token,

@@ -10,4 +10,9 @@ public class StudentCertificateDropdownDto
     public string AcademicYear { get; set; } = string.Empty;
     public string AcademicLevel { get; set; } = string.Empty;
     public string Section { get; set; } = string.Empty;
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+    public int? GroupId { get; set; }
+    public int? SectionId { get; set; }
+    public int? CampusId { get; set; }
 }

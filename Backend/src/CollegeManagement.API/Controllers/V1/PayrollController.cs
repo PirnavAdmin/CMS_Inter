@@ -1,3 +1,4 @@
+﻿using CollegeManagement.API.Filters;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using Microsoft.AspNetCore.Authorization;
@@ -10,6 +11,7 @@ namespace CollegeManagement.API.Controllers
     [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("payroll")]
     public class PayrollController : ControllerBase
     {
         private readonly IPayrollService _payrollService;
@@ -55,6 +57,31 @@ namespace CollegeManagement.API.Controllers
             }
 
             return null;
+        }
+
+        private (int? StaffId, bool IsAdminOrFinance) GetCallerIdentity()
+        {
+            int? staffId = null;
+            var staffClaim = User?.FindFirst("StaffId")?.Value 
+                ?? User?.FindFirst("staffId")?.Value 
+                ?? User?.FindFirst("staff_id")?.Value
+                ?? User?.FindFirst("Staff_Id")?.Value;
+
+            if (int.TryParse(staffClaim, out int sId) && sId > 0)
+            {
+                staffId = sId;
+            }
+
+            var role = User?.FindFirst(ClaimTypes.Role)?.Value 
+                ?? User?.FindFirst("role")?.Value 
+                ?? User?.FindFirst("Role")?.Value;
+
+            bool isAdminOrFinance = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Principal", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Accountant", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Finance", StringComparison.OrdinalIgnoreCase);
+
+            return (staffId, isAdminOrFinance);
         }
 
 
@@ -358,6 +385,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/generate
         [HttpPost("payslips/generate")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> GeneratePayslip(
             [FromBody] GeneratePayslipRequest request)
         {
@@ -401,6 +429,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/generate-bulk
         [HttpPost("payslips/generate-bulk")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> GenerateBulkPayslips(
             [FromBody] GenerateBulkPayslipRequest request)
         {
@@ -456,6 +485,7 @@ namespace CollegeManagement.API.Controllers
 
         // PATCH: api/payroll/payslips/5/status
         [HttpPatch("payslips/{id}/status")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> UpdatePayslipStatus(
             string id,
             [FromQuery] string status)
@@ -513,6 +543,7 @@ namespace CollegeManagement.API.Controllers
 
         // POST: api/payroll/payslips/5/send-email
         [HttpPost("payslips/{id}/send-email")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
         public async Task<IActionResult> SendPayslipEmail(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -552,8 +583,43 @@ namespace CollegeManagement.API.Controllers
 
 
 
+                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        [HttpGet("my-payslips")]
+        [BypassPermission]
+        public async Task<IActionResult> GetMyPayslips(
+            [FromQuery] int? payrollMonth,
+            [FromQuery] int? payrollYear,
+            [FromQuery] int? campusId)
+        {
+            var (callerStaffId, _) = GetCallerIdentity();
+            if (!callerStaffId.HasValue || callerStaffId.Value <= 0)
+            {
+                var empIdClaim = User?.FindFirst("EmployeeId")?.Value 
+                    ?? User?.FindFirst("employeeId")?.Value 
+                    ?? User?.FindFirst("sub")?.Value;
+
+                if (!string.IsNullOrWhiteSpace(empIdClaim))
+                {
+                    var resolvedCampus = ResolveCampusId(campusId);
+                    var searchPayslips = await _payrollService.GetPayslipHistoryAsync(
+                        payrollMonth, payrollYear, null, empIdClaim, resolvedCampus);
+                    return Ok(searchPayslips);
+                }
+
+                return Unauthorized(new { Message = "Staff profile could not be identified from authentication credentials." });
+            }
+
+            var resolvedCampusId = ResolveCampusId(campusId);
+            var allPayslips = await _payrollService.GetPayslipHistoryAsync(
+                payrollMonth, payrollYear, null, null, resolvedCampusId);
+
+            var myPayslips = allPayslips.Where(p => p.StaffId == callerStaffId.Value).ToList();
+            return Ok(myPayslips);
+        }
+
         // GET: api/payroll/payslips
         [HttpGet("payslips")]
+        [HttpGet("payslips/my-payslips")]
         public async Task<IActionResult> GetPayslipHistory(
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
@@ -570,8 +636,18 @@ namespace CollegeManagement.API.Controllers
                     search,
                     resolvedCampusId);
 
+            if (!IsAdminOrHr())
+            {
+                var callerStaffId = GetCallerStaffId();
+                result = result.Where(p => p.StaffId == (callerStaffId ?? 0));
+            }
+
             return Ok(result);
         }
+
+                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        [HttpGet("my-payslips")]
+        [BypassPermission]
 
         // GET: api/payroll/payslips/5
         [HttpGet("payslips/{id}")]
@@ -605,8 +681,21 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (!IsAdminOrHr())
+            {
+                var callerStaffId = GetCallerStaffId();
+                if (result.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to view payslips of other employees." });
+                }
+            }
+
             return Ok(result);
         }
+
+                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        [HttpGet("my-payslips")]
+        [BypassPermission]
 
         // GET: api/payroll/payslips/{id}/pdf
         [HttpGet("payslips/{id}/pdf")]
@@ -630,6 +719,17 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (!IsAdminOrHr())
+            {
+                var existing = await _payrollService.GetPayslipByIdAsync(numericId.Value);
+                if (existing == null) return NotFound(new { Message = "Payslip not found." });
+                var callerStaffId = GetCallerStaffId();
+                if (existing.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to download payslips of other employees." });
+                }
+            }
+
             var pdfBytes = await _payrollService.GeneratePayslipPdfAsync(numericId.Value);
             if (pdfBytes == null || pdfBytes.Length == 0)
             {
@@ -640,6 +740,14 @@ namespace CollegeManagement.API.Controllers
             }
 
             return File(pdfBytes, "application/pdf", $"Payslip_{numericId.Value}.pdf");
+        }
+
+        private bool IsAdminOrHr() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("HR");
+
+        private int? GetCallerStaffId()
+        {
+            var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            return int.TryParse(claim, out int id) ? id : null;
         }
 
         // GET: api/payroll/revisions?staffId=10&status=Pending
@@ -720,6 +828,7 @@ namespace CollegeManagement.API.Controllers
         // PATCH: api/payroll/revisions/5/approve
         // The approver ID is taken from the authenticated JWT, not request input.
         [HttpPatch("revisions/{id:int}/approve")]
+        [Authorize(Roles = "Admin,Principal,Accountant,Finance")]
         public async Task<IActionResult> ApproveSalaryRevision(int id)
         {
             if (id <= 0)
@@ -828,6 +937,7 @@ namespace CollegeManagement.API.Controllers
         // PATCH: api/payroll/bonuses/5/approve
         // Approver ID comes from the authenticated JWT, not request input.
         [HttpPatch("bonuses/{id:int}/approve")]
+        [Authorize(Roles = "Admin,Principal,Accountant,Finance")]
         public async Task<IActionResult> ApproveBonus(int id)
         {
             if (id <= 0)
@@ -935,6 +1045,7 @@ namespace CollegeManagement.API.Controllers
         // PATCH: api/payroll/advances/5/approve
         // Approver ID is taken from the authenticated JWT.
         [HttpPatch("advances/{id:int}/approve")]
+        [Authorize(Roles = "Admin,Principal,Accountant,Finance")]
         public async Task<IActionResult> ApproveAdvance(int id)
         {
             if (id <= 0)
@@ -1010,6 +1121,10 @@ namespace CollegeManagement.API.Controllers
             var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
         }
+
+                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        [HttpGet("my-payslips")]
+        [BypassPermission]
 
         // GET: api/payroll/payslips/10/advance-repayments
         [HttpGet("payslips/{id}/advance-repayments")]

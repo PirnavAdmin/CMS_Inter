@@ -1,5 +1,6 @@
 import PaginatedTable from "../common/PaginatedTable.jsx";
 import apiClient from "@/api/axios.js";
+import templateApi from "@/api/templateApi.js";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
@@ -296,6 +297,150 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
   },
 ];
 
+export const DEFAULT_REPORT_TEMPLATES = [
+  {
+    id: "report-attendance",
+    templateCode: "REP_ATTENDANCE",
+    name: "Monthly Student Attendance Summary",
+    title: "Monthly Student Attendance Summary",
+    category: "Academic",
+    type: "Report",
+    format: "Excel",
+    columns: ["Roll No", "Admission No", "Student Name", "Group", "Section", "Working Days", "Present Days", "Attendance %", "Eligibility"],
+    description: "Detailed monthly attendance tracking report across intermediate sections with percentage calculations.",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    lastModified: getPresentDateFormatted(),
+    builtIn: true,
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+  },
+  {
+    id: "report-marks-register",
+    templateCode: "REP_MARKS",
+    name: "Consolidated Semester Marks Register",
+    title: "Consolidated Semester Marks Register",
+    category: "Academic",
+    type: "Report",
+    format: "PDF",
+    columns: ["Hall Ticket No", "Student Name", "Group", "Physics", "Chemistry", "Mathematics", "English", "Sanskrit", "Total Marks", "Grade", "Result"],
+    description: "Official semester score sheet formatted for academic verification, grading analysis, and parent notification.",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    lastModified: getPresentDateFormatted(),
+    builtIn: true,
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+  },
+  {
+    id: "report-fee-collection",
+    templateCode: "REP_FEE",
+    name: "Fee Collection & Outstanding Register",
+    title: "Fee Collection & Outstanding Register",
+    category: "Finance",
+    type: "Report",
+    format: "Excel",
+    columns: ["Receipt No", "Admission No", "Student Name", "Group", "Total Fee", "Concession", "Paid Amount", "Outstanding Dues", "Status"],
+    description: "Departmental revenue and student fee balance audit statement.",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    lastModified: getPresentDateFormatted(),
+    builtIn: true,
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+  },
+  {
+    id: "report-faculty-workload",
+    templateCode: "REP_FACULTY",
+    name: "Faculty Workload Allocation Report",
+    title: "Faculty Workload Allocation Report",
+    category: "HR",
+    type: "Report",
+    format: "Excel",
+    columns: ["Faculty ID", "Faculty Name", "Department", "Designation", "Assigned Courses", "Lecture Hours", "Practical Hours", "Total Weekly Hours"],
+    description: "Teaching lecture hours and laboratory assignment audit report for academic departments.",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    lastModified: getPresentDateFormatted(),
+    builtIn: true,
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+  },
+];
+
+export const DEFAULT_LETTER_TEMPLATES = [
+  {
+    id: "letter-provisional-admission",
+    templateCode: "LTR_PROVISIONAL_ADM",
+    name: "Provisional Admission Offer Letter",
+    title: "Provisional Admission Offer Letter",
+    category: "Admission",
+    type: "Letter",
+    format: "PDF",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    refPrefix: "ADM",
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+    subject: "Provisional Admission Confirmation for Academic Session {{academic_year}}",
+    greeting: "Dear {{student_name}} (Admission No: {{admission_no}}),",
+    body: "We are pleased to inform you that you have been provisionally admitted into the {{course_name}} program (Group: {{group_name}}, Section: {{section}}) at Pirnav College for the academic session {{academic_year}}.\n\nPlease note that this offer is provisional and subject to physical verification of all original certificates, timely payment of prescribed term fees, and submission of the mandatory Transfer and Conduct Certificates by the stipulated date.",
+    description: "Official institutional letter issued to candidates accepted for intermediate admissions.",
+    builtIn: true,
+  },
+  {
+    id: "letter-fee-due-notice",
+    templateCode: "LTR_FEE_NOTICE",
+    name: "Term Fee Due Notice Letter",
+    title: "Term Fee Due Notice Letter",
+    category: "Finance",
+    type: "Letter",
+    format: "PDF",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    refPrefix: "FEE",
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+    subject: "Urgent Reminder: Outstanding Term Tuition Fee for {{academic_year}}",
+    greeting: "Dear Parent / Guardian of {{student_name}} (Roll No: {{roll_no}}),",
+    body: "This is a formal communication from the Accounts & Finance Department of Pirnav College. Institutional records indicate that an outstanding fee balance of ₹{{amount_paid}} remains pending under your student's account for {{fee_type}} in academic session {{academic_year}}.\n\nKindly arrange to clear the outstanding balance via the college payment portal or at the administrative cashier counter on or before the due date to ensure uninterrupted access to academic resources and examination hall tickets.",
+    description: "Formal fee overdue reminder letter with payment instructions.",
+    builtIn: true,
+  },
+  {
+    id: "letter-parent-meeting",
+    templateCode: "LTR_PTM_INVITE",
+    name: "Parent-Teacher Meeting Invitation",
+    title: "Parent-Teacher Meeting Invitation",
+    category: "Academic",
+    type: "Letter",
+    format: "PDF",
+    status: "Active",
+    isActive: true,
+    version: "1.0",
+    refPrefix: "PTM",
+    place: "Vijayawada",
+    issueDate: getPresentDateFormatted(),
+    subject: "Invitation to Parent-Teacher Academic Review Meeting",
+    greeting: "Respected Parents of {{student_name}},",
+    body: "Pirnav College cordially invites you to the Parent-Teacher Academic Performance Review Meeting scheduled for the {{group_name}} batch. This conference provides an invaluable opportunity to review your ward's attendance records, internal assessments, and preparation for board examinations.\n\nYour presence and constructive feedback are highly appreciated as we partner together in ensuring student academic excellence and overall personal development.",
+    description: "Formal letter invitation addressed to parents for term parent-teacher conferences.",
+    builtIn: true,
+  },
+];
+
+export const DEFAULT_ALL_TEMPLATES = [
+  ...DEFAULT_CERTIFICATE_TEMPLATES,
+  ...DEFAULT_REPORT_TEMPLATES,
+  ...DEFAULT_LETTER_TEMPLATES,
+];
+
 export const TEMPLATES_STORAGE_KEY = "cms_certificate_templates_v6";
 
 export const CANONICAL_TEMPLATES = [
@@ -371,7 +516,7 @@ export function isAllowedCertificate(item) {
   return getCanonicalSlot(item) !== null;
 }
 
-export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFICATE_TEMPLATES) {
+export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_ALL_TEMPLATES) {
   if (!apiItem) return null;
   const slot = getCanonicalSlot(apiItem);
   const id = slot || apiItem.id || apiItem.templateCode || `tmpl_${Date.now()}`;
@@ -387,20 +532,21 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFIC
     : (apiItem.lastModified || getPresentDateFormatted());
 
   // Match built-in preset styling if available
-  const preset = (Array.isArray(fallbackPresets) ? fallbackPresets : DEFAULT_CERTIFICATE_TEMPLATES).find(
+  const preset = (Array.isArray(fallbackPresets) ? fallbackPresets : DEFAULT_ALL_TEMPLATES).find(
     (p) => p.id === slot || p.id === id || p.id === code || String(p.name || "").toLowerCase() === String(name).toLowerCase()
   ) || {};
 
-  const cleanContent = cleanCertificateContent(contentBody, preset.content || "");
+  const cleanContent = cleanCertificateContent(contentBody, preset.content || preset.body || "");
+  const type = apiItem.type || preset.type || (name.toLowerCase().includes("report") ? "Report" : name.toLowerCase().includes("letter") ? "Letter" : "Certificate");
 
   return {
     ...preset,
     id: preset.id || id,
-    templateCode: preset.id || code,
+    templateCode: preset.templateCode || preset.id || code,
     name: preset.name || name,
-    title: preset.name || name,
-    category,
-    type: "Certificate",
+    title: preset.title || preset.name || name,
+    category: preset.category || category,
+    type,
     status: isActive ? "Active" : "Inactive",
     isActive,
     version,
@@ -409,11 +555,16 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFIC
     issueDate: apiItem.issueDate || preset.issueDate || getPresentDateFormatted(),
     content: cleanContent,
     contentBody: cleanContent,
-    placeholders: Array.isArray(placeholders) && placeholders.length > 0 ? placeholders : (preset.dynamicFields || []),
-    dynamicFields: Array.isArray(placeholders) && placeholders.length > 0 ? placeholders : (preset.dynamicFields || []),
+    placeholders: Array.isArray(placeholders) && placeholders.length > 0 ? placeholders : (preset.dynamicFields || preset.placeholders || []),
+    dynamicFields: Array.isArray(placeholders) && placeholders.length > 0 ? placeholders : (preset.dynamicFields || preset.placeholders || []),
     purpose: apiItem.purpose || preset.purpose || "Official Use",
     description: apiItem.description || preset.description || `${preset.name || name} template.`,
-    builtIn: true,
+    builtIn: preset.builtIn ?? false,
+    format: apiItem.format || preset.format || (type === "Report" ? "Excel" : "PDF"),
+    columns: apiItem.columns || preset.columns || [],
+    subject: apiItem.subject || preset.subject || "",
+    greeting: apiItem.greeting || preset.greeting || "",
+    body: apiItem.body || preset.body || cleanContent,
     orientation: apiItem.orientation || preset.orientation || "Landscape",
     pageSize: apiItem.pageSize || preset.pageSize || "A4",
     borderStyle: apiItem.borderStyle || preset.borderStyle || "Navy Ornate",
@@ -424,48 +575,12 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_CERTIFIC
     sealColor: apiItem.sealColor || preset.sealColor || "#1e3a8a",
     qrEnabled: apiItem.qrEnabled ?? preset.qrEnabled ?? true,
     signatureType: apiItem.signatureType || preset.signatureType || "Principal",
-    refPrefix: apiItem.refPrefix || preset.refPrefix || "CERT",
+    refPrefix: apiItem.refPrefix || preset.refPrefix || (type === "Report" ? "REP" : type === "Letter" ? "LTR" : "CERT"),
   };
 }
 
-const templateApi = {
-  getTemplateCategories: async () => {
-    try {
-      const res = await apiClient.get("/api/v1/settings/templates/categories");
-      return res?.data?.data || res?.data || [];
-    } catch {
-      return ["Student Certificate", "Academic", "HR", "Finance", "Admission"];
-    }
-  },
-  getTemplates: async (params) => {
-    try {
-      const res = await apiClient.get("/api/v1/settings/templates", { params });
-      return res?.data?.data || res?.data || [];
-    } catch {
-      return [];
-    }
-  },
-  createTemplate: async (data) => {
-    const res = await apiClient.post("/api/v1/settings/templates", data);
-    return res?.data?.data || res?.data;
-  },
-  updateTemplate: async (id, data) => {
-    const res = await apiClient.put(`/api/v1/settings/templates/${id}`, data);
-    return res?.data?.data || res?.data;
-  },
-  toggleTemplateActive: async (id) => {
-    const res = await apiClient.patch(`/api/v1/settings/templates/${id}/toggle-active`);
-    return res?.data?.data || res?.data;
-  },
-  deleteTemplate: async (id) => {
-    const res = await apiClient.delete(`/api/v1/settings/templates/${id}`);
-    return res?.data?.data || res?.data;
-  },
-};
-
 export function getStoredCertificateTemplates() {
-  // Pure database mode: Load canonical defaults in memory; live records fetched via templateApi from MySQL
-  return DEFAULT_CERTIFICATE_TEMPLATES.map((t) => ({ ...t }));
+  return DEFAULT_ALL_TEMPLATES.map((t) => ({ ...t }));
 }
 
 export function saveCertificateTemplates(templatesList) {
@@ -567,7 +682,7 @@ export function extractCleanCertificateBody(rawContent) {
 }
 
 const INITIAL_TEMPLATES = [
-  ...DEFAULT_CERTIFICATE_TEMPLATES,
+  ...DEFAULT_ALL_TEMPLATES,
 ];
 
 const DYNAMIC_FIELD_TOKENS = [
@@ -627,8 +742,9 @@ export default function TemplatesPage() {
       // Fetch categories
       try {
         const catRes = await templateApi.getTemplateCategories();
-        if (Array.isArray(catRes) && catRes.length > 0) {
-          const combinedCats = ["All Categories", ...new Set([...catRes, "Student Certificate", "Academic", "HR", "Finance", "Admission"])];
+        const cats = catRes?.data || (Array.isArray(catRes) ? catRes : []);
+        if (Array.isArray(cats) && cats.length > 0) {
+          const combinedCats = ["All Categories", ...new Set([...cats, "Student Certificate", "Academic", "HR", "Finance", "Admission"])];
           setCategoriesList(combinedCats);
         }
       } catch (catErr) {
@@ -637,22 +753,31 @@ export default function TemplatesPage() {
 
       // Fetch templates
       const res = await templateApi.getTemplates({ pageSize: 100 });
-      const items = res?.items || res?.data || (Array.isArray(res) ? res : []);
+      const items = res?.data?.items || res?.items || res?.data || (Array.isArray(res) ? res : []);
       if (Array.isArray(items) && items.length > 0) {
-        // Map strictly onto the 5 canonical templates with no duplicates
-        const canonicalMap = new Map();
-        DEFAULT_CERTIFICATE_TEMPLATES.forEach((def) => canonicalMap.set(def.id, { ...def }));
+        const templateMap = new Map();
+        DEFAULT_ALL_TEMPLATES.forEach((def) => templateMap.set(def.id, { ...def }));
 
         items.forEach((apiItem) => {
           const slot = getCanonicalSlot(apiItem);
-          if (slot && canonicalMap.has(slot)) {
-            const base = canonicalMap.get(slot);
-            const normalized = normalizeApiTemplate(apiItem, DEFAULT_CERTIFICATE_TEMPLATES);
-            canonicalMap.set(slot, { ...base, ...normalized, id: base.id, name: base.name, builtIn: true });
+          const key = slot || apiItem.id || apiItem.templateCode;
+          if (slot && templateMap.has(slot)) {
+            const base = templateMap.get(slot);
+            const normalized = normalizeApiTemplate(apiItem, DEFAULT_ALL_TEMPLATES);
+            templateMap.set(slot, { ...base, ...normalized, id: base.id, name: base.name, builtIn: true });
+          } else if (key && templateMap.has(key)) {
+            const base = templateMap.get(key);
+            const normalized = normalizeApiTemplate(apiItem, DEFAULT_ALL_TEMPLATES);
+            templateMap.set(key, { ...base, ...normalized });
+          } else {
+            const normalized = normalizeApiTemplate(apiItem, DEFAULT_ALL_TEMPLATES);
+            if (normalized) {
+              templateMap.set(normalized.id, normalized);
+            }
           }
         });
 
-        const deduplicated = Array.from(canonicalMap.values());
+        const deduplicated = Array.from(templateMap.values());
         setTemplates(deduplicated);
       }
     } catch (err) {
@@ -764,7 +889,7 @@ export default function TemplatesPage() {
   // Handler: Reset built-in template to default design
   const handleResetToDefault = useCallback(
     (templateId) => {
-      const defaultVersion = DEFAULT_CERTIFICATE_TEMPLATES.find((t) => t.id === templateId);
+      const defaultVersion = DEFAULT_ALL_TEMPLATES.find((t) => t.id === templateId);
       if (!defaultVersion) {
         notify("Only built-in default templates can be reset to default.");
         return;
@@ -988,6 +1113,20 @@ export default function TemplatesPage() {
             onClick={() => setActiveTab("certificates")}
           >
             <Award size={15} /> Certificates
+          </button>
+          <button
+            type="button"
+            className={`templates-tab-btn ${activeTab === "reports" ? "active" : ""}`}
+            onClick={() => setActiveTab("reports")}
+          >
+            <FileSpreadsheet size={15} /> Reports
+          </button>
+          <button
+            type="button"
+            className={`templates-tab-btn ${activeTab === "letters" ? "active" : ""}`}
+            onClick={() => setActiveTab("letters")}
+          >
+            <FileText size={15} /> Official Letters
           </button>
           <button
             type="button"
@@ -2492,9 +2631,12 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
   const renderedContent = useMemo(() => renderWithDemoData(template.content, template), [template]);
   const renderedPurpose = useMemo(() => renderWithDemoData(template.purpose, template), [template]);
 
+  const isReport = template.type === "Report";
+  const isLetter = template.type === "Letter";
+
   return (
     <DashboardLayout
-      title="Certificate Template Preview"
+      title={`${template.type || "Document"} Template Preview`}
       subtitle="Full-page visual preview of template layout, institutional branding and demo student data."
       breadcrumb={["Home", "Settings", "Templates", "Preview"]}
     >
@@ -2513,85 +2655,147 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
               <Printer size={14} /> Print Preview
             </button>
             <button type="button" className="cms-btn cms-btn-primary" onClick={() => onDownload(template)}>
-              <Download size={14} /> Download Demo PDF
+              <Download size={14} /> Download Demo {isReport ? (template.format || "Excel") : "PDF"}
             </button>
           </div>
         </header>
 
         <main className="preview-canvas-box">
-          <div
-            className={`visual-certificate-canvas ${template.orientation?.toLowerCase() || 'landscape'}`}
-            style={{ backgroundColor: template.bgCanvasColor || "#ffffff" }}
-          >
-            {/* Inner Decorative Border */}
-            <div
-              className="cert-inner-border"
-              style={{
-                borderColor: template.borderColor || "#1e3a8a",
-                borderStyle: "double",
-                borderWidth: "4px",
-              }}
-            >
-              {/* Header Branding */}
-              <header className="cert-header">
-                <div className="cert-header-grid">
-                  <div className="cert-header-left">
-                    <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
-                  </div>
-                  <div className="cert-header-center">
-                    <h1 className="cert-institution-name" style={{ color: template.borderColor || "#1e3a8a" }}>
-                      PIRNAV COLLEGE
-                    </h1>
-                    <p className="cert-tagline" style={{ color: template.borderColor || "#b45309" }}>
-                      (Intermediate / Junior College)
-                    </p>
-                    <p className="cert-address">
-                      D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh
-                    </p>
-                  </div>
-                  <div className="cert-header-right">
-                    <small>Affiliated to</small>
-                    <strong>Board of Intermediate Education</strong>
-                    <small>Andhra Pradesh (BIEAP)</small>
-                    <small>College Code: 12345</small>
+          {isReport ? (
+            <div className="visual-report-canvas">
+              <header className="report-canvas-header">
+                <div className="report-header-crest">
+                  <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
+                </div>
+                <div className="report-header-titles">
+                  <h1 className="report-inst-title">PIRNAV COLLEGE</h1>
+                  <p className="report-sub">Affiliated to Board of Intermediate Education, Andhra Pradesh (BIEAP)</p>
+                  <div className="report-doc-badge">
+                    <h2>{template.name.toUpperCase()}</h2>
                   </div>
                 </div>
-
-                <div className="cert-ref-row">
-                  <span>Ref No: <strong>{template.refPrefix || "BC"}/2026/001</strong></span>
-                  <span>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></span>
+                <div className="report-meta-box">
+                  <div className="report-meta-row"><span>Ref Code:</span> <strong>{template.templateCode || template.id}</strong></div>
+                  <div className="report-meta-row"><span>Academic Year:</span> <strong>2026-2027</strong></div>
+                  <div className="report-meta-row"><span>Generated Date:</span> <strong>{template.issueDate || getPresentDateFormatted()}</strong></div>
+                  <div className="report-meta-row"><span>Export Format:</span> <strong className="format-tag">{template.format || "Excel"}</strong></div>
                 </div>
               </header>
 
-              {/* Title Badge */}
-              <div className="cert-title-badge">
-                <h2 style={{ backgroundColor: template.badgeBgColor || template.borderColor || "#1e3a8a", color: "#ffffff" }}>
-                  {template.name.toUpperCase()}
-                </h2>
+              <div className="report-desc-banner">
+                <p>{template.description || "Official institutional data report extract."}</p>
               </div>
 
-              {/* Body Text Area */}
-              <div className="cert-body-area">
-                <p className="cert-content-text">{renderedContent}</p>
-                {renderedPurpose && (
-                  <p className="cert-purpose-text">This certificate is issued for the purpose of <strong>{renderedPurpose}</strong>.</p>
-                )}
+              <div className="report-preview-table-wrap">
+                <table className="report-preview-table">
+                  <thead>
+                    <tr>
+                      {(template.columns && template.columns.length > 0
+                        ? template.columns
+                        : ["S.No", "Admission No", "Student Name", "Group", "Section", "Status"]
+                      ).map((col, idx) => (
+                        <th key={idx}>{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ["1", "ADM-2026-0017", "Rahul Kumar", "MPC", "A", "94.2%", "Eligible"],
+                      ["2", "ADM-2026-0024", "Priya Sharma", "BiPC", "A", "91.8%", "Eligible"],
+                      ["3", "ADM-2026-0051", "K. Sai Teja", "MEC", "B", "88.5%", "Eligible"],
+                      ["4", "ADM-2026-0082", "Ananya Reddy", "MPC", "B", "96.0%", "Eligible"],
+                      ["5", "ADM-2026-0105", "V. Rohan Varma", "CEC", "A", "82.4%", "Eligible"],
+                    ].map((row, rIdx) => {
+                      const cols = template.columns && template.columns.length > 0
+                        ? template.columns
+                        : ["S.No", "Admission No", "Student Name", "Group", "Section", "Status"];
+                      return (
+                        <tr key={rIdx}>
+                          {cols.map((col, cIdx) => (
+                            <td key={cIdx}>{row[cIdx % row.length]}</td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              {/* Footer Section */}
-              <footer className="cert-footer-area">
-                <div className="cert-footer-col left">
-                  <p>Place: <strong>{template.place || "Vijayawada"}</strong></p>
-                  <p>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></p>
+              <footer className="report-canvas-footer">
+                <div className="report-footer-note">
+                  <small>Generated automatically by Pirnav College Management System. Verified data register.</small>
+                </div>
+                <div className="report-footer-sigs">
+                  <div className="sig-block">
+                    <span className="sig-handwritten style-cursive-hand">Verified by</span>
+                    <strong>Dean of Academics</strong>
+                    <small>Pirnav College</small>
+                  </div>
+                  <div className="sig-block">
+                    <span className="sig-handwritten style-cursive-hand">Dr. S. K. Rao</span>
+                    <strong>Principal</strong>
+                    <small>Pirnav College</small>
+                  </div>
+                </div>
+              </footer>
+            </div>
+          ) : isLetter ? (
+            <div className="visual-letter-canvas">
+              <header className="letter-canvas-header">
+                <div className="letter-header-left">
+                  <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
+                </div>
+                <div className="letter-header-center">
+                  <h1>PIRNAV COLLEGE</h1>
+                  <p className="letter-header-sub">Recognized & Affiliated to Board of Intermediate Education, A.P.</p>
+                  <p className="letter-header-addr">D.No. 12-3-45, College Road, Vijayawada - 520 001 | Phone: 0866-2456789 | Email: info@pirnavcollege.edu.in</p>
+                </div>
+              </header>
+              <div className="letter-divider" />
+
+              <div className="letter-meta-row">
+                <div>Ref No: <strong>{template.refPrefix || "LTR"}/2026/042</strong></div>
+                <div>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></div>
+              </div>
+
+              <div className="letter-recipient-block">
+                <p><strong>To,</strong></p>
+                <p>The Parents / Guardian of <strong>{DEMO_STUDENT.student_name}</strong></p>
+                <p>Admission No: {DEMO_STUDENT.admission_no} | Class: {DEMO_STUDENT.course_name}</p>
+                <p>Pirnav College Campus, Vijayawada</p>
+              </div>
+
+              <div className="letter-subject-line">
+                <strong>Subject: </strong>
+                <span>{renderWithDemoData(template.subject || "Official Institutional Communication", template)}</span>
+              </div>
+
+              <div className="letter-salutation">
+                {renderWithDemoData(template.greeting || "Respected Sir / Madam,", template)}
+              </div>
+
+              <div className="letter-body-content">
+                {(renderWithDemoData(template.body || template.content, template) || "")
+                  .split("\n\n")
+                  .map((paragraph, pIdx) => (
+                    <p key={pIdx}>{paragraph}</p>
+                  ))}
+              </div>
+
+              <footer className="letter-canvas-footer">
+                <div className="letter-footer-left">
+                  <div className="cert-seal-stamp" style={{ borderColor: "#1e3a8a", color: "#1e3a8a" }}>
+                    <span>PIRNAV<br/>COLLEGE</span>
+                  </div>
                   {template.qrEnabled !== false && (
-                    <div className="cert-qr-placeholder">
+                    <div className="cert-qr-placeholder" style={{ marginTop: "12px" }}>
                       <div
                         className="cert-qr-svg-wrap"
                         dangerouslySetInnerHTML={{
                           __html: generateQrCodeSvg(
-                            `https://pirnavcollege.edu.in/verify-certificate/${template.refPrefix || "BC"}-2026-001`,
-                            44,
-                            template.borderColor || "#1e3a8a"
+                            `https://pirnavcollege.edu.in/verify-doc/${template.refPrefix || "LTR"}-2026-042`,
+                            40,
+                            "#1e3a8a"
                           ),
                         }}
                       />
@@ -2600,24 +2804,118 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
                   )}
                 </div>
 
-                <div className="cert-footer-col center">
-                  <div className="cert-seal-stamp" style={{ borderColor: template.borderColor || "#1e3a8a", color: template.borderColor || "#1e3a8a" }}>
-                    <span>PIRNAV<br/>COLLEGE</span>
+                <div className="letter-footer-right">
+                  <p>Yours faithfully,</p>
+                  <div className="sig-handwritten style-cursive-hand" style={{ margin: "14px 0 4px" }}>
+                    {template.signatureType || "Principal"} Signature
                   </div>
-                </div>
-
-                <div className="cert-footer-col right">
-                  <div className="cert-sig-line">
-                    <span className="sig-handwritten style-cursive-hand">
-                      {template.signatureType || "Principal"} Signature
-                    </span>
-                    <strong className="sig-title">{template.signatureType || "Principal"}</strong>
-                    <small>Pirnav College</small>
-                  </div>
+                  <strong>{DEMO_STUDENT.principal_name}</strong>
+                  <p className="sig-title">{template.signatureType || "Principal"}</p>
+                  <small>Pirnav College, Vijayawada</small>
                 </div>
               </footer>
             </div>
-          </div>
+          ) : (
+            <div
+              className={`visual-certificate-canvas ${template.orientation?.toLowerCase() || 'landscape'}`}
+              style={{ backgroundColor: template.bgCanvasColor || "#ffffff" }}
+            >
+              {/* Inner Decorative Border */}
+              <div
+                className="cert-inner-border"
+                style={{
+                  borderColor: template.borderColor || "#1e3a8a",
+                  borderStyle: "double",
+                  borderWidth: "4px",
+                }}
+              >
+                {/* Header Branding */}
+                <header className="cert-header">
+                  <div className="cert-header-grid">
+                    <div className="cert-header-left">
+                      <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
+                    </div>
+                    <div className="cert-header-center">
+                      <h1 className="cert-institution-name" style={{ color: template.borderColor || "#1e3a8a" }}>
+                        PIRNAV COLLEGE
+                      </h1>
+                      <p className="cert-tagline" style={{ color: template.borderColor || "#b45309" }}>
+                        (Intermediate / Junior College)
+                      </p>
+                      <p className="cert-address">
+                        D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh
+                      </p>
+                    </div>
+                    <div className="cert-header-right">
+                      <small>Affiliated to</small>
+                      <strong>Board of Intermediate Education</strong>
+                      <small>Andhra Pradesh (BIEAP)</small>
+                      <small>College Code: 12345</small>
+                    </div>
+                  </div>
+
+                  <div className="cert-ref-row">
+                    <span>Ref No: <strong>{template.refPrefix || "BC"}/2026/001</strong></span>
+                    <span>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></span>
+                  </div>
+                </header>
+
+                {/* Title Badge */}
+                <div className="cert-title-badge">
+                  <h2 style={{ backgroundColor: template.badgeBgColor || template.borderColor || "#1e3a8a", color: "#ffffff" }}>
+                    {template.name.toUpperCase()}
+                  </h2>
+                </div>
+
+                {/* Body Text Area */}
+                <div className="cert-body-area">
+                  <p className="cert-content-text">{renderedContent}</p>
+                  {renderedPurpose && (
+                    <p className="cert-purpose-text">This certificate is issued for the purpose of <strong>{renderedPurpose}</strong>.</p>
+                  )}
+                </div>
+
+                {/* Footer Section */}
+                <footer className="cert-footer-area">
+                  <div className="cert-footer-col left">
+                    <p>Place: <strong>{template.place || "Vijayawada"}</strong></p>
+                    <p>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></p>
+                    {template.qrEnabled !== false && (
+                      <div className="cert-qr-placeholder">
+                        <div
+                          className="cert-qr-svg-wrap"
+                          dangerouslySetInnerHTML={{
+                            __html: generateQrCodeSvg(
+                              `https://pirnavcollege.edu.in/verify-certificate/${template.refPrefix || "BC"}-2026-001`,
+                              44,
+                              template.borderColor || "#1e3a8a"
+                            ),
+                          }}
+                        />
+                        <span>Scan to verify</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="cert-footer-col center">
+                    <div className="cert-seal-stamp" style={{ borderColor: template.borderColor || "#1e3a8a", color: template.borderColor || "#1e3a8a" }}>
+                      <span>PIRNAV<br/>COLLEGE</span>
+                    </div>
+                  </div>
+
+                  <div className="cert-footer-col right">
+                    <div className="cert-sig-line">
+                      <span className="sig-handwritten style-cursive-hand">
+                        {template.signatureType || "Principal"} Signature
+                      </span>
+                      <strong className="sig-title">{template.signatureType || "Principal"}</strong>
+                      <small>Pirnav College</small>
+                    </div>
+                  </div>
+                </footer>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </DashboardLayout>

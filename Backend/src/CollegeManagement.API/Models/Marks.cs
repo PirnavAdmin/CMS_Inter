@@ -13,8 +13,7 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int MarkId { get; set; }
 
-        [NotMapped]
-        public int? CampusId { get; set; }
+        public int CampusId { get; set; } = 1;
 
         public string? Board { get; set; } = string.Empty;
 
@@ -116,10 +115,8 @@ namespace CollegeManagement.API.Models
 
         public DateTime? PublishedAt { get; set; }
 
-        [NotMapped]
         public DateTime? SubmittedAt { get; set; }
 
-        [NotMapped]
         public int ResubmissionCount { get; set; } = 0;
 
         [NotMapped]

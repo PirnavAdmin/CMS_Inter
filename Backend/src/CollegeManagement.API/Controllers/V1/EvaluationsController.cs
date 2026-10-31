@@ -116,6 +116,7 @@ namespace CollegeManagement.API.Controllers
         /// </summary>
         [HttpPatch("{evaluationId}/verify")]
         [HttpPost("{evaluationId}/verify")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> VerifyEvaluation(
             [FromRoute] string evaluationId,
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyEvaluationRequestDto? requestDto = null,
@@ -138,6 +139,7 @@ namespace CollegeManagement.API.Controllers
         /// </summary>
         [HttpPatch("{evaluationId}/approve")]
         [HttpPost("{evaluationId}/approve")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> ApproveEvaluation([FromRoute] string evaluationId)
         {
             var userId = GetCurrentUserId();
@@ -151,6 +153,7 @@ namespace CollegeManagement.API.Controllers
         /// </summary>
         [HttpPost("{evaluationId}/reject")]
         [HttpPatch("{evaluationId}/reject")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> RejectEvaluation(
             [FromRoute] string evaluationId,
             [FromQuery] string? remarks,
@@ -181,6 +184,7 @@ namespace CollegeManagement.API.Controllers
         /// Restore evaluation status back to SUBMITTED.
         /// </summary>
         [HttpPatch("{evaluationId}/restore")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> RestoreEvaluation([FromRoute] string evaluationId)
         {
             var userId = GetCurrentUserId();
@@ -193,6 +197,7 @@ namespace CollegeManagement.API.Controllers
         /// Global bulk verify all submitted subjects in the selected context.
         /// </summary>
         [HttpPost("verify-all")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> VerifyAllEvaluations([FromBody] EvaluationFilterDto? filter = null)
         {
             var userId = GetCurrentUserId();
@@ -211,6 +216,7 @@ namespace CollegeManagement.API.Controllers
         /// Global bulk approve all verified subjects in the selected context.
         /// </summary>
         [HttpPost("approve-all")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> ApproveAllEvaluations([FromBody] EvaluationFilterDto? filter = null)
         {
             var userId = GetCurrentUserId();

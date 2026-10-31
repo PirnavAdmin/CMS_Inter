@@ -35,16 +35,19 @@ const isBackendStudentId = (id) => Boolean(id) && !isNaN(Number(id)) && Number(i
 export const getMyChildren = async () => {
   try {
     const res = await api.get("/api/v1/students/my-children");
-    // Handles { success: true, data: [...] } or direct array [...]
-    if (res?.data && Array.isArray(res.data.data)) {
-      return res.data.data;
-    }
-    if (Array.isArray(res?.data)) {
-      return res.data;
-    }
-    return res?.data?.data || [];
-  } catch {
+    const raw = res?.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.students)) return raw.students;
+    if (Array.isArray(raw?.children)) return raw.children;
+    if (Array.isArray(raw?.data?.items)) return raw.data.items;
+    if (Array.isArray(raw?.data?.students)) return raw.data.students;
+    if (Array.isArray(raw?.data?.children)) return raw.data.children;
+    if (raw?.data && typeof raw.data === "object") return [raw.data];
     return [];
+  } catch (err) {
+    // Rethrow so callers can distinguish between network/auth failure vs genuine 0 children
+    throw err;
   }
 };
 
@@ -207,11 +210,11 @@ export const getSubjectsByGroup = async (groupId) => {
  * 8. GET /api/v1/attendance/student/{studentId}/yearly-overview
  * Retrieves the yearly attendance overview for a specific student.
  */
-export const getStudentAttendanceOverview = async (studentId, academicYearId) => {
+export const getStudentAttendanceOverview = async (studentId, academicYearId = 9) => {
   if (!isBackendStudentId(studentId)) return null;
   try {
     const res = await api.get(`/api/v1/attendance/student/${encodeURIComponent(studentId)}/yearly-overview`, {
-      params: academicYearId ? { academicYearId } : {},
+      params: { academicYearId: academicYearId || 9 },
     });
     return res?.data?.data ?? res?.data ?? null;
   } catch {
@@ -270,7 +273,7 @@ export const getStudentDailyAttendanceLogs = async (studentId, { month, year } =
   try {
     const now = new Date();
     const params = {
-      month: (month !== undefined && month !== null && month !== "" && month !== "all") ? Number(month) : (now.getMonth() + 1),
+      month: (month === 0 || month === "0" || month === "all") ? 0 : ((month !== undefined && month !== null && month !== "") ? Number(month) : (now.getMonth() + 1)),
       year: (year !== undefined && year !== null && year !== "") ? Number(year) : now.getFullYear(),
     };
     const res = await api.get(`/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`, { params });
@@ -411,3 +414,13 @@ export const getCertificateActiveTemplates = async () => {
 
 
 
+
+/**
+ * 19. POST /api/v1/students/parent/change-password
+ * Changes the authenticated parent's account password.
+ */
+export const changeParentPassword = async ({ oldPassword, newPassword, confirmPassword }) => {
+  const payload = { oldPassword, newPassword, confirmPassword };
+  const res = await api.post("/api/v1/students/parent/change-password", payload);
+  return res?.data ?? res;
+};

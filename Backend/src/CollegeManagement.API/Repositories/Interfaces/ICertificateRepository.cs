@@ -70,14 +70,27 @@ public interface ICertificateRepository
 
     Task<int> BulkReviewAsync(
         string reviewedBy,
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<int> BulkApproveAsync(
         string approvedBy,
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<int> BulkIssueAsync(
         string issuedBy,
+        int? campusId = null,
+        CancellationToken ct = default);
+
+    Task<bool> UpdateFeeClearanceAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
+        CancellationToken ct = default);
+
+    Task<bool> GrantFeeExemptionAsync(
+        int id,
+        CertificateFeeClearanceRequestDto request,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<CertificateResponseDto>> BulkGenerateAsync(
@@ -95,5 +108,9 @@ public interface ICertificateRepository
 
     Task<bool> DeleteAsync(
         int id,
+        CancellationToken ct = default);
+
+    Task<StudentGenerationLookupDto?> GetStudentForGenerationAsync(
+        string admissionNo,
         CancellationToken ct = default);
 }

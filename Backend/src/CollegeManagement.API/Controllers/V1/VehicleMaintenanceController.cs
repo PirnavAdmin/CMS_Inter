@@ -8,7 +8,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/maintenance")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     [Tags("Vehicle Maintenance")]
     public class VehicleMaintenanceController : ControllerBase
     {
@@ -21,7 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetAll(
             [FromQuery] VehicleMaintenanceFilterDto filter)
         {
@@ -36,7 +36,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> GetById(string id)
         {
             if (long.TryParse(id, out long maintenanceId))
@@ -52,7 +52,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Create([FromBody] CreateVehicleMaintenanceDto dto)
         {
             var userId = GetUserId();
@@ -67,7 +67,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("{id}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Update(
             string id,
             [FromBody] UpdateVehicleMaintenanceDto dto)
@@ -105,7 +105,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("{id}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Delete(string id)
         {
             var userId = GetUserId();
@@ -118,7 +118,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("lookup")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Lookup()
         {
             var data = await _service.GetLookupAsync();

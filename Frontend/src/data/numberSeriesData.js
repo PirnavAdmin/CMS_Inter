@@ -36,7 +36,7 @@ export const FIXED_NUMBER_SERIES = [
       currentNumber: 0,
       currentSequence: 0,
       isActive: true,
-      allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{BOARD}", "{PROGRAM}", "{AY}"],
+      allowedTokens: ["{SEQ}", "{GROUP}", "{GROUP:1}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{BOARD}", "{BOARD:1}", "{PROGRAM}", "{PROGRAM:1}", "{AY}", "{LEVEL}"],
     sampleFormats: [
       { format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", example: "26MUB1M0001" },
       { format: "ROLL-{AY}-{GROUP}-{SEQ}", example: "ROLL-2026-MPC-0001" },
@@ -218,7 +218,9 @@ export function isSeriesRemoved(item) {
         return true;
       }
     }
-  } catch (e) {}
+  } catch {
+    // Ignore storage errors
+  }
 
   if (item.isDeleted === true) return true;
   return false;
@@ -265,6 +267,13 @@ export const MOCK_GENERATED_HISTORY = {
     { id: 4, val: "FEE-20260903-000008", student: "Pooja Hegde", admNo: "ADM-14", type: "Transport Fee", amount: "₹12,000", date: "03 Sep 2026" },
     { id: 5, val: "FEE-20260902-000007", student: "Venkatesh Rao", admNo: "ADM-13", type: "Hostel Fee", amount: "₹35,000", date: "02 Sep 2026" },
   ],
+  "roll-no": [
+    { id: 1, val: "26MCB1M0006", name: "Rahul Kumar", rollNo: "26MCB1M0006", board: "BIEAP", group: "MPC", program: "Intermediate", year: "2026-2027", date: "12 May 2026" },
+    { id: 2, val: "26MCB1M0005", name: "Sneha Reddy", rollNo: "26MCB1M0005", board: "BIEAP", group: "MPC", program: "Intermediate", year: "2026-2027", date: "11 May 2026" },
+    { id: 3, val: "26MCC1B0002", name: "Aditya Joshi", rollNo: "26MCC1B0002", board: "CBSE", group: "BiPC", program: "Intermediate", year: "2026-2027", date: "10 May 2026" },
+    { id: 4, val: "26MCB1C0004", name: "Pooja Hegde", rollNo: "26MCB1C0004", board: "BIEAP", group: "CEC", program: "Intermediate", year: "2026-2027", date: "09 May 2026" },
+    { id: 5, val: "26MCB1M0003", name: "Venkatesh Rao", rollNo: "26MCB1M0003", board: "BIEAP", group: "MEC", program: "Intermediate", year: "2026-2027", date: "08 May 2026" },
+  ],
 };
 
 // --- MOCK CONFIGURATION HISTORY LOGS ---
@@ -287,6 +296,9 @@ export const MOCK_CONFIG_HISTORY = {
   ],
   "receipt-no": [
     { version: "v1.0", format: "FEE-{YYYYMMDD}-{SEQ}", prefix: "FEE", length: 6, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
+  ],
+  "roll-no": [
+    { version: "v1.0", format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", prefix: "—", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
   ],
 };
 
@@ -362,7 +374,9 @@ export function appendConfigHistory(seriesId, newConfig) {
   const newList = [newRow, ...updatedPrevious];
   try {
     localStorage.setItem(`pirnav_config_hist_${seriesId}`, JSON.stringify(newList));
-  } catch {}
+  } catch {
+    // Ignore storage errors
+  }
   return newList;
 }
 
@@ -535,8 +549,24 @@ export function validateNumberSeries(format, numberLength, currentNumber, allowe
 
   // Extract all {TOKEN} patterns
   const tokens = format.match(/\{[^}]+\}/g) || [];
-  const coreSupportedTokens = ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}", "{PREFIX}", "{GROUP}", "{SECTION}", "{CAMPUS}"];
-  const unsupported = tokens.filter((t) => !allowedTokens.includes(t) && !coreSupportedTokens.includes(t));
+  const coreSupportedBases = new Set([
+    "SEQ", "YYYY", "YY", "MM", "DD", "YYYYMMDD", "RANDOM", "PREFIX", 
+    "GROUP", "SECTION", "CAMPUS", "BOARD", "PROGRAM", "AY", "DEPT", 
+    "DESIG", "STAFF", "CERT", "TYPE", "YEAR", "LEVEL", "EXAM"
+  ]);
+
+  const allowedSet = new Set(allowedTokens.map((t) => t.toUpperCase()));
+
+  const unsupported = [];
+  for (const token of tokens) {
+    const rawInner = token.slice(1, -1).trim().toUpperCase();
+    const baseName = rawInner.split(":")[0];
+    const isAllowedExplicit = allowedSet.has(token.toUpperCase()) || allowedSet.has(`{${baseName}}`);
+    const isCoreBase = coreSupportedBases.has(baseName);
+    if (!isAllowedExplicit && !isCoreBase) {
+      unsupported.push(token);
+    }
+  }
 
   if (unsupported.length > 0) {
     return {

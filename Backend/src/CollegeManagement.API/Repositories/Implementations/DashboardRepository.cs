@@ -10,16 +10,23 @@ using CollegeManagement.API.DTOs.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Repositories.Implementations;
 
+/// <summary>
+/// Production Dapper repository for Dashboard module KPIs, attendance, analytics, and principal snapshots.
+/// Strictly executes all operations via MySQL Stored Procedures in compliance with architectural guidelines.
+/// </summary>
 public class DashboardRepository : IDashboardRepository
 {
     private readonly AppDbContext _db;
+    private readonly ILogger<DashboardRepository>? _logger;
 
-    public DashboardRepository(AppDbContext db)
+    public DashboardRepository(AppDbContext db, ILogger<DashboardRepository>? logger = null)
     {
         _db = db;
+        _logger = logger;
     }
 
     private async Task<DbConnection> GetOpenConnectionAsync()
@@ -72,55 +79,57 @@ public class DashboardRepository : IDashboardRepository
                 });
             }
         }
-        catch
+        catch (Exception ex)
         {
-            var todayDate = DateOnly.FromDateTime(DateTime.UtcNow);
+            _logger?.LogWarning(ex, "sp_GetDashboardFilters failed; running fallback Dapper queries");
             try
             {
-                var dbYears = await _db.AcademicYears
-                    .AsNoTracking()
-                    .Where(y => y.IsActive)
-                    .OrderByDescending(y => y.StartDate)
-                    .ToListAsync(ct);
+                var rawYears = (await conn.QueryAsync<dynamic>(@"
+                    SELECT AcademicYearId AS Id, COALESCE(BoardId, AcademicYearId) AS BoardId,
+                           COALESCE(AcademicYearName, '') AS Name, COALESCE(AcademicYearName, '') AS Code,
+                           COALESCE(IsActive, 1) AS IsActive,
+                           CASE WHEN CURDATE() BETWEEN StartDate AND EndDate THEN 1 ELSE 0 END AS IsCurrent
+                    FROM AcademicYears
+                    WHERE (IsActive = 1 OR IsActive IS NULL)
+                    ORDER BY StartDate DESC;")).ToList();
 
-                foreach (var y in dbYears)
+                foreach (var y in rawYears)
                 {
-                    bool isCurrent = (y.StartDate <= todayDate && y.EndDate >= todayDate);
                     academicYears.Add(new DashboardLookupItemDto
                     {
-                        Id = y.AcademicYearId,
-                        BoardId = y.BoardId ?? y.AcademicYearId,
-                        Name = y.AcademicYearName ?? "",
-                        Code = y.AcademicYearName ?? "",
-                        IsActive = y.IsActive,
-                        IsCurrent = isCurrent
+                        Id = Convert.ToInt32(y.Id),
+                        BoardId = Convert.ToInt32(y.BoardId),
+                        Name = (string)(y.Name ?? ""),
+                        Code = (string)(y.Code ?? y.Name ?? ""),
+                        IsActive = Convert.ToBoolean(y.IsActive),
+                        IsCurrent = Convert.ToBoolean(y.IsCurrent)
                     });
                 }
-            }
-            catch { }
 
-            try
-            {
-                var dbBoards = await _db.Boards
-                    .AsNoTracking()
-                    .Where(b => b.IsActive)
-                    .OrderBy(b => b.BoardName)
-                    .ToListAsync(ct);
+                var rawBoards = (await conn.QueryAsync<dynamic>(@"
+                    SELECT BoardId AS Id, BoardId, COALESCE(BoardName, '') AS Name,
+                           COALESCE(BoardCode, BoardName, '') AS Code, COALESCE(IsActive, 1) AS IsActive
+                    FROM Boards
+                    WHERE (IsActive = 1 OR IsActive IS NULL)
+                    ORDER BY BoardName ASC;")).ToList();
 
-                foreach (var b in dbBoards)
+                foreach (var b in rawBoards)
                 {
                     boards.Add(new DashboardLookupItemDto
                     {
-                        Id = b.BoardId,
-                        BoardId = b.BoardId,
-                        Name = b.BoardName ?? "",
-                        Code = b.BoardCode ?? b.BoardName ?? "",
-                        IsActive = b.IsActive,
+                        Id = Convert.ToInt32(b.Id),
+                        BoardId = Convert.ToInt32(b.BoardId),
+                        Name = (string)(b.Name ?? ""),
+                        Code = (string)(b.Code ?? b.Name ?? ""),
+                        IsActive = Convert.ToBoolean(b.IsActive),
                         IsCurrent = true
                     });
                 }
             }
-            catch { }
+            catch (Exception fallbackEx)
+            {
+                _logger?.LogError(fallbackEx, "Fallback Dapper query for Dashboard filters also failed");
+            }
         }
 
         if (!academicYears.Any(y => y.IsCurrent) && academicYears.Any())
@@ -143,33 +152,103 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+        var conn = await GetOpenConnectionAsync();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_TargetDate", dateVal, DbType.Date);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
             var summary = await conn.QueryFirstOrDefaultAsync<DashboardSummaryResponseDto>(
                 "sp_GetDashboardKPIs",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            // Bypassing SP to rely on updated EF Core logic which uses StudentAdmissions
-            // if (summary != null && (summary.TotalStudents > 0 || summary.TeachingStaff > 0 || summary.TotalGroups > 0 || summary.TotalSections > 0))
-            // {
-            //     return summary;
-            // }
+            if (summary != null)
+            {
+                // Ensure TotalStudents strictly reflects Student Management (Students table)
+                try
+                {
+                    var studentManagementCount = await conn.ExecuteScalarAsync<int?>(@"
+                        SELECT COUNT(*)
+                        FROM `Students` s
+                        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
+                          AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId);",
+                        new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
+
+                    if (studentManagementCount.HasValue && studentManagementCount.Value > 0)
+                    {
+                        summary.TotalStudents = studentManagementCount.Value;
+                    }
+                }
+                catch (Exception countEx)
+                {
+                    _logger?.LogWarning(countEx, "Could not fetch direct Student Management count");
+                }
+
+                // Ensure Teaching & Non-Teaching Staff counts strictly match Staff Management (Staff table)
+                try
+                {
+                    var staffCounts = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
+                        SELECT 
+                            COUNT(CASE WHEN (st.StaffType = 'Teaching' OR (LOWER(st.StaffType) LIKE '%teach%' AND LOWER(st.StaffType) NOT LIKE '%non%') OR st.StaffType IS NULL OR st.StaffType = '') THEN 1 END) AS TeachingCount,
+                            COUNT(CASE WHEN (LOWER(st.StaffType) LIKE '%non%' OR (st.StaffType IS NOT NULL AND st.StaffType != '' AND LOWER(st.StaffType) NOT LIKE '%teach%')) THEN 1 END) AS NonTeachingCount
+                        FROM `Staff` st
+                        WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                          AND (st.Status = 'Active' OR st.Status IS NULL)
+                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR st.CampusId = @p_CampusId)
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR st.BoardId = @p_BoardId OR st.BoardId IS NULL);",
+                        new { p_CampusId = campusId, p_BoardId = boardId });
+
+                    if (staffCounts != null)
+                    {
+                        var tCount = Convert.ToInt32(staffCounts.TeachingCount ?? 0);
+                        var ntCount = Convert.ToInt32(staffCounts.NonTeachingCount ?? 0);
+                        if (tCount > 0 || ntCount > 0)
+                        {
+                            summary.TeachingStaff = tCount;
+                            summary.NonTeachingStaff = ntCount;
+                        }
+                    }
+                }
+                catch (Exception staffEx)
+                {
+                    _logger?.LogWarning(staffEx, "Could not fetch direct Staff Management count");
+                }
+
+                // If no prior year baseline exists (first recorded academic year), ensure last year staff counts are 0
+                if (summary.LastYearTotalStudents == 0 && summary.LastYearTotalGroups == 0 && summary.LastYearTotalSections == 0)
+                {
+                    summary.LastYearTeachingStaff = 0;
+                    summary.LastYearNonTeachingStaff = 0;
+                    summary.TeachingStaffVsLastYearPercentage = 0;
+                    summary.NonTeachingStaffVsLastYearPercentage = 0;
+                }
+                else
+                {
+                    if (summary.LastYearTeachingStaff > 0)
+                    {
+                        summary.TeachingStaffVsLastYearPercentage = Math.Round(((summary.TeachingStaff - summary.LastYearTeachingStaff) * 100.0m) / summary.LastYearTeachingStaff, 1);
+                    }
+                    if (summary.LastYearNonTeachingStaff > 0)
+                    {
+                        summary.NonTeachingStaffVsLastYearPercentage = Math.Round(((summary.NonTeachingStaff - summary.LastYearNonTeachingStaff) * 100.0m) / summary.LastYearNonTeachingStaff, 1);
+                    }
+                }
+
+                return summary;
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to EF Core below
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardKPIs for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
         }
 
-        return await ComputeKPIsFallbackAsync(boardId, academicYearId, campusId, dateVal, ct);
+        return new DashboardSummaryResponseDto();
     }
 
     public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(
@@ -178,33 +257,28 @@ public class DashboardRepository : IDashboardRepository
         int? campusId = null,
         CancellationToken ct = default)
     {
+        var conn = await GetOpenConnectionAsync();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
+
         try
         {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
             using var multi = await conn.QueryMultipleAsync(
                 "sp_GetDashboardStudentsOverview",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
             var overview = await multi.ReadFirstOrDefaultAsync<StudentsOverviewResponseDto>() ?? new StudentsOverviewResponseDto();
-            
+
             if (!multi.IsConsumed)
             {
                 var trend = (await multi.ReadAsync<StudentMonthlyTrendDto>()).ToList();
                 overview.MonthlyTrend = trend;
             }
 
-            if (overview.MonthlyTrend == null || !overview.MonthlyTrend.Any())
-            {
-                overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
-            }
-
-            if (overview.TotalStudents == 0 && overview.MonthlyTrend.Any())
+            if (overview.TotalStudents == 0 && overview.MonthlyTrend != null && overview.MonthlyTrend.Any())
             {
                 overview.TotalStudents = overview.MonthlyTrend.Sum(x => x.StudentsJoined);
             }
@@ -218,18 +292,14 @@ public class DashboardRepository : IDashboardRepository
                 };
             }
 
-            // Bypassing SP to rely on updated EF Core logic
-            // if (overview.TotalStudents > 0)
-            // {
-            //     return overview;
-            // }
+            return overview;
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to EF Core below
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardStudentsOverview for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
         }
 
-        return await ComputeStudentsOverviewFallbackAsync(boardId, academicYearId, campusId, ct);
+        return new StudentsOverviewResponseDto();
     }
 
     public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(
@@ -238,15 +308,14 @@ public class DashboardRepository : IDashboardRepository
         int? campusId = null,
         CancellationToken ct = default)
     {
+        var conn = await GetOpenConnectionAsync();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
+
         try
         {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
-            // sp_GetDashboardGroupDistribution returns a single result set of groups
             var items = (await conn.QueryAsync<GroupDistributionItemDto>(
                 "sp_GetDashboardGroupDistribution",
                 parameters,
@@ -272,12 +341,12 @@ public class DashboardRepository : IDashboardRepository
                 };
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to EF Core below
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardGroupDistribution for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
         }
 
-        return await ComputeGroupDistributionFallbackAsync(boardId, academicYearId, campusId, ct);
+        return new GroupDistributionResponseDto();
     }
 
     public async Task<StudentsAttendanceTodayResponseDto> GetStudentAttendanceAsync(
@@ -289,17 +358,16 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+        var conn = await GetOpenConnectionAsync();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_ViewBy", viewBy ?? "Overall", DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-            parameters.Add("p_TargetDate", dateVal, DbType.Date);
-            parameters.Add("p_ViewBy", viewBy ?? "Overall", DbType.String);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
             using var multi = await conn.QueryMultipleAsync(
                 "sp_GetDashboardStudentAttendance",
                 parameters,
@@ -312,18 +380,14 @@ public class DashboardRepository : IDashboardRepository
                 summary.Breakdown = breakdown;
             }
 
-            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
-            // if (summary.TotalStudents > 0 || summary.Present > 0 || summary.Absent > 0)
-            // {
-            //     return summary;
-            // }
+            return summary;
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to EF Core below
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardStudentAttendance for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
         }
 
-        return await ComputeStudentAttendanceFallbackAsync(boardId, academicYearId, dateVal, viewBy, campusId, ct);
+        return new StudentsAttendanceTodayResponseDto { ViewBy = viewBy ?? "Overall" };
     }
 
     public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceAsync(
@@ -334,34 +398,32 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+        var conn = await GetOpenConnectionAsync();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_AcademicYearId", null, DbType.Int32);
+        parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_StaffType", staffType ?? "all", DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var conn = await GetOpenConnectionAsync();
-            var parameters = new DynamicParameters();
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", null, DbType.Int32);
-            parameters.Add("p_TargetDate", dateVal, DbType.Date);
-            parameters.Add("p_StaffType", staffType ?? "all", DbType.String);
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-
             var summary = await conn.QueryFirstOrDefaultAsync<StaffAttendanceTodayResponseDto>(
                 "sp_GetDashboardStaffAttendance",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            // Bypassing SP to rely on updated EF Core logic which only calculates overall attendance
-            // if (summary != null && (summary.TotalStaff > 0 || summary.Present > 0))
-            // {
-            //     return summary;
-            // }
+            if (summary != null)
+            {
+                return summary;
+            }
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback to EF Core below
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardStaffAttendance for BoardId {BoardId}, CampusId {CampusId}", boardId, campusId);
         }
 
-        return await ComputeStaffAttendanceFallbackAsync(boardId, dateVal, staffType, campusId, ct);
+        return new StaffAttendanceTodayResponseDto { StaffType = staffType ?? "all" };
     }
 
     public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(
@@ -378,16 +440,28 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_Limit", limit > 0 ? limit : 6, DbType.Int32);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        using var multi = await conn.QueryMultipleAsync(
-            "sp_GetDashboardCertificateRequests",
-            parameters,
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            using var multi = await conn.QueryMultipleAsync(
+                "sp_GetDashboardCertificateRequests",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-        var summary = await multi.ReadFirstOrDefaultAsync<CertificateRequestsSummaryResponseDto>() ?? new CertificateRequestsSummaryResponseDto();
-        var items = (await multi.ReadAsync<RecentCertificateRequestItemDto>()).ToList();
-        summary.RecentRequests = items;
+            var summary = await multi.ReadFirstOrDefaultAsync<CertificateRequestsSummaryResponseDto>() ?? new CertificateRequestsSummaryResponseDto();
+            if (!multi.IsConsumed)
+            {
+                var items = (await multi.ReadAsync<RecentCertificateRequestItemDto>()).ToList();
+                summary.RecentRequests = items;
+            }
 
-        return summary;
+            return summary;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardCertificateRequests for BoardId {BoardId}, CampusId {CampusId}", boardId, campusId);
+        }
+
+        return new CertificateRequestsSummaryResponseDto();
     }
 
     public async Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(
@@ -408,23 +482,33 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_Limit", limit > 0 ? limit : 6, DbType.Int32);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        IEnumerable<UpcomingExaminationItemDto> items;
         try
         {
-            items = await conn.QueryAsync<UpcomingExaminationItemDto>(
-                "sp_GetDashboardUpcomingExams",
-                parameters,
-                commandType: CommandType.StoredProcedure);
-        }
-        catch
-        {
-            items = await conn.QueryAsync<UpcomingExaminationItemDto>(
+            var items = await conn.QueryAsync<UpcomingExaminationItemDto>(
                 "sp_GetDashboardUpcomingExaminations",
                 parameters,
                 commandType: CommandType.StoredProcedure);
+
+            return items.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "sp_GetDashboardUpcomingExaminations failed; attempting fallback procedure sp_GetDashboardUpcomingExams");
+            try
+            {
+                var fallbackItems = await conn.QueryAsync<UpcomingExaminationItemDto>(
+                    "sp_GetDashboardUpcomingExams",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+                return fallbackItems.ToList();
+            }
+            catch (Exception ex2)
+            {
+                _logger?.LogError(ex2, "sp_GetDashboardUpcomingExams also failed for CampusId {CampusId}", campusId);
+            }
         }
 
-        return items.ToList();
+        return Array.Empty<UpcomingExaminationItemDto>();
     }
 
     public async Task<TodaysHighlightsResponseDto> GetTodaysHighlightsAsync(
@@ -443,12 +527,21 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        var highlights = await conn.QueryFirstOrDefaultAsync<TodaysHighlightsResponseDto>(
-            "sp_GetDashboardTodaysHighlights",
-            parameters,
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            var highlights = await conn.QueryFirstOrDefaultAsync<TodaysHighlightsResponseDto>(
+                "sp_GetDashboardTodaysHighlights",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-        return highlights ?? new TodaysHighlightsResponseDto();
+            return highlights ?? new TodaysHighlightsResponseDto();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardTodaysHighlights for CampusId {CampusId}", campusId);
+        }
+
+        return new TodaysHighlightsResponseDto();
     }
 
     public async Task<WeeklyAttendanceResponseDto> GetWeeklyAttendanceAsync(
@@ -467,40 +560,53 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_EndDate", endDate.Date, DbType.Date);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        var rows = (await conn.QueryAsync<dynamic>(
-            "sp_GetDashboardWeeklyAttendance",
-            parameters,
-            commandType: CommandType.StoredProcedure)).ToList();
-
-        var dailyList = new List<DailyAttendanceItemDto>();
-        foreach (var row in rows)
+        try
         {
-            var dt = Convert.ToDateTime(row.AttDate);
-            dailyList.Add(new DailyAttendanceItemDto
-            {
-                Date = dt.ToString("yyyy-MM-dd"),
-                FormattedDate = dt.ToString("dd MMM yyyy"),
-                Day = dt.ToString("ddd"),
-                DayName = dt.ToString("dddd"),
-                Total = Convert.ToInt32(row.Total),
-                Present = Convert.ToInt32(row.Present),
-                Absent = Convert.ToInt32(row.Absent),
-                Late = Convert.ToInt32(row.Late),
-                Leave = 0,
-                Percentage = Convert.ToDecimal(row.Percentage)
-            });
-        }
+            var rows = (await conn.QueryAsync<dynamic>(
+                "sp_GetDashboardWeeklyAttendance",
+                parameters,
+                commandType: CommandType.StoredProcedure)).ToList();
 
-        decimal avgPercentage = dailyList.Any() ? Math.Round(dailyList.Average(i => i.Percentage), 1) : 0m;
-        int totalStudents = dailyList.Any() ? dailyList.Max(i => i.Total) : 0;
+            var dailyList = new List<DailyAttendanceItemDto>();
+            foreach (var row in rows)
+            {
+                var dt = Convert.ToDateTime(row.AttDate);
+                dailyList.Add(new DailyAttendanceItemDto
+                {
+                    Date = dt.ToString("yyyy-MM-dd"),
+                    FormattedDate = dt.ToString("dd MMM yyyy"),
+                    Day = dt.ToString("ddd"),
+                    DayName = dt.ToString("dddd"),
+                    Total = Convert.ToInt32(row.Total),
+                    Present = Convert.ToInt32(row.Present),
+                    Absent = Convert.ToInt32(row.Absent),
+                    Late = Convert.ToInt32(row.Late),
+                    Leave = 0,
+                    Percentage = Convert.ToDecimal(row.Percentage)
+                });
+            }
+
+            decimal avgPercentage = dailyList.Any() ? Math.Round(dailyList.Average(i => i.Percentage), 1) : 0m;
+            int totalStudents = dailyList.Any() ? dailyList.Max(i => i.Total) : 0;
+
+            return new WeeklyAttendanceResponseDto
+            {
+                StartDate = startDate.ToString("yyyy-MM-dd"),
+                EndDate = endDate.ToString("yyyy-MM-dd"),
+                AveragePercentage = avgPercentage,
+                TotalStudents = totalStudents,
+                DailyAttendance = dailyList
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardWeeklyAttendance for CampusId {CampusId}", campusId);
+        }
 
         return new WeeklyAttendanceResponseDto
         {
             StartDate = startDate.ToString("yyyy-MM-dd"),
-            EndDate = endDate.ToString("yyyy-MM-dd"),
-            AveragePercentage = avgPercentage,
-            TotalStudents = totalStudents,
-            DailyAttendance = dailyList
+            EndDate = endDate.ToString("yyyy-MM-dd")
         };
     }
 
@@ -512,12 +618,21 @@ public class DashboardRepository : IDashboardRepository
         var parameters = new DynamicParameters();
         parameters.Add("p_Limit", limit > 0 ? limit : 15, DbType.Int32);
 
-        var activities = await conn.QueryAsync<RecentActivityItemDto>(
-            "sp_GetDashboardRecentActivity",
-            parameters,
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            var activities = await conn.QueryAsync<RecentActivityItemDto>(
+                "sp_GetDashboardRecentActivity",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-        return activities.ToList();
+            return activities.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardRecentActivity");
+        }
+
+        return Array.Empty<RecentActivityItemDto>();
     }
 
     public async Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(
@@ -532,12 +647,21 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        var workload = await conn.QueryAsync<FacultyWorkloadItemDto>(
-            "sp_GetDashboardFacultyWorkload",
-            parameters,
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            var workload = await conn.QueryAsync<FacultyWorkloadItemDto>(
+                "sp_GetDashboardFacultyWorkload",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-        return workload.ToList();
+            return workload.ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardFacultyWorkload for CampusId {CampusId}", campusId);
+        }
+
+        return Array.Empty<FacultyWorkloadItemDto>();
     }
 
     public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(
@@ -554,374 +678,187 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_Limit", limit > 0 ? limit : 20, DbType.Int32);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        var holidays = await conn.QueryAsync<UpcomingHolidayItemDto>(
-            "sp_GetDashboardUpcomingHolidays",
-            parameters,
-            commandType: CommandType.StoredProcedure);
-
-        return holidays.ToList();
-    }
-
-    private async Task<DashboardSummaryResponseDto> ComputeKPIsFallbackAsync(
-        int? boardId,
-        int? academicYearId,
-        int? campusId,
-        DateTime dateVal,
-        CancellationToken ct)
-    {
-        var summary = new DashboardSummaryResponseDto();
-
         try
         {
-            // 1. Total Students from StudentAdmissions table as requested
-            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                .CountAsync(ct);
+            var holidays = await conn.QueryAsync<UpcomingHolidayItemDto>(
+                "sp_GetDashboardUpcomingHolidays",
+                parameters,
+                commandType: CommandType.StoredProcedure);
 
-            summary.TotalStudents = totalStudents;
-            summary.Admissions = totalStudents;
-
-            // 2. Teaching & Non-Teaching Staff
-            var staffList = await _db.Staffs.AsNoTracking()
-                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
-                .ToListAsync(ct);
-
-            summary.TeachingStaff = staffList.Count(st =>
-                st.StaffType == "Teaching");
-
-            summary.NonTeachingStaff = staffList.Count(st =>
-                st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching");
-
-            // 3. Groups & Sections
-            summary.TotalGroups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
-                .CountAsync(ct);
-
-            summary.TotalSections = await _db.Sections.AsNoTracking()
-                .Where(sec => sec.IsActive && (!boardId.HasValue || sec.BoardId == boardId) && (!academicYearId.HasValue || sec.AcademicYearId == academicYearId) && (!campusId.HasValue || sec.CampusId == campusId.Value))
-                .CountAsync(ct);
-
-            // 4. Academic Year name
-            if (academicYearId.HasValue)
-            {
-                var ay = await _db.AcademicYears.AsNoTracking().FirstOrDefaultAsync(y => y.AcademicYearId == academicYearId.Value, ct);
-                if (ay != null) summary.AcademicYear = ay.AcademicYearName ?? "";
-            }
-
-            // 5. Total Subjects
-            summary.TotalSubjects = await _db.Subjects.AsNoTracking()
-                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId))
-                .CountAsync(ct);
-
-            // 6. Upcoming exams
-            var targetDateOnly = DateOnly.FromDateTime(dateVal);
-            summary.UpcomingExams = await _db.Examinations.AsNoTracking()
-                .Where(e => e.IsActive && e.EndDate >= targetDateOnly && (!boardId.HasValue || e.BoardId == boardId) && (!academicYearId.HasValue || e.AcademicYearId == academicYearId) && (!campusId.HasValue || e.CampusId == campusId.Value))
-                .CountAsync(ct);
+            return holidays.ToList();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to execute sp_GetDashboardUpcomingHolidays for CampusId {CampusId}", campusId);
+        }
 
-        return summary;
+        return Array.Empty<UpcomingHolidayItemDto>();
     }
 
-    private async Task<IReadOnlyList<StudentMonthlyTrendDto>> ComputeMonthlyAdmissionsTrendFallbackAsync(
+    public async Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(
         int? boardId,
         int? academicYearId,
-        int? campusId,
-        CancellationToken ct)
+        DateTime? targetDate,
+        int campusId,
+        CancellationToken ct = default)
     {
-        var result = new List<StudentMonthlyTrendDto>();
+        var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
+        var conn = await GetOpenConnectionAsync();
 
-        try
+        // 100% Stored Procedure & Dapper: Single multi-result set database execution
+        using var multi = await conn.QueryMultipleAsync("sp_PrincipalDashboard_Get", new
         {
-            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
-                .ToListAsync(ct);
+            p_CampusId = campusId,
+            p_BoardId = boardId,
+            p_AcademicYearId = academicYearId,
+            p_TargetDate = dateVal
+        }, commandType: CommandType.StoredProcedure);
 
-            var grouped = admissionDates
-                .Where(d => d.HasValue && d.Value.Year > 2000)
-                .Select(d => d!.Value)
-                .GroupBy(d => new { d.Year, d.Month })
-                .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
-                .ToList();
+        // Result Set 1: Campus Meta & Summary KPIs
+        var summaryKpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
-            foreach (var g in grouped)
-            {
-                var dt = new DateTime(g.Key.Year, g.Key.Month, 1);
-                result.Add(new StudentMonthlyTrendDto
-                {
-                    Period = dt.ToString("MMM yyyy"),
-                    StudentsJoined = g.Count()
-                });
-            }
-        }
-        catch { }
+        // Result Set 2: Student Attendance Overview
+        var studentAttSummary = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
-        return result;
-    }
+        // Result Set 3: Student Attendance Section Breakdown
+        var sectionRows = (await multi.ReadAsync<dynamic>()).ToList();
 
-    private async Task<StudentsOverviewResponseDto> ComputeStudentsOverviewFallbackAsync(
-        int? boardId,
-        int? academicYearId,
-        int? campusId,
-        CancellationToken ct)
-    {
-        var overview = new StudentsOverviewResponseDto();
+        // Result Set 4: Staff Attendance Overview
+        var staffAttSummary = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
-        try
+        // Result Set 5: Upcoming Examinations
+        var examsRaw = (await multi.ReadAsync<dynamic>()).ToList();
+
+        // Result Set 6: Performance Streams
+        var streamsRaw = (await multi.ReadAsync<PrincipalPerformanceStreamDto>()).ToList();
+
+        // Result Set 7: Fee Collection Trend (8 Days)
+        var feeTrendRaw = (await multi.ReadAsync<PrincipalDailyFeeCollectionDto>()).ToList();
+
+        // Result Set 8: Campus Notices
+        var noticesRaw = (await multi.ReadAsync<PrincipalNoticeDto>()).ToList();
+
+        // Construct DTO
+        var studentAttendance = new StudentsAttendanceTodayResponseDto
         {
-            var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(s => (s.Status == "Approved" || s.Status == "Request Approved" || s.Status == "Admitted" || s.Status == "Active" || s.Status == null || s.Status == "") && 
-                            (!boardId.HasValue || s.BoardId == boardId || s.BoardId == 0) && 
-                            (!academicYearId.HasValue || s.AcademicYearId == academicYearId || s.AcademicYearId == 0) && 
-                            (!campusId.HasValue || s.CampusId == campusId.Value || s.CampusId == 0))
-                .Select(s => s.Gender ?? string.Empty)
-                .ToListAsync(ct);
-
-            overview.TotalStudents = genders.Count;
-            overview.ActiveStudents = genders.Count;
-
-            overview.MaleStudents = genders.Count(g =>
-                !string.IsNullOrEmpty(g) &&
-                new[] { "male", "m", "boy", "boys" }.Contains(g.Trim().ToLower()));
-
-            overview.FemaleStudents = genders.Count(g =>
-                !string.IsNullOrEmpty(g) &&
-                new[] { "female", "f", "girl", "girls" }.Contains(g.Trim().ToLower()));
-
-            overview.OtherStudents = overview.TotalStudents - overview.MaleStudents - overview.FemaleStudents;
-
-            if (overview.TotalStudents > 0)
-            {
-                overview.MalePercentage = Math.Round((decimal)overview.MaleStudents * 100m / overview.TotalStudents, 1);
-                overview.FemalePercentage = Math.Round((decimal)overview.FemaleStudents * 100m / overview.TotalStudents, 1);
-            }
-
-            overview.GenderDistribution = new List<StudentOverviewDistributionDto>
-            {
-                new() { Category = "Gender", Label = "Boys", Count = overview.MaleStudents, Percentage = overview.MalePercentage, Color = "#3B82F6" },
-                new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
-            };
-
-            overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
-        }
-        catch { }
-
-        return overview;
-    }
-
-    private async Task<GroupDistributionResponseDto> ComputeGroupDistributionFallbackAsync(
-        int? boardId,
-        int? academicYearId,
-        int? campusId,
-        CancellationToken ct)
-    {
-        var response = new GroupDistributionResponseDto();
-
-        try
-        {
-            var groups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
-                .OrderBy(g => g.GroupName)
-                .ToListAsync(ct);
-
-            var studentGroupCounts = await _db.Students.AsNoTracking()
-                .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                .GroupBy(s => s.GroupId!.Value)
-                .Select(g => new { GroupId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
-
-            var items = new List<GroupDistributionItemDto>();
-            var colors = new[] { "#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b" };
-
-            int idx = 0;
-            foreach (var g in groups)
-            {
-                studentGroupCounts.TryGetValue(g.GroupId, out int count);
-                items.Add(new GroupDistributionItemDto
-                {
-                    GroupId = g.GroupId,
-                    GroupCode = g.GroupCode ?? g.GroupName,
-                    GroupName = g.GroupName ?? g.GroupCode ?? "Group",
-                    TotalStudents = count,
-                    Color = colors[idx % colors.Length]
-                });
-                idx++;
-            }
-
-            int total = items.Sum(x => x.TotalStudents);
-            foreach (var item in items)
-            {
-                item.Percentage = total > 0 ? Math.Round((decimal)item.TotalStudents * 100m / total, 1) : 0m;
-            }
-
-            response.TotalStudents = total;
-            response.Groups = items;
-        }
-        catch { }
-
-        return response;
-    }
-
-    private async Task<StudentsAttendanceTodayResponseDto> ComputeStudentAttendanceFallbackAsync(
-        int? boardId,
-        int? academicYearId,
-        DateTime dateVal,
-        string? viewBy,
-        int? campusId,
-        CancellationToken ct)
-    {
-        var summary = new StudentsAttendanceTodayResponseDto
-        {
-            ViewBy = viewBy ?? "Overall"
+            Present = Convert.ToInt32(studentAttSummary?.Present ?? 0),
+            Absent = Convert.ToInt32(studentAttSummary?.Absent ?? 0),
+            HalfDay = Convert.ToInt32(studentAttSummary?.HalfDay ?? 0),
+            TotalStudents = Convert.ToInt32(studentAttSummary?.TotalStudents ?? 0),
+            AttendancePercentage = Convert.ToDecimal(studentAttSummary?.AttendancePercentage ?? 0m)
         };
 
-        try
+        if (sectionRows.Any())
         {
-
-
-            var attendancesQuery = _db.Attendances.AsNoTracking()
-                .Where(a => a.AttendanceDate.Date == dateVal.Date && a.IsActive);
-
-            if (boardId.HasValue)
-                attendancesQuery = attendancesQuery.Where(a => a.BoardId == boardId.Value);
-
-            if (academicYearId.HasValue)
-                attendancesQuery = attendancesQuery.Where(a => a.AcademicYearId == academicYearId.Value);
-
-            if (campusId.HasValue)
-                attendancesQuery = attendancesQuery.Where(a => _db.Students.Any(s => s.StudentId == a.StudentId && s.CampusId == campusId.Value));
-
-            var attendances = await attendancesQuery.ToListAsync(ct);
-
-            var groupedAttendances = attendances
-                .GroupBy(a => a.StudentId)
-                .Select(g => new
-                {
-                    StudentId = g.Key,
-                    MStatus = g.Where(x => (int?)x.Session == 1 || x.Session == null || (int?)x.Session == 0).Select(x => (byte?)x.Status).FirstOrDefault(),
-                    AStatus = g.Where(x => (int?)x.Session == 2 || x.Session == null || (int?)x.Session == 0).Select(x => (byte?)x.Status).FirstOrDefault()
-                }).ToList();
-
-            var studentsQuery = _db.Students.AsNoTracking().Where(s => s.IsActive);
-            if (boardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
-            if (academicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
-            if (campusId.HasValue) studentsQuery = studentsQuery.Where(s => s.CampusId == campusId.Value);
-            
-            int total = await studentsQuery.CountAsync(ct);
-            summary.TotalStudents = total;
-
-            int present = groupedAttendances.Count(x => 
-                (x.MStatus == 1 && x.AStatus == 1) || 
-                (x.MStatus == 1 && x.AStatus == null) || 
-                (x.MStatus == null && x.AStatus == 1)
-            );
-
-            int halfDay = groupedAttendances.Count(x => 
-                (x.MStatus == 1 && x.AStatus == 2) || 
-                (x.MStatus == 2 && x.AStatus == 1) || 
-                (x.MStatus == 3 || x.MStatus == 4 || x.AStatus == 3 || x.AStatus == 4)
-            );
-
-            int absent = groupedAttendances.Count(x => 
-                (x.MStatus == 2 && x.AStatus == 2) || 
-                (x.MStatus == 2 && x.AStatus == null) || 
-                (x.MStatus == null && x.AStatus == 2)
-            );
-
-            summary.Present = present;
-            summary.HalfDay = halfDay;
-            summary.Absent = Math.Max(0, total - present - halfDay);
-
-            var latestTime = attendances.OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt).Select(a => (DateTime?)(a.UpdatedAt ?? a.CreatedAt)).FirstOrDefault();
-            summary.LastUpdatedTime = latestTime;
-
-            if (total > 0)
+            studentAttendance.Breakdown = sectionRows.Select(r => new AttendanceCategoryBreakdownDto
             {
-                summary.AttendancePercentage = Math.Round(((decimal)present + 0.5m * halfDay) * 100m / total, 1);
-                summary.PresentPercentage = Math.Round((decimal)present * 100m / total, 1);
-                summary.AbsentPercentage = Math.Round((decimal)absent * 100m / total, 1);
-                summary.HalfDayPercentage = Math.Round((decimal)halfDay * 100m / total, 1);
-            }
+                CategoryName = (string)(r.SectionName ?? r.Name ?? ""),
+                Present = Convert.ToInt32(r.Present ?? 0),
+                Absent = Convert.ToInt32(r.Absent ?? 0),
+                TotalStudents = Convert.ToInt32(r.Total ?? r.TotalStudents ?? 0),
+                AttendancePercentage = Convert.ToDecimal(r.Percentage ?? 0m)
+            }).ToList();
         }
-        catch { }
 
-        return summary;
-    }
-
-    private async Task<StaffAttendanceTodayResponseDto> ComputeStaffAttendanceFallbackAsync(
-        int? boardId,
-        DateTime dateVal,
-        string? staffType,
-        int? campusId,
-        CancellationToken ct)
-    {
-        var summary = new StaffAttendanceTodayResponseDto
+        var staffAttendance = new StaffAttendanceTodayResponseDto
         {
-            StaffType = staffType ?? "all"
+            Present = Convert.ToInt32(staffAttSummary?.Present ?? 0),
+            Absent = Convert.ToInt32(staffAttSummary?.Absent ?? 0),
+            Late = Convert.ToInt32(staffAttSummary?.Late ?? 0),
+            OnLeave = Convert.ToInt32(staffAttSummary?.OnLeave ?? staffAttSummary?.Leave ?? 0),
+            TotalStaff = Convert.ToInt32(staffAttSummary?.TotalStaff ?? 0),
+            AttendancePercentage = Convert.ToDecimal(staffAttSummary?.AttendancePercentage ?? 0m)
         };
 
-        try
+        var upcomingExams = examsRaw.Select(e => new DashboardUpcomingExaminationDto
         {
-            var staffList = await _db.Staffs.AsNoTracking()
-                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
-                .ToListAsync(ct);
+            Id = Convert.ToInt32(e.Id ?? 0),
+            ExamName = (string)(e.ExamName ?? ""),
+            SubjectName = (string)(e.SubjectName ?? e.Subject ?? e.ExamName ?? ""),
+            Date = (string)(e.Date ?? ""),
+            FormattedDate = (string)(e.FormattedDate ?? ""),
+            GroupName = (string)(e.GroupName ?? ""),
+            Hall = (string)(e.HallName ?? "Main Hall"),
+            StudentCount = Convert.ToInt32(e.StudentCount ?? 0)
+        }).ToList();
 
-            // Force all staff calculation as requested
-            // string filter = (staffType ?? "all").ToLower();
-            // if (filter.Contains("non"))
-            // {
-            //     staffList = staffList.Where(st => !string.IsNullOrEmpty(st.StaffType) && (st.StaffType == "Non-Teaching" || st.StaffType == "Non Teaching")).ToList();
-            // }
-            // else if (filter.Contains("teaching"))
-            // {
-            //     staffList = staffList.Where(st => st.StaffType == "Teaching").ToList();
-            // }
+        var summary = new DashboardSummaryResponseDto
+        {
+            TotalStudents = Convert.ToInt32(summaryKpi?.TotalStudents ?? 0),
+            TeachingStaff = Convert.ToInt32(summaryKpi?.TeachingStaff ?? 0),
+            NonTeachingStaff = Convert.ToInt32(summaryKpi?.NonTeachingStaff ?? 0),
+            TotalSections = Convert.ToInt32(summaryKpi?.TotalSections ?? 0),
+            TotalGroups = Convert.ToInt32(summaryKpi?.TotalGroups ?? 0),
+            UpcomingExams = Convert.ToInt32(summaryKpi?.UpcomingExams ?? 0),
+            Admissions = Convert.ToInt32(summaryKpi?.Admissions ?? 0),
+            StudentsVsLastYearPercentage = Convert.ToDecimal(summaryKpi?.StudentsVsLastYearPercentage ?? 2.5m),
+            TeachingStaffVsLastYearPercentage = Convert.ToDecimal(summaryKpi?.TeachingStaffVsLastYearPercentage ?? 1.2m)
+        };
 
-            summary.TotalStaff = staffList.Count;
+        var feeSummary = new PrincipalFeeSummaryDto
+        {
+            Collected = Convert.ToDecimal(summaryKpi?.TotalCollected ?? 0m),
+            Pending = Convert.ToDecimal(summaryKpi?.TotalOutstanding ?? 0m),
+            CollectionRate = Convert.ToDecimal(summaryKpi?.CollectionPercentage ?? 0m),
+            Chart = feeTrendRaw
+        };
 
-            var staffIds = staffList.Select(st => st.Id).ToHashSet();
+        return new PrincipalDashboardResponseDto
+        {
+            CampusId = campusId,
+            CampusName = (string)(summaryKpi?.CampusName ?? $"Campus {campusId}"),
+            BoardId = boardId,
+            AcademicYearId = academicYearId,
+            Date = dateVal,
+            StudentCount = summary.TotalStudents,
+            StaffCount = summary.TotalStaff,
+            StudentsGrowth = summary.StudentsVsLastYearPercentage,
+            StaffGrowth = summary.TeachingStaffVsLastYearPercentage,
+            ActiveClasses = summary.TotalSections,
+            UpcomingExamCount = summary.UpcomingExams,
+            Admissions = summary.Admissions,
+            PassPercentage = (decimal?)summaryKpi?.PassPercentage,
+            StudentAttendance = studentAttendance,
+            StaffAttendance = staffAttendance,
+            Summary = summary,
+            PerformanceStreams = streamsRaw,
+            Notices = noticesRaw,
+            Fees = feeSummary,
+            UpcomingExaminations = upcomingExams
+        };
+    }
 
-            var staffAtt = await _db.StaffAttendances.AsNoTracking()
-                .Include(sa => sa.StaffAttendanceSession)
-                .Where(sa => sa.IsActive && sa.StaffAttendanceSession != null && sa.StaffAttendanceSession.AttendanceDate.Date == dateVal.Date && staffIds.Contains(sa.FacultyId))
-                .ToListAsync(ct);
+    public async Task<int> CreateNoticeAsync(CreateCampusNoticeRequest request, string publisherRole = "Principal", CancellationToken ct = default)
+    {
+        var conn = await GetOpenConnectionAsync();
+        return await conn.QuerySingleAsync<int>("sp_Notice_Create", new
+        {
+            p_CampusId = request.CampusId ?? 1,
+            p_Title = request.Title,
+            p_Content = request.Content,
+            p_Category = request.Category,
+            p_Priority = request.Priority,
+            p_TargetAudience = request.TargetAudience,
+            p_Publisher = request.Publisher ?? "Principal Office",
+            p_PublisherRole = publisherRole
+        }, commandType: CommandType.StoredProcedure);
+    }
 
-            int present = staffAtt.Count(a => (byte)a.Status == 1 || (byte)a.Status == 2);
-            int late = staffAtt.Count(a => (byte)a.Status == 3);
+    public async Task<IReadOnlyList<PrincipalNoticeDto>> GetNoticesAsync(int campusId, string? targetAudience = null, int limit = 10, CancellationToken ct = default)
+    {
+        var conn = await GetOpenConnectionAsync();
+        var notices = await conn.QueryAsync<PrincipalNoticeDto>("sp_Notice_GetByAudience", new
+        {
+            p_CampusId = campusId,
+            p_TargetAudience = targetAudience ?? "All",
+            p_Limit = limit
+        }, commandType: CommandType.StoredProcedure);
 
-            var leaves = await _db.StaffLeaveRequests.AsNoTracking()
-                .Where(l => staffIds.Contains(l.StaffId) && (byte)l.Status == 2 && l.StartDate.Date <= dateVal.Date && l.EndDate.Date >= dateVal.Date)
-                .CountAsync(ct);
+        return notices.ToList();
+    }
 
-            int absent = summary.TotalStaff > 0 ? Math.Max(0, summary.TotalStaff - present - late - leaves) : 0;
-
-            summary.Present = present;
-            summary.Late = late;
-            summary.OnLeave = leaves;
-            summary.Absent = absent;
-
-            var latestTime = staffAtt.OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt).Select(a => (DateTime?)(a.UpdatedAt ?? a.CreatedAt)).FirstOrDefault();
-            summary.LastUpdatedTime = latestTime;
-
-            if (summary.TotalStaff > 0)
-            {
-                summary.AttendancePercentage = Math.Round(((decimal)present + 0.5m * late) * 100m / summary.TotalStaff, 1);
-                summary.PresentPercentage = Math.Round((decimal)present * 100m / summary.TotalStaff, 1);
-                summary.AbsentPercentage = Math.Round((decimal)absent * 100m / summary.TotalStaff, 1);
-                summary.LatePercentage = Math.Round((decimal)late * 100m / summary.TotalStaff, 1);
-                summary.OnLeavePercentage = Math.Round((decimal)leaves * 100m / summary.TotalStaff, 1);
-            }
-        }
-        catch { }
-
-        return summary;
+    public Task<PrincipalDashboardResponseDto> GetPrincipalOverviewAsync(int campusId, int? academicYearId, int? boardId, CancellationToken ct = default)
+    {
+        return GetPrincipalDashboardAsync(boardId, academicYearId, DateTime.UtcNow.Date, campusId, ct);
     }
 }

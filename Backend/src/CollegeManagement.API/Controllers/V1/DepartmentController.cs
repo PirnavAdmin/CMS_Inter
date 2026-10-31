@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -14,9 +16,9 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/departments")]
     [EnableCors("AllowFrontend")]
-    [AllowAnonymous]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("department-designation")]
     public class DepartmentController : ControllerBase
     {
         private readonly IDepartmentService _departmentService;
@@ -31,6 +33,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get all departments with optional staffType and includeInactive filtering.
         /// </summary>
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<DepartmentResponseDto>), StatusCodes.Status200OK)]
         public async Task<ActionResult<IEnumerable<DepartmentResponseDto>>> GetDepartments(
             [FromQuery] string? staffType = null,
@@ -51,6 +54,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get department details by ID.
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(DepartmentResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<ActionResult<DepartmentResponseDto>> GetDepartmentById(int id)
@@ -68,6 +72,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get department master overview statistics (Total, Active, Inactive, Designations, Staff).
         /// </summary>
         [HttpGet("summary")]
+        [BypassPermission]
         [ProducesResponseType(typeof(DepartmentSummaryDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<DepartmentSummaryDto>> GetSummary([FromQuery] int? campusId = null)
         {
@@ -174,6 +179,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Validate department code uniqueness.
         /// </summary>
         [HttpGet("validate-code")]
+        [BypassPermission]
         public async Task<IActionResult> ValidateCode([FromQuery] string code, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
         {
             var isValid = await _departmentService.ValidateCodeAsync(code, excludeId, campusId);
@@ -185,6 +191,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Validate department name uniqueness.
         /// </summary>
         [HttpGet("validate-name")]
+        [BypassPermission]
         public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
         {
             var isValid = await _departmentService.ValidateNameAsync(name, excludeId, campusId);
@@ -258,6 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("export-template")]
         [HttpGet("template")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadDepartmentTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;
@@ -271,6 +279,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("/api/v1/departments-designations/template")]
         [HttpGet("/api/v1/departments-designations/export-template")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadUnifiedTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;
@@ -284,6 +293,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("export-excel")]
         [HttpGet("export")]
+        [BypassPermission]
         public async Task<IActionResult> ExportExcel([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;

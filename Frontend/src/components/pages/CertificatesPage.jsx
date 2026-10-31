@@ -53,11 +53,18 @@ const CERTIFICATE_API = {
     const base = `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/issue`;
     return issuedBy ? `${base}?issuedBy=${encodeURIComponent(issuedBy)}` : base;
   },
-  bulkReview: `${CERTIFICATE_BASE}/bulk-review`,
-  bulkApprove: `${CERTIFICATE_BASE}/bulk-approve`,
-  bulkIssue: (issuedBy) => {
-    const base = `${CERTIFICATE_BASE}/bulk-issue`;
-    return issuedBy ? `${base}?issuedBy=${encodeURIComponent(issuedBy)}` : base;
+  bulkReview: (campusId) => {
+    return campusId ? `${CERTIFICATE_BASE}/bulk-review?campusId=${encodeURIComponent(campusId)}` : `${CERTIFICATE_BASE}/bulk-review`;
+  },
+  bulkApprove: (campusId) => {
+    return campusId ? `${CERTIFICATE_BASE}/bulk-approve?campusId=${encodeURIComponent(campusId)}` : `${CERTIFICATE_BASE}/bulk-approve`;
+  },
+  bulkIssue: (issuedBy, campusId) => {
+    const params = new URLSearchParams();
+    if (issuedBy) params.set("issuedBy", issuedBy);
+    if (campusId) params.set("campusId", campusId);
+    const qs = params.toString();
+    return qs ? `${CERTIFICATE_BASE}/bulk-issue?${qs}` : `${CERTIFICATE_BASE}/bulk-issue`;
   },
   bulkGenerate: `${CERTIFICATE_BASE}/bulk-generate`,
   bulkEligibleStudents: `${CERTIFICATE_BASE}/bulk-eligible-students`,
@@ -813,8 +820,8 @@ export const FALLBACK_PLACEHOLDERS = {
   student_id: "518",
   admission_no: "ADM-2026-0000",
   roll_no: "101",
-  father_name: "Parent Name",
-  mother_name: "Anita Devi",
+  father_name: "Parent / Guardian",
+  mother_name: "Parent / Guardian",
   group_name: "MPC",
   academic_level: "I / II Year",
   academic_year: "2026-2027",
@@ -824,7 +831,7 @@ export const FALLBACK_PLACEHOLDERS = {
   issue_date: "11 Sep 2026",
   place: "Vijayawada",
   purpose: "Higher Education / Official Purpose",
-  principal_name: "Dr. S. K. Rao",
+  principal_name: "Principal",
   study_from: "June 2025",
   study_to: "May 2027",
   conduct_rating: "Good",
@@ -1292,7 +1299,6 @@ function getCertificateTemplate(type, record) {
 }
 
 const CERTIFICATE_PRINT_CSS = `
-  @page { size: A4 landscape; margin: 0; }
   body {
     margin: 0;
     font-family: Georgia, "Times New Roman", serif;
@@ -2071,6 +2077,7 @@ export default function CertificatesPage() {
       if (channel) channel.close();
       clearInterval(polling);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -2481,7 +2488,9 @@ export default function CertificatesPage() {
         const list = storedMock ? JSON.parse(storedMock) : [];
         list.unshift(createdCertificate);
         localStorage.setItem("cms_mock_store_certificates", JSON.stringify(list));
-      } catch {}
+      } catch {
+        // Ignore mock storage error
+      }
 
       setWorkflowStats((prev) => ({
         ...prev,
@@ -2854,7 +2863,9 @@ export default function CertificatesPage() {
             timestamp: new Date().toISOString(),
           });
           channel.close();
-        } catch {}
+        } catch {
+          // Ignore broadcast notification error
+        }
       }
       setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
@@ -2893,8 +2904,13 @@ export default function CertificatesPage() {
       const serverEligible = eligibleRows.filter((r) => hasServerCertificateId(r));
       if (serverEligible.length) {
         try {
-          const requestConfig = action === "issue" && getIssuedBy() ? { params: { issuedBy: getIssuedBy() } } : undefined;
-          const url = typeof selected.endpoint === "function" ? selected.endpoint(getIssuedBy()) : selected.endpoint;
+          const params = {};
+          if (selectedCampusId) params.campusId = selectedCampusId;
+          if (action === "issue" && getIssuedBy()) params.issuedBy = getIssuedBy();
+          const requestConfig = Object.keys(params).length ? { params } : undefined;
+          const url = typeof selected.endpoint === "function" 
+            ? (action === "issue" ? selected.endpoint(getIssuedBy(), selectedCampusId) : selected.endpoint(selectedCampusId))
+            : selected.endpoint;
           await apiClient.patch(url, null, requestConfig);
         } catch {
           // Graceful fallback to local update
@@ -2934,7 +2950,9 @@ export default function CertificatesPage() {
             });
           });
           channel.close();
-        } catch {}
+        } catch {
+          // Ignore broadcast notification error
+        }
       }
       setToast(`${completedCount} eligible certificate${completedCount === 1 ? "" : "s"} ${selected.label}.`);
     } catch (error) {
@@ -3415,6 +3433,9 @@ export default function CertificatesPage() {
       try {
         setToast("Preparing certificates export...");
         const params = {};
+        if (selectedCampusId) params.campusId = selectedCampusId;
+        if (selectedBoardId) params.boardId = selectedBoardId;
+        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
         if (query.trim()) params.search = query.trim();
         if (status !== "All") params.status = status;
         if (typeFilter !== "All") params.certificateType = typeFilter;

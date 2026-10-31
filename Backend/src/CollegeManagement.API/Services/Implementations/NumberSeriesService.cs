@@ -234,6 +234,12 @@ namespace CollegeManagement.API.Services.Implementations
                 isPreview: true);
         }
 
+        public async Task<bool> DeleteSeriesAsync(string seriesCodeOrSlug, int? campusId = null)
+        {
+            var code = NormalizeSeriesCode(seriesCodeOrSlug);
+            return await _repository.DeleteByCodeAsync(code, campusId);
+        }
+
         private async Task<NumberSeriesResponseDto> MapToDtoAsync(NumberSeriesConfiguration entity, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var curSeq = entity.CurrentSequence;

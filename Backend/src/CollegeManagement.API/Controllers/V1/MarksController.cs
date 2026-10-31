@@ -45,17 +45,41 @@ namespace CollegeManagement.API.Controllers.V1
                 });
             }
 
+            if (!IsAdmin())
+            {
+                var staffId = GetCallerStaffId();
+                if (staffId.HasValue && staffId.Value > 0)
+                {
+                    dto.FacultyId = staffId.Value;
+                }
+            }
+
             var result = await _marksService.SaveMarkAsync(dto);
             return CreatedAtAction(nameof(GetMarkById), new { id = result.MarkId }, result);
         }
 
         [HttpPost("bulk")]
-        public async Task<IActionResult> BulkSaveMarks([FromBody] BulkUploadMarksDto dto) => Ok(await _marksService.BulkSaveMarksAsync(dto));
+        public async Task<IActionResult> BulkSaveMarks([FromBody] BulkUploadMarksDto dto)
+        {
+            if (!IsAdmin())
+            {
+                var staffId = GetCallerStaffId();
+                if (staffId.HasValue && staffId.Value > 0 && dto?.Marks != null)
+                {
+                    foreach (var m in dto.Marks)
+                    {
+                        m.FacultyId = staffId.Value;
+                    }
+                }
+            }
+            return Ok(await _marksService.BulkSaveMarksAsync(dto));
+        }
 
         [HttpPut("{id:int}")]
         public async Task<IActionResult> UpdateMark(int id, [FromBody] UpdateMarkDto dto) => Ok(await _marksService.UpdateMarkAsync(id, dto));
 
         [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> DeleteMark(int id)
         {
             await _marksService.DeleteMarkAsync(id);
@@ -63,6 +87,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPatch("{id:int}/restore")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> RestoreMark(int id)
         {
             var restored = await _marksService.RestoreMarkAsync(id);
@@ -83,7 +108,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId:int}")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetMarksByStudent(int studentId) => Ok(await _marksService.GetMarksByStudentAsync(studentId));
@@ -95,9 +120,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetMarksByExam(int examinationId) => Ok(await _marksService.GetMarksByExamAsync(examinationId));
 
         [HttpPost("verify")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> VerifyMarks([FromBody] VerifyMarksDto dto) => Ok(new { Count = await _marksService.VerifyMarksAsync(dto) });
 
         [HttpPatch("publish")]
+        [Authorize(Roles = "Admin,Super Admin,Principal")]
         public async Task<IActionResult> PublishMarks([FromBody] PublishMarksDto dto) => Ok(new { Count = await _marksService.PublishMarksAsync(dto) });
 
         [HttpGet("summary/{examinationId:int}")]
@@ -108,6 +135,14 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var bytes = await _marksService.ExportCsvAsync(examinationId, subjectId);
             return File(bytes, "text/csv", $"Marks_{examinationId}_{subjectId}.csv");
+        }
+
+        private bool IsAdmin() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
+
+        private int? GetCallerStaffId()
+        {
+            var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            return int.TryParse(claim, out int id) ? id : null;
         }
     }
 }

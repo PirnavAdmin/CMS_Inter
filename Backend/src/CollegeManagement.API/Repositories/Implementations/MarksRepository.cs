@@ -155,10 +155,49 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AddRangeAsync(IEnumerable<Mark> marks)
         {
-            foreach (var mark in marks)
+            if (marks == null || !marks.Any()) return;
+
+            var items = marks.Select(m => new
             {
-                await CreateAsync(mark);
-            }
+                campusId = m.CampusId,
+                board = m.Board,
+                boardId = m.BoardId,
+                academicYearId = m.AcademicYearId,
+                academicLevel = m.AcademicLevel,
+                academicLevelId = m.AcademicLevelId,
+                groupId = m.GroupId,
+                sectionId = m.SectionId,
+                examinationId = m.ExaminationId,
+                subjectId = m.SubjectId,
+                studentId = m.StudentId,
+                rollNo = m.RollNo,
+                studentName = m.StudentName,
+                facultyId = m.FacultyId,
+                internalMarks = m.InternalMarks,
+                practicalMarks = m.PracticalMarks,
+                theoryMarks = m.TheoryMarks,
+                totalMarks = m.TotalMarks,
+                passingMarks = m.PassingMarks,
+                isAbsent = m.IsAbsent ? 1 : 0,
+                remarks = m.Remarks,
+                status = (int)m.Status
+            }).ToList();
+
+            var json = System.Text.Json.JsonSerializer.Serialize(items);
+            await BulkUpsertMarksAsync(json, 0, null);
+        }
+
+        public async Task<int> BulkUpsertMarksAsync(string marksJson, int userId, int? campusId)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_MarksJson", marksJson);
+            parameters.Add("p_UserId", userId);
+            parameters.Add("p_CampusId", campusId ?? 0);
+
+            return await Connection.ExecuteScalarAsync<int>(
+                "sp_BulkUpsertMarks",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<Mark> UpdateAsync(Mark mark)
@@ -283,7 +322,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_CampusId", filter.CampusId ?? 0);
 
             var rows = await Connection.QueryAsync(
-                "sp_GetFilteredEvaluations",
+                "sp_GetFilteredMarks",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
@@ -398,9 +437,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             var existingMarks = (await GetEvaluationMarksListAsync(subjectId, sectionId, examinationId)).ToList();
             if (!existingMarks.Any()) return false;
 
-            bool isObjective = await ExaminationFormatHelper.IsObjectiveExamAsync(_context, examinationId, subjectId);
+            var first = existingMarks.First();
+            bool isObjective = string.Equals(first.Examination?.ExamPattern, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) 
+                || (first.Examination?.ExamPattern != null && first.Examination.ExamPattern.ToUpper().Contains("OBJECTIVE"));
 
-            bool anyUpdated = false;
+            var itemsToUpsert = new List<object>();
+
             foreach (var update in updates)
             {
                 Mark? target = null;
@@ -425,7 +467,6 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                     if (isObjective)
                     {
-                        // Objective exam: single score authoritative, internal and practical remain 0
                         decimal singleScore = update.ObtainedMarks.HasValue
                             ? update.ObtainedMarks.Value
                             : (update.TotalMarks.HasValue
@@ -440,36 +481,48 @@ namespace CollegeManagement.API.Repositories.Implementations
                     }
                     else
                     {
-                        // Regular exam: preserve internal, practical, theory components
                         internalMarks = update.Internal.HasValue ? (int)update.Internal.Value : target.InternalMarks;
                         practicalMarks = update.Practical.HasValue ? (int)update.Practical.Value : target.PracticalMarks;
                         theoryMarks = update.Theory.HasValue ? (int)update.Theory.Value : target.TheoryMarks;
                         totalMarks = isAbsent ? 0 : (internalMarks + practicalMarks + theoryMarks);
                     }
 
-                    var parameters = new DynamicParameters();
-                    parameters.Add("p_MarkId", target.MarkId);
-                    parameters.Add("p_InternalMarks", internalMarks);
-                    parameters.Add("p_PracticalMarks", practicalMarks);
-                    parameters.Add("p_TheoryMarks", theoryMarks);
-                    parameters.Add("p_TotalMarks", totalMarks);
-                    parameters.Add("p_PassingMarks", target.PassingMarks);
-                    parameters.Add("p_IsAbsent", isAbsent ? 1 : 0);
-                    parameters.Add("p_Remarks", remarks);
-                    parameters.Add("p_FacultyId", target.FacultyId);
-                    parameters.Add("p_Status", (int)EvaluationStatus.SUBMITTED);
-                    parameters.Add("p_CampusId", target.CampusId > 0 ? target.CampusId : 1);
-
-                    await Connection.QueryFirstOrDefaultAsync(
-                        "sp_UpdateMark",
-                        parameters,
-                        commandType: CommandType.StoredProcedure);
-
-                    anyUpdated = true;
+                    itemsToUpsert.Add(new
+                    {
+                        campusId = target.CampusId > 0 ? target.CampusId : 1,
+                        board = target.Board,
+                        boardId = target.BoardId,
+                        academicYearId = target.AcademicYearId,
+                        academicLevel = target.AcademicLevel,
+                        academicLevelId = target.AcademicLevelId,
+                        groupId = target.GroupId,
+                        sectionId = target.SectionId,
+                        examinationId = target.ExaminationId,
+                        subjectId = target.SubjectId,
+                        studentId = target.StudentId,
+                        rollNo = target.RollNo,
+                        studentName = target.StudentName,
+                        facultyId = target.FacultyId,
+                        internalMarks = internalMarks,
+                        practicalMarks = practicalMarks,
+                        theoryMarks = theoryMarks,
+                        totalMarks = totalMarks,
+                        passingMarks = target.PassingMarks,
+                        isAbsent = isAbsent ? 1 : 0,
+                        remarks = remarks,
+                        status = (int)EvaluationStatus.SUBMITTED
+                    });
                 }
             }
 
-            return anyUpdated;
+            if (!itemsToUpsert.Any()) return false;
+
+            var json = System.Text.Json.JsonSerializer.Serialize(itemsToUpsert);
+            var upserted = await BulkUpsertMarksAsync(json, userId, first.CampusId > 0 ? first.CampusId : 1);
+
+            await UpdateEvaluationStatusAsync(subjectId, sectionId, examinationId, EvaluationStatus.SUBMITTED, userId, "Admin Marks Revision");
+
+            return upserted >= 0;
         }
 
         public async Task<IEnumerable<dynamic>> GetGroupSectionsAsync(int groupId)
@@ -519,7 +572,27 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? remarks = dict.ContainsKey("Remarks") && dict["Remarks"] != null ? dict["Remarks"].ToString() : null;
             bool isVerified = dict.ContainsKey("IsVerified") && dict["IsVerified"] != null && (Convert.ToInt32(dict["IsVerified"]) == 1 || Convert.ToBoolean(dict["IsVerified"]));
             bool isPublished = dict.ContainsKey("IsPublished") && dict["IsPublished"] != null && (Convert.ToInt32(dict["IsPublished"]) == 1 || Convert.ToBoolean(dict["IsPublished"]));
-            int statusInt = dict.ContainsKey("Status") && dict["Status"] != null ? Convert.ToInt32(dict["Status"]) : 1;
+            EvaluationStatus statusVal = EvaluationStatus.SUBMITTED;
+            if (dict.ContainsKey("StatusCode") && dict["StatusCode"] != null && int.TryParse(dict["StatusCode"].ToString(), out int scInt))
+            {
+                statusVal = (EvaluationStatus)scInt;
+            }
+            else if (dict.ContainsKey("Status") && dict["Status"] != null)
+            {
+                var sStr = dict["Status"].ToString()?.Trim();
+                if (int.TryParse(sStr, out int sInt))
+                {
+                    statusVal = (EvaluationStatus)sInt;
+                }
+                else if (Enum.TryParse<EvaluationStatus>(sStr, true, out var parsedEnum))
+                {
+                    statusVal = parsedEnum;
+                }
+                else if (string.Equals(sStr, "NOT STARTED", StringComparison.OrdinalIgnoreCase))
+                {
+                    statusVal = EvaluationStatus.DRAFT;
+                }
+            }
             bool isLocked = dict.ContainsKey("IsLocked") && dict["IsLocked"] != null && (Convert.ToInt32(dict["IsLocked"]) == 1 || Convert.ToBoolean(dict["IsLocked"]));
             string? verifiedBy = dict.ContainsKey("VerifiedBy") && dict["VerifiedBy"] != null ? dict["VerifiedBy"].ToString() : null;
             DateTime? verifiedAt = dict.ContainsKey("VerifiedAt") && dict["VerifiedAt"] != null ? Convert.ToDateTime(dict["VerifiedAt"]) : null;
@@ -581,7 +654,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Remarks = remarks,
                 IsVerified = isVerified,
                 IsPublished = isPublished,
-                Status = (EvaluationStatus)statusInt,
+                Status = statusVal,
                 IsLocked = isLocked,
                 VerifiedBy = verifiedBy,
                 VerifiedAt = verifiedAt,

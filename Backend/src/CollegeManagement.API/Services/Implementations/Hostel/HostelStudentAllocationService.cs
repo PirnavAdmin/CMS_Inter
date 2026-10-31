@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
@@ -455,7 +455,24 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     : MapToResponseDto(updatedRecord));
         }
 
+        
         public async Task<(bool Success, string Message)>
+            VacateAsync(int allocationId, VacateStudentAllocationDto? dto = null)
+        {
+            if (!await _allocationRepository.ExistsAsync(allocationId))
+            {
+                return (false, "Student hostel allocation not found.");
+            }
+
+            var vacated = await _allocationRepository.VacateAsync(allocationId, dto?.Reason);
+            if (!vacated)
+            {
+                return (false, "Unable to vacate student hostel allocation.");
+            }
+
+            return (true, "Student bed vacated successfully.");
+        }
+public async Task<(bool Success, string Message)>
             DeleteAsync(int allocationId)
         {
             if (!await _allocationRepository

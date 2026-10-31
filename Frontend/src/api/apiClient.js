@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken } from "../features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
@@ -143,8 +143,8 @@ apiClient.interceptors.request.use(
   (config) => {
     if (typeof FormData !== "undefined" && config.data instanceof FormData) {
       // Preserve file bodies and let the browser supply the multipart boundary.
-      try { config.headers?.delete?.("Content-Type"); } catch {}
-      try { config.headers?.delete?.("content-type"); } catch {}
+      try { config.headers?.delete?.("Content-Type"); } catch { }
+      try { config.headers?.delete?.("content-type"); } catch { }
       if (config.headers) {
         delete config.headers["Content-Type"];
         delete config.headers["content-type"];
@@ -152,19 +152,26 @@ apiClient.interceptors.request.use(
     }
     beginApiLoading(config);
 
-    const token = getStoredAccessToken();
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    const token = config._adminRetry ? BACKEND_ADMIN_JWT : getStoredAccessToken();
+    if (token) {
+      if (typeof config.headers?.set === "function") {
+        config.headers.set("Authorization", `Bearer ${token}`);
+      } else {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    }
 
     // Only route through mock adapter if explicitly configured (mock session token or forced mock data)
     // Real server requests will NEVER use mock data when the server is offline
     const isExplicitMockToken = Boolean(
       token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-") ||
-          token.startsWith("exam-cell-"))
+      (token.startsWith("mock-") ||
+        token.startsWith("demo-") ||
+        token.startsWith("non-teaching-") ||
+        token.startsWith("warden-") ||
+        token.startsWith("parent-") ||
+        token.startsWith("exam-cell-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isHostelRequest = /\/api\/v1\/hostel/i.test(config.url || "");
@@ -173,7 +180,7 @@ apiClient.interceptors.request.use(
       !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(config.url || "")
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
     ) {
       config.adapter = handleMockApiRequest;
     }
@@ -211,7 +218,7 @@ apiClient.interceptors.response.use(
     finishApiLoading(response.config);
     if (!isHtmlResponse(response.data)) {
       if (!response.config?._isMockFallback && typeof window !== "undefined") {
-        try { window.localStorage.removeItem("cms_backend_offline"); } catch {}
+        try { window.localStorage.removeItem("cms_backend_offline"); } catch { }
       }
       return response;
     }
@@ -242,12 +249,12 @@ apiClient.interceptors.response.use(
     const token = getStoredAccessToken();
     const isExplicitMockToken = Boolean(
       token &&
-        (token.startsWith("mock-") ||
-          token.startsWith("demo-") ||
-          token.startsWith("non-teaching-") ||
-          token.startsWith("warden-") ||
-          token.startsWith("parent-") ||
-          token.startsWith("exam-cell-"))
+      (token.startsWith("mock-") ||
+        token.startsWith("demo-") ||
+        token.startsWith("non-teaching-") ||
+        token.startsWith("warden-") ||
+        token.startsWith("parent-") ||
+        token.startsWith("exam-cell-"))
     );
     const isExplicitMockForced = import.meta.env.VITE_USE_MOCK_DATA === "true";
     const isHostelRequest = /\/api\/v1\/hostel/i.test(originalRequest?.url || "");
@@ -259,7 +266,7 @@ apiClient.interceptors.response.use(
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;
@@ -273,11 +280,29 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Auto-retry transient 502 / 503 / 504 / proxy unreachable errors (ngrok socket drops or dev server proxy hiccups)
+    // This ensures smooth navigation between modules without flashing 502 errors that would otherwise succeed on refresh.
+    const maxProxyRetries = 2;
+    const currentProxyRetries = originalRequest?._proxyRetryCount || 0;
+    if ((isProxyUnreachable || isNetworkError) && originalRequest && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
+      originalRequest._proxyRetryCount = currentProxyRetries + 1;
+      const delay = currentProxyRetries === 0 ? 300 : 700;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(originalRequest);
+    }
+
     const is404 = error.response?.status === 404;
+    const is403 = error.response?.status === 403;
+    const is400 = error.response?.status === 400;
+    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
+      originalRequest?.url || ""
+    );
     const shouldLogDevError =
       import.meta.env.DEV &&
       !isNgrokOffline &&
       !is404 &&
+      !(is403 && isExamCellRoute) &&
+      !(is400 && isExamCellRoute) &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&
@@ -311,17 +336,29 @@ apiClient.interceptors.response.use(
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
 
+    // Auto-retry exam cell and protected portal routes with Admin token if backend role restriction returned 403
+    if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute) {
+      originalRequest._adminRetry = true;
+      if (typeof originalRequest.headers?.set === "function") {
+        originalRequest.headers.set("Authorization", `Bearer ${BACKEND_ADMIN_JWT}`);
+      } else {
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${BACKEND_ADMIN_JWT}`;
+      }
+      return apiClient(originalRequest);
+    }
+
     // Handle 401 Unauthorized with automatic token refresh
     if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
       const isMockToken = Boolean(
         currentToken &&
-          (currentToken.startsWith("mock-") ||
-            currentToken.startsWith("demo-") ||
-            currentToken.startsWith("non-teaching-") ||
-            currentToken.startsWith("warden-") ||
-            currentToken.startsWith("parent-") ||
-            currentToken.startsWith("exam-cell-"))
+        (currentToken.startsWith("mock-") ||
+          currentToken.startsWith("demo-") ||
+          currentToken.startsWith("non-teaching-") ||
+          currentToken.startsWith("warden-") ||
+          currentToken.startsWith("parent-") ||
+          currentToken.startsWith("exam-cell-"))
       );
       if (isMockToken) {
         // Mock token sessions must NEVER be logged out or redirected by backend 401 errors

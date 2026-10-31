@@ -1,0 +1,469 @@
+/* ==========================================================================
+   Visual Role Builder Wizard Styles - CMS Design System Aligned
+   ========================================================================== */
+
+.visual-role-wizard-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: calc(100vh - 160px);
+  background-color: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  border-radius: var(--cms-radius, 14px);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(16, 32, 60, 0.06);
+  position: relative;
+}
+
+/* Header & Stepper */
+.wizard-top-header {
+  padding: 16px 24px;
+  background: linear-gradient(180deg, var(--cms-primary-soft, #F1F4E2) 0%, var(--cms-surface, #ffffff) 100%);
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.wizard-title-group h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--cms-text, #10203c);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wizard-title-group p {
+  margin: 3px 0 0 0;
+  font-size: 13px;
+  color: var(--cms-muted, #7B8275);
+}
+
+/* Stepper Bar */
+.wizard-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cms-surface, #ffffff);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--cms-border, #e4e8f0);
+  box-shadow: 0 1px 3px rgba(16, 32, 60, 0.04);
+}
+
+.wizard-step-node {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-muted, #7B8275);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.wizard-step-node:hover:not(.active) {
+  color: var(--cms-text, #10203c);
+  background: var(--cms-bg, #f4f6fb);
+}
+
+.wizard-step-node.active {
+  background: linear-gradient(135deg, var(--cms-primary, #6F8400) 0%, var(--cms-primary-dark, #566900) 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary)  0.35);
+}
+
+.wizard-step-node.completed {
+  color: var(--cms-primary-dark, #566900);
+}
+
+.step-num-pill {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--cms-bg, #f4f6fb);
+  color: var(--cms-muted, #7B8275);
+}
+
+.wizard-step-node.completed .step-num-pill {
+  background: #eef5e7;
+  color: var(--cms-primary-dark, #566900);
+}
+
+.wizard-step-node.active .step-num-pill {
+  background: #ffffff;
+  color: var(--cms-primary-dark, #566900);
+  font-weight: 800;
+}
+
+.step-divider {
+  width: 14px;
+  height: 2px;
+  background: var(--cms-border, #e4e8f0);
+}
+
+/* Wizard Content Body Viewport */
+.wizard-body-viewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  position: relative;
+  background: var(--cms-bg, #f4f6fb);
+}
+
+/* Persistent Wizard Footer Bar */
+.wizard-bottom-bar {
+  padding: 14px 28px;
+  background: var(--cms-surface, #ffffff);
+  border-top: 1px solid var(--cms-border, #e4e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  z-index: 20;
+  box-shadow: 0 -2px 10px rgba(16, 32, 60, 0.03);
+}
+
+.wizard-summary-pill {
+  font-size: 13.5px;
+  color: var(--cms-text, #10203c);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wizard-summary-pill strong {
+  color: var(--cms-primary-dark, #566900);
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   Step 1: Role Selection Styles
+   ========================================================================== */
+.step1-container {
+  padding: 28px 36px;
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.role-modes-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.role-mode-btn {
+  padding: 9px 18px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border: 1px solid var(--cms-border, #e4e8f0);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(16, 32, 60, 0.04);
+}
+
+.role-mode-btn:hover {
+  border-color: var(--cms-primary-border, #c7d7fe);
+  background: var(--cms-primary-soft, #F1F4E2);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.role-mode-btn.active {
+  background: linear-gradient(135deg, var(--cms-primary, #6F8400) 0%, var(--cms-primary-dark, #566900) 100%);
+  color: #ffffff;
+  border-color: var(--cms-primary, #6F8400);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary)  0.3);
+}
+
+.existing-roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.role-select-card {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--cms-surface, #ffffff);
+  border: 1.5px solid var(--cms-border, #e4e8f0);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(16, 32, 60, 0.04);
+}
+
+.role-select-card:hover {
+  border-color: var(--cms-primary, #6F8400);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--cms-primary)  0.12);
+  background: var(--cms-primary-soft, #F1F4E2);
+}
+
+.role-select-card.selected {
+  border-color: var(--cms-primary, #6F8400);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--cms-primary, #6F8400), 0 6px 16px color-mix(in srgb, var(--cms-primary)  0.16);
+}
+
+/* ==========================================================================
+   Step 2: Screen Gallery Styles
+   ========================================================================== */
+.step2-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  height: 100%;
+  min-height: 600px;
+}
+
+.module-nav-sidebar {
+  background: var(--cms-surface, #ffffff);
+  border-right: 1px solid var(--cms-border, #e4e8f0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.module-nav-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.module-nav-item {
+  padding: 9px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--cms-text, #10203c);
+  transition: all 0.16s ease;
+  user-select: none;
+  font-weight: 500;
+}
+
+.module-nav-item:hover {
+  background: var(--cms-primary-soft, #F1F4E2);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.module-nav-item.active {
+  background: #eef5e7;
+  color: var(--cms-primary-dark, #566900);
+  font-weight: 700;
+  border-left: 3px solid var(--cms-primary, #6F8400);
+}
+
+.screen-gallery-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--cms-bg, #f4f6fb);
+}
+
+.gallery-toolbar {
+  padding: 14px 24px;
+  background: var(--cms-surface, #ffffff);
+  border-bottom: 1px solid var(--cms-border, #e4e8f0);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gallery-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gallery-section-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.gallery-chip {
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-muted, #7B8275);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+
+.gallery-chip:hover {
+  border-color: var(--cms-primary, #6F8400);
+  color: var(--cms-primary-dark, #566900);
+}
+
+.gallery-chip.active {
+  background: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  border-color: var(--cms-primary, #6F8400);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--cms-primary)  0.25);
+}
+
+.gallery-cards-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+  align-content: start;
+}
+
+/* ==========================================================================
+   Step 3: Permission Configuration Matrix
+   ========================================================================== */
+.step3-container {
+  padding: 24px 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.permission-screen-row {
+  background: var(--cms-surface, #ffffff);
+  border-radius: 10px;
+  border: 1px solid var(--cms-border, #e4e8f0);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 2px rgba(16, 32, 60, 0.03);
+}
+
+.permission-screen-row:hover {
+  background: #fafbfc;
+  border-color: var(--cms-primary-border, #c7d7fe);
+}
+
+.action-switches-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-switch-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--cms-bg, #f4f6fb);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  font-size: 12px;
+  color: var(--cms-muted, #7B8275);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  transition: all 0.16s ease;
+}
+
+.action-switch-pill:hover:not(.granted) {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.action-switch-pill.granted {
+  background: #eef5e7;
+  border-color: var(--cms-primary, #6F8400);
+  color: var(--cms-primary-dark, #566900);
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   Step 4: Review & Deploy Styles
+   ========================================================================== */
+.step4-container {
+  padding: 28px 36px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.review-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.review-stat-card {
+  background: var(--cms-surface, #ffffff);
+  border-radius: 12px;
+  border: 1px solid var(--cms-border, #e4e8f0);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 3px rgba(16, 32, 60, 0.04);
+}
+
+.review-stat-card .val {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--cms-primary-dark, #566900);
+}
+
+.review-stat-card .lbl {
+  font-size: 13px;
+  color: var(--cms-muted, #7B8275);
+  font-weight: 600;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

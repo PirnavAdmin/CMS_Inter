@@ -11,6 +11,7 @@ using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using ClosedXML.Excel;
+using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -20,10 +21,12 @@ namespace CollegeManagement.API.Services.Implementations;
 public class ReportService : IReportService
 {
     private readonly IReportRepository _repo;
+    private readonly ILogger<ReportService> _logger;
 
-    public ReportService(IReportRepository repo)
+    public ReportService(IReportRepository repo, ILogger<ReportService>? logger = null)
     {
         _repo = repo;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ReportService>.Instance;
     }
 
     private static ReportFilterModel M(ReportFilterDto f) => new()
@@ -38,97 +41,116 @@ public class ReportService : IReportService
         ToDate = f.ToDate
     };
 
-    // ---------- Generic Safe Helpers ----------
-    private static async Task<T> SafeAsync<T>(Func<Task<T>> action, Func<T> fallback)
+    // ---------- Generic Safe Helpers with Structured Error Logging ----------
+    private async Task<T> SafeAsync<T>(string opName, Func<Task<T>> action, Func<T> fallback)
     {
         try
         {
             return await action();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "ReportService error executing {OperationName}", opName);
             return fallback();
         }
     }
-    private static async Task<IReadOnlyList<T>> SafeListAsync<T>(Func<Task<IReadOnlyList<T>>> action)
+
+    private async Task<IReadOnlyList<T>> SafeListAsync<T>(string opName, Func<Task<IReadOnlyList<T>>> action)
     {
         try
         {
             return await action();
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "ReportService error executing {OperationName}", opName);
             return Array.Empty<T>();
         }
     }
 
+    // ---------- Cascading Filter Dropdowns ----------
+    public Task<IReadOnlyList<ReportFilterBoardDto>> GetFilterBoardsAsync(int? campusId, CancellationToken ct = default)
+        => SafeListAsync("GetFilterBoardsAsync", () => _repo.GetFilterBoardsAsync(campusId, ct));
+
+    public Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, CancellationToken ct = default)
+        => SafeListAsync("GetFilterAcademicYearsAsync", () => _repo.GetFilterAcademicYearsAsync(boardId, ct));
+
+    public Task<IReadOnlyList<ReportFilterAcademicLevelDto>> GetFilterAcademicLevelsAsync(int? boardId, CancellationToken ct = default)
+        => SafeListAsync("GetFilterAcademicLevelsAsync", () => _repo.GetFilterAcademicLevelsAsync(boardId, ct));
+
+    public Task<IReadOnlyList<ReportFilterGroupDto>> GetFilterGroupsAsync(int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default)
+        => SafeListAsync("GetFilterGroupsAsync", () => _repo.GetFilterGroupsAsync(boardId, academicYearId, academicLevelId, ct));
+
+    public Task<IReadOnlyList<ReportFilterSectionDto>> GetFilterSectionsAsync(int? campusId, int? groupId, int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default)
+        => SafeListAsync("GetFilterSectionsAsync", () => _repo.GetFilterSectionsAsync(campusId, groupId, boardId, academicYearId, academicLevelId, ct));
+
     // ---------- Dashboard ----------
     public Task<DashboardReportDto> DashboardAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeAsync(() => _repo.GetDashboardAsync(M(f), ct), () => new DashboardReportDto());
+        => SafeAsync("DashboardAsync", () => _repo.GetDashboardAsync(M(f), ct), () => new DashboardReportDto());
 
     // ---------- Admissions ----------
     public Task<IReadOnlyList<AdmissionReportDto>> AdmissionsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetAdmissionsAsync(M(f), ct));
+        => SafeListAsync("AdmissionsAsync", () => _repo.GetAdmissionsAsync(M(f), ct));
 
     // ---------- Student Strength ----------
     public Task<IReadOnlyList<StudentStrengthReportDto>> StudentStrengthAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetStudentStrengthAsync(M(f), ct));
+        => SafeListAsync("StudentStrengthAsync", () => _repo.GetStudentStrengthAsync(M(f), ct));
 
     // ---------- Attendance ----------
     public Task<IReadOnlyList<AttendanceReportDto>> AttendanceAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetAttendanceAsync(M(f), ct));
+        => SafeListAsync("AttendanceAsync", () => _repo.GetAttendanceAsync(M(f), ct));
 
     // ---------- Faculty Attendance ----------
     public Task<IReadOnlyList<FacultyAttendanceReportDto>> FacultyAttendanceAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetFacultyAttendanceAsync(M(f), ct));
+        => SafeListAsync("FacultyAttendanceAsync", () => _repo.GetFacultyAttendanceAsync(M(f), ct));
 
     // ---------- Fee Collection ----------
     public Task<IReadOnlyList<FeeCollectionReportDto>> FeeCollectionAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetFeeCollectionAsync(M(f), ct));
+        => SafeListAsync("FeeCollectionAsync", () => _repo.GetFeeCollectionAsync(M(f), ct));
 
     // ---------- Outstanding Fees ----------
     public Task<IReadOnlyList<OutstandingFeeReportDto>> OutstandingFeesAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetOutstandingFeesAsync(M(f), ct));
+        => SafeListAsync("OutstandingFeesAsync", () => _repo.GetOutstandingFeesAsync(M(f), ct));
 
     // ---------- Examinations ----------
     public Task<IReadOnlyList<ExaminationReportDto>> ExaminationsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetExaminationsAsync(M(f), ct));
+        => SafeListAsync("ExaminationsAsync", () => _repo.GetExaminationsAsync(M(f), ct));
 
     // ---------- Results ----------
     public Task<IReadOnlyList<ResultAnalysisReportDto>> ResultsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetResultsAsync(M(f), ct));
+        => SafeListAsync("ResultsAsync", () => _repo.GetResultsAsync(M(f), ct));
 
     // ---------- Pass Percentage ----------
     public Task<IReadOnlyList<PassPercentageReportDto>> PassPercentageAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetPassPercentageAsync(M(f), ct));
+        => SafeListAsync("PassPercentageAsync", () => _repo.GetPassPercentageAsync(M(f), ct));
 
     // ---------- Toppers ----------
     public Task<IReadOnlyList<TopperReportDto>> ToppersAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetToppersAsync(M(f), ct));
+        => SafeListAsync("ToppersAsync", () => _repo.GetToppersAsync(M(f), ct));
 
     // ---------- Subjects ----------
     public Task<IReadOnlyList<SubjectWiseReportDto>> SubjectsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetSubjectsAsync(M(f), ct));
+        => SafeListAsync("SubjectsAsync", () => _repo.GetSubjectsAsync(M(f), ct));
 
     // ---------- Groups ----------
     public Task<IReadOnlyList<GroupWiseReportDto>> GroupsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetGroupsAsync(M(f), ct));
+        => SafeListAsync("GroupsAsync", () => _repo.GetGroupsAsync(M(f), ct));
 
     // ---------- Sections ----------
     public Task<IReadOnlyList<SectionWiseReportDto>> SectionsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetSectionsAsync(M(f), ct));
+        => SafeListAsync("SectionsAsync", () => _repo.GetSectionsAsync(M(f), ct));
 
     // ---------- Faculty Workload ----------
     public Task<IReadOnlyList<FacultyWorkloadReportDto>> FacultyWorkloadAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetFacultyWorkloadAsync(M(f), ct));
+        => SafeListAsync("FacultyWorkloadAsync", () => _repo.GetFacultyWorkloadAsync(M(f), ct));
 
     // ---------- Student Performance ----------
     public Task<IReadOnlyList<StudentPerformanceReportDto>> StudentPerformanceAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetStudentPerformanceAsync(M(f), ct));
+        => SafeListAsync("StudentPerformanceAsync", () => _repo.GetStudentPerformanceAsync(M(f), ct));
 
     // ---------- Audit Logs ----------
     public Task<IReadOnlyList<AuditLogDto>> AuditLogsAsync(ReportFilterDto f, CancellationToken ct = default)
-        => SafeListAsync(() => _repo.GetAuditLogsAsync(M(f), ct));
+        => SafeListAsync("AuditLogsAsync", () => _repo.GetAuditLogsAsync(M(f), ct));
 
     // ---------- Custom Report ----------
     public async Task<object> CustomAsync(
@@ -171,6 +193,7 @@ public class ReportService : IReportService
         var request = new CustomReportRequestDto
         {
             ReportType = reportType,
+            CampusId = filter.CampusId,
             BoardId = filter.BoardId,
             AcademicYearId = filter.AcademicYearId,
             AcademicLevelId = filter.AcademicLevelId,
@@ -680,7 +703,7 @@ public class ReportService : IReportService
             case IReadOnlyList<FacultyWorkloadReportDto> fw:
                 title = "Faculty Workload & Allocation Report";
                 headers = new[] { "S.No", "Employee ID", "Faculty Name", "Department", "Assigned Periods", "Weekly Hours" };
-                var sumHours = fw.Sum(x => x.HoursPerWeek);
+                var sumHours = Math.Round(fw.Sum(x => x.HoursPerWeek), 1);
                 kpis.Add(("Total Faculty", $"{fw.Count}"));
                 kpis.Add(("Total Teaching Hours", $"{sumHours:F1} hrs"));
                 int fwIdx = 1;
@@ -762,3 +785,4 @@ public class ReportService : IReportService
         return (title, headers, rows, kpis);
     }
 }
+

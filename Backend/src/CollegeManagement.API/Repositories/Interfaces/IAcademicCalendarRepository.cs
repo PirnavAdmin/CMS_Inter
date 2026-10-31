@@ -15,6 +15,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<List<AcademicCalendarEvent>> GetUpcomingEventsAsync(int? academicYearId, int? boardId, int? campusId, int count = 5);
         Task<AcademicCalendarEvent> CreateAsync(AcademicCalendarEvent entity);
         Task<AcademicCalendarEvent> UpdateAsync(AcademicCalendarEvent entity);
+        Task<AcademicCalendarEvent?> PublishAsync(int eventId, int? publishedBy = null);
         Task<bool> DeleteAsync(int eventId, int? deletedBy = null);
     }
 }

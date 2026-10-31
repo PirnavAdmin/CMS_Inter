@@ -18,7 +18,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/campuses")]
     [Route("api/v1/campuses")]
-    [AllowAnonymous]
+    [Authorize]
     [Produces("application/json")]
     public class CampusController : ControllerBase
     {
@@ -35,6 +35,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all campuses with search and filtering.
         /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<CampusDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetCampuses(
             [FromQuery] string? search = null,
@@ -51,6 +52,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves lightweight active campuses for header branch selector dropdown.
         /// </summary>
         [HttpGet("active-header")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<CampusHeaderDropdownDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetActiveHeaderCampuses(CancellationToken cancellationToken = default)
         {
@@ -62,6 +64,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves statistics for the Campus Configuration screen cards.
         /// </summary>
         [HttpGet("stats")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(CampusStatsDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetCampusStats(
             [FromQuery] int? selectedCampusId = null,
@@ -75,6 +78,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves single campus details by ID with affiliated boards.
         /// </summary>
         [HttpGet("{id:int}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(CampusDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetCampusById(int id, CancellationToken cancellationToken = default)
@@ -87,6 +91,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves boards affiliated with a specific campus branch.
         /// </summary>
         [HttpGet("{id:int}/boards")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<AffiliatedBoardDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetCampusAffiliatedBoards(int id, CancellationToken cancellationToken = default)
         {
@@ -98,6 +103,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Creates a new campus branch with affiliated boards.
         /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin")]
         [ProducesResponseType(typeof(CampusDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -114,6 +120,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates an existing campus branch details and affiliated boards.
         /// </summary>
         [HttpPut("{id:int}")]
+        [Authorize(Roles = "Super Admin,Admin")]
         [ProducesResponseType(typeof(CampusDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -133,6 +140,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes or soft-deletes a campus branch (if no active students enrolled).
         /// </summary>
         [HttpDelete("{id:int}")]
+        [Authorize(Roles = "Super Admin,Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -146,6 +154,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Toggles the active status of a campus branch (displays in header selector).
         /// </summary>
         [HttpPatch("{id:int}/toggle-status")]
+        [Authorize(Roles = "Super Admin,Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ToggleCampusStatus(int id, CancellationToken cancellationToken = default)

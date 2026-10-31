@@ -4404,7 +4404,7 @@ export default function AdmissionPage() {
       academicLevelId: values.level || undefined,
       isActive: true,
     };
-    apiClient.get(apiEndpoints.groups.getAll, { params })
+    apiClient.get(apiEndpoints.groups.dropdown, { params: { ...params, academicLevelId: values.level || undefined } })
       .then((response) => {
         if (ignore) return;
         const groups = getCollection(response.data)
