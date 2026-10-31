@@ -599,8 +599,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(
-            int studentId)
+        public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_StudentId", studentId, DbType.Int32);
@@ -611,9 +610,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(
-            int studentId,
-            int examinationId)
+        public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_StudentId", studentId, DbType.Int32);
@@ -627,14 +624,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             var memo = await multi.ReadFirstOrDefaultAsync<StudentSelfResultMemoDto>();
             if (memo == null) return null;
 
-            var subjects = (await multi.ReadAsync<StudentSubjectMarkMemoDto>()).ToList();
-            memo.Subjects = subjects;
+            if (!multi.IsConsumed)
+            {
+                memo.Subjects = (await multi.ReadAsync<StudentSubjectMarkMemoDto>()).AsList();
+            }
 
             return memo;
         }
 
-        public async Task<IEnumerable<int>> GetExamScheduleSubjectsAsync(
-            int examId)
+        public async Task<IEnumerable<int>> GetExamScheduleSubjectsAsync(int examId)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_ExamId", examId, DbType.Int32);

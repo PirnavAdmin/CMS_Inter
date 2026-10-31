@@ -1,11 +1,14 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
+using CollegeManagement.API.Dtos;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
-using CollegeManagement.API.Models;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
@@ -18,11 +21,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
+        private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<PagedResult<StudentTransportAssignmentDto>> GetAllAsync(StudentTransportAssignmentFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var all = await c.QueryAsync<StudentTransportAssignmentDto>(
                 "sp_GetStudentTransportAssignments",
                 new
@@ -32,7 +35,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_PickupPointId = filter.PickupPointId,
                     p_VehicleAssignmentId = filter.VehicleAssignmentId,
                     p_TransportType = filter.TransportType,
-                    p_Status = filter.Status,
+                    p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
                     p_Search = filter.Search ?? ""
                 },
                 commandType: CommandType.StoredProcedure);
@@ -45,7 +48,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<StudentTransportAssignmentDto?> GetByIdAsync(long assignmentId)
         {
-            using var c = Connection();
+            var c = Connection;
             return await c.QueryFirstOrDefaultAsync<StudentTransportAssignmentDto>(
                 "sp_GetStudentTransportAssignmentById",
                 new { p_Id = assignmentId },
@@ -54,46 +57,44 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<long> CreateAsync(CreateStudentTransportAssignmentDto dto, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateStudentTransportAssignments",
                 new
                 {
+                    p_StudentId = (long?)null,
                     p_AdmissionNo = dto.AdmissionNo,
                     p_RouteId = dto.RouteId,
                     p_PickupPointId = dto.PickupPointId,
                     p_VehicleAssignmentId = dto.VehicleAssignmentId,
                     p_EffectiveFrom = dto.EffectiveFrom,
                     p_EffectiveTo = dto.EffectiveTo,
-                    p_TransportType = dto.TransportType ?? "TwoWay",
+                    p_TransportType = dto.TransportType ?? "Both",
                     p_Remarks = dto.Remarks,
-                    p_Status = dto.Status,
-                    p_IsDeleted = false,
-                    p_CreatedBy = userId,
-                    p_UpdatedBy = (long?)null
+                    p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_CreatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> UpdateAsync(long assignmentId, UpdateStudentTransportAssignmentDto dto, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             var rows = await c.ExecuteAsync(
                 "sp_UpdateStudentTransportAssignments",
                 new
                 {
-                    p_Id = assignmentId,
+                    p_StudentTransportAssignmentId = assignmentId,
+                    p_StudentId = (long?)null,
                     p_AdmissionNo = dto.AdmissionNo,
                     p_RouteId = dto.RouteId,
                     p_PickupPointId = dto.PickupPointId,
                     p_VehicleAssignmentId = dto.VehicleAssignmentId,
                     p_EffectiveFrom = dto.EffectiveFrom,
                     p_EffectiveTo = dto.EffectiveTo,
-                    p_TransportType = dto.TransportType ?? "TwoWay",
+                    p_TransportType = dto.TransportType ?? "Both",
                     p_Remarks = dto.Remarks,
-                    p_Status = dto.Status,
-                    p_IsDeleted = false,
-                    p_CreatedBy = (long?)null,
+                    p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
@@ -102,34 +103,44 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<bool> DeleteAsync(long assignmentId, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             var rows = await c.ExecuteAsync(
                 "sp_DeleteStudentTransportAssignments",
-                new { p_Id = assignmentId, p_UpdatedBy = userId },
+                new { p_StudentTransportAssignmentId = assignmentId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
-        public async Task<bool> HasActiveAssignmentAsync(string admissionNo, long? excludeAssignmentId = null)
-        {
-            return await HasOverlappingAssignmentAsync(admissionNo, DateTime.UtcNow, null, excludeAssignmentId);
-        }
-        
         public async Task<bool> HasOverlappingAssignmentAsync(string admissionNo, DateTime effectiveFrom, DateTime? effectiveTo, long? excludeAssignmentId = null)
         {
-            using var c = Connection();
+            var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckStudentTransportOverlapping",
-                new { p_AdmissionNo = admissionNo, p_EffectiveFrom = effectiveFrom, p_EffectiveTo = effectiveTo, p_ExcludeAssignmentId = excludeAssignmentId },
+                new
+                {
+                    p_AdmissionNo = admissionNo,
+                    p_EffectiveFrom = effectiveFrom,
+                    p_EffectiveTo = effectiveTo,
+                    p_ExcludeAssignmentId = excludeAssignmentId
+                },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }
         
         public async Task<IEnumerable<StudentTransportAssignmentLookupDto>> GetLookupAsync()
         {
-            using var c = Connection();
+            var c = Connection;
             return await c.QueryAsync<StudentTransportAssignmentLookupDto>(
                 "sp_GetStudentTransportAssignmentLookup",
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<StudentTransportResponseDto?> GetStudentTransportDetailsAsync(int studentId)
+        {
+            var c = Connection;
+            return await c.QueryFirstOrDefaultAsync<StudentTransportResponseDto>(
+                "sp_GetStudentTransportDetails",
+                new { p_StudentId = (long)studentId },
                 commandType: CommandType.StoredProcedure);
         }
     }

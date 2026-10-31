@@ -141,12 +141,12 @@ export const apiEndpoints = {
     list: "/api/v1/break-types",
   },
   masterGroups: {
-    list: "/api/v1/master-groups",
-    create: "/api/v1/master-groups",
-    getById: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    update: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    delete: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    status: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}/status`,
+    list: "/api/v1/groups",
+    create: "/api/v1/groups",
+    getById: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    update: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    delete: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    status: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}/status`,
   },
   groups: {
     getAll: "/api/v1/groups",

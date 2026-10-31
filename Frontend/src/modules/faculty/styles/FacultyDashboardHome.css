@@ -786,7 +786,7 @@
 
 .att-kpi-chip:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.15), 0 2px 4px rgba(0, 0, 0, 0.05);
   border-color: color-mix(in srgb, var(--cms-primary, #6F8400) 35%, var(--cms-border, #e2e8f0));
   background: color-mix(in srgb, var(--cms-primary, #6F8400) 10%, #ffffff);
 }

@@ -131,6 +131,9 @@ public class FeeController : ControllerBase
 
     /// <summary>Get student fee details by student ID.</summary>
     [HttpGet("students/{studentId:int}/fee-details")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [BypassPermission]
+    [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetStudentFeeDetails(int studentId)
     {
         var result = await _service.GetStudentFeeDetailsByStudentAsync(studentId);
@@ -152,6 +155,9 @@ public class FeeController : ControllerBase
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [BypassPermission]
+    [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetStudentLedger(int studentId) => Ok(await _service.GetStudentFeeDetailsByStudentAsync(studentId));
 
     // ---------------- Concession ----------------
@@ -173,6 +179,7 @@ public class FeeController : ControllerBase
     [HttpGet("history/{studentId:int}")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
+    [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetHistory(int studentId)
     {
         if (!IsPrivilegedStaff())
@@ -190,12 +197,7 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
-        foreach (var id in studentIds.Distinct())
-        {
-            result[id] = await _service.GetFeePaymentsAsync(id);
-        }
-        return Ok(result);
+        return Ok(await _service.GetBulkFeePaymentsAsync(studentIds));
     }
 
     /// <summary>Fetch one payment transaction by payment ID.</summary>

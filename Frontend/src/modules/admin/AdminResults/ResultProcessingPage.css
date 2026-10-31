@@ -60,7 +60,7 @@
   color: #ffffff;
   background: var(--cms-primary);
   border-color: var(--cms-primary);
-  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 [data-theme="dark"] .results-view-tabs {
@@ -1607,7 +1607,7 @@
 .cms-custom-select-combobox.is-focused,
 .cms-custom-select-combobox:focus-within {
   border-color: var(--cms-primary, #6f8400) !important;
-  box-shadow: 0 0 0 3px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+  box-shadow: 0 0 0 3px var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary)  0.16)) !important;
   background: #ffffff !important;
 }
 
@@ -1794,7 +1794,7 @@ span.cms-custom-combobox-input {
 
 [data-theme="dark"] .cms-custom-select-menu.bay-style-menu .cms-custom-select-option:hover,
 [data-theme="dark"] .cms-custom-select-menu.bay-style-menu .cms-custom-select-option.highlighted {
-  background: rgba(111, 132, 0, 0.25) !important;
+  background: color-mix(in srgb, var(--cms-primary)  0.25) !important;
   color: #c9db74 !important;
 }
 
@@ -1805,7 +1805,7 @@ span.cms-custom-combobox-input {
 }
 
 [data-theme="dark"] .cms-custom-select-menu.bay-style-menu .cms-custom-select-option.selected {
-  background: rgba(111, 132, 0, 0.35) !important;
+  background: color-mix(in srgb, var(--cms-primary)  0.35) !important;
   color: #c9db74 !important;
   font-weight: 700 !important;
 }

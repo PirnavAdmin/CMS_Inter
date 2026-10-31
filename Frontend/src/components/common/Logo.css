@@ -1,0 +1,11 @@
+.logo-mark {
+  background: transparent;
+  overflow: hidden;
+  border: none;
+}
+.logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}

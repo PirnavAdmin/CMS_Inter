@@ -2,14 +2,10 @@ import { useCallback } from "react";
 import { reportApi } from "../services/accountantService.js";
 import { payrollApi } from "../services/accountantService.js";
 import { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import StudentCard from "@/modules/student/components/StudentCard.jsx";
-import StudentDataTable from "@/modules/student/components/StudentDataTable.jsx";
-import StudentPageHeader from "@/modules/student/components/StudentPageHeader.jsx";
-import StudentSummaryCard from "@/modules/student/components/StudentSummaryCard.jsx";
 import "@/modules/admin/AdminProfile/AdminProfilePage.css";
 
 import { getRows, getNumber, formatMoney, formatDate, normalizePayment, normalizeDue, useAccountantPage as useFinancePage, useCampusParams } from "../services/accountantService.js";
-import { PageState } from "../components/AccountantUI.jsx";
+import { AccountantCard, AccountantDataTable, AccountantPageHeader, AccountantSummaryCard, PageState } from "../components/AccountantUI.jsx";
 
 export function AccountantReports() {
   const campusParams = useCampusParams();
@@ -33,18 +29,18 @@ export function AccountantReports() {
   const collectionRows = (state.data?.collections || []).map(normalizePayment);
   const dueRows = (state.data?.dues || []).map(normalizeDue).filter((row) => row.amount > 0);
   return <>
-    <StudentPageHeader title="Financial Reports" subtitle="Financial collection, outstanding dues, transaction, and payroll reporting." />
+    <AccountantPageHeader title="Financial Reports" subtitle="Financial collection, outstanding dues, transaction, and payroll reporting." />
     <PageState {...state} />
     {!state.loading && !state.error ? <>
       <section className="sp-summary-grid four">
-        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collection Rows" value={collectionRows.length} note="Report detail records" />
-        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Outstanding Rows" value={dueRows.length} note="Report detail records" tone="orange" />
-        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(getNumber(state.data?.payroll, ["totalPayroll", "TotalPayroll", "totalNetSalary", "TotalNetSalary"]) || 0)} note="Current payroll API" tone="purple" />
-        <StudentSummaryCard icon={adminIconAssets.financialReports} label="Report Metrics" value={Object.keys(report || {}).length} note="Available dashboard fields" tone="blue" />
+        <AccountantSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collection Rows" value={collectionRows.length} note="Report detail records" />
+        <AccountantSummaryCard icon={adminIconAssets.feeManagement} label="Outstanding Rows" value={dueRows.length} note="Report detail records" tone="orange" />
+        <AccountantSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(getNumber(state.data?.payroll, ["totalPayroll", "TotalPayroll", "totalNetSalary", "TotalNetSalary"]) || 0)} note="Current payroll API" tone="purple" />
+        <AccountantSummaryCard icon={adminIconAssets.financialReports} label="Report Metrics" value={Object.keys(report || {}).length} note="Available dashboard fields" tone="blue" />
       </section>
       <div className="sp-grid-2">
-        <StudentCard title="Fee Collection Report"><StudentDataTable columns={["Student", "Amount", "Date", "Status"]} statusColumns={[3]} rows={collectionRows.slice(0, 10).map((row) => ({ Student: row.studentName, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty="No fee collection report data available." /></StudentCard>
-        <StudentCard title="Outstanding Dues Report"><StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date"]} rows={dueRows.slice(0, 10).map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate) }))} empty="No outstanding dues report data available." /></StudentCard>
+        <AccountantCard title="Fee Collection Report"><AccountantDataTable columns={["Student", "Amount", "Date", "Status"]} statusColumns={[3]} rows={collectionRows.slice(0, 10).map((row) => ({ Student: row.studentName, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty="No fee collection report data available." /></AccountantCard>
+        <AccountantCard title="Outstanding Dues Report"><AccountantDataTable columns={["Student", "Admission No", "Amount", "Due Date"]} rows={dueRows.slice(0, 10).map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate) }))} empty="No outstanding dues report data available." /></AccountantCard>
       </div>
     </> : null}
   </>;

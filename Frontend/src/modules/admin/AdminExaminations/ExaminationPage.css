@@ -115,7 +115,7 @@
 .exam-tabs button.active {
   background: var(--cms-primary);
   color: #ffffff;
-  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.25);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 /* Toolbar & Filters */
@@ -1222,7 +1222,7 @@
 .exam-subject-chip.selected {
   border-color: var(--cms-primary);
   background: color-mix(in srgb, var(--cms-surface) 90%, var(--cms-primary-soft));
-  box-shadow: 0 2px 8px rgba(111, 132, 0, 0.12);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary)  0.12);
 }
 
 .exam-subject-chip.deselected {
@@ -2054,7 +2054,7 @@
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(111, 132, 0, 0.12);
+  background: color-mix(in srgb, var(--cms-primary)  0.12);
   color: var(--cms-primary, #6f8400);
   margin-right: 4px;
 }

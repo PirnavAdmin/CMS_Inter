@@ -4137,7 +4137,7 @@ export default function ExaminationPage() {
     const { signal } = controller;
     const fetchInitialMasterData = async () => {
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, subjectsRes, programsRes, campusesRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes, campusesRes] =
           await Promise.allSettled([
             apiClient.get("/api/v1/boards/active", { signal }).catch((error) => {
               if (signal.aborted) throw error;
@@ -6671,7 +6671,7 @@ function SearchableSingleSelect({
                       }}
                     >
                       <span>{opt.name}</span>
-                      {isSelected && <Check size={14} style={{ color: "#6F8400" }} />}
+                      {isSelected && <Check size={14} style={{ color: "var(--cms-primary)" }} />}
                     </div>
                   );
                 })
@@ -6833,7 +6833,7 @@ function SearchableMultiSelect({
                           </small>
                         )}
                       </div>
-                      {isChecked && <Check size={14} style={{ color: "#6F8400" }} />}
+                      {isChecked && <Check size={14} style={{ color: "var(--cms-primary)" }} />}
                     </div>
                   );
                 })

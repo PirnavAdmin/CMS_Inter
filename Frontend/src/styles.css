@@ -1,4 +1,5 @@
 @import "./cms.css";
+@import "./shared/layouts/DashboardLayout/DashboardLayout.css";
 @import "./shared/components/Button.css";
 @import "./shared/components/Card.css";
 @import "./shared/components/Form.css";

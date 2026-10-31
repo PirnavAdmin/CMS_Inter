@@ -4,11 +4,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
-  ReceiptIndianRupee, Boxes, KeyRound,
+  ReceiptIndianRupee, Boxes, KeyRound, Palette,
 } from "lucide-react";
 import ChangePasswordModal from "@/modules/exam-cell/components/ChangePasswordModal.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
 import TransparentAvatar from "@/shared/components/TransparentAvatar.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -278,6 +280,12 @@ export const parentMenu = [
       { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon },
       { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon },
       { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon },
+    ],
+  },
+  {
+    section: "Settings",
+    items: [
+      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon },
     ],
   },
 ];
@@ -649,10 +657,12 @@ export default function DashboardLayout({
   const campusContext = useContext(CampusContext) || EMPTY_CAMPUS_CONTEXT;
   const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = campusContext;
 
+  const { palette } = useTheme();
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
@@ -1202,7 +1212,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`}>
+    <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
@@ -1673,6 +1683,17 @@ export default function DashboardLayout({
                 >
                   <User size={15} /> My Profile
                 </button>
+                <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    setThemePaletteOpen(true);
+                  }}
+                >
+                  <Palette size={15} /> Theme Appearance
+                </button>
                 {isExamCell ? (
                   <button
                     type="button"
@@ -1733,6 +1754,12 @@ export default function DashboardLayout({
           onClose={() => setChangePasswordOpen(false)}
         />
       )}
+
+      <ThemePalettePicker
+        open={themePaletteOpen}
+        onOpenChange={setThemePaletteOpen}
+        hideTrigger={true}
+      />
     </div>
   );
 }

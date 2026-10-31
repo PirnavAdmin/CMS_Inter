@@ -228,18 +228,18 @@
 
 .sp-shell {
   --sp-sidebar-width: 218px;
-  --sp-primary: #6f8700;
-  --sp-primary-dark: #536600;
-  --sp-primary-hover: #819b08;
-  --sp-primary-soft: #eef3d9;
-  --sp-soft: #f3f6e8;
-  --sp-bg: #f7f9f0;
-  --sp-sidebar: #d5dfb0;
-  --sp-header: #d5dfb0;
-  --sp-surface: #fff;
-  --sp-border: #d7ddc6;
-  --sp-text: #1d2519;
-  --sp-muted: #7b8375;
+  --sp-primary: var(--cms-primary, #6f8700);
+  --sp-primary-dark: var(--cms-primary-dark, #536600);
+  --sp-primary-hover: var(--cms-primary-hover, #819b08);
+  --sp-primary-soft: var(--cms-primary-soft, rgba(0, 0, 0, 0.04));
+  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(0, 0, 0, 0.035)));
+  --sp-bg: transparent;
+  --sp-sidebar: var(--cms-sidebar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
+  --sp-header: var(--cms-topbar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
+  --sp-surface: var(--cms-surface, #ffffff);
+  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, var(--cms-border, rgba(0, 0, 0, 0.12))));
+  --sp-text: var(--cms-text, #1e293b);
+  --sp-muted: var(--cms-muted, #64748b);
   position: fixed;
   inset: 0;
   display: flex;
@@ -247,21 +247,22 @@
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  background: var(--sp-bg);
+  background: transparent;
   color: var(--sp-text);
   font-family: inherit;
 }
 
-:root[data-theme="dark"] .sp-shell {
-  --sp-bg: #151b13;
-  --sp-sidebar: #192116;
-  --sp-header: #202a1c;
-  --sp-surface: #1d251a;
-  --sp-border: #35422e;
-  --sp-text: #edf2e7;
-  --sp-muted: #aab5a2;
-  --sp-soft: #29351f;
-  --sp-primary-soft: #29351f;
+:root[data-theme="dark"] .sp-shell,
+[data-theme="dark"] .sp-shell {
+  --sp-bg: transparent;
+  --sp-sidebar: var(--cms-sidebar-surface-bg, #0f1c36);
+  --sp-header: var(--cms-topbar-surface-bg, #0f1c36);
+  --sp-surface: var(--cms-surface, #151b28);
+  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, rgba(255, 255, 255, 0.12)));
+  --sp-text: var(--cms-text, #f8fafc);
+  --sp-muted: var(--cms-muted, #94a3b8);
+  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(255, 255, 255, 0.06)));
+  --sp-primary-soft: var(--cms-primary-soft, rgba(255, 255, 255, 0.06));
 }
 
 .sp-shell * {
@@ -282,9 +283,7 @@
   background: var(--sp-sidebar);
 }
 
-:root[data-theme="dark"] .sp-sidebar {
-  background: #192116;
-}
+
 
 .sp-brand {
   display: flex;
@@ -296,6 +295,7 @@
   padding: 3px 5px;
   overflow: hidden;
   border-bottom: 1px solid var(--sp-border);
+  background: var(--cms-brand-surface-bg, var(--sp-header));
 }
 
 .sp-brand img {
@@ -342,11 +342,11 @@
 .sp-sidebar nav h2 {
   margin: 0;
   padding: 14px 6px 6px;
-  color: color-mix(in srgb, var(--sp-text) 65%, var(--sp-primary) 35%);
+  color: var(--cms-sidebar-group-color, color-mix(in srgb, var(--sp-text) 65%, var(--sp-primary) 35%));
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 1.1px;
-  text-transform: uppercase
+  text-transform: uppercase;
 }
 
 .sp-sidebar nav a {
@@ -358,7 +358,7 @@
   margin-left: 4px;
   padding: 8px 7px;
   border-radius: 10px;
-  color: var(--sp-text);
+  color: var(--cms-sidebar-link-color, var(--sp-text));
   font-size: 11.75px;
   font-weight: 600;
   text-decoration: none;
@@ -366,15 +366,15 @@
 }
 
 .sp-sidebar nav a:hover {
-  background: var(--sp-primary-soft);
-  color: var(--sp-primary-dark);
-  transform: translateX(2px)
+  background: var(--cms-sidebar-link-hover-bg, var(--sp-primary-soft));
+  color: var(--cms-sidebar-link-hover-color, var(--sp-primary-dark));
+  transform: translateX(2px);
 }
 
 .sp-sidebar nav a.is-active {
-  background: linear-gradient(90deg, var(--sp-primary), var(--sp-primary-dark));
-  color: #fff;
-  box-shadow: none
+  background: linear-gradient(90deg, var(--sp-primary), var(--sp-primary-hover, var(--sp-primary-dark)));
+  color: #fff !important;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--sp-primary) 45%, transparent);
 }
 
 .sp-nav-3d-icon {
@@ -464,7 +464,7 @@
 }
 
 .sp-icon-btn:hover {
-  border-color: #b8c889;
+  border-color: var(--cms-primary-border, var(--sp-primary));
   background: var(--sp-primary-soft)
 }
 
@@ -1937,8 +1937,8 @@
   padding: 5px 10px;
   border: 1px solid var(--sp-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--sp-surface) 90%, transparent);
-  box-shadow: 0 2px 7px rgba(28, 36, 22, .035)
+  background: color-mix(in srgb, var(--sp-surface) 92%, var(--sp-primary-soft));
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.035);
 }
 
 .sp-readonly-context>img {
@@ -3770,7 +3770,13 @@
 .sp-dashboard-page .sp-metric-list>div{display:flex;align-items:center;gap:14px;padding:12px;border:0;border-radius:9px;background:color-mix(in srgb,var(--sp-surface) 93%,#23ab62)}
 .sp-dashboard-page .sp-metric-list>div>svg{color:#0ba658;flex-shrink:0}.sp-dashboard-page .sp-metric-list>.tone-red{background:color-mix(in srgb,var(--sp-surface) 94%,#ec5970)}.sp-dashboard-page .sp-metric-list>.tone-red>svg{color:#ec5970}.sp-dashboard-page .sp-metric-list>.tone-orange>svg{color:#ed9a18}
 .sp-dashboard-page .sp-metric-list span{display:block;font-size:12px;color:var(--sp-muted)}.sp-dashboard-page .sp-metric-list strong{display:block;font-size:23px;margin-top:3px}
-.sp-dashboard-page .sp-table th{font-size:10px;padding:7px 10px;background:var(--sp-soft)}.sp-dashboard-page .sp-table td{font-size:12px;padding:8px 10px}.sp-dashboard-page .sp-table-wrap{max-width:100%;overflow-x:auto}
+.sp-dashboard-page .sp-table th {
+  font-size: 10px;
+  padding: 7px 10px;
+  background: var(--cms-table-header, var(--sp-soft));
+  color: var(--sp-text);
+  border-bottom: 1px solid var(--sp-border);
+}.sp-dashboard-page .sp-table td{font-size:12px;padding:8px 10px}.sp-dashboard-page .sp-table-wrap{max-width:100%;overflow-x:auto}
 .sp-dashboard-page .sp-fee-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .sp-dashboard-page .sp-fee-overview>div{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:12px;border:1px solid var(--sp-border);border-radius:8px;background:color-mix(in srgb,var(--sp-surface) 93%,#2586e8)}
 .sp-dashboard-page .sp-fee-overview>div:nth-child(2){background:color-mix(in srgb,var(--sp-surface) 93%,#23ab62)}.sp-dashboard-page .sp-fee-overview>div:nth-child(3){background:color-mix(in srgb,var(--sp-surface) 93%,#ec5970)}
@@ -5596,7 +5602,12 @@
 /* Student dashboard home: admin dashboard spacing, card hierarchy and density. */
 .sp-shell .sp-content:has(> .sp-dashboard-page) { padding: 4px 12px 6px; }
 .sp-shell .sp-dashboard-page { gap: 6px; width: 100%; min-width: 0; }
-.sp-shell .sp-dashboard-page .sp-card { border-radius: 12px; background: color-mix(in srgb, var(--sp-surface) 94%, var(--sp-soft)); box-shadow: 0 1px 4px #00000006; }
+.sp-shell .sp-dashboard-page .sp-card {
+  border-radius: 12px;
+  background: var(--sp-surface);
+  border: 1px solid var(--sp-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
 .sp-shell .sp-dashboard-page .sp-card-head { min-height: 32px; padding: 5px 10px; gap: 6px; }
 .sp-shell .sp-dashboard-page .sp-card-head h2 { font-size: 12px; font-weight: 800; }
 .sp-shell .sp-dashboard-page .sp-card-head p { margin-top: 2px; font-size: 10px; }
@@ -5761,11 +5772,11 @@
 @media (hover: hover) and (pointer: fine) {
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: #edf2dc;
+    background-color: var(--cms-hover, var(--cms-primary-soft, rgba(0, 0, 0, 0.035)));
   }
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: color-mix(in srgb, var(--sp-surface, #1d251a) 75%, #65833d);
+    background-color: var(--cms-hover, var(--cms-primary-soft, rgba(255, 255, 255, 0.06)));
   }
 }
 @media (prefers-reduced-motion: reduce) {

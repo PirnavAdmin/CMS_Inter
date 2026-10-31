@@ -1,0 +1,34 @@
+.cms-admission-requests { min-width: 0; }
+.cms-admission-requests .cms-requests-tabs { width: fit-content; max-width: 100%; margin-bottom: 18px; flex-wrap: wrap; }
+.cms-requests-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 6px; background: var(--cms-primary-soft); color: var(--cms-primary); font-size: 12px; }
+.is-active .cms-requests-count { background: var(--cms-surface); }
+.cms-requests-info { display: flex; align-items: center; gap: 10px; padding: 14px 16px; margin-bottom: 18px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-primary-soft); color: var(--cms-text-secondary); }
+.cms-requests-info svg { flex-shrink: 0; color: var(--cms-primary); }
+.cms-requests-info p { margin: 0; font-size: 14px; }
+.cms-admission-requests .cms-requests-toolbar { display: flex; align-items: flex-end; justify-content: flex-start; flex-wrap: wrap; gap: 14px; }
+.cms-requests-toolbar .cms-field { width: 240px; max-width: 100%; }
+.cms-requests-toolbar .cms-requests-search-field { width: 420px; flex: 0 1 auto; }
+.cms-requests-toolbar .cms-admission-search { width: 100%; max-width: none; min-width: 0; flex: none; height: 36px; min-height: 36px; }
+.cms-requests-toolbar .cms-field select { height: 36px; min-height: 36px; padding-block: 0; }
+.cms-requests-table { min-width: 780px; }
+.cms-requests-empty { text-align: center; padding: 32px !important; color: var(--cms-muted); }
+.cms-requests-details { display: grid; gap: 20px; }
+.cms-requests-details.has-action { grid-template-columns: minmax(0, 1fr) 260px; align-items: start; }
+.cms-requests-sections { display: grid; gap: 18px; min-width: 0; }
+.cms-requests-sections .cms-preview-item strong { overflow-wrap: anywhere; }
+.cms-requests-sections .cms-preview-item .cms-badge { display: inline-flex; margin-bottom: 0; }
+.cms-requests-sections .cms-preview-item .cms-badge-active { color: var(--cms-green); }
+.cms-requests-sections .cms-preview-item .cms-badge-danger { color: var(--cms-red); }
+.cms-requests-sections .cms-preview-item .cms-badge-warn { color: var(--cms-amber); }
+.cms-requests-action .cms-card-body { display: grid; gap: 12px; }
+.cms-requests-history { list-style: none; margin: 0; padding: 18px; display: grid; gap: 18px; }
+.cms-requests-history li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.cms-requests-history strong, .cms-requests-history time { display: block; font-size: 14px; }
+.cms-requests-history time { margin-top: 6px; color: var(--cms-muted); font-size: 13px; }
+@media (max-width: 900px) { .cms-requests-details.has-action { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .cms-admission-requests .cms-requests-tabs { width: 100%; }
+  .cms-admission-requests .cms-requests-tabs .cms-admission-main-tab { flex: 1 1 100%; justify-content: center; }
+  .cms-requests-toolbar .cms-field, .cms-requests-toolbar .cms-admission-search { width: 100%; }
+  .cms-admission-requests .cms-pagination { flex-wrap: wrap; }
+}

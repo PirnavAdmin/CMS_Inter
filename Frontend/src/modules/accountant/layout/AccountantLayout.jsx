@@ -30,6 +30,7 @@ const accountantMenu = [
       { to: "/accountant-dashboard/leave", label: "Staff Leave", icon: staffLeaveIcon, moduleKey: "staff-leave-management", screenKey: "staff-leave" },
       { to: "/accountant-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: "holiday-management" },
       { to: "/accountant-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile, moduleKey: "profile" },
+      { to: "/accountant-dashboard/settings", label: "Settings", icon: adminIconAssets.board, moduleKey: "settings" },
     ],
   },
 ];
@@ -39,8 +40,8 @@ export default function AccountantLayout() {
     <DashboardLayout
       menuOverride={accountantMenu}
       profilePath="/accountant-dashboard/profile"
-      settingsPath={null}
-      showSettingsAction={false}
+      settingsPath="/accountant-dashboard/settings"
+      showSettingsAction={true}
     >
       <div className="accountant-shell">
         <Outlet />

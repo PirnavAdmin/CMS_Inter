@@ -1,20 +1,14 @@
-using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Security.Claims;
-using System.Text.Json;
-using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
-using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -25,18 +19,21 @@ namespace CollegeManagement.API.Controllers.V1
     [Authorize]
     public class StaffSettingsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IStaffSettingsService _staffSettingsService;
+        private readonly IUserRepository _userRepository;
         private readonly IAuthService _authService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly ILogger<StaffSettingsController> _logger;
 
         public StaffSettingsController(
-            AppDbContext context,
+            IStaffSettingsService staffSettingsService,
+            IUserRepository userRepository,
             IAuthService authService,
             IJwtTokenHelper jwtTokenHelper,
             ILogger<StaffSettingsController> logger)
         {
-            _context = context;
+            _staffSettingsService = staffSettingsService;
+            _userRepository = userRepository;
             _authService = authService;
             _jwtTokenHelper = jwtTokenHelper;
             _logger = logger;
@@ -53,11 +50,11 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User);
             if (userId.HasValue && userId.Value > 0)
             {
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-                var sId = await conn.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT StaffId FROM Users WHERE UserId = @UserId", new { UserId = userId.Value });
-                if (sId.HasValue && sId.Value > 0) return sId.Value;
+                var user = await _userRepository.GetByIdAsync(userId.Value);
+                if (user?.StaffId != null && user.StaffId.Value > 0)
+                {
+                    return user.StaffId.Value;
+                }
             }
 
             return null;
@@ -73,10 +70,11 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (staffId.HasValue && staffId.Value > 0)
             {
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-                return await conn.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT UserId FROM Users WHERE StaffId = @StaffId", new { StaffId = staffId.Value });
+                var user = await _userRepository.GetByStaffIdAsync(staffId.Value);
+                if (user != null)
+                {
+                    return user.UserId;
+                }
             }
 
             return null;
@@ -93,66 +91,13 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified from token." });
                 }
 
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-
-                var staffRow = await conn.QueryFirstOrDefaultAsync<dynamic>(
-                    "sp_GetStaffSettingsProfile",
-                    new { p_StaffId = staffId.Value },
-                    commandType: CommandType.StoredProcedure);
-
-                if (staffRow == null)
+                var settings = await _staffSettingsService.GetSettingsAsync(staffId.Value);
+                if (settings == null)
                 {
                     return NotFound(new { success = false, message = "Staff record not found." });
                 }
 
-                StaffPreferencesDto preferences = new();
-                string? customFieldsJson = (string?)staffRow.CustomFieldsJson;
-                if (!string.IsNullOrWhiteSpace(customFieldsJson))
-                {
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(customFieldsJson);
-                        if (doc.RootElement.TryGetProperty("preferences", out var prefEl))
-                        {
-                            var parsed = JsonSerializer.Deserialize<StaffPreferencesDto>(prefEl.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            if (parsed != null) preferences = parsed;
-                        }
-                        else
-                        {
-                            var parsed = JsonSerializer.Deserialize<StaffPreferencesDto>(customFieldsJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                            if (parsed != null) preferences = parsed;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to parse staff preferences for StaffId {StaffId}", staffId);
-                    }
-                }
-
-                string firstName = (string?)staffRow.FirstName ?? string.Empty;
-                string lastName = (string?)staffRow.LastName ?? string.Empty;
-                var fullName = $"{firstName} {lastName}".Trim();
-                if (string.IsNullOrWhiteSpace(fullName)) fullName = firstName;
-
-                var response = new StaffSettingsResponseDto
-                {
-                    Profile = new StaffProfileSettingsDto
-                    {
-                        Id = (int)staffRow.Id,
-                        FullName = fullName,
-                        EmployeeId = (string?)staffRow.EmployeeId,
-                        Department = (string?)staffRow.Department ?? "Not Assigned",
-                        Designation = (string?)staffRow.Designation ?? "Faculty",
-                        Mobile = (string?)staffRow.Mobile ?? string.Empty,
-                        PersonalEmail = (string?)staffRow.Email ?? string.Empty,
-                        Address = (string?)staffRow.CurrentAddress ?? string.Empty,
-                        EmergencyContact = (string?)staffRow.AlternateMobile ?? string.Empty
-                    },
-                    Preferences = preferences
-                };
-
-                return Ok(new { success = true, data = response });
+                return Ok(new { success = true, data = settings });
             }
             catch (Exception ex)
             {
@@ -177,44 +122,11 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified." });
                 }
 
-                var trimmedName = request.FullName.Trim();
-                var cleanedMobile = System.Text.RegularExpressions.Regex.Replace(request.Mobile.Trim(), @"[^\d]", "");
-                if (cleanedMobile.Length != 10)
+                var success = await _staffSettingsService.UpdateProfileSettingsAsync(staffId.Value, request);
+                if (!success)
                 {
-                    return BadRequest(new { success = false, message = "Phone number must be a valid 10-digit mobile number." });
+                    return NotFound(new { success = false, message = "Staff record not found or could not be updated." });
                 }
-
-                var newEmail = request.PersonalEmail.Trim();
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.StaffId == staffId.Value);
-                if (user != null && !string.Equals(user.Email, newEmail, StringComparison.OrdinalIgnoreCase))
-                {
-                    var emailExists = await _context.Users.AnyAsync(u => u.Email == newEmail && u.UserId != user.UserId);
-                    if (emailExists)
-                    {
-                        return BadRequest(new { success = false, message = "The email address is already in use by another account." });
-                    }
-                }
-
-                var nameParts = trimmedName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-                var firstName = nameParts.Length > 0 ? nameParts[0] : trimmedName;
-                var lastName = nameParts.Length > 1 ? nameParts[1] : string.Empty;
-
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-
-                var affected = await conn.ExecuteAsync(
-                    "sp_UpdateStaffSettingsProfile",
-                    new
-                    {
-                        p_StaffId = staffId.Value,
-                        p_FirstName = firstName,
-                        p_LastName = lastName,
-                        p_Mobile = request.Mobile.Trim(),
-                        p_Email = request.PersonalEmail.Trim(),
-                        p_Address = request.Address?.Trim(),
-                        p_EmergencyContact = request.EmergencyContact?.Trim()
-                    },
-                    commandType: CommandType.StoredProcedure);
 
                 return Ok(new { success = true, message = "Profile settings updated successfully." });
             }
@@ -241,42 +153,11 @@ namespace CollegeManagement.API.Controllers.V1
                     return Unauthorized(new { success = false, message = "Staff identity could not be verified." });
                 }
 
-                var conn = _context.Database.GetDbConnection();
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-
-                var staffRow = await conn.QueryFirstOrDefaultAsync<dynamic>(
-                    "sp_GetStaffSettingsProfile",
-                    new { p_StaffId = staffId.Value },
-                    commandType: CommandType.StoredProcedure);
-
-                if (staffRow == null)
+                var success = await _staffSettingsService.UpdatePreferencesAsync(staffId.Value, request);
+                if (!success)
                 {
-                    return NotFound(new { success = false, message = "Staff record not found." });
+                    return NotFound(new { success = false, message = "Staff record not found or could not be updated." });
                 }
-
-                Dictionary<string, object> customData = new();
-                string? existingJson = (string?)staffRow.CustomFieldsJson;
-                if (!string.IsNullOrWhiteSpace(existingJson))
-                {
-                    try
-                    {
-                        var parsed = JsonSerializer.Deserialize<Dictionary<string, object>>(existingJson);
-                        if (parsed != null) customData = parsed;
-                    }
-                    catch { }
-                }
-
-                customData["preferences"] = request;
-                var updatedJson = JsonSerializer.Serialize(customData);
-
-                await conn.ExecuteAsync(
-                    "sp_UpdateStaffSettingsPreferences",
-                    new
-                    {
-                        p_StaffId = staffId.Value,
-                        p_PreferencesJson = updatedJson
-                    },
-                    commandType: CommandType.StoredProcedure);
 
                 return Ok(new { success = true, message = "General preferences updated successfully." });
             }
@@ -295,19 +176,18 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(ModelState);
             }
 
-            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+            if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 6)
             {
-                return BadRequest(new { success = false, message = "New password must be at least 8 characters long." });
+                return BadRequest(new { success = false, message = "New password must be at least 6 characters long." });
             }
 
             bool hasUpper = request.NewPassword.Any(char.IsUpper);
-            bool hasLower = request.NewPassword.Any(char.IsLower);
             bool hasDigit = request.NewPassword.Any(char.IsDigit);
             bool hasSpecial = request.NewPassword.Any(ch => !char.IsLetterOrDigit(ch));
 
-            if (!hasUpper || !hasLower || !hasDigit || !hasSpecial)
+            if (!hasUpper || !hasDigit || !hasSpecial)
             {
-                return BadRequest(new { success = false, message = "New password must contain at least one uppercase letter (A-Z), one lowercase letter (a-z), one number (0-9), and one special symbol (e.g. !@#$%^&*)." });
+                return BadRequest(new { success = false, message = "New password must contain at least one uppercase letter (A-Z), one number (0-9), and one special symbol (e.g. !@#$%^&*)." });
             }
 
             try

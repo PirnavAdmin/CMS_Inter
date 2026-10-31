@@ -1038,6 +1038,9 @@ BEGIN
         COALESCE(DATEDIFF(h.EndDate, h.StartDate) + 1, 1) AS TotalDays,
         COALESCE(h.Description, '') AS Description,
         COALESCE(h.Status, 'Active') AS Status,
+
+        DATEDIFF(h.StartDate, CURDATE()) AS DaysRemaining,
+
         CASE 
             WHEN CURDATE() BETWEEN h.StartDate AND h.EndDate THEN 'Ongoing'
             WHEN DATEDIFF(h.StartDate, CURDATE()) = 0 THEN 'Today'
@@ -1049,9 +1052,9 @@ BEGIN
     WHERE (h.IsDeleted = 0 OR h.IsDeleted IS NULL)
       AND (h.Status = 'Active' OR h.Status IS NULL)
       AND h.EndDate >= CURDATE()
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR h.CampusId = p_CampusId)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR h.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR h.BoardId = p_BoardId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR h.CampusId = p_CampusId OR h.CampusId IS NULL)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR h.AcademicYearId = p_AcademicYearId OR h.AcademicYearId IS NULL)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR h.BoardId = p_BoardId OR h.BoardId IS NULL)
     ORDER BY h.StartDate ASC
     LIMIT v_Limit;
 END //

@@ -1074,7 +1074,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
             <div className="reimb-form-header">
               <div className="reimb-form-title-group">
                 <h2>
-                  <ReceiptIndianRupee size={18} style={{ color: "#6F8400" }} />
+                  <ReceiptIndianRupee size={18} style={{ color: "var(--cms-primary)" }} />
                   Submit Reimbursement Claim
                 </h2>
                 <p>Complete the three sections below and attach supporting receipts or invoices.</p>
@@ -1373,7 +1373,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     ) : (
                       <div className="reimb-file-badge">
                         <div className="reimb-file-info">
-                          <Paperclip size={18} style={{ color: "#6F8400", flexShrink: 0 }} />
+                          <Paperclip size={18} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
                           <div style={{ overflow: "hidden" }}>
                             <div className="reimb-file-name" title={uploadedFile.name}>{uploadedFile.name}</div>
                             <div className="reimb-file-size">
@@ -1741,7 +1741,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                                 setPreviewDocModalOpen(true);
                               }}
                             >
-                              <Paperclip size={14} style={{ color: "#6F8400" }} />
+                              <Paperclip size={14} style={{ color: "var(--cms-primary)" }} />
                             </button>
                           )}
 
@@ -1939,7 +1939,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 </div>
                 <div className="reimb-modal-prop">
                   <span className="reimb-modal-label">Claimed Amount</span>
-                  <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 16 }}>
+                  <span className="reimb-modal-value" style={{ color: "var(--cms-primary)", fontSize: 16 }}>
                     {formatINR(selectedClaim.amount)}
                   </span>
                 </div>
@@ -1997,7 +1997,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                   <span className="reimb-modal-label">Supporting Document</span>
                   <div className="reimb-doc-preview-card">
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <Paperclip size={16} style={{ color: "#6F8400" }} />
+                      <Paperclip size={16} style={{ color: "var(--cms-primary)" }} />
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedClaim.proof.name}</span>
                       <span style={{ fontSize: 11, color: "#64748b" }}>
                         ({(selectedClaim.proof.size / 1024).toFixed(1)} KB)
@@ -2492,7 +2492,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 />
               ) : (
                 <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                  <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
+                  <FileText size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 12px" }} />
                   <h4 style={{ margin: "0 0 6px" }}>{proofClaim.proof.name}</h4>
                   <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                     File size: {(proofClaim.proof.size / 1024).toFixed(1)} KB • Type: {proofClaim.proof.type || "Document"}
@@ -2693,7 +2693,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     height: 34,
                     borderRadius: "50%",
                     background: "#f1f4e2",
-                    color: "#6F8400",
+                    color: "var(--cms-primary)",
                     display: "grid",
                     placeItems: "center",
                     flexShrink: 0,
@@ -2745,7 +2745,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
                 <div className="reimb-modal-prop">
                   <span className="reimb-modal-label">Claimed Amount</span>
-                  <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 17, fontWeight: 700 }}>
+                  <span className="reimb-modal-value" style={{ color: "var(--cms-primary)", fontSize: 17, fontWeight: 700 }}>
                     {formatINR(Number(formData.amount) || 0)}
                   </span>
                 </div>
@@ -2784,7 +2784,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 {uploadedFile ? (
                   <div className="reimb-doc-preview-card">
                     <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-                      <Paperclip size={16} style={{ color: "#6F8400", flexShrink: 0 }} />
+                      <Paperclip size={16} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
                       <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {uploadedFile.name}
                       </span>
@@ -2876,7 +2876,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 />
               ) : (
                 <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                  <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
+                  <FileText size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 12px" }} />
                   <h4 style={{ margin: "0 0 6px" }}>{uploadedFile.name}</h4>
                   <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                     File size: {(uploadedFile.size / 1024).toFixed(1)} KB • Type: {uploadedFile.type || "Document"}

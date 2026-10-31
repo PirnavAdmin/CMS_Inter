@@ -7,8 +7,8 @@ test("employee API requests use StaffId, preserve ownership, and do not invent m
  global.window={localStorage:{getItem:(k)=>values.get(k)??null,removeItem:(k)=>values.delete(k)},sessionStorage:{getItem:()=>null,removeItem:()=>{}}};
  const server=await createServer({configFile:false,root:process.cwd(),resolve:{alias:{"@":path.resolve("src")}},server:{middlewareMode:true,hmr:false,watch:null},optimizeDeps:{noDiscovery:true,include:[]}});
  try{
-  const api=await server.ssrLoadModule('/src/Dashboard/InventoryDashboard/data/inventoryUserApi.js');
-  const session=await server.ssrLoadModule('/src/Dashboard/InventoryDashboard/data/inventorySession.js');
+  const api=await server.ssrLoadModule('/src/modules/inventory/data/inventoryUserApi.js');
+  const session=await server.ssrLoadModule('/src/modules/inventory/data/inventorySession.js');
   const client=(await server.ssrLoadModule('/src/api/apiClient.js')).default;
   const calls=[];let data=[];
   client.defaults.adapter=async(config)=>{calls.push(config);return{status:200,statusText:'OK',headers:{},config,data:{success:true,data}};};

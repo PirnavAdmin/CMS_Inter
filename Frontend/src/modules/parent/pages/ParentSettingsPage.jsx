@@ -1,7 +1,9 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import { useState, useEffect } from "react";
 import { Settings, Bell, Lock, Globe, Shield, CheckCircle2, Save } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import { changeParentPassword } from "@/api/parentApi.js";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import {
   getStoredSettings,
@@ -57,7 +59,7 @@ export default function ParentSettingsPage() {
     setToastMessage("Parent preferences saved successfully!");
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
     if (!oldPassword || !newPassword || !confirmPassword) {
       alert("Please fill in all password fields.");
@@ -72,20 +74,24 @@ export default function ParentSettingsPage() {
       return;
     }
 
-    if (parentUser?.id) {
-      const currentSaved = getStoredParentPassword(parentUser.id);
-      if (currentSaved && oldPassword !== currentSaved) {
-        alert("The current password entered is incorrect.");
-        return;
+    try {
+      const res = await changeParentPassword({ oldPassword, newPassword, confirmPassword });
+      if (res?.success || res?.status) {
+        if (parentUser?.id) {
+          saveStoredParentPassword(parentUser.id, newPassword);
+        }
+        setPasswordModalOpen(false);
+        setOldPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setToastMessage("Password changed successfully for parent account!");
+      } else {
+        alert(res?.message || "Failed to change password. Please check your current password.");
       }
-      saveStoredParentPassword(parentUser.id, newPassword);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || "Failed to change password.";
+      alert(msg);
     }
-
-    setPasswordModalOpen(false);
-    setOldPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setToastMessage("Password changed successfully for parent account!");
   };
 
   return (
@@ -101,6 +107,9 @@ export default function ParentSettingsPage() {
     >
       <div className="parent-dashboard-wrapper">
         <Toast message={toastMessage} onClose={() => setToastMessage("")} />
+        <div style={{ marginBottom: "20px" }}>
+          <ThemeSettingsCard />
+        </div>
 
         {/* Notification Preferences */}
         <div className="parent-card">

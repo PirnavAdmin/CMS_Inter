@@ -1,20 +1,26 @@
+using System;
 using System.Collections.Generic;
-using CollegeManagement.API.Filters;
+using System.IO;
+using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Attendance.Requests;
 using CollegeManagement.API.DTOs.Attendance.Responses;
 using CollegeManagement.API.DTOs.Common;
+using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     /// <summary>
-    /// API controller for Attendance module endpoints, handling routing, REST conventions, and service orchestration.
+    /// API controller for Attendance module endpoints.
+    /// Strictly routes requests through IAttendanceService and ensures zero EF Core / inline SQL usage.
     /// </summary>
     [ApiController]
     [ApiVersion("1.0")]
@@ -25,47 +31,28 @@ namespace CollegeManagement.API.Controllers.V1
     public class AttendanceController : ControllerBase
     {
         private readonly IAttendanceService _attendanceService;
-        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
-        private readonly CollegeManagement.API.Data.AppDbContext? _db;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AttendanceController"/> class.
-        /// </summary>
-        /// <param name="attendanceService">The attendance service dependency.</param>
-        /// <param name="jwtTokenHelper">The JWT token helper dependency.</param>
-        /// <param name="db">The database context dependency.</param>
         public AttendanceController(
             IAttendanceService attendanceService,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
-            CollegeManagement.API.Data.AppDbContext? db = null)
+            IJwtTokenHelper jwtTokenHelper)
         {
             _attendanceService = attendanceService;
             _jwtTokenHelper = jwtTokenHelper;
-            _db = db;
         }
 
-        /// <summary>
-        /// Creates a new student attendance record.
-        /// </summary>
-        /// <param name="request">The attendance record details.</param>
-        /// <returns>The ID of the newly created attendance record.</returns>
-        /// <response code="201">Attendance record created successfully.</response>
-        /// <response code="400">Invalid validation request details.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="409">Conflict with an existing attendance record.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpPost("create")]
         [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> CreateAttendance([FromBody] CreateAttendanceRequest request)
+        public async Task<IActionResult> CreateAttendance([FromBody] CreateAttendanceRequest request, CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
-            var id = await _attendanceService.CreateAttendanceAsync(request, isAdmin, userName, userId);
+            var id = await _attendanceService.CreateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
             return CreatedAtAction(
                 nameof(GetAttendanceById),
                 new
@@ -76,97 +63,59 @@ namespace CollegeManagement.API.Controllers.V1
                 id);
         }
 
-        /// <summary>
-        /// Creates multiple student attendance records in bulk.
-        /// </summary>
-        /// <param name="request">The bulk attendance details.</param>
-        /// <returns>The number of records successfully created.</returns>
-        /// <response code="200">Bulk attendance created successfully.</response>
-        /// <response code="400">Invalid bulk attendance request parameters.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="409">Conflict with existing attendance records.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpPost("bulk")]
         [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> CreateBulkAttendance([FromBody] BulkAttendanceRequest request)
+        public async Task<IActionResult> CreateBulkAttendance([FromBody] BulkAttendanceRequest request, CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
-            var affectedRows = await _attendanceService.CreateBulkAttendanceAsync(request, isAdmin, userName);
+            var userId = GetCurrentUserId();
+            var affectedRows = await _attendanceService.CreateBulkAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
             return Ok(affectedRows);
         }
 
-        /// <summary>
-        /// Updates an existing attendance record.
-        /// </summary>
-        /// <param name="request">The updated attendance values.</param>
-        /// <returns>The number of updated records.</returns>
-        /// <response code="200">Attendance updated successfully.</response>
-        /// <response code="400">Invalid update configuration values.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Attendance record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpPut("update")]
         [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> UpdateAttendance([FromBody] UpdateAttendanceRequest request)
+        public async Task<IActionResult> UpdateAttendance([FromBody] UpdateAttendanceRequest request, CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
-            var affectedRows = await _attendanceService.UpdateAttendanceAsync(request, isAdmin, userName, userId);
+            var affectedRows = await _attendanceService.UpdateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
             return Ok(affectedRows);
         }
 
-        /// <summary>
-        /// Updates multiple existing student attendance records in one bulk operation.
-        /// </summary>
-        /// <param name="request">The bulk update attendance record values.</param>
-        /// <returns>The number of updated records.</returns>
-        /// <response code="200">Bulk attendance updated successfully.</response>
-        /// <response code="400">Invalid request values.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Target attendance session or record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpPut("bulk-update")]
         [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> BulkUpdateAttendance([FromBody] BulkUpdateAttendanceRequest request)
+        public async Task<IActionResult> BulkUpdateAttendance([FromBody] BulkUpdateAttendanceRequest request, CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
-            var affectedRows = await _attendanceService.BulkUpdateAttendanceAsync(request, isAdmin, userName, userId);
+            var affectedRows = await _attendanceService.BulkUpdateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
             return Ok(affectedRows);
         }
 
-        /// <summary>
-        /// Retrieves a single detailed attendance record by its ID.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <returns>The matching attendance response details.</returns>
-        /// <response code="200">Attendance record retrieved successfully.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Attendance record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpGet("{attendanceId:int}")]
         [ProducesResponseType(typeof(AttendanceResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAttendanceById(int attendanceId)
+        public async Task<IActionResult> GetAttendanceById(int attendanceId, CancellationToken cancellationToken = default)
         {
-            var response = await _attendanceService.GetAttendanceByIdAsync(attendanceId);
+            var response = await _attendanceService.GetAttendanceByIdAsync(attendanceId, cancellationToken);
             if (response == null)
             {
                 return NotFound();
@@ -174,37 +123,28 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(response);
         }
 
-        /// <summary>
-        /// Searches and filters attendance records with pagination metadata via GET (Query parameters only).
-        /// </summary>
         [HttpGet("search")]
         [ProducesResponseType(typeof(PagedResponse<AttendanceListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> SearchAttendancesGet([FromQuery] AttendanceSearchRequest request)
+        public async Task<IActionResult> SearchAttendancesGet([FromQuery] AttendanceSearchRequest request, CancellationToken cancellationToken = default)
         {
-            var results = await _attendanceService.GetAttendancesAsync(request);
+            var results = await _attendanceService.GetAttendancesAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Searches and filters attendance records with pagination metadata via POST (Body payload).
-        /// </summary>
         [HttpPost("search")]
         [ProducesResponseType(typeof(PagedResponse<AttendanceListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> SearchAttendancesPost([FromBody] AttendanceSearchRequest request)
+        public async Task<IActionResult> SearchAttendancesPost([FromBody] AttendanceSearchRequest request, CancellationToken cancellationToken = default)
         {
-            var results = await _attendanceService.GetAttendancesAsync(request);
+            var results = await _attendanceService.GetAttendancesAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Retrieves students available to mark attendance for the specified search criteria.
-        /// </summary>
         [HttpPost("students")]
         [HttpGet("students")]
         [HttpGet("students-for-attendance")]
@@ -212,16 +152,16 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetStudentsForAttendance([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> GetStudentsForAttendance(
+            [FromQuery] AttendanceSearchRequest requestQuery,
+            [FromBody] AttendanceSearchRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
-            var results = await _attendanceService.GetStudentsForAttendanceAsync(request);
+            var results = await _attendanceService.GetStudentsForAttendanceAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Retrieves students for Admin attendance marking (session-based).
-        /// </summary>
         [HttpPost("admin/students")]
         [HttpGet("admin/students")]
         [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
@@ -230,7 +170,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAdminStudentsForAttendance([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> GetAdminStudentsForAttendance(
+            [FromQuery] AttendanceSearchRequest requestQuery,
+            [FromBody] AttendanceSearchRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
             
@@ -249,13 +192,10 @@ namespace CollegeManagement.API.Controllers.V1
             if (!string.IsNullOrEmpty(request.Date) && !DateTime.TryParse(request.Date, out _))
                 return BadRequest(new { success = false, message = "Invalid Date format." });
 
-            var results = await _attendanceService.GetAdminStudentsForAttendanceAsync(request);
+            var results = await _attendanceService.GetAdminStudentsForAttendanceAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Saves or updates student attendance records in bulk for Admin (session-based).
-        /// </summary>
         [HttpPost("admin/bulk-save")]
         [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
@@ -263,178 +203,107 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> AdminBulkSaveStudentAttendance([FromBody] AdminBulkSaveStudentAttendanceRequest request)
+        public async Task<IActionResult> AdminBulkSaveStudentAttendance(
+            [FromBody] AdminBulkSaveStudentAttendanceRequest request,
+            CancellationToken cancellationToken = default)
         {
-            if (request == null || request.Attendances == null || !request.Attendances.Any())
-            {
-                return BadRequest(new { success = false, message = "Attendance request or records list cannot be empty." });
-            }
-
-            if (!IsCurrentUserAdmin())
-            {
-                var attDate = request.AttendanceDate.Date;
-                var today = DateTime.UtcNow.Date;
-
-                // 1. 48-Hour Retroactive Limit Enforcement
-                if (attDate < today.AddDays(-2) || attDate > today.AddDays(1))
-                {
-                    return BadRequest(new { success = false, message = "Non-administrative staff cannot submit attendance more than 48 hours retroactively or for future dates." });
-                }
-
-                // 2. Sunday & Holiday Check
-                if (attDate.DayOfWeek == DayOfWeek.Sunday)
-                {
-                    return BadRequest(new { success = false, message = "Attendance cannot be recorded on Sundays." });
-                }
-
-                if (_db != null)
-                {
-                    var isHoliday = await _db.Holidays.AsNoTracking().AnyAsync(h => !h.IsDeleted && h.Status == "Active" && h.StartDate.Date <= attDate && h.EndDate.Date >= attDate);
-                    if (isHoliday)
-                    {
-                        return BadRequest(new { success = false, message = "Attendance cannot be recorded on declared institutional holidays." });
-                    }
-                }
-
-                // 3. Section Allocation Check
-                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
-                {
-                    var isAllocated = false;
-                    if (_db != null)
-                    {
-                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
-                    }
-                    if (!isAllocated)
-                    {
-                        var hasTimetable = await _attendanceService.GetFacultySubjectAllocationAsync(attDate, request.GroupId, request.SectionId.Value, null, null);
-                        if (hasTimetable != null && hasTimetable.FacultyId == callerStaffId)
-                        {
-                            isAllocated = true;
-                        }
-                    }
-
-                    if (!isAllocated)
-                    {
-                        return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "You are not authorized to record attendance for a section not allocated to you." });
-                    }
-                }
-            }
-
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
-            var count = await _attendanceService.AdminBulkSaveStudentAttendanceAsync(request, userName, userId);
+            var count = await _attendanceService.AdminBulkSaveStudentAttendanceAsync(request, userName, userId, cancellationToken);
             return Ok(new { success = true, message = $"Attendance saved successfully for {count} records.", count });
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
-        [BypassPermission]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetDefaulters([FromQuery] AttendanceDefaultersRequest request)
+        public async Task<IActionResult> GetDefaulters(
+            [FromQuery] AttendanceDefaultersRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var results = await _attendanceService.GetAttendanceDefaultersAsync(request);
+            var results = await _attendanceService.GetAttendanceDefaultersAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Retrieves statistical summary metrics based on filters.pecified filters.
-        /// </summary>
         [HttpPost("summary")]
         [HttpGet("summary")]
         [ProducesResponseType(typeof(AttendanceSummaryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAttendanceSummary([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> GetAttendanceSummary(
+            [FromQuery] AttendanceSearchRequest requestQuery,
+            [FromBody] AttendanceSearchRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
-            var summary = await _attendanceService.GetAttendanceSummaryAsync(request);
+            var summary = await _attendanceService.GetAttendanceSummaryAsync(request, cancellationToken);
             return Ok(summary);
         }
 
-        /// <summary>
-        /// Retrieves attendance percentages and class counts per student for the specified filters.
-        /// </summary>
         [HttpPost("percentage")]
         [HttpGet("percentage")]
         [ProducesResponseType(typeof(IEnumerable<AttendancePercentageResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAttendancePercentage([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> GetAttendancePercentage(
+            [FromQuery] AttendanceSearchRequest requestQuery,
+            [FromBody] AttendanceSearchRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
-            var results = await _attendanceService.GetAttendancePercentageAsync(request);
+            var results = await _attendanceService.GetAttendancePercentageAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Generates a flat report listing attendance details for the specified filters.
-        /// </summary>
         [HttpPost("report")]
         [HttpGet("report")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceReportResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAttendanceReport([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> GetAttendanceReport(
+            [FromQuery] AttendanceSearchRequest requestQuery,
+            [FromBody] AttendanceSearchRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
-            var results = await _attendanceService.GetAttendanceReportAsync(request);
+            var results = await _attendanceService.GetAttendanceReportAsync(request, cancellationToken);
             return Ok(results);
         }
 
-        /// <summary>
-        /// Changes the active/inactive status of an attendance record.
-        /// </summary>
-        /// <param name="attendanceId">The unique identifier of the attendance record.</param>
-        /// <param name="isActive">The target active status flag.</param>
-        /// <returns>The number of affected records.</returns>
-        /// <response code="200">Status changed successfully.</response>
-        /// <response code="400">Invalid request parameter values.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Attendance record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpPatch("{attendanceId}/status")]
         [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> ChangeStatus(int attendanceId, [FromQuery] bool isActive)
+        public async Task<IActionResult> ChangeStatus(
+            int attendanceId,
+            [FromQuery] bool isActive,
+            CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
-            var affectedRows = await _attendanceService.ChangeAttendanceActiveStatusAsync(attendanceId, isActive, isAdmin, userName);
+            var affectedRows = await _attendanceService.ChangeAttendanceActiveStatusAsync(attendanceId, isActive, isAdmin, userName, cancellationToken);
             return Ok(affectedRows);
         }
 
-        /// <summary>
-        /// Locks an attendance session, preventing further modifications by Faculty members.
-        /// </summary>
-        /// <param name="sessionId">The session identifier.</param>
-        /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/lock")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> LockSession(int sessionId)
+        public async Task<IActionResult> LockSession(int sessionId, CancellationToken cancellationToken = default)
         {
             var currentUserId = GetCurrentUserId();
             var userName = GetCurrentUserName();
-            var result = await _attendanceService.LockSessionAsync(sessionId, currentUserId, userName);
+            var result = await _attendanceService.LockSessionAsync(sessionId, currentUserId, userName, cancellationToken);
             return Ok(new { success = result, message = "Attendance session locked successfully." });
         }
 
-        /// <summary>
-        /// Unlocks a locked attendance session (restricted to Super Admin and Admin).
-        /// </summary>
-        /// <param name="sessionId">The session identifier.</param>
-        /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/unlock")]
         [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
@@ -442,42 +311,33 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> UnlockSession(int sessionId)
+        public async Task<IActionResult> UnlockSession(int sessionId, CancellationToken cancellationToken = default)
         {
             var userName = GetCurrentUserName();
-            var result = await _attendanceService.UnlockSessionAsync(sessionId, userName);
+            var result = await _attendanceService.UnlockSessionAsync(sessionId, userName, cancellationToken);
             return Ok(new { success = result, message = "Attendance session unlocked successfully." });
         }
 
-        /// <summary>
-        /// Soft deletes an existing attendance record.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <returns>A success indicator.</returns>
-        /// <response code="200">Attendance record deleted successfully.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Attendance record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpDelete("{attendanceId}")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> DeleteAttendance(int attendanceId)
+        public async Task<IActionResult> DeleteAttendance(int attendanceId, CancellationToken cancellationToken = default)
         {
             var isAdmin = IsCurrentUserAdmin();
             var userName = GetCurrentUserName();
-            var result = await _attendanceService.DeleteAttendanceAsync(attendanceId, isAdmin, userName);
+            var result = await _attendanceService.DeleteAttendanceAsync(attendanceId, isAdmin, userName, cancellationToken);
             return Ok(new { success = result, message = "Attendance record soft deleted successfully." });
         }
 
-        /// <summary>
-        /// Retrieves Board and Academic Year metadata for the Academic Context info modal.
-        /// </summary>
         [HttpGet("academic-context")]
-        public async Task<IActionResult> GetAcademicContext([FromQuery] int groupId, [FromQuery] int sectionId)
+        public async Task<IActionResult> GetAcademicContext(
+            [FromQuery] int groupId,
+            [FromQuery] int sectionId,
+            CancellationToken cancellationToken = default)
         {
-            var result = await _attendanceService.GetAcademicContextAsync(groupId, sectionId);
+            var result = await _attendanceService.GetAcademicContextAsync(groupId, sectionId, cancellationToken);
             if (result == null)
             {
                 return NotFound(new { Status = false, Message = "Academic context not found for specified Group and Section." });
@@ -485,11 +345,7 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new { Status = true, Message = "Academic context retrieved successfully.", Data = result });
         }
 
-        /// <summary>
-        /// Auto-derives assigned Subject and Faculty (or Class Teacher) for specified Date, Group, Section, Period, or SessionType.
-        /// </summary>
         [HttpGet("faculty-subject")]
-        
         public async Task<IActionResult> GetFacultySubjectAllocation(
             [FromQuery] DateTime date,
             [FromQuery] int? boardId = null,
@@ -500,15 +356,13 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? sectionId = null,
             [FromQuery] int? subjectId = null,
             [FromQuery] int? periodId = null,
-            [FromQuery] string? sessionType = null)
+            [FromQuery] string? sessionType = null,
+            CancellationToken cancellationToken = default)
         {
-            var result = await _attendanceService.GetFacultySubjectAllocationAsync(date, groupId, sectionId, periodId, sessionType);
+            var result = await _attendanceService.GetFacultySubjectAllocationAsync(date, groupId, sectionId, periodId, sessionType, cancellationToken);
             return Ok(new { Status = true, Message = "Faculty and subject derived successfully.", Data = result });
         }
 
-        /// <summary>
-        /// Generates Student Monthly Calendar Matrix Grid Report (Rows: Students, Columns: Dates 1-31).
-        /// </summary>
         [HttpPost("student-monthly-report")]
         [HttpGet("student-monthly-report")]
         [HttpPost("reports/student-monthly")]
@@ -517,127 +371,119 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student-monthly")]
         [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
-        public async Task<IActionResult> GetStudentMonthlyReportGrid([FromQuery] StudentMonthlyReportRequest requestQuery, [FromBody] StudentMonthlyReportRequest? requestBody = null)
+        public async Task<IActionResult> GetStudentMonthlyReportGrid(
+            [FromQuery] StudentMonthlyReportRequest requestQuery,
+            [FromBody] StudentMonthlyReportRequest? requestBody = null,
+            CancellationToken cancellationToken = default)
         {
             var request = requestBody ?? requestQuery;
-            if (request.Month < 1 || request.Month > 12)
-            {
-                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
-            }
-
-            if (!IsCurrentUserAdmin())
-            {
-                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
-                {
-                    var isAllocated = false;
-                    if (_db != null)
-                    {
-                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
-                    }
-                    if (!isAllocated)
-                    {
-                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
-                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
-                        {
-                            isAllocated = true;
-                        }
-                    }
-
-                    if (!isAllocated)
-                    {
-                        return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view attendance reports for sections not allocated to you." });
-                    }
-                }
-            }
-
-            var result = await _attendanceService.GetStudentMonthlyReportGridAsync(request);
+            var result = await _attendanceService.GetStudentMonthlyReportGridAsync(request, cancellationToken);
             return Ok(new { Status = true, Message = "Student monthly report grid generated successfully.", Data = result });
         }
 
-        /// <summary>
-        /// Exports Student Monthly Calendar Matrix Report to CSV format.
-        /// </summary>
         [HttpGet("student-monthly-report/export/csv")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
-        [BypassPermission]
-        public async Task<IActionResult> ExportStudentMonthlyCsv([FromQuery] StudentMonthlyReportRequest request)
+        public async Task<IActionResult> ExportStudentMonthlyCsv(
+            [FromQuery] StudentMonthlyReportRequest request,
+            CancellationToken cancellationToken = default)
         {
-            if (request.Month < 1 || request.Month > 12)
-            {
-                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
-            }
-
-            if (!IsCurrentUserAdmin())
-            {
-                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
-                {
-                    var isAllocated = false;
-                    if (_db != null)
-                    {
-                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
-                    }
-                    if (!isAllocated)
-                    {
-                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
-                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
-                        {
-                            isAllocated = true;
-                        }
-                    }
-
-                    if (!isAllocated) return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "Forbidden" });
-                }
-            }
-
-            var bytes = await _attendanceService.ExportStudentMonthlyReportToCsvAsync(request);
+            var bytes = await _attendanceService.ExportStudentMonthlyReportToCsvAsync(request, cancellationToken);
             return File(bytes, "text/csv", $"StudentMonthlyReport_{request.Year}_{request.Month:D2}.csv");
         }
 
-        /// <summary>
-        /// Exports Student Monthly Calendar Matrix Report to Excel format.
-        /// </summary>
         [HttpGet("student-monthly-report/export/excel")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
-        [BypassPermission]
-        public async Task<IActionResult> ExportStudentMonthlyExcel([FromQuery] StudentMonthlyReportRequest request)
+        public async Task<IActionResult> ExportStudentMonthlyExcel(
+            [FromQuery] StudentMonthlyReportRequest request,
+            CancellationToken cancellationToken = default)
         {
-            if (request.Month < 1 || request.Month > 12)
-            {
-                return BadRequest(new { Status = false, Message = "Month must be between 1 and 12." });
-            }
-
-            if (!IsCurrentUserAdmin())
-            {
-                var callerStaffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-                if (int.TryParse(callerStaffClaim, out int callerStaffId) && callerStaffId > 0 && request.SectionId.HasValue && request.SectionId.Value > 0)
-                {
-                    var isAllocated = false;
-                    if (_db != null)
-                    {
-                        isAllocated = await _db.Sections.AsNoTracking().AnyAsync(s => s.SectionId == request.SectionId.Value && s.InchargeId == callerStaffId);
-                    }
-                    if (!isAllocated)
-                    {
-                        var hasSlot = await _attendanceService.GetFacultySubjectAllocationAsync(DateTime.UtcNow.Date, null, request.SectionId.Value, null, null);
-                        if (hasSlot != null && hasSlot.FacultyId == callerStaffId)
-                        {
-                            isAllocated = true;
-                        }
-                    }
-
-                    if (!isAllocated) return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "Forbidden" });
-                }
-            }
-
-            var bytes = await _attendanceService.ExportStudentMonthlyReportToExcelAsync(request);
+            var bytes = await _attendanceService.ExportStudentMonthlyReportToExcelAsync(request, cancellationToken);
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"StudentMonthlyReport_{request.Year}_{request.Month:D2}.xlsx");
         }
 
+        [HttpPost("audit")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
+        public async Task<IActionResult> GetAuditHistory(
+            [FromBody] AuditHistorySearchRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await _attendanceService.GetAuditHistoryAsync(request, cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("student/{studentId}/yearly-overview")]
+        [ProducesResponseType(typeof(YearlyOverviewResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
+        public async Task<IActionResult> GetStudentYearlyOverview(
+            [FromRoute] int studentId,
+            [FromQuery] int academicYearId,
+            CancellationToken cancellationToken = default)
+        {
+            var response = await _attendanceService.GetStudentYearlyOverviewAsync(studentId, academicYearId, cancellationToken);
+            return Ok(response);
+        }
+
+        [HttpGet("import/template")]
+        public async Task<IActionResult> DownloadImportTemplate(CancellationToken cancellationToken = default)
+        {
+            var bytes = await _attendanceService.GenerateImportTemplateAsync(cancellationToken);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "StudentAttendance_ImportTemplate.xlsx");
+        }
+
+        [HttpPost("import/excel")]
+        public async Task<IActionResult> ImportExcel(
+            IFormFile file,
+            [FromQuery] bool validateOnly = false,
+            CancellationToken cancellationToken = default)
+        {
+            if (file == null || file.Length == 0) return BadRequest("File is empty or not provided.");
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms, cancellationToken);
+            
+            var userName = GetCurrentUserName();
+            var userId = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
+
+            var result = await _attendanceService.ImportAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId, cancellationToken);
+            return Ok(result);
+        }
+
+        [HttpGet("student/{studentId}/subjects")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
+        [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStudentSubjectAttendance(
+            [FromRoute] int studentId,
+            CancellationToken cancellationToken = default)
+        {
+            var results = await _attendanceService.GetStudentSubjectAttendanceAsync(studentId, cancellationToken);
+            return Ok(results);
+        }
+
+        [HttpGet("student/{studentId}/daily-logs")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
+        [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStudentDailyPunchLogs(
+            [FromRoute] int studentId,
+            [FromQuery] int month,
+            [FromQuery] int year,
+            CancellationToken cancellationToken = default)
+        {
+            if (month < 0 || month > 12 || year < 2000)
+            {
+                return BadRequest(new { message = "Invalid month or year." });
+            }
+
+            var results = await _attendanceService.GetStudentDailyPunchLogsAsync(studentId, month, year, cancellationToken);
+            return Ok(results);
+        }
+
+        #region Helpers
+
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal") || User.IsInRole("Examination Cell") || User.IsInRole("Exam Cell");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin") || User.IsInRole("Principal");
         }
 
         private int GetCurrentUserId()
@@ -645,17 +491,17 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User);
             if (!userId.HasValue || userId.Value <= 0)
             {
-                throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
+                throw new UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
             return userId.Value;
         }
 
         private string GetCurrentUserName()
         {
-            var userName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            var userName = User.FindFirst(ClaimTypes.Name)?.Value;
             if (string.IsNullOrEmpty(userName))
             {
-                userName = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                userName = User.FindFirst(ClaimTypes.Email)?.Value;
             }
             if (string.IsNullOrEmpty(userName))
             {
@@ -663,190 +509,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
             return userName;
         }
-        [HttpPost("audit")]
-        [Authorize(Roles = "Super Admin,Admin,HOD,Principal")]
-        public async Task<IActionResult> GetAuditHistory([FromBody] CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request)
-        {
-            var result = await _attendanceService.GetAuditHistoryAsync(request);
-            return Ok(result);
-        }
 
-        /// <summary>
-        /// Retrieves the yearly attendance overview for a specific student.
-        /// </summary>
-        [HttpGet("student/{studentId}/yearly-overview")]
-        [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
-        [CollegeManagement.API.Filters.ParentStudentAuthorization]
-        public async Task<IActionResult> GetStudentYearlyOverview([FromRoute] int studentId, [FromQuery] int academicYearId)
-        {
-            try
-            {
-                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-                var connection = dbContext.Database.GetDbConnection();
-                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync();
-
-                using var multi = await Dapper.SqlMapper.QueryMultipleAsync(
-                    connection,
-                    "CALL sp_GetStudentAttendances(@StudentId, @AcademicYearId);",
-                    new { StudentId = studentId, AcademicYearId = academicYearId },
-                    commandType: System.Data.CommandType.Text);
-
-                var yearInfo = await multi.ReadSingleOrDefaultAsync<dynamic>();
-                if (yearInfo == null || yearInfo.StartDate == null || yearInfo.EndDate == null)
-                    return NotFound(new { message = "No active Academic Year found in the system for this student." });
-
-                DateTime startDate = yearInfo.StartDate;
-                DateTime endDate = yearInfo.EndDate;
-                var records = (await multi.ReadAsync<CollegeManagement.API.Models.Attendance>()).ToList();
-
-                var response = new CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse();
-                var months = new List<CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem>();
-
-                var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
-                var endMonth = new DateTime(endDate.Year, endDate.Month, 1);
-
-                while (currentMonth <= endMonth)
-                {
-                    var monthRecords = records.Where(r => r.AttendanceDate.Month == currentMonth.Month && r.AttendanceDate.Year == currentMonth.Year).ToList();
-                    var distinctDays = monthRecords.Select(r => r.AttendanceDate.Date).Distinct().ToList();
-                    int workingDays = distinctDays.Count;
-                    
-                    int presentDays = 0, absentDays = 0, halfDays = 0;
-
-                    foreach (var day in distinctDays)
-                    {
-                        var dayRecords = monthRecords.Where(r => r.AttendanceDate.Date == day).ToList();
-                        var morning = dayRecords.FirstOrDefault(r => r.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Morning);
-                        var afternoon = dayRecords.FirstOrDefault(r => r.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Afternoon);
-
-                        bool isMorningPresent = morning != null && morning.Status == CollegeManagement.API.Enums.AttendanceStatus.Present;
-                        bool isAfternoonPresent = afternoon != null && afternoon.Status == CollegeManagement.API.Enums.AttendanceStatus.Present;
-                        bool hasMorning = morning != null, hasAfternoon = afternoon != null;
-
-                        if (isMorningPresent && isAfternoonPresent) presentDays++;
-                        else if ((isMorningPresent && hasAfternoon && !isAfternoonPresent) || (isAfternoonPresent && hasMorning && !isMorningPresent)) halfDays++;
-                        else if (isMorningPresent || isAfternoonPresent) presentDays++;
-                        else absentDays++;
-                    }
-
-                    months.Add(new CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem
-                    {
-                        MonthName = currentMonth.ToString("MMMM"),
-                        Month = currentMonth.Month,
-                        Year = currentMonth.Year,
-                        WorkingDays = workingDays,
-                        Present = presentDays,
-                        Absent = absentDays,
-                        HalfDays = halfDays,
-                        AttendancePercentage = workingDays > 0 ? Math.Round(((presentDays + (halfDays * 0.5)) / workingDays) * 100, 2) : 0
-                    });
-
-                    currentMonth = currentMonth.AddMonths(1);
-                }
-
-                response.MonthlyRecords = months;
-                response.TotalWorkingDays = months.Sum(m => m.WorkingDays);
-                response.TotalPresent = months.Sum(m => m.Present);
-                response.TotalAbsent = months.Sum(m => m.Absent);
-                response.TotalHalfDays = months.Sum(m => m.HalfDays);
-                response.OverallAttendancePercentage = response.TotalWorkingDays > 0 
-                    ? Math.Round(((response.TotalPresent + (response.TotalHalfDays * 0.5)) / response.TotalWorkingDays) * 100, 2) 
-                    : 0;
-
-                return Ok(response);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An error occurred while retrieving student attendance.", details = ex.Message });
-            }
-        }
-
-        [HttpGet("import/template")]
-        public async Task<IActionResult> DownloadImportTemplate()
-        {
-            var bytes = await _attendanceService.GenerateImportTemplateAsync();
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "StudentAttendance_ImportTemplate.xlsx");
-        }
-
-        [HttpPost("import/excel")]
-        public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false)
-        {
-            if (file == null || file.Length == 0) return BadRequest("File is empty or not provided.");
-            using var ms = new System.IO.MemoryStream();
-            await file.CopyToAsync(ms);
-            
-            var userName = GetCurrentUserName();
-            var userId = GetCurrentUserId();
-            var isAdmin = IsCurrentUserAdmin();
-
-            var result = await _attendanceService.ImportAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
-            return Ok(result);
-        }
-        [HttpGet("student/{studentId}/subjects")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
-        [ParentStudentAuthorization]
-        [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetStudentSubjectAttendance([FromRoute] int studentId)
-        {
-            try
-            {
-                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-                var connection = dbContext.Database.GetDbConnection();
-                
-                var results = await Dapper.SqlMapper.QueryAsync<SubjectWiseAttendanceResponse>(
-                    connection,
-                    "CALL sp_GetStudentSubjectAttendance(@StudentId);",
-                    new { StudentId = studentId },
-                    commandType: System.Data.CommandType.Text
-                );
-
-                return Ok(results);
-            }
-            catch (System.Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    message = "An error occurred while retrieving subject-wise attendance.",
-                    details = ex.Message
-                });
-            }
-        }
-
-        [HttpGet("student/{studentId}/daily-logs")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
-        [ParentStudentAuthorization]
-        [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetStudentDailyPunchLogs([FromRoute] int studentId, [FromQuery] int month, [FromQuery] int year)
-        {
-            try
-            {
-                if (month < 1 || month > 12 || year < 2000)
-                {
-                    return BadRequest(new { message = "Invalid month or year." });
-                }
-
-                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-                var connection = dbContext.Database.GetDbConnection();
-                
-                var results = await Dapper.SqlMapper.QueryAsync<DailyPunchLogResponse>(
-                    connection,
-                    "CALL sp_GetStudentDailyPunchLogs(@StudentId, @Month, @Year);",
-                    new { StudentId = studentId, Month = month, Year = year },
-                    commandType: System.Data.CommandType.Text
-                );
-
-                return Ok(results);
-            }
-            catch (System.Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    message = "An error occurred while retrieving daily punch logs.",
-                    details = ex.Message
-                });
-            }
-        }
+        #endregion
     }
 }

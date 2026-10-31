@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -8,6 +9,7 @@ using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -19,6 +21,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             _context = context;
         }
+
+        private DbTransaction? CurrentTransaction => _context.Database.CurrentTransaction?.GetDbTransaction();
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
         {
@@ -64,6 +68,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var backupId = await conn.ExecuteScalarAsync<int>(
                 "sp_ArchiveSectionTimetable",
                 parameters,
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
 
             if (backupId <= 0)
@@ -86,6 +91,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var restoredCount = await conn.ExecuteScalarAsync<int>(
                 "sp_SwapSectionTimetableBackup",
                 parameters,
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
 
             if (restoredCount <= 0)
@@ -102,6 +108,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_DeleteTimetableBackup",
                 new { p_SectionId = sectionId, p_AcademicYearId = academicYearId },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
     }

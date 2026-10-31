@@ -54,6 +54,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<ExaminationSettingsDto?> GetExaminationSettingsAsync(int campusId);
         Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings);
+        Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(ExaminationSettingsDto settings);
         Task<int> AutoTransitionExaminationStatusesAsync(DateTime currentTime);
     }
 }

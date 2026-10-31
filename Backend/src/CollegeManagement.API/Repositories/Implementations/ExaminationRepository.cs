@@ -346,16 +346,37 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             try
             {
-                string idsStr = string.Join(",", list);
+                string json = JsonSerializer.Serialize(list);
+                var p = new DynamicParameters();
+                p.Add("p_ExamId", examinationId);
+                p.Add("p_SubjectIdsJson", json);
                 await Connection.ExecuteAsync(
                     "sp_SaveExaminationSubjects",
-                    new { p_ExamId = examinationId, p_SubjectIds = idsStr },
+                    p,
                     commandType: CommandType.StoredProcedure);
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Failed to save ExaminationSubjects for Exam {ExamId}", examinationId);
             }
+        }
+
+                public async Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(ExaminationSettingsDto settings)
+        {
+            return await SaveExaminationSettingsAsync(settings.CampusId, settings);
+        }
+
+        public async Task<string> GenerateUniqueExamCodeAsync(int boardId, int academicYearId, int groupId, int? programId)
+        {
+            var p = new DynamicParameters();
+            p.Add("p_BoardId", boardId);
+            p.Add("p_AcademicYearId", academicYearId);
+            p.Add("p_GroupId", groupId);
+            p.Add("p_ProgramId", programId ?? 0);
+            return await Connection.QueryFirstOrDefaultAsync<string>(
+                "sp_GenerateUniqueExamCode",
+                p,
+                commandType: CommandType.StoredProcedure) ?? $"EXAM-{DateTime.UtcNow.Year}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
         }
 
         #endregion
@@ -727,12 +748,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             };
         }
 
-        public Task<string> GenerateUniqueExamCodeAsync(int boardId, int academicYearId, int groupId, int? programId)
-        {
-            string yearStr = DateTime.UtcNow.Year.ToString();
-            return Task.FromResult($"EXAM-{yearStr}-{DateTime.UtcNow.Ticks % 10000:D4}");
-        }
-
         #endregion
 
         #region Hall Ticket Methods
@@ -887,9 +902,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 results.Add(new FacultyExamDutyDto
                 {
-                    Id = (int)r.Id,
-                    ExamScheduleId = (int)r.ExamScheduleId,
-                    ExaminationId = (int)r.ExaminationId,
+                    Id = r.DutyId != null ? Convert.ToInt32(r.DutyId) : (r.Id != null ? Convert.ToInt32(r.Id) : Convert.ToInt32(r.ExamScheduleId ?? 0)),
+                    ExamScheduleId = r.ExamScheduleId != null ? Convert.ToInt32(r.ExamScheduleId) : 0,
+                    ExaminationId = r.ExaminationId != null ? Convert.ToInt32(r.ExaminationId) : (r.ExamId != null ? Convert.ToInt32(r.ExamId) : 0),
                     ExamName = (string)(r.ExamName ?? $"Exam #{r.ExaminationId}"),
                     ExamCode = (string)(r.ExamCode ?? $"EXAM-{r.ExaminationId}"),
                     Category = examCat,
@@ -962,6 +977,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_ReEvaluationWindowDays", settings.ReEvaluationWindowDays);
             p.Add("p_EnableDoubleEvaluation", settings.EnableDoubleEvaluation ? 1 : 0);
             p.Add("p_AllowNegativeMarking", settings.AllowNegativeMarking ? 1 : 0);
+            p.Add("p_MinAttendancePercent", settings.MinAttendancePercent);
+            p.Add("p_CondonationThreshold", settings.CondonationThreshold);
+            p.Add("p_IncludePrincipalSign", settings.IncludePrincipalSign ? 1 : 0);
+            p.Add("p_AutoLockSeatingHours", settings.AutoLockSeatingHours);
+            p.Add("p_AllowManualHallTicketRelease", settings.AllowManualHallTicketRelease ? 1 : 0);
+            p.Add("p_SmsAlertsOnPublish", settings.SmsAlertsOnPublish ? 1 : 0);
+            p.Add("p_EmailMarksheetCopy", settings.EmailMarksheetCopy ? 1 : 0);
+            p.Add("p_RestrictResultsForFeeDue", settings.RestrictResultsForFeeDue ? 1 : 0);
+            p.Add("p_AutoArchivePastExams", settings.AutoArchivePastExams ? 1 : 0);
             p.Add("p_SettingsJson", settings.SettingsJson);
 
             var saved = await Connection.QueryFirstOrDefaultAsync<ExaminationSettingsDto>(

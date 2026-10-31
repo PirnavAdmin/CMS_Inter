@@ -1,7 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport.Driver;
 using CollegeManagement.API.Services.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers
 {
@@ -54,6 +58,27 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CreateTransportDriverDto dto)
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                var id = await _service.CreateAsync(dto, userId);
+                var result = await _service.GetByIdAsync(id);
+
+                return StatusCode(StatusCodes.Status201Created, new
+                {
+                    success = true,
+                    message = "Driver created successfully.",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
@@ -105,57 +130,65 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("{id}/documents")]
         public async Task<IActionResult> GetDriverDocuments(string id)
         {
-            var defaultDocs = new List<DriverDocumentDto>
+            try
             {
-                new DriverDocumentDto
+                var existing = await _service.GetByIdOrNumberAsync(id);
+                if (existing == null)
                 {
-                    Id = 1,
-                    DocumentCategory = "Medical Certificate",
-                    DocumentNumber = "MED-VER-2718",
-                    BadgeNumber = "BDG-1004",
-                    IssueDate = DateTime.Today.ToString("yyyy-MM-dd"),
-                    ExpiryDate = DateTime.Today.AddYears(1).ToString("yyyy-MM-dd"),
-                    Status = "Verified",
-                    FileName = "Medical_Certificate_Main_Driver.pdf"
-                },
-                new DriverDocumentDto
-                {
-                    Id = 2,
-                    DocumentCategory = "Medical Certificate",
-                    DocumentNumber = "MED-VER-6372",
-                    BadgeNumber = "BDG-1034",
-                    IssueDate = DateTime.Today.ToString("yyyy-MM-dd"),
-                    ExpiryDate = DateTime.Today.AddYears(1).ToString("yyyy-MM-dd"),
-                    Status = "Verified",
-                    FileName = "Medical_Certificate_Main_Driver.pdf"
+                    return NotFound(new { success = false, message = "Driver not found." });
                 }
-            };
 
-            return Ok(new { success = true, data = defaultDocs });
+                var docs = await _service.GetDocumentsAsync(existing.DriverId);
+                return Ok(new { success = true, data = docs });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         [HttpPost("{id}/documents")]
         public async Task<IActionResult> UploadDriverDocument(string id, [FromBody] DriverDocumentDto dto)
         {
-            var newDoc = new DriverDocumentDto
+            try
             {
-                Id = Random.Shared.Next(100, 999),
-                DocumentCategory = !string.IsNullOrWhiteSpace(dto.DocumentCategory) ? dto.DocumentCategory : "Medical Certificate",
-                DocumentNumber = !string.IsNullOrWhiteSpace(dto.DocumentNumber) ? dto.DocumentNumber : $"MED-VER-{Random.Shared.Next(1000, 9999)}",
-                BadgeNumber = !string.IsNullOrWhiteSpace(dto.BadgeNumber) ? dto.BadgeNumber : $"BDG-{Random.Shared.Next(1000, 9999)}",
-                IssueDate = !string.IsNullOrWhiteSpace(dto.IssueDate) ? dto.IssueDate : DateTime.Today.ToString("yyyy-MM-dd"),
-                ExpiryDate = !string.IsNullOrWhiteSpace(dto.ExpiryDate) ? dto.ExpiryDate : DateTime.Today.AddYears(1).ToString("yyyy-MM-dd"),
-                Status = "Verified",
-                FileName = !string.IsNullOrWhiteSpace(dto.FileName) ? dto.FileName : "Verification_Document.pdf"
-            };
+                var existing = await _service.GetByIdOrNumberAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { success = false, message = "Driver not found." });
+                }
 
-            return Ok(new { success = true, message = "Driver verification document uploaded successfully.", data = newDoc });
+                var created = await _service.CreateDocumentAsync(existing.DriverId, dto);
+                return Ok(new { success = true, message = "Driver verification document uploaded successfully.", data = created });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         [HttpDelete("{id}/documents/{docId}")]
         public async Task<IActionResult> DeleteDriverDocument(string id, string docId)
         {
-            return Ok(new { success = true, message = "Verification document deleted successfully." });
+            try
+            {
+                var existing = await _service.GetByIdOrNumberAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { success = false, message = "Driver not found." });
+                }
+
+                if (long.TryParse(docId, out var documentId))
+                {
+                    await _service.DeleteDocumentAsync(documentId, existing.DriverId);
+                }
+
+                return Ok(new { success = true, message = "Verification document deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
     }
 }

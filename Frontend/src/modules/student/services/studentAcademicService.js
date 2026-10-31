@@ -77,67 +77,13 @@ export const getCurrentStudent = async () => {
   return getPayload(response.data) || {};
 };
 
-// Keep the portal's allocation details in sync with the combined record used
-// by Student Management (student record + admission record).
+// Keep the portal's allocation details in sync with authenticated student profile
 export const getStudentAllocationProfile = async (student) => {
-  const studentId = student?.studentId ?? student?.StudentId ?? student?.id ?? student?.Id;
-  const admissionNo = String(student?.admissionNo ?? student?.AdmissionNo ?? student?.admissionNumber ?? student?.AdmissionNumber ?? "").trim();
-  const getRows = (payload) => {
-    let value = payload;
-    for (let index = 0; index < 3; index += 1) {
-      if (value?.data != null) value = value.data;
-      else if (value?.Data != null) value = value.Data;
-      else break;
-    }
-    if (Array.isArray(value)) return value;
-    return value?.items ?? value?.Items ?? value?.records ?? value?.Records ?? value?.results ?? value?.Results ?? [];
-  };
-  const getRecord = (payload) => {
-    let value = payload;
-    for (let index = 0; index < 3; index += 1) {
-      if (value?.data != null) value = value.data;
-      else if (value?.Data != null) value = value.Data;
-      else break;
-    }
-    return value && typeof value === "object" ? value : {};
-  };
-  const read = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value != null && value !== "");
-
-  const [studentResult, studentListResult, admissionListResult] = await Promise.allSettled([
-    studentId ? apiClient.get(`/api/v1/students/${encodeURIComponent(studentId)}`) : Promise.reject(new Error("Student ID unavailable")),
-    apiClient.get("/api/v1/students"),
-    apiClient.get("/api/v1/student-admissions"),
-  ]);
-  const currentRecord = studentResult.status === "fulfilled" ? getRecord(studentResult.value.data) : student;
-  const currentStudentId = String(read(currentRecord, "studentId", "StudentId", "id", "Id") ?? studentId ?? "");
-  const currentAdmissionNo = String(read(currentRecord, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? admissionNo).trim();
-  const studentSummary = studentListResult.status === "fulfilled"
-    ? getRows(studentListResult.value.data).find((item) => String(read(item, "studentId", "StudentId", "id", "Id") ?? "") === currentStudentId
-      || String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === currentAdmissionNo)
-    : null;
-  const admissionSummary = admissionListResult.status === "fulfilled"
-    ? getRows(admissionListResult.value.data).find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === currentAdmissionNo
-      || String(read(item, "studentId", "StudentId") ?? "") === currentStudentId)
-    : null;
-  let admission = admissionSummary;
-  const admissionId = read(admissionSummary, "admissionId", "AdmissionId", "studentAdmissionId", "StudentAdmissionId", "id", "Id");
-  if (admissionId != null) {
-    try {
-      const detail = await apiClient.get(`/api/v1/student-admissions/${encodeURIComponent(admissionId)}`);
-      admission = { ...admissionSummary, ...getRecord(detail.data) };
-    } catch { /* The list record still contains useful allocation fields. */ }
+  if (student && typeof student === "object" && (student.studentId || student.StudentId)) {
+    return student;
   }
-
-  const merged = { ...(currentRecord && typeof currentRecord === "object" ? currentRecord : student) };
-  Object.entries(studentSummary || {}).forEach(([key, value]) => {
-    if ((merged[key] == null || merged[key] === "") && value != null && value !== "") merged[key] = value;
-  });
-  Object.entries(admission || {}).forEach(([key, value]) => {
-    if (value != null && value !== "") merged[key] = value;
-  });
-  return merged;
+  return await getCurrentStudent();
 };
-
 export const updateCurrentStudentProfile = (data) => apiClient.put(studentApiEndpoints.profile.update, data);
 
 export const uploadCurrentStudentPhoto = (file) => {
@@ -285,26 +231,39 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
 };
 
 export const getStudentAttendance = async (studentId, fromDate, toDate) => {
+  const parsedFrom = fromDate ? new Date(fromDate) : new Date();
+  const month = Number.isInteger(parsedFrom.getMonth()) ? parsedFrom.getMonth() + 1 : 0;
+  const year = parsedFrom.getFullYear() || new Date().getFullYear();
+
+  try {
+    const response = await apiClient.get(`/api/v1/attendance/student/${studentId}/daily-logs`, {
+      params: { month, year },
+      skipGlobalLoader: true,
+    });
+    const payload = getPayload(response.data);
+    const rows = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.records ?? [];
+    if (Array.isArray(rows) && rows.length > 0) {
+      return rows.map((r) => ({
+        ...r,
+        attendanceDate: String(r.date || r.attendanceDate || "").slice(0, 10),
+        session: r.sessionName || r.session,
+        status: r.status,
+      }));
+    }
+  } catch {
+    // Graceful fallback to search endpoint if daily-logs is unavailable
+  }
+
   const response = await apiClient.get(studentApiEndpoints.attendance.search, {
     params: { studentId, fromDate, toDate, pageNumber: 1, pageSize: 1000 },
+    skipGlobalLoader: true,
   });
   const list = (value) => {
     const payload = getPayload(value);
     return Array.isArray(payload) ? payload
       : payload?.records ?? payload?.items ?? payload?.attendanceRecords ?? payload?.data ?? [];
   };
-  const records = list(response.data);
-  const dates = [...new Set(records.map((record) => String(record.attendanceDate ?? record.date ?? "").slice(0, 10)).filter(Boolean))];
-  // The search DTO has no reliable session identity. The existing daily endpoint
-  // returns the same explicit Morning/Afternoon fields used by admin attendance.
-  return (await Promise.all(dates.map(async (date) => {
-    const daily = await apiClient.get(studentApiEndpoints.attendance.dailySessions, {
-      params: { studentId, attendanceDate: date, date },
-      skipGlobalLoader: true,
-    });
-    const record = list(daily.data).find((item) => String(item.studentId) === String(studentId));
-    return record ? { ...record, attendanceDate: date } : null;
-  }))).filter(Boolean);
+  return list(response.data);
 };
 
 export const getPublishedStudentResults = async (student) => {

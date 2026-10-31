@@ -183,7 +183,7 @@
 .cms-searchable-select-combobox:focus-within,
 .cms-searchable-select.is-open .cms-searchable-select-combobox {
   border-color: var(--cms-primary, #6f8400) !important;
-  box-shadow: 0 0 0 2px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+  box-shadow: 0 0 0 2px var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary)  0.16)) !important;
 }
 
 .cms-searchable-select-combobox.is-disabled {

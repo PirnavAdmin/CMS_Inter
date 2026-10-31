@@ -170,20 +170,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var summary = await statsMulti.ReadFirstOrDefaultAsync<dynamic>();
                 if (summary != null)
                 {
-                    stats.EventsToday = (int)summary.EventsToday;
-                    stats.FailedOperationsToday = (int)summary.FailedOperationsToday;
-                    stats.SecurityAlertsToday = (int)summary.SecurityAlertsToday;
-                    stats.SecurityAlerts = (int)summary.SecurityAlertsToday;
-                    stats.ActiveUsersToday = (int)summary.ActiveUsersToday;
-                    stats.RegisteredDevicesToday = (int)summary.RegisteredDevicesToday;
-                    stats.DistinctPublicIpsToday = (int)summary.DistinctPublicIpsToday;
+                    stats.EventsToday = Convert.ToInt32(summary.EventsToday ?? 0);
+                    stats.FailedOperationsToday = Convert.ToInt32(summary.FailedOperationsToday ?? 0);
+                    stats.SecurityAlertsToday = Convert.ToInt32(summary.SecurityAlertsToday ?? 0);
+                    stats.SecurityAlerts = Convert.ToInt32(summary.SecurityAlertsToday ?? 0);
+                    stats.ActiveUsersToday = Convert.ToInt32(summary.ActiveUsersToday ?? 0);
+                    stats.RegisteredDevicesToday = Convert.ToInt32(summary.RegisteredDevicesToday ?? 0);
+                    stats.DistinctPublicIpsToday = Convert.ToInt32(summary.DistinctPublicIpsToday ?? 0);
                 }
 
                 var admins = (await statsMulti.ReadAsync<dynamic>()).Select(a => new ActiveAdminInfoDto
                 {
                     UserName = (string)a.UserName,
                     Role = (string)a.Role,
-                    ActionCount = (int)a.ActionCount,
+                    ActionCount = Convert.ToInt32(a.ActionCount ?? 0),
                     LastActive = (DateTime)a.LastActive,
                     LastIp = (string?)a.LastIp,
                     LastAction = (string?)a.LastAction
