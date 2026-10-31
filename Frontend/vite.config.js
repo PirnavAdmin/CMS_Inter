@@ -32,6 +32,7 @@ function examCellShieldPlugin(apiBaseUrl) {
         const isCertActiveTemplates = urlStr.startsWith("/api/v1/certificates/active-templates");
         const isReports = urlStr.startsWith("/api/v1/reports");
         const isTimetableGenerate = urlStr.startsWith("/api/v1/timetable/generate");
+        const isHostel = urlStr.startsWith("/api/v1/hostel");
         const isUndefinedOrNull = urlStr.includes("/undefined") || urlStr.includes("/null");
 
         if (
@@ -53,6 +54,7 @@ function examCellShieldPlugin(apiBaseUrl) {
           !isCertActiveTemplates &&
           !isReports &&
           !isTimetableGenerate &&
+          !isHostel &&
           !isUndefinedOrNull
         ) {
           return next();
@@ -60,6 +62,9 @@ function examCellShieldPlugin(apiBaseUrl) {
 
         try {
           let rewrittenUrl = urlStr;
+          if (rewrittenUrl.startsWith("/api/v1/hostel/allocations")) {
+            rewrittenUrl = rewrittenUrl.replace("/api/v1/hostel/allocations", "/api/v1/hostel/student-allocations");
+          }
           if (isAttendanceTimingEffective && rewrittenUrl.includes("staffType=Staff")) {
             rewrittenUrl = rewrittenUrl.replace("staffType=Staff", "staffType=NonTeaching");
           }
@@ -687,6 +692,14 @@ function examCellShieldPlugin(apiBaseUrl) {
             }));
           }
 
+          if (isHostel) {
+            return res.end(JSON.stringify({
+              success: true,
+              message: "Hostel data retrieved",
+              data: [],
+            }));
+          }
+
           return next();
         } catch {
           return next();
@@ -698,7 +711,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://superior-hatchery-gibberish.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {

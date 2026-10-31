@@ -912,11 +912,21 @@ export default function DashboardLayout({
     if (!rawPhoto || typeof rawPhoto !== "string") return null;
     const trimmed = rawPhoto.trim();
     if (!trimmed) return null;
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      if (env.useDevProxy && trimmed.includes("/uploads/")) {
+        return trimmed.slice(trimmed.indexOf("/uploads/"));
+      }
       return trimmed;
     }
+    if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+      return trimmed;
+    }
+    const uploadPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    if (env.useDevProxy && uploadPath.startsWith("/uploads/")) {
+      return uploadPath;
+    }
     const apiBase = (env.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
-    return `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+    return `${apiBase}${uploadPath}`;
   }, [user]);
 
   useEffect(() => {
