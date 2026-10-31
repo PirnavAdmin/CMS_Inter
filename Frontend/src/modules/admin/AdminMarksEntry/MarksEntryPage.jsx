@@ -2361,6 +2361,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           }
         }
 
+        const selectedExam = (entry?.exams || []).find((e) => eq(e.id, entryExamId));
         // Reconcile complete authoritative section roster with marks
         loadedRows = reconcileRosterWithMarks(
           entryStudents,

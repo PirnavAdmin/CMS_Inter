@@ -1897,7 +1897,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
 
   const loadActiveTemplates = async () => {
     try {
-      const response = await apiClient.get(CERTIFICATE_API.activeTemplates, { skipGlobalLoader: true });
+      const response = await apiClient.get(CERTIFICATE_API.activeTemplates, { skipGlobalLoader: true, silent: true, skipErrorLog: true });
       const list = unwrapListPayload(response?.data);
       const serverList = Array.isArray(list) ? list.map((item) => normalizeApiTemplate(item)).filter(Boolean) : [];
 

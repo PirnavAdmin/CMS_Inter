@@ -3376,7 +3376,7 @@ export default function HostelPage() {
 
       try {
         const bulkRes = await hostelApi.bulkSaveAttendance({
-          hostelId: Number(filterHostelAttendance || bulkItems[0]?.hostelId || 1),
+          hostelId: Number((attendanceBlock !== "all" && attendanceBlock) || bulkItems[0]?.hostelId || 1),
           attendanceDate: attDate,
           session: sessionLabel,
           records: bulkItems,

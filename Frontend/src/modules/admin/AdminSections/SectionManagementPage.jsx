@@ -1125,9 +1125,10 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
+      apiClient.get("/api/v1/students", { params: { pageSize: 1000 } }).catch(() => null),
     ]).then((results) => {
       if (!active) return;
-      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult] = results;
+      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
       if (campusesResult?.status === "fulfilled") {
         const loadedCampuses = unwrapList(campusesResult.value).map(normalizeCampus).filter((item) => item.id && item.isActive);
         setCampusesList(loadedCampuses);

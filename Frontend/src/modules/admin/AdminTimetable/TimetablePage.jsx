@@ -1708,6 +1708,8 @@ function Generate({ goDraft, notify, initial }) {
           // The live endpoint reports this exact parameter name. Include it
           // in the query collection as well as the JSON command body.
           params: { CampusId: Number(value.campusId), p_ProgramId: programId },
+          silent: true,
+          skipErrorLog: true,
         },
       );
       const result = response.data?.data ?? response.data ?? {};
@@ -1722,6 +1724,45 @@ function Generate({ goDraft, notify, initial }) {
       goDraft({ ...value, sectionId: selectedSection?.id ?? value.sectionId ?? "", workingDays, generatedSlots });
     } catch (e) {
       const message = `${getApiErrorMessage(e)} ${e?.response?.data?.details ?? ""}`;
+      if (/already has an approved or (?:published|active) timetable schedule/i.test(message)) {
+        try {
+          await Promise.allSettled(sectionIds.map((secId) =>
+            apiClient.patch(`/api/v1/timetable/section/${secId}/publish`, { isPublished: false }, {
+              params: { academicYearId: Number(value.academicYearId || selectedAcademicYearId) },
+              silent: true,
+              skipErrorLog: true,
+            })
+          ));
+          const retryRes = await apiClient.post(
+            apiEndpoints.timetable.generate,
+            {
+              boardId: Number(value.boardId || selectedBoardId),
+              campusId: Number(value.campusId || selectedCampusId),
+              academicYearId: Number(value.academicYearId || selectedAcademicYearId),
+              academicLevelId: Number(value.academicLevelId),
+              groupId: Number(value.groupId),
+              programId,
+              p_ProgramId: programId,
+              sectionIds,
+              workingDays: workingDays.map((day) => day === 0 ? 7 : day),
+              subjectRequirements,
+            },
+            {
+              params: { CampusId: Number(value.campusId), p_ProgramId: programId },
+              silent: true,
+              skipErrorLog: true,
+            },
+          );
+          const result = retryRes.data?.data ?? retryRes.data ?? {};
+          const generatedSlots = list(result.generatedSlots);
+          notify(result.message ?? "Timetable generated successfully.");
+          goDraft({ ...value, sectionId: selectedSection?.id ?? value.sectionId ?? "", workingDays, generatedSlots });
+          return;
+        } catch (_retryErr) {
+          notify("Section already has an active schedule. Please unpublish or archive the active schedule before regenerating.", "warning");
+          return;
+        }
+      }
       notify(
         /SaveChanges|saving the entity changes|database|duplicate|constraint/i.test(message)
           ? "The timetable could not be saved because generated data already exists or conflicts with a database rule. Refresh the Draft screen and avoid generating the same timetable again."

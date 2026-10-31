@@ -923,14 +923,15 @@ export default function ReportsPage() {
       return () => controller.abort();
     }
     setLevelLoading(true);
-    const params = boardId ? { boardId } : {};
+    const params = scope.boardId ? { boardId: scope.boardId } : {};
     getReportAcademicLevels(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load academic levels.");
-      const levels = activeFilterOptions(rows, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
+      const resData = res?.data ?? res;
+      if (resData?.success === false || resData?.Success === false) throw new Error(resData.message || resData.Message || "Unable to load academic levels.");
+      const levels = activeFilterOptions(resData, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey, levels);
       setMasterOptions((current) => ({ ...current, levels }));
       setFilters((current) => current.level && !levels.some((level) => level.value === String(current.level)) ? { ...current, level: "", group: "", section: "" } : current);
@@ -962,16 +963,18 @@ export default function ReportsPage() {
     }
     setGroupsLoading(true);
     const params = {};
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    const levelId = positiveId(filters.level);
+    if (levelId) params.academicLevelId = levelId;
     getReportGroups(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load groups.");
-      const groups = activeFilterOptions(rows, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
+      const resData = res?.data ?? res;
+      if (resData?.success === false || resData?.Success === false) throw new Error(resData.message || resData.Message || "Unable to load groups.");
+      const groups = activeFilterOptions(resData, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.groups, cacheKey, groups);
       applyGroups(groups);
     }).catch((error) => {
@@ -1004,18 +1007,24 @@ export default function ReportsPage() {
     }
     setSectionsLoading(true);
     const params = {};
+    const groupId = positiveId(filters.group);
     if (groupId) params.groupId = groupId;
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    const levelId = positiveId(filters.level);
+    if (levelId) params.academicLevelId = levelId;
     getReportSections(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      if (response.data?.success === false || response.data?.Success === false) throw new Error(response.data.message || response.data.Message || "Unable to load sections.");
-      const rows = collection(response.data, ["sections", "Sections"]).filter((row) => {
-        if (flagIsFalse(read(row, "isActive", "IsActive")) || flagIsTrue(read(row, "isDeleted", "IsDeleted")) || String(read(row, "status", "Status") || "").toLowerCase() === "deleted") return false;
+      const resData = res?.data ?? res;
+      if (resData?.success === false || resData?.Success === false) throw new Error(resData.message || resData.Message || "Unable to load sections.");
+      const rows = collection(resData, ["sections", "Sections"]).filter((row) => {
+        const isAct = read(row, "isActive", "IsActive");
+        const isDel = read(row, "isDeleted", "IsDeleted");
+        const stat = String(read(row, "status", "Status") || "").toLowerCase();
+        if (isAct === false || isDel === true || stat === "deleted") return false;
         return Object.entries(scope).every(([key, expected]) => {
           const actual = read(row, key, key[0].toUpperCase() + key.slice(1));
           return !expected || actual == null || positiveId(actual) === expected;

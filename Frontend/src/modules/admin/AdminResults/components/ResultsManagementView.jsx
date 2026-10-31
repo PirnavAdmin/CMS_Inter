@@ -26,8 +26,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "../ResultProcessingPage.css";
 
-// PAGE_SIZE moved to component props
-// ANALYTICS_MODAL_PAGE_SIZE moved to component props
+const PAGE_SIZE = 10;
+const ANALYTICS_MODAL_PAGE_SIZE = 10;
 
 /* ============================================================
    PAYLOAD UNWRAPPING & FILE UTILITIES
