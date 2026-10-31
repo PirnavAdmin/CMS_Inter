@@ -62,7 +62,6 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 "sp_CreateStudentTransportAssignments",
                 new
                 {
-                    p_StudentId = (long?)null,
                     p_AdmissionNo = dto.AdmissionNo,
                     p_RouteId = dto.RouteId,
                     p_PickupPointId = dto.PickupPointId,
@@ -72,7 +71,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_TransportType = dto.TransportType ?? "Both",
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = userId
+                    p_IsDeleted = (byte)0,
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -80,12 +81,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long assignmentId, UpdateStudentTransportAssignmentDto dto, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateStudentTransportAssignments",
                 new
                 {
-                    p_StudentTransportAssignmentId = assignmentId,
-                    p_StudentId = (long?)null,
+                    p_Id = assignmentId,
                     p_AdmissionNo = dto.AdmissionNo,
                     p_RouteId = dto.RouteId,
                     p_PickupPointId = dto.PickupPointId,
@@ -95,6 +95,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_TransportType = dto.TransportType ?? "Both",
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_IsDeleted = (byte)0,
+                    p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
@@ -104,9 +106,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long assignmentId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteStudentTransportAssignments",
-                new { p_StudentTransportAssignmentId = assignmentId, p_UpdatedBy = userId },
+                new { p_Id = assignmentId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

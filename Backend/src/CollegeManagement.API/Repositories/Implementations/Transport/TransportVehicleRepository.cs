@@ -85,29 +85,30 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long vehicleId, UpdateTransportVehicleDto dto, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateTransportVehicles",
                 new
                 {
-                    p_VehicleId = vehicleId,
+                    p_Id = vehicleId,
                     p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_VehicleName = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
+                    p_Capacity = dto.Capacity,
+                    p_IsActive = (byte)1,
+                    p_VehicleRegistrationNo = dto.RegistrationNumber,
+                    p_MaximumCapacity = dto.Capacity,
                     p_Make = dto.Manufacturer,
                     p_Model = dto.Model,
+                    p_YearOfManufacture = 0,
                     p_ChassisNumber = dto.ChassisNumber,
                     p_EngineNumber = dto.EngineNumber,
-                    p_GpsDeviceId = dto.GpsDeviceId,
-                    p_InsuranceNumber = dto.InsuranceNumber,
                     p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
                     p_FitnessExpiry = dto.FitnessExpiry,
-                    p_Capacity = dto.Capacity,
+                    p_PollutionExpiry = dto.PollutionExpiry,
+                    p_GpsDeviceId = dto.GpsDeviceId,
                     p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
-                    p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1
+                    p_InsuranceNumber = dto.InsuranceNumber,
+                    p_CreatedBy = (long?)null,
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -116,9 +117,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportVehicles", 
-                new { p_VehicleId = vehicleId, p_UpdatedBy = userId }, 
+                new { p_Id = vehicleId, p_UpdatedBy = userId }, 
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

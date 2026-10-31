@@ -66,7 +66,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EveningTripTime = dto.EveningTripTime,
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = userId
+                    p_IsActive = (byte)1,
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -74,11 +76,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long assignmentId, UpdateTransportVehicleAssignmentDto dto, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateTransportVehicleAssignments",
                 new
                 {
-                    p_AssignmentId = assignmentId,
+                    p_Id = assignmentId,
                     p_RouteId = dto.RouteId,
                     p_VehicleId = dto.VehicleId,
                     p_DriverId = dto.DriverId,
@@ -90,6 +92,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EveningTripTime = dto.EveningTripTime,
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_IsActive = (byte)1,
+                    p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
@@ -99,9 +103,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long assignmentId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportVehicleAssignments",
-                new { p_AssignmentId = assignmentId, p_UpdatedBy = userId },
+                new { p_Id = assignmentId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
