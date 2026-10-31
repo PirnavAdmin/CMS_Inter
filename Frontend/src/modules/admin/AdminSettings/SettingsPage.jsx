@@ -17,12 +17,29 @@ import "./SettingsPage.css";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { palette, customColor } = useTheme();
+  const { palette, customColor, themePolicy, updateThemePolicy } = useTheme();
   const [themeModalOpen, setThemeModalOpen] = useState(false);
+  const [policyUpdating, setPolicyUpdating] = useState(false);
 
   const currentTheme = THEME_OPTIONS.find((t) => t.id === palette);
   const currentThemeName = palette === "custom" ? "Custom Color" : currentTheme ? currentTheme.name : "Olive";
   const currentThemeColor = palette === "custom" ? (customColor || "#00b4d8") : currentTheme ? currentTheme.swatches[0] : "var(--cms-primary)";
+
+  const handlePolicyModeChange = async (mode) => {
+    if (policyUpdating || themePolicy?.themeMode === mode) return;
+    setPolicyUpdating(true);
+    try {
+      await updateThemePolicy({
+        themeMode: mode,
+        adminPalette: palette,
+        adminCustomColor: customColor,
+      });
+    } catch (err) {
+      console.error("Failed to update theme policy:", err);
+    } finally {
+      setPolicyUpdating(false);
+    }
+  };
 
   const settingsCards = [
     {
@@ -61,7 +78,7 @@ export default function SettingsPage() {
       description: "Create, edit and manage education boards, board codes, academic years, date ranges and status.",
       icon: Landmark,
       image: boardAcademicYearImage,
-      to: "/dashboard/board-academic-year",
+      to: "/dashboard/settings/board-academic-year",
       buttonText: "Manage Board & Academic Year",
       primary: true,
     },
@@ -96,7 +113,7 @@ export default function SettingsPage() {
       primary: true,
     },
     {
-      id: "leave-types",
+      id: "leave-types-policy",
       title: "Leave Types & Policy Configuration",
       description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
       icon: CalendarDays,
@@ -167,6 +184,47 @@ export default function SettingsPage() {
                     <h3>{card.title}</h3>
                   </div>
                   <p>{card.description}</p>
+                  {card.isThemeCard && (
+                    <div className="settings-theme-policy-control" onClick={(e) => e.stopPropagation()}>
+                      <div className="settings-theme-policy-label-row">
+                        <span className="settings-theme-policy-label">Theme Control Policy</span>
+                        <span className={`settings-theme-policy-status-pill ${themePolicy?.themeMode === "admin" ? "is-admin" : "is-user"}`}>
+                          {themePolicy?.themeMode === "admin" ? "Admin Enforced" : "User Choice"}
+                        </span>
+                      </div>
+                      <div className="settings-theme-policy-toggle-group" role="radiogroup" aria-label="Theme Control Policy">
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={themePolicy?.themeMode !== "admin"}
+                          className={`settings-theme-policy-btn ${themePolicy?.themeMode !== "admin" ? "is-active" : ""}`}
+                          onClick={() => handlePolicyModeChange("independent")}
+                          disabled={policyUpdating}
+                          title="Users can choose their own theme independently."
+                        >
+                          <span className="settings-theme-policy-btn-indicator" />
+                          <span>Independent</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={themePolicy?.themeMode === "admin"}
+                          className={`settings-theme-policy-btn ${themePolicy?.themeMode === "admin" ? "is-active" : ""}`}
+                          onClick={() => handlePolicyModeChange("admin")}
+                          disabled={policyUpdating}
+                          title="Admin decides the theme for the entire application."
+                        >
+                          <span className="settings-theme-policy-btn-indicator" />
+                          <span>Admin Enforced</span>
+                        </button>
+                      </div>
+                      <span className="settings-theme-policy-note">
+                        {themePolicy?.themeMode === "admin"
+                          ? "🔒 The whole project uses the admin theme below. Users cannot change it."
+                          : "🔓 Users across all portals can customize their own theme freely."}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="settings-card-footer">
                   <button
@@ -180,10 +238,13 @@ export default function SettingsPage() {
                       }
                     }}
                   >
-                    {card.buttonText} <ArrowRight size={14} />
+                    {card.isThemeCard && themePolicy?.themeMode === "admin" ? "Configure Global Theme" : card.buttonText} <ArrowRight size={14} />
                   </button>
                   {card.isThemeCard ? (
-                    <span className="settings-selected-theme-pill" title={`Active: ${currentThemeName}`}>
+                    <span
+                      className="settings-selected-theme-pill"
+                      title={`Active: ${currentThemeName} (${themePolicy?.themeMode === "admin" ? "Admin Enforced" : "User Choice"})`}
+                    >
                       <span className="settings-selected-theme-dot" style={{ backgroundColor: currentThemeColor }} />
                       <span className="settings-selected-theme-name">{currentThemeName}</span>
                     </span>
@@ -198,6 +259,7 @@ export default function SettingsPage() {
         open={themeModalOpen}
         onOpenChange={setThemeModalOpen}
         hideTrigger={true}
+        isAdmin={true}
       />
     </DashboardLayout>
   );

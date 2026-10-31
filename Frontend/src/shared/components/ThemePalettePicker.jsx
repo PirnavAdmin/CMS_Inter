@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { Palette, Pipette, Check, X } from "lucide-react";
+import { Palette, Pipette, Check, X, Lock, Globe } from "lucide-react";
 import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
 
 export const THEME_OPTIONS = [
@@ -59,6 +59,7 @@ export default function ThemePalettePicker({
   onOpenChange,
   hideTrigger = false,
   showTrigger = true,
+  isAdmin: isAdminProp,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -72,7 +73,17 @@ export default function ThemePalettePicker({
     }
   };
 
-  const { palette, setPalette, customColor, setCustomColor } = useTheme();
+  const {
+    palette,
+    setPalette,
+    customColor,
+    setCustomColor,
+    themePolicy,
+    isAdmin: isAdminHook,
+  } = useTheme();
+
+  const isAdmin = isAdminProp !== undefined ? Boolean(isAdminProp) : Boolean(isAdminHook);
+  const isThemeLocked = themePolicy?.themeMode === "admin" && !isAdmin;
 
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [currentHex, setCurrentHex] = useState(customColor || "#00b4d8");
@@ -87,6 +98,7 @@ export default function ThemePalettePicker({
   }, [customColor]);
 
   const handleHueChange = (e) => {
+    if (isThemeLocked) return;
     const hue = Number(e.target.value);
     setSliderHue(hue);
     const newHex = hslToHex(hue, 95, 45);
@@ -95,6 +107,7 @@ export default function ThemePalettePicker({
   };
 
   const handleHexInput = (e) => {
+    if (isThemeLocked) return;
     const val = e.target.value;
     setCurrentHex(val);
     if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
@@ -104,15 +117,18 @@ export default function ThemePalettePicker({
   };
 
   const handleNativeColorPick = (e) => {
+    if (isThemeLocked) return;
     const val = e.target.value;
     setCurrentHex(val);
     setSliderHue(hexToHue(val));
     setCustomColor(val);
   };
 
+  const shouldRenderTrigger = !hideTrigger && showTrigger && !isThemeLocked;
+
   return (
     <>
-      {!hideTrigger && showTrigger && (
+      {shouldRenderTrigger && (
         <button
           type="button"
           className={`cms-icon-btn cms-theme-picker-trigger cms-theme-picker-${palette} ${className}`}
@@ -146,9 +162,15 @@ export default function ThemePalettePicker({
           >
             <div className="cms-dashboard-theme-heading">
               <div>
-                <h2 id="cms-theme-dialog-title">Pick a theme colour</h2>
+                <h2 id="cms-theme-dialog-title">
+                  {isAdmin && themePolicy?.themeMode === "admin"
+                    ? "Set Global Application Theme"
+                    : "Pick a theme colour"}
+                </h2>
                 <p id="cms-theme-dialog-desc">
-                  Choose a professional palette or pick a custom color to style your application.
+                  {isAdmin && themePolicy?.themeMode === "admin"
+                    ? "Select a palette to apply across the entire college management system for all portals."
+                    : "Choose a professional palette or pick a custom color to style your application."}
                 </p>
               </div>
               <button
@@ -161,8 +183,58 @@ export default function ThemePalettePicker({
               </button>
             </div>
 
-            {/* Presets Grid (Image 2 style with segmented circles) */}
-            <div className="cms-dashboard-theme-grid" role="radiogroup" aria-label="Color theme">
+            {/* Locked warning banner: ONLY for non-admins when themeMode === admin */}
+            {isThemeLocked && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  padding: "9px 12px",
+                  marginBottom: "12px",
+                  borderRadius: "8px",
+                  background: "color-mix(in srgb, var(--cms-primary) 14%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--cms-primary) 30%, transparent)",
+                  fontSize: "12px",
+                  color: "var(--cms-text)",
+                }}
+              >
+                <Lock size={15} style={{ flexShrink: 0, color: "var(--cms-primary)" }} />
+                <span>
+                  The application theme is currently centrally managed by your administrator. Individual changes are locked.
+                </span>
+              </div>
+            )}
+
+            {/* Admin Global Enforce Banner */}
+            {isAdmin && themePolicy?.themeMode === "admin" && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "7px",
+                  padding: "8px 12px",
+                  marginBottom: "12px",
+                  borderRadius: "8px",
+                  background: "color-mix(in srgb, var(--cms-primary) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--cms-primary) 28%, transparent)",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: "var(--cms-primary)",
+                }}
+              >
+                <Globe size={15} style={{ flexShrink: 0 }} />
+                <span>🌐 Global Mode Active: Selecting a theme below will immediately apply it across all portals and users.</span>
+              </div>
+            )}
+
+            {/* Presets Grid */}
+            <div
+              className="cms-dashboard-theme-grid"
+              role="radiogroup"
+              aria-label="Color theme"
+              style={isThemeLocked ? { opacity: 0.75, pointerEvents: "none" } : undefined}
+            >
               {THEME_OPTIONS.map((theme) => {
                 const isSelected = palette === theme.id;
                 return (
@@ -174,9 +246,11 @@ export default function ThemePalettePicker({
                     title={theme.name}
                     className={`cms-theme-card ${isSelected ? "is-selected" : ""}`}
                     onClick={() => {
+                      if (isThemeLocked) return;
                       setPalette(theme.id);
                       setShowColorPicker(false);
                     }}
+                    disabled={isThemeLocked}
                   >
                     <span className="cms-theme-circle-swatch" aria-hidden="true">
                       <span className="swatch-top" style={{ backgroundColor: theme.swatches[2] }} />
@@ -202,9 +276,11 @@ export default function ThemePalettePicker({
                 className={`cms-theme-card ${palette === "custom" ? "is-selected" : ""}`}
                 style={{ "--cms-custom-preview-color": currentHex }}
                 onClick={() => {
+                  if (isThemeLocked) return;
                   setCustomColor(currentHex);
                   setShowColorPicker((prev) => !prev);
                 }}
+                disabled={isThemeLocked}
               >
                 <span className="cms-theme-circle-swatch is-custom" aria-hidden="true">
                   <Pipette size={20} />
@@ -219,7 +295,7 @@ export default function ThemePalettePicker({
             </div>
 
             {/* Colour Picker Popover (Image 3 Style with Rainbow Slider) */}
-            {showColorPicker && (
+            {showColorPicker && !isThemeLocked && (
               <div className="cms-colour-picker-popover" role="region" aria-label="Colour picker">
                 <div className="cms-colour-picker-header">
                   <span className="cms-colour-picker-title">Colour picker</span>
@@ -249,53 +325,41 @@ export default function ThemePalettePicker({
 
                 {/* Controls Row */}
                 <div className="cms-colour-picker-controls">
-                  <span
-                    className="cms-colour-preview-badge"
-                    style={{ backgroundColor: currentHex }}
-                    aria-hidden="true"
-                  />
-                  <input
-                    type="text"
-                    value={currentHex}
-                    onChange={handleHexInput}
-                    placeholder="#00B4D8"
-                    maxLength={7}
-                    className="cms-colour-hex-input"
-                    aria-label="Colour hex code"
-                  />
-                  <label className="cms-colour-native-wrap" title="Pick precise color">
+                  <div className="cms-colour-preview-box" style={{ backgroundColor: currentHex }}>
                     <input
                       type="color"
                       value={currentHex}
                       onChange={handleNativeColorPick}
-                      className="cms-colour-native-input"
+                      className="cms-native-color-input"
+                      title="Open native color picker"
+                      aria-label="Pick custom colour"
                     />
-                    <span className="cms-colour-native-btn">
-                      <Pipette size={14} /> Eye Dropper
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="cms-colour-apply-btn"
-                    onClick={() => {
-                      setCustomColor(currentHex);
-                      setShowColorPicker(false);
-                    }}
-                  >
-                    Apply
-                  </button>
+                  </div>
+
+                  <div className="cms-hex-input-wrap">
+                    <span className="cms-hex-prefix">#</span>
+                    <input
+                      type="text"
+                      value={currentHex.replace("#", "")}
+                      onChange={(e) => handleHexInput({ target: { value: `#${e.target.value}` } })}
+                      maxLength={6}
+                      className="cms-hex-input"
+                      placeholder="00b4d8"
+                      aria-label="Hex color code"
+                      spellCheck="false"
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
             <div className="cms-dashboard-theme-footer">
-              <span>Light and dark appearances follow your current mode.</span>
               <button
                 type="button"
                 className="cms-dashboard-theme-done"
                 onClick={() => setOpen(false)}
               >
-                Close
+                Done
               </button>
             </div>
           </section>

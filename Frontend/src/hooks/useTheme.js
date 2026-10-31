@@ -1,4 +1,10 @@
 import { useSyncExternalStore } from "react";
+import {
+  getThemePolicySnapshot,
+  subscribeThemePolicy,
+  fetchThemePolicy,
+  updateThemePolicy,
+} from "@/features/themePolicy.js";
 
 const THEME_STORAGE_KEY = "pirnav-theme";
 const PALETTE_STORAGE_KEY = "pirnav-dashboard-palette";
@@ -24,6 +30,49 @@ export const VALID_PALETTES = [
 ];
 
 const listeners = new Set();
+
+export function isUserAdmin() {
+  if (typeof window === "undefined") return false;
+  try {
+    // 1. Check role in sessionStorage / localStorage
+    const role = (
+      window.sessionStorage.getItem("role") ||
+      window.localStorage.getItem("role") ||
+      ""
+    ).toLowerCase();
+
+    if (role.includes("admin") || role.includes("superadmin")) return true;
+
+    // 2. Check user object
+    const userRaw =
+      window.sessionStorage.getItem("user") ||
+      window.localStorage.getItem("user");
+    if (userRaw) {
+      const u = JSON.parse(userRaw);
+      if (
+        u?.isAdmin ||
+        String(u?.role || "").toLowerCase().includes("admin") ||
+        u?.roleType === "admin"
+      ) {
+        return true;
+      }
+    }
+
+    // 3. Fallback: Path-based detection for Admin Portal
+    const pathname = window.location?.pathname || "";
+    if (
+      pathname.startsWith("/dashboard/settings") ||
+      pathname === "/dashboard" ||
+      (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/student"))
+    ) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 function hexToHsl(hex) {
   let c = (hex || "#00b4d8").replace("#", "");
@@ -138,16 +187,48 @@ function readPalette() {
   }
 }
 
-// Initial setup on script execution
-if (typeof document !== "undefined") {
-  const initialPalette = readPalette();
-  if (!document.documentElement.getAttribute("data-theme-palette")) {
-    document.documentElement.setAttribute("data-theme-palette", initialPalette);
+function readEffectivePalette() {
+  const policy = getThemePolicySnapshot();
+  if (policy && policy.themeMode === "admin") {
+    return VALID_PALETTES.includes(policy.adminPalette) ? policy.adminPalette : "olive";
   }
-  if (initialPalette === "custom") {
-    applyCustomThemeTokens(readCustomColor());
+  return readPalette();
+}
+
+function readEffectiveCustomColor() {
+  const policy = getThemePolicySnapshot();
+  if (policy && policy.themeMode === "admin" && policy.adminPalette === "custom") {
+    return policy.adminCustomColor || "#00b4d8";
+  }
+  return readCustomColor();
+}
+
+export function applyEffectiveTheme() {
+  if (typeof document === "undefined") return;
+  const p = readEffectivePalette();
+  document.documentElement.setAttribute("data-theme-palette", p);
+  if (p === "custom") {
+    applyCustomThemeTokens(readEffectiveCustomColor());
   }
 }
+
+// Initial setup on script execution
+if (typeof document !== "undefined") {
+  applyEffectiveTheme();
+  // Fetch fresh theme policy from backend on app bootstrap
+  fetchThemePolicy()
+    .then(() => {
+      applyEffectiveTheme();
+      listeners.forEach((l) => l());
+    })
+    .catch(() => {});
+}
+
+// Subscribe to policy updates (custom events / multi-tab)
+subscribeThemePolicy(() => {
+  applyEffectiveTheme();
+  listeners.forEach((l) => l());
+});
 
 export function setTheme(theme) {
   if (typeof document === "undefined") return;
@@ -163,6 +244,14 @@ export function setTheme(theme) {
 export function setPalette(palette) {
   if (typeof document === "undefined") return;
   const p = VALID_PALETTES.includes(palette) ? palette : "olive";
+  const policy = getThemePolicySnapshot();
+  const adminUser = isUserAdmin();
+
+  // If in admin mode and user is admin, immediately update the policy in backend!
+  if (policy?.themeMode === "admin" && adminUser) {
+    updateThemePolicy({ themeMode: "admin", adminPalette: p }).catch(() => {});
+  }
+
   document.documentElement.setAttribute("data-theme-palette", p);
   try {
     window.localStorage.setItem(PALETTE_STORAGE_KEY, p);
@@ -170,7 +259,7 @@ export function setPalette(palette) {
   } catch {}
 
   if (p === "custom") {
-    applyCustomThemeTokens(readCustomColor());
+    applyCustomThemeTokens(readEffectiveCustomColor());
   }
 
   listeners.forEach((l) => l());
@@ -178,6 +267,17 @@ export function setPalette(palette) {
 
 export function setCustomColor(color) {
   if (typeof window === "undefined") return;
+  const policy = getThemePolicySnapshot();
+  const adminUser = isUserAdmin();
+
+  if (policy?.themeMode === "admin" && adminUser) {
+    updateThemePolicy({
+      themeMode: "admin",
+      adminCustomColor: color,
+      adminPalette: "custom",
+    }).catch(() => {});
+  }
+
   try {
     window.localStorage.setItem(CUSTOM_COLOR_STORAGE_KEY, color);
   } catch {}
@@ -185,7 +285,7 @@ export function setCustomColor(color) {
   applyCustomThemeTokens(color);
 
   // If not already on custom, switch to custom palette
-  if (readPalette() !== "custom") {
+  if (readEffectivePalette() !== "custom") {
     setPalette("custom");
   } else {
     listeners.forEach((l) => l());
@@ -201,8 +301,8 @@ function subscribe(cb) {
       e.key === "pirnav-palette" ||
       e.key === CUSTOM_COLOR_STORAGE_KEY
     ) {
-      if (e.key === CUSTOM_COLOR_STORAGE_KEY && readPalette() === "custom") {
-        applyCustomThemeTokens(readCustomColor());
+      if (e.key === CUSTOM_COLOR_STORAGE_KEY && readEffectivePalette() === "custom") {
+        applyCustomThemeTokens(readEffectiveCustomColor());
       }
       cb();
     }
@@ -216,17 +316,37 @@ function subscribe(cb) {
 
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, readTheme, () => "light");
-  const palette = useSyncExternalStore(subscribe, readPalette, () => "olive");
-  const customColor = useSyncExternalStore(subscribe, readCustomColor, () => "#00b4d8");
+  const palette = useSyncExternalStore(subscribe, readEffectivePalette, () => "olive");
+  const customColor = useSyncExternalStore(subscribe, readEffectiveCustomColor, () => "#00b4d8");
+  const themePolicy = useSyncExternalStore(subscribe, getThemePolicySnapshot, () => ({
+    themeMode: "independent",
+    adminPalette: "olive",
+    adminCustomColor: "",
+    adminDarkMode: "light",
+  }));
+
+  const isAdmin = isUserAdmin();
+  // An Admin user is NEVER locked out!
+  const isThemeLocked = themePolicy?.themeMode === "admin" && !isAdmin;
 
   return {
     theme,
     toggle: () => setTheme(theme === "dark" ? "light" : "dark"),
     setTheme,
     palette,
-    setPalette,
+    setPalette: (p) => {
+      if (isThemeLocked) return;
+      setPalette(p);
+    },
     customColor,
-    setCustomColor,
+    setCustomColor: (c) => {
+      if (isThemeLocked) return;
+      setCustomColor(c);
+    },
+    themePolicy,
+    isThemeLocked,
+    isAdmin,
+    updateThemePolicy,
   };
 }
 
