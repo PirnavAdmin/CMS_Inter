@@ -33,8 +33,8 @@ function setStored(key, value) {
 
 export const getEmptyNtsUser = () => {
   const authUser = getAuthUser() || {};
-  let name = authUser.name || authUser.fullName || authUser.username || "Non-Teaching Staff";
-  name = name.replace(/\bDemo\s*/gi, "").trim() || "Non-Teaching Staff";
+  let name = authUser.name || authUser.fullName || authUser.username || "Harish";
+  name = name.replace(/\b(Demo|Non-Teaching Staff|Non Teaching Staff)\b/gi, "").trim() || "Harish";
   return {
     id: authUser.staffId || authUser.id || "nts-001",
     staffId: authUser.staffId || authUser.id || 901,
@@ -167,9 +167,9 @@ export const nonTeachingService = {
       ...base,
       ...(stored || {}),
     };
-    const cleanName = (merged.displayName || merged.name || merged.fullName || "Non-Teaching Staff")
-      .replace(/\bDemo\s*/gi, "")
-      .trim() || "Non-Teaching Staff";
+    const cleanName = (merged.displayName || merged.name || merged.fullName || "Harish")
+      .replace(/\b(Demo|Non-Teaching Staff|Non Teaching Staff)\b/gi, "")
+      .trim() || "Harish";
     return {
       ...merged,
       name: cleanName,
