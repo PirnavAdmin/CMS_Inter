@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -9,6 +10,7 @@ using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -20,6 +22,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             _context = context;
         }
+
+        private DbTransaction? CurrentTransaction => _context.Database.CurrentTransaction?.GetDbTransaction();
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
         {
@@ -211,6 +215,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Remarks = dto.Remarks,
                     p_SlotType = dto.SlotType ?? "Teaching"
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -240,6 +245,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Remarks = dto.Remarks,
                     p_SlotType = dto.SlotType ?? "Teaching"
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -249,6 +255,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_DeleteTimetable",
                 new { p_Id = id },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -258,6 +265,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_TogglePublishSlot",
                 new { p_Id = id, p_IsPublished = isPublished ? 1 : 0 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -267,6 +275,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_PublishSectionTimetable",
                 new { p_SectionId = sectionId, p_AcademicYearId = academicYearId, p_IsPublished = isPublished ? 1 : 0 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -276,6 +285,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.ExecuteScalarAsync<int>(
                 "sp_ApproveSectionTimetable",
                 new { p_SectionId = sectionId, p_AcademicYearId = academicYearId },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -303,6 +313,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryAsync<AllocatedFacultyDto>(
                 "sp_GetAllocatedFaculties",
                 new { p_SubjectId = subjectId, p_CampusId = campusId },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -318,6 +329,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_TargetAcademicYearId = dto.TargetAcademicYearId,
                     p_TargetSectionId = dto.TargetSectionId
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
     }

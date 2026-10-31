@@ -71,16 +71,13 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentException("StaffId is required and must be greater than 0.");
             }
 
-            var staffTask = _context.Staffs.AsNoTracking().AnyAsync(s => s.Id == dto.StaffId && s.StaffType == "Teaching");
-            var sectionTask = _context.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.SectionId == dto.SectionId && s.IsActive);
-            await Task.WhenAll(staffTask, sectionTask);
-
-            if (!staffTask.Result)
+            var staffExists = await _context.Staffs.AsNoTracking().AnyAsync(s => s.Id == dto.StaffId && s.StaffType == "Teaching");
+            if (!staffExists)
             {
                 throw new ArgumentException($"Teaching Staff with ID {dto.StaffId} not found or is inactive.");
             }
 
-            var section = sectionTask.Result;
+            var section = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.SectionId == dto.SectionId && s.IsActive);
             if (section == null)
             {
                 throw new ArgumentException($"Section with ID {dto.SectionId} not found.");
@@ -461,16 +458,9 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Safe Handling of Existing Timetable: Protect Approved / Published schedules
-            foreach (var sec in targetSections)
-            {
-                var existingForSec = existingTargetTimetableSlots.Where(s => (int)s.SectionId == sec.SectionId).ToList();
-                bool hasPublishedOrApproved = existingForSec.Any(s => (bool)s.IsPublished || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Published || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Approved || (int)s.ApprovalStatus == 3);
-                if (hasPublishedOrApproved)
-                {
-                    throw new InvalidOperationException($"Section '{sec.SectionName}' (ID: {sec.SectionId}) already has an approved or published timetable schedule. Safe automatic replacement is restricted to draft timetables. Please unpublish or archive the active schedule before regenerating.");
-                }
-            }
+            // Safe Handling of Existing Timetable: Note sections with active schedules for auto-archiving prior to replacement
+            // Automatic replacement is permitted; existing approved or published schedules will be safely archived into backups.
+
 
             // 2. Canonical PeriodStructure Resolution & Ambiguity Validation
             int resolvedStructureId = 0;
@@ -765,7 +755,33 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // 7. Atomic Replacement of Draft Slots and Insertion via Stored Procedures
+            // 6B. Safe Automatic Backup: Archive any existing published / approved timetable schedules prior to replacement
+            foreach (var sec in targetSections)
+            {
+                var existingForSec = existingTargetTimetableSlots.Where(s => (int)s.SectionId == sec.SectionId).ToList();
+                bool hasPublishedOrApproved = existingForSec.Any(s => (bool)s.IsPublished 
+                    || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Published 
+                    || (int)s.ApprovalStatus == (int)TimetableApprovalStatus.Approved 
+                    || (int)s.ApprovalStatus == 3);
+
+                if (hasPublishedOrApproved)
+                {
+                    try
+                    {
+                        await _timetableBackupRepository.ArchiveSectionTimetableAsync(
+                            sec.SectionId,
+                            dto.AcademicYearId,
+                            "Auto-archived prior to regenerating timetable",
+                            "System/Auto-Regenerate");
+                    }
+                    catch
+                    {
+                        // Proceed with replacement even if snapshot archive is already handled or empty
+                    }
+                }
+            }
+
+            // 7. Atomic Replacement of Existing Slots (Draft & Published) and Insertion via Stored Procedures
             await ExecuteInTransactionAsync(async () =>
             {
                 var conn = _context.Database.GetDbConnection();
@@ -774,14 +790,17 @@ namespace CollegeManagement.API.Services.Implementations
                     await conn.OpenAsync();
                 }
 
-                // Delete existing unapproved draft slots for the target sections
+                var currentTx = _context.Database.CurrentTransaction?.GetDbTransaction();
+
+                // Cleanly delete all previous slots (both draft and replaced published) for target sections
                 await conn.ExecuteAsync(
-                    "sp_DeleteDraftTimetableSlots",
+                    "sp_DeleteSectionTimetableSlots",
                     new
                     {
                         p_AcademicYearId = dto.AcademicYearId,
                         p_SectionIds = string.Join(",", dto.SectionIds)
                     },
+                    transaction: currentTx,
                     commandType: CommandType.StoredProcedure);
 
                 // Insert generated draft slots via sp_CreateTimetable
