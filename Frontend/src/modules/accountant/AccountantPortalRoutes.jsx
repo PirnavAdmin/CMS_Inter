@@ -15,7 +15,31 @@ import AccountantLeave from "./pages/AccountantLeave.jsx";
 import AccountantHolidays from "./pages/AccountantHolidays.jsx";
 import AccountantSettingsPage from "./pages/AccountantSettingsPage.jsx";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
-import { AccessDeniedNotice } from "@/modules/faculty/FacultyPortalRoutes.jsx";
+
+function AccessDeniedNotice({ moduleName = "this screen" }) {
+  return (
+    <div style={{
+      display: "grid",
+      placeItems: "center",
+      minHeight: "360px",
+      padding: "48px 24px",
+      textAlign: "center",
+      background: "var(--cms-surface, #fff)",
+      borderRadius: "12px",
+      border: "1px solid var(--cms-border, #e2e8f0)",
+      margin: "24px auto",
+      maxWidth: "600px",
+    }}>
+      <div style={{ fontSize: "40px", marginBottom: "16px" }}>🔒</div>
+      <h2 style={{ fontSize: "20px", fontWeight: "700", color: "var(--cms-text-primary, #0f172a)", marginBottom: "8px" }}>
+        Access Restricted
+      </h2>
+      <p style={{ fontSize: "14px", color: "var(--cms-text-secondary, #64748b)", lineHeight: "1.6", maxWidth: "420px" }}>
+        You do not have permission to view {moduleName}. Please contact your administrator if you believe you should have access.
+      </p>
+    </div>
+  );
+}
 
 function AccountantPermissionRoute({ moduleKey, screenKey = null, moduleName = "this screen", children }) {
   const { canView } = usePermissions();

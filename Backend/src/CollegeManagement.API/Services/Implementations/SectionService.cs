@@ -306,7 +306,8 @@ namespace CollegeManagement.API.Services.Implementations
             var existingSection = await _sectionRepository.GetSectionByIdAsync(id);
             if (existingSection == null)
             {
-                throw new NotFoundException($"Section with ID {id} not found.");
+                _cacheService?.RemoveByPrefix("sections:");
+                return true;
             }
 
             var deleted = await _sectionRepository.DeleteSectionAsync(id);

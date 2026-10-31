@@ -555,6 +555,37 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
+    public async Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds)
+    {
+        var ids = studentIds?.Distinct().Where(id => id > 0).ToList() ?? new List<int>();
+        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
+        if (!ids.Any()) return result;
+
+        var c = Connection();
+        try
+        {
+            var payments = await c.QueryAsync<FeePaymentResponse>(
+                "sp_FeePayment_GetBulkHistory",
+                new { p_StudentIds = string.Join(",", ids) },
+                commandType: CommandType.StoredProcedure);
+
+            var grouped = payments.GroupBy(p => p.StudentId).ToDictionary(g => g.Key, g => (IEnumerable<FeePaymentResponse>)g.ToList());
+            foreach (var id in ids)
+            {
+                result[id] = grouped.TryGetValue(id, out var list) ? list : Enumerable.Empty<FeePaymentResponse>();
+            }
+            return result;
+        }
+        catch
+        {
+            foreach (var id in ids)
+            {
+                result[id] = await GetFeePaymentsAsync(id);
+            }
+            return result;
+        }
+    }
+
     public async Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id)
     {
         var c = Connection();

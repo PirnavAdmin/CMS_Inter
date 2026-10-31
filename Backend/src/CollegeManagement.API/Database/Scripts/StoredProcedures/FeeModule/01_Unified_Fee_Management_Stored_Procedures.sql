@@ -1413,6 +1413,9 @@ BEGIN
         s.StudentName,
         s.CampusId,
         COALESCE(c.CampusName, '') AS CampusName,
+        COALESCE(b.BoardName, '') AS BoardName,
+        COALESCE(ay.AcademicYearName, '') AS AcademicYearName,
+        COALESCE(s.RollNo, '') AS RollNumber,
         COALESCE(g.GroupName, '') AS GroupName,
         COALESCE(sec.SectionName, '') AS SectionName,
         sf.FeeStructureId,
@@ -1424,19 +1427,22 @@ BEGIN
         sf.ConcessionAmount AS Concession,
         0.00 AS Fine,
         sf.Status,
-        (
-            SELECT MIN(fi.DueDate)
-            FROM FeeInstallments fi
-            INNER JOIN FeePaymentPlans fpp ON fpp.FeePaymentPlanId = fi.FeePaymentPlanId
-            WHERE fpp.StudentFeeId = sf.StudentFeeId
-              AND fi.BalanceAmount > 0
-        ) AS NextDueDate
+        next_due.NextDueDate
     FROM StudentFees sf
     INNER JOIN Students s ON s.StudentId = sf.StudentId
     LEFT JOIN FeeStructures fs ON fs.FeeStructureId = sf.FeeStructureId
     LEFT JOIN Campuses c ON c.CampusId = s.CampusId
+    LEFT JOIN Boards b ON b.BoardId = s.BoardId
+    LEFT JOIN AcademicYears ay ON ay.AcademicYearId = s.AcademicYearId
     LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
     LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
+    LEFT JOIN (
+        SELECT fpp.StudentFeeId, MIN(fi.DueDate) AS NextDueDate
+        FROM FeeInstallments fi
+        INNER JOIN FeePaymentPlans fpp ON fpp.FeePaymentPlanId = fi.FeePaymentPlanId
+        WHERE fi.BalanceAmount > 0
+        GROUP BY fpp.StudentFeeId
+    ) next_due ON next_due.StudentFeeId = sf.StudentFeeId
     WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
@@ -1877,6 +1883,32 @@ DELIMITER ;
 CREATE PROCEDURE sp_GetPaymentHistoryByStudent(IN p_StudentId INT)
 BEGIN
     CALL sp_FeePayment_GetHistoryByStudent(p_StudentId);
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS sp_FeePayment_GetBulkHistory;
+DELIMITER //
+CREATE PROCEDURE sp_FeePayment_GetBulkHistory(IN p_StudentIds TEXT)
+BEGIN
+    SELECT 
+        fp.FeePaymentId,
+        fp.StudentId,
+        s.StudentName,
+        s.AdmissionNo AS AdmissionNumber,
+        fp.StudentFeeId,
+        fp.FeeInstallmentId,
+        fp.Amount,
+        fp.PaymentMode AS PaymentMethod,
+        fp.TransactionReference,
+        fp.Remarks,
+        fp.PaymentDate,
+        fp.Status,
+        fp.ReceiptNumber
+    FROM FeePayments fp
+    INNER JOIN Students s ON s.StudentId = fp.StudentId
+    WHERE p_StudentIds IS NOT NULL 
+      AND FIND_IN_SET(fp.StudentId, p_StudentIds)
+    ORDER BY fp.FeePaymentId DESC;
 END //
 DELIMITER ;
 

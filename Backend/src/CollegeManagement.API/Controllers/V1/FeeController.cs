@@ -197,12 +197,7 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
-        foreach (var id in studentIds.Distinct())
-        {
-            result[id] = await _service.GetFeePaymentsAsync(id);
-        }
-        return Ok(result);
+        return Ok(await _service.GetBulkFeePaymentsAsync(studentIds));
     }
 
     /// <summary>Fetch one payment transaction by payment ID.</summary>

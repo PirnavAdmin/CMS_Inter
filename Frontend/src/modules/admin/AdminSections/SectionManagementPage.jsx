@@ -2210,17 +2210,25 @@ export default function SectionManagementPage() {
 
     await runMutation(
       "DELETE_SECTION:" + sec.id,
-      () => apiClient.delete(apiEndpoints.sections.delete(sec.id)),
+      async () => {
+        try {
+          return await apiClient.delete(apiEndpoints.sections.delete(sec.id));
+        } catch (err) {
+          if (err?.response?.status === 404) {
+            return { status: 404, alreadyDeleted: true };
+          }
+          throw err;
+        }
+      },
       async () => {
         const next = await loadSections(effectiveCampusId);
         await loadRooms(effectiveCampusId);
         closeDeleteSectionModal(true);
-        if (next.some((item) => item.id === sec.id)) {
-          throw new Error("The Section is still present in the backend data.");
-        }
+        setSections((prev) => prev.filter((item) => item.id !== sec.id));
       },
       () => {
         closeDeleteSectionModal(true);
+        setSections((prev) => prev.filter((item) => item.id !== sec.id));
         say('Section "' + sec.name + '" deleted successfully.');
       }
     );

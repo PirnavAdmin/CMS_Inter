@@ -91,6 +91,7 @@ public class FeeService : IFeeService
     }
 
     public Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int id) { Id(id, "StudentId"); return _repo.GetFeePaymentsAsync(id); }
+    public Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds) => _repo.GetBulkFeePaymentsAsync(studentIds);
     public Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id) { Id(id, "FeePaymentId"); return _repo.GetFeePaymentByIdAsync(id); }
     public Task<FeeReceiptResponse?> GetReceiptAsync(string number) { Text(number, "ReceiptNumber"); return _repo.GetReceiptAsync(number.Trim()); }
     public Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search, int? boardId = null, int? academicYearId = null) => _repo.GetFeeCollectionAsync(campusId, search?.Trim(), boardId, academicYearId);
