@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import DashboardLayout, { adminIconAssets, generatedSidebarIcons } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Route as RouteIcon, Settings as SettingsIcon } from "lucide-react";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -12,6 +12,7 @@ import { useTransportManager } from "../TransportManagerContext.jsx";
 import "@/shared/layouts/DashboardLayout/DashboardLayout.css";
 import "@/cms.css";
 import "./TransportManagerLayout.css";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 
 export const transportManagerMenu = [
   {
@@ -73,6 +74,7 @@ export const transportSearchIndex = [
 
 export default function TransportManagerLayout({ children }) {
   const { sidebarCollapsed, sidebarOpen, closeSidebar } = useTransportManager();
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
 
   return (
     <div className={`cms-shell ${sidebarCollapsed ? "nav-closed" : ""}`}>
@@ -82,7 +84,7 @@ export default function TransportManagerLayout({ children }) {
       {/* Main Workspace */}
       <main className="cms-main">
         {/* Transport Manager Topbar with fixed role, assigned campus/board/year */}
-        <TransportManagerNavbar />
+        <TransportManagerNavbar onOpenThemePalette={() => setThemePaletteOpen(true)} />
 
         {/* Content Body */}
         <div className="cms-content">
@@ -91,6 +93,12 @@ export default function TransportManagerLayout({ children }) {
           </div>
         </div>
       </main>
+
+      <ThemePalettePicker
+        open={themePaletteOpen}
+        onOpenChange={setThemePaletteOpen}
+        hideTrigger={true}
+      />
 
       {/* Mobile Backdrop */}
       {sidebarOpen && (

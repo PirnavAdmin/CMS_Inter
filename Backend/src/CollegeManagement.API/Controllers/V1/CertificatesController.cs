@@ -296,7 +296,7 @@ public class CertificatesController : ControllerBase
     // POST /api/v1/certificates/student-request
     // =========================================================
     [HttpPost("student-request")]
-    [Authorize] // Enforces authentication
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
     [ProducesResponseType(typeof(CertificateResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> StudentRequest(

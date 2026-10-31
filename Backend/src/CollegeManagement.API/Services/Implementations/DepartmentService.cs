@@ -60,6 +60,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var created = await _departmentRepository.AddDepartmentAsync(dept);
             _cache.RemoveByPrefix("lookup:departments");
+            _cache.RemoveByPrefix("lookup:designations");
             return new DepartmentResponseDto
             {
                 DepartmentId = created.DepartmentId,
@@ -98,6 +99,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (updated == null) return null;
 
             _cache.RemoveByPrefix("lookup:departments");
+            _cache.RemoveByPrefix("lookup:designations");
             var deps = await _departmentRepository.GetDependenciesAsync(id);
             return new DepartmentResponseDto
             {
@@ -135,6 +137,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             _cache.RemoveByPrefix("lookup:departments");
+            _cache.RemoveByPrefix("lookup:designations");
             return (true, "Department deleted successfully.");
         }
 
@@ -553,6 +556,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             result.Success = result.Errors.Count == 0;
             result.Message = $"Bulk import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.DuplicateCount} duplicates, {result.FailedRowsCount} failed ({result.DepartmentsImported} departments, {result.DesignationsImported} designations).";
+            _cache.RemoveByPrefix("lookup:departments");
+            _cache.RemoveByPrefix("lookup:designations");
             return result;
         }
 
@@ -633,6 +638,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             result.Success = result.Errors.Count == 0;
             result.Message = $"Bulk department import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.FailedRowsCount} failed.";
+            _cache.RemoveByPrefix("lookup:departments");
+            _cache.RemoveByPrefix("lookup:designations");
             return result;
         }
 

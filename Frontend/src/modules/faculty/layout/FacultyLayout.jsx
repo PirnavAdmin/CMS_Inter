@@ -4,15 +4,17 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import FacultySidebar from "./FacultySidebar.jsx";
 import FacultyNavbar from "./FacultyNavbar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
+import useTheme from "@/hooks/useTheme.js";
 import "@/shared/layouts/DashboardLayout/DashboardLayout.css";
 import "@/cms.css";
 import "../FacultyDashboard.css";
 
 export default function FacultyLayout({ children }) {
   const { sidebarOpen, setSidebarOpen, toast } = useFaculty();
+  const { palette } = useTheme();
 
   return (
-    <div className={`cms-shell ${sidebarOpen ? "" : "nav-closed"}`}>
+    <div className={`cms-shell ${sidebarOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       {/* Sidebar */}
       <FacultySidebar />
 

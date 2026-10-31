@@ -264,7 +264,7 @@
   text-transform: uppercase !important;
   text-align: center !important;
   border: 1px solid var(--cms-border, #e4e8f0) !important;
-  border-bottom: 1.5px solid rgba(111, 132, 0, 0.3) !important;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.3) !important;
   white-space: nowrap !important;
   line-height: 1.2 !important;
 }
@@ -313,7 +313,7 @@
 /* Compact, Executive Theme-Based Slot Box */
 .sp-tt-cell {
   background: var(--cms-primary-soft, #F1F4E2);
-  border: 1px solid rgba(111, 132, 0, 0.22);
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.22);
   border-left: 3px solid var(--cms-primary, #6F8400);
   border-radius: 6px;
   padding: 3px 6px;
@@ -332,7 +332,7 @@
   border-color: var(--cms-primary, #6F8400);
   border-left: 3px solid var(--cms-primary-dark, #566900);
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.16);
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cms-primary)  0.16);
 }
 
 .sp-tt-sub {
@@ -387,7 +387,7 @@
 }
 
 .sp-tt-free:hover {
-  background: rgba(111, 132, 0, 0.04);
+  background: color-mix(in srgb, var(--cms-primary)  0.04);
 }
 
 /* Modal Details Theming */
@@ -1071,7 +1071,7 @@
   transform: translateY(-2px);
   border-color: var(--cms-primary, #6f8400);
   border-left-color: var(--cms-primary-dark, #566900);
-  box-shadow: 0 6px 16px rgba(111, 132, 0, 0.14), 0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--cms-primary)  0.14), 0 2px 4px rgba(0, 0, 0, 0.04);
   background: color-mix(in srgb, var(--cms-primary-soft, #f1f4e2) 25%, #ffffff);
 }
 
@@ -1100,7 +1100,7 @@
   flex-wrap: wrap;
   gap: 5px;
   background: var(--cms-primary-soft, #F1F4E2);
-  border: 1px solid rgba(111, 132, 0, 0.22);
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.22);
   color: var(--cms-primary-dark, #566900);
   font-size: 11.5px;
   font-weight: 700;
@@ -1227,7 +1227,7 @@
 .modal-badge.badge-code {
   background: #ffffff;
   color: var(--cms-primary-dark, #566900);
-  border: 1px solid rgba(111, 132, 0, 0.25);
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.25);
 }
 
 .modal-badge.badge-section {

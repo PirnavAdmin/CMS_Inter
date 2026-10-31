@@ -669,6 +669,11 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
+                public async Task<DTOs.Examination.ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, DTOs.Examination.ExaminationSettingsDto settings)
+        {
+            return await UpdateExaminationSettingsAsync(campusId, settings);
+        }
+
         #endregion
 
         #region Exam Schedule Implementations

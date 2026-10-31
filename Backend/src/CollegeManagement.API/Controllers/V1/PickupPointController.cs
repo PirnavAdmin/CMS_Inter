@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/pickup-points")]
-    [AllowAnonymous]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class PickupPointController : ControllerBase
     {
         private readonly IPickupPointService _service;

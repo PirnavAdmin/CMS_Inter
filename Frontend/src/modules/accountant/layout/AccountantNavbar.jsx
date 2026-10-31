@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, UserRound, Palette } from "lucide-react";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import menuIcon from "@/assets/navbar-3d/menu.png";
 import notificationIcon from "@/assets/navbar-3d/notifications.png";
@@ -14,6 +15,7 @@ export default function AccountantNavbar({ onMenu }) {
   const user = getAuthUser() || {};
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const menuRef = useRef(null);
   const name = user.fullName || user.name || "Accountant";
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "AC";
@@ -45,11 +47,13 @@ export default function AccountantNavbar({ onMenu }) {
           </button>
           {profileOpen ? <div className="sp-profile-dropdown">
             <Link to="/accountant-dashboard/profile" onClick={() => setProfileOpen(false)}><UserRound size={16} /> My Profile</Link>
+            <button type="button" className="sp-profile-logout" style={{ color: "var(--cms-text)" }} onClick={() => { setProfileOpen(false); setThemePaletteOpen(true); }}><Palette size={16} /> Theme Appearance</button>
             <div className="sp-profile-divider" />
             <button type="button" className="sp-profile-logout" onClick={logout}><LogOut size={16} /> Logout</button>
           </div> : null}
         </div>
       </div>
+      <ThemePalettePicker open={themePaletteOpen} onOpenChange={setThemePaletteOpen} hideTrigger={true} />
     </header>
   );
 }

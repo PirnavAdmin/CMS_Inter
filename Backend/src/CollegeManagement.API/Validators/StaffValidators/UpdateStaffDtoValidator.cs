@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using CollegeManagement.API.DTOs.Staff;
 using FluentValidation;
 
@@ -10,11 +11,25 @@ namespace CollegeManagement.API.Validators.StaffValidators
         {
             RuleFor(x => x.FirstName)
                 .NotEmpty().WithMessage("First name is required.")
-                .MaximumLength(100);
+                .MaximumLength(100).WithMessage("First name cannot exceed 100 characters.");
 
             RuleFor(x => x.LastName)
                 .NotEmpty().WithMessage("Last name is required.")
-                .MaximumLength(100);
+                .MaximumLength(100).WithMessage("Last name cannot exceed 100 characters.");
+
+            RuleFor(x => x.Gender)
+                .NotEmpty().WithMessage("Gender is required.")
+                .Must(g => g == "Male" || g == "Female" || g == "Other")
+                .WithMessage("Gender must be 'Male', 'Female', or 'Other'.");
+
+            RuleFor(x => x.DateOfBirth)
+                .NotEmpty().WithMessage("Date of birth is required.")
+                .Must(dob => dob < DateTime.UtcNow)
+                .WithMessage("Date of birth must be in the past.");
+
+            RuleFor(x => x.Mobile)
+                .NotEmpty().WithMessage("Mobile number is required.")
+                .Matches(@"^[0-9+\-\s]{7,15}$").WithMessage("Mobile number must be a valid contact format.");
 
             When(x => string.Equals(x.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(x.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
@@ -27,14 +42,44 @@ namespace CollegeManagement.API.Validators.StaffValidators
             }).Otherwise(() =>
             {
                 RuleFor(x => x.Email)
-                    .NotEmpty().WithMessage("Email address is required.")
-                    .EmailAddress().WithMessage("Please provide a valid email address.")
+                    .NotEmpty().WithMessage("Email is required.")
+                    .EmailAddress().WithMessage("A valid email address is required.")
                     .MaximumLength(150);
             });
 
-            RuleFor(x => x.Mobile)
-                .NotEmpty().WithMessage("Mobile number is required.")
-                .Matches(@"^[0-9+\-\s]{7,15}$").WithMessage("Mobile number must be a valid contact format.");
+            RuleFor(x => x.DrivingLicenseNumber)
+                .Must(dl =>
+                {
+                    if (string.IsNullOrWhiteSpace(dl)) return true;
+                    var clean = Regex.Replace(dl.ToUpperInvariant(), @"[-/\s]", "");
+                    return clean.Length >= 15 && clean.Length <= 16 &&
+                           Regex.IsMatch(clean, @"^[A-Z]{2}[0-9]{2}(19|20)\d{2}\d{7}$|^[A-Z]{2}[0-9]{13,14}$");
+                })
+                .WithMessage("Driving License number must be a valid 15-16 character Indian DL (e.g. AP0920210001234).");
+
+            When(x => string.Equals(x.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(x.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(x.StaffType, "Non Teaching", StringComparison.OrdinalIgnoreCase), () =>
+            {
+                RuleFor(x => x.Qualification)
+                    .MaximumLength(100).WithMessage("Qualification cannot exceed 100 characters.");
+            }).Otherwise(() =>
+            {
+                RuleFor(x => x.Qualification)
+                    .NotEmpty().WithMessage("Qualification is required.")
+                    .MaximumLength(100).WithMessage("Qualification cannot exceed 100 characters.");
+            });
+
+            RuleFor(x => x.JoiningDate)
+                .NotEmpty().WithMessage("Joining date is required.");
+
+            RuleFor(x => x.Experience)
+                .GreaterThanOrEqualTo(0).WithMessage("Experience cannot be negative.");
+
+            RuleFor(x => x.Status)
+                .NotEmpty().WithMessage("Status is required.")
+                .Must(s => s == "Active" || s == "Inactive")
+                .WithMessage("Status must be 'Active' or 'Inactive'.");
         }
     }
 }

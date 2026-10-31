@@ -748,6 +748,7 @@ export function ParentPortalProvider({ children }) {
         };
       });
 
+
       if (mapped && mapped.length > 0) {
         setChildrenList(mapped);
         try {
@@ -949,6 +950,7 @@ export function ParentPortalProvider({ children }) {
       }
     };
   }, [fetchHolidays]);
+
 
 
 

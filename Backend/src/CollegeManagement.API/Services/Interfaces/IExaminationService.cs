@@ -47,6 +47,7 @@ namespace CollegeManagement.API.Services.Interfaces
 
         // Settings Methods
         Task<ExaminationSettingsDto?> GetExaminationSettingsAsync(int campusId);
+        Task<ExaminationSettingsDto> SaveExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings);
         Task<ExaminationSettingsDto> UpdateExaminationSettingsAsync(int campusId, ExaminationSettingsDto settings);
     }
 }

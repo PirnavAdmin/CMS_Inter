@@ -1958,7 +1958,7 @@
 
 .att-staff-tab:hover:not(.att-staff-tab-active) {
   color: var(--cms-text, #10203c);
-  background: var(--cms-hover, rgba(111, 132, 0, 0.08));
+  background: var(--cms-hover, color-mix(in srgb, var(--cms-primary)  0.08));
 }
 
 .att-staff-tab-active {

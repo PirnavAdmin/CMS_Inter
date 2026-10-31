@@ -77,7 +77,6 @@ namespace CollegeManagement.API.Repositories
 
 
         // =========================================================
-
         // STUDENT ACADEMIC
         // =========================================================
 
@@ -149,5 +148,8 @@ namespace CollegeManagement.API.Repositories
         Task<bool> MobileExistsAsync(
             string mobile,
             int? excludeStudentId = null);
+
+        Task<IEnumerable<ParentChildDto>> GetParentChildrenAsync(
+            int parentUserId);
     }
 }

@@ -1,0 +1,445 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { CheckCircle2, X, AlertTriangle, Eye, EyeOff, Info } from "lucide-react";
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonTable, SkeletonRow, SkeletonInput, SkeletonButton, SkeletonAvatar, SkeletonDashboard, SkeletonPage } from "./Skeleton.jsx";
+
+export function StatusBadge({ value }) {
+  const v = String(value || "").toLowerCase();
+  let cls = "cms-badge-inactive";
+  if (["active", "paid", "pass", "published", "present"].includes(v)) cls = "cms-badge-active";
+  else if (["partial", "pending", "late"].includes(v)) cls = "cms-badge-warn";
+  else if (["due", "fail", "absent"].includes(v)) cls = "cms-badge-danger";
+  else if (["inactive"].includes(v)) cls = "cms-badge-inactive";
+  return <span className={`cms-badge ${cls}`}>{value}</span>;
+}
+
+/** @deprecated Use a named Skeleton component. Retained as a visual-skeleton compatibility layer. */
+
+export function Toast({ message, onClose, type = "success" }) {
+  useEffect(() => {
+    if (!message) return undefined;
+    const t = setTimeout(onClose, 2600);
+    return () => clearTimeout(t);
+  }, [message, onClose]);
+  if (!message) return null;
+  const normalizedType = ["success", "error", "warning", "info"].includes(type) ? type : "info";
+  const isError = normalizedType === "error";
+  const Icon = normalizedType === "success" ? CheckCircle2 : normalizedType === "info" ? Info : AlertTriangle;
+  return (
+    <div className={`cms-toast cms-toast-${normalizedType}`} role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"}>
+      <Icon size={18} />
+      <span className="cms-toast-message">{message}</span>
+      <button type="button" className="cms-toast-close" onClick={onClose} aria-label="Dismiss notification"><X size={15} /></button>
+    </div>
+  );
+}
+
+export function Modal({ title, children, footer, onClose, size, className = "", closeOnOverlay = true }) {
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  const dialog = (
+    <div
+      className="cms-overlay"
+      onMouseDown={(e) => closeOnOverlay && e.target === e.currentTarget && onClose()}
+    >
+      <div className={`cms-modal ${size === "sm" ? "sm" : ""} ${className}`.trim()} role="dialog" aria-modal="true">
+        <div className="cms-modal-head">
+          <h3>{title}</h3>
+          <button className="cms-action-btn" onClick={onClose} aria-label="Close">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="cms-modal-body">{children}</div>
+        {footer ? <div className="cms-modal-foot">{footer}</div> : null}
+      </div>
+    </div>
+  );
+
+  if (typeof document === "undefined") return dialog;
+  return createPortal(dialog, document.body);
+}
+
+export function ConfirmDialog({ title = "Confirm action", message, onCancel, onConfirm, loading = false, confirmLabel = "Confirm", loadingLabel = "Please wait...", danger = false }) {
+  return (
+    <Modal
+      title={title}
+      size="sm"
+      className="cms-confirm-dialog"
+      onClose={loading ? () => {} : onCancel}
+      footer={
+        <>
+          <button className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={loading}>Cancel</button>
+          <button className={`cms-btn ${danger ? "cms-btn-danger" : "cms-btn-primary"}`} onClick={onConfirm} disabled={loading}>{loading ? loadingLabel : confirmLabel}</button>
+        </>
+      }
+    >
+      <div className={`cms-confirm-content ${danger ? "is-danger" : ""}`}>
+        <p className="cms-confirm-message">
+          {message || "This action cannot be undone. Are you sure you want to delete this record?"}
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
+export function useConfirmDialog() {
+  const [options, setOptions] = useState(null);
+  const resolverRef = useRef(null);
+
+  const confirm = useCallback((nextOptions) => new Promise((resolve) => {
+    resolverRef.current = resolve;
+    setOptions(typeof nextOptions === "string" ? { message: nextOptions } : nextOptions);
+  }), []);
+
+  const finish = useCallback((result) => {
+    const resolve = resolverRef.current;
+    resolverRef.current = null;
+    setOptions(null);
+    resolve?.(result);
+  }, []);
+
+  const confirmationDialog = options ? (
+    <ConfirmDialog
+      {...options}
+      onCancel={() => finish(false)}
+      onConfirm={() => finish(true)}
+    />
+  ) : null;
+
+  return { confirm, confirmationDialog };
+}
+
+export function Field({ field = {}, value, error, onChange, onBlur }) {
+  const [reveal, setReveal] = useState(false);
+  if (!field || typeof field !== "object") return null;
+  const { name = "", label = "", type = "text", options = [], required = false, placeholder = "", full = false, disabled = false, min, max, step, autoComplete } = field;
+  const id = `f-${name}`;
+  const isPassword = type === "password";
+  const safeOpts = Array.isArray(options) ? options : [];
+  const normalizedOptions = safeOpts.map((option) => (
+    option && typeof option === "object"
+      ? { value: option.value, label: option.label ?? option.value, disabled: Boolean(option.disabled) }
+      : { value: option, label: option }
+  ));
+  const handleChange = (val) => {
+    if (typeof onChange === "function") onChange(name, val);
+  };
+  return (
+    <div className={`cms-field ${full ? "full" : ""} ${error ? "has-error" : ""}`}>
+      <label htmlFor={id}>
+        {label} {required ? <span className="req">*</span> : null}
+      </label>
+      {type === "select" ? (
+        <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
+          {!normalizedOptions.some((o) => o.value === "" || o.value === null) ? (
+            <option value="">Select {label}</option>
+          ) : null}
+          {normalizedOptions.map((o, index) => (
+            <option key={`${o.value}-${index}`} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      ) : type === "textarea" ? (
+        <textarea id={id} name={name} value={value ?? ""} disabled={disabled} placeholder={placeholder} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)} />
+      ) : type === "checkbox" ? (
+        <span className="cms-check">
+          <input id={id} name={name} type="checkbox" disabled={disabled} checked={!!value} onChange={(e) => handleChange(e.target.checked)} />
+          <span>{placeholder || "Yes"}</span>
+        </span>
+      ) : isPassword ? (
+        <span className="cms-password">
+          <input
+            id={id}
+            name={name}
+            type={reveal ? "text" : "password"}
+            value={value ?? ""}
+            disabled={disabled}
+            autoComplete={autoComplete}
+            placeholder={placeholder || label}
+            onChange={(e) => handleChange(e.target.value)}
+            onBlur={() => onBlur?.(name)}
+          />
+          <button
+            type="button"
+            className="cms-eye-btn"
+            onClick={() => setReveal((v) => !v)}
+            aria-label={reveal ? "Hide password" : "Show password"}
+            title={reveal ? "Hide password" : "Show password"}
+          >
+            {reveal ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+        </span>
+      ) : (
+        <input
+          id={id}
+          name={name}
+          type={type}
+          value={value ?? ""}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          placeholder={placeholder || label}
+          min={min}
+          max={max}
+          step={step}
+          onKeyDown={(e) => {
+            if (type === "number" && Number(min) >= 0 && (e.key === "-" || e.key === "Subtract" || e.key === "e" || e.key === "E")) {
+              e.preventDefault();
+            }
+          }}
+          onPaste={(e) => {
+            if (type === "number" && Number(min) >= 0) {
+              const pasted = e.clipboardData.getData("text");
+              if (pasted.trim().startsWith("-")) e.preventDefault();
+            }
+          }}
+          onChange={(e) => {
+            let raw = e.target.value;
+            if (type === "number" && raw !== "" && min !== undefined && Number(raw) < Number(min)) {
+              raw = String(min);
+            }
+            handleChange(raw);
+          }}
+          onBlur={() => onBlur?.(name)}
+        />
+      )}
+      {error ? <span className="cms-error">{error}</span> : null}
+    </div>
+  );
+}
+
+export function useForm(fields, initial) {
+  const flatFields = fields.flatMap((field) => (field?.type === "group" ? field.fields || [] : field));
+  const [values, setValues] = useState(initial || {});
+  const [errors, setErrors] = useState({});
+  const setValue = (name, val) => {
+    setValues((v) => ({ ...v, [name]: val }));
+    setErrors((e) => ({ ...e, [name]: undefined }));
+  };
+  const validate = () => {
+    const next = {};
+    flatFields.forEach((f) => {
+      const val = values[f.name];
+      if (f.required && (val === undefined || val === null || String(val).trim() === "")) {
+        next[f.name] = `${f.label} is required`;
+      } else if (f.type === "email" && val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+        next[f.name] = "Enter a valid email address";
+      } else if (f.type === "tel" && val && !/^[0-9]{10}$/.test(String(val))) {
+        next[f.name] = "Enter a valid 10 digit mobile number";
+      } else if (f.type === "number" && val && Number.isNaN(Number(val))) {
+        next[f.name] = "Enter a valid number";
+      } else if (f.type === "number" && val !== "" && f.min !== undefined && Number(val) < Number(f.min)) {
+        next[f.name] = `${f.label} must be at least ${f.min}`;
+      } else if (f.type === "number" && val !== "" && f.max !== undefined && Number(val) > Number(f.max)) {
+        next[f.name] = `${f.label} must be no more than ${f.max}`;
+      }
+    });
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+  return { values, errors, setValue, validate, setValues, setErrors };
+}
+
+export function FormModal({ title, fields, initial, columns = 2, onCancel, onSave, awaitSave = false, savingLabel = "Saving...", className = "" }) {
+  const { values, errors, setValue, validate } = useForm(fields, initial);
+  const [saving, setSaving] = useState(false);
+  const submit = async () => {
+    if (saving || !validate()) return;
+    setSaving(true);
+    if (awaitSave) {
+      try {
+        await onSave(values);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+    setTimeout(() => {
+      setSaving(false);
+      onSave(values);
+    }, 500);
+  };
+  return (
+    <Modal
+      title={title}
+      className={className}
+      onClose={awaitSave && saving ? () => {} : onCancel}
+      footer={
+        <>
+          <button className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
+          <button className="cms-btn cms-btn-primary" onClick={submit} disabled={saving}>
+            {saving ? savingLabel : "Save"}
+          </button>
+        </>
+      }
+    >
+      <div className={`cms-form-grid ${columns === 3 ? "cols-3" : ""}`}>
+        {fields.map((f) => (
+          f.type === "group" ? (
+            <div key={f.name || f.title} className={`cms-field-group ${f.className || ""}`.trim()}>
+              {f.title ? <h4>{f.title}</h4> : null}
+              <div className={`cms-form-grid ${f.columns === 3 ? "cols-3" : ""}`}>
+                {(f.fields || []).map((groupField) => (
+                  <Field key={groupField.name} field={groupField} value={values[groupField.name]} error={errors[groupField.name]} onChange={setValue} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+          )
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+export function FilterBar({ fields, values, onChange, onApply }) {
+  return (
+    <div className="cms-card" style={{ marginBottom: 16 }}>
+      <div className="cms-card-body">
+        <div className="cms-filters">
+          {fields.map((f) => (
+            <Field key={f.name} field={f} value={values[f.name]} onChange={onChange} />
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+          <button className="cms-btn cms-btn-primary" onClick={onApply}>Load Data</button>
+          <button className="cms-btn cms-btn-ghost" onClick={() => onChange("__reset__", null)}>Reset</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+export function Loader({ label = 'Loading...', fullScreen = false }) {
+  const content = (
+    <div className='cms-loader-container' style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+      <div className='cms-spinner' style={{ width: '40px', height: '40px', border: '4px solid rgba(0,0,0,0.1)', borderLeftColor: '#3498db', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }}></style>
+      {label && <p style={{ marginTop: '1rem', color: '#666', fontSize: '0.9rem' }}>{label}</p>}
+    </div>
+  );
+  if (fullScreen) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {content}
+      </div>
+    );
+  }
+  return content;
+}
+
+export function Pagination({
+  currentPage = 1,
+  page,
+  pages,
+  totalPages: propTotalPages,
+  totalRecords,
+  totalCount,
+  total,
+  pageSize = 10,
+  onPageChange,
+  setPage,
+  unit = "records",
+  className = "",
+  showPageNumbers = true,
+}) {
+  const current = Number(page ?? currentPage ?? 1) || 1;
+  const handlePageChange = onPageChange || setPage || (() => {});
+  const resolvedTotal = Number(totalRecords ?? totalCount ?? total);
+  const limit = Math.max(1, Number(pageSize) || 10);
+
+  const computedTotalPages = !isNaN(resolvedTotal) && resolvedTotal >= 0
+    ? Math.max(1, Math.ceil(resolvedTotal / limit))
+    : Math.max(1, Number(pages ?? propTotalPages ?? 1) || 1);
+
+  const totalPages = Math.max(1, computedTotalPages);
+  const activePage = Math.min(Math.max(1, current), totalPages);
+
+  const hasExplicitCount = !isNaN(resolvedTotal) && resolvedTotal >= 0;
+  const start = hasExplicitCount ? (resolvedTotal === 0 ? 0 : (activePage - 1) * limit + 1) : (activePage - 1) * limit + 1;
+  const end = hasExplicitCount ? Math.min(activePage * limit, resolvedTotal) : activePage * limit;
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const list = [];
+    if (activePage <= 4) {
+      for (let i = 1; i <= 5; i++) list.push(i);
+      list.push("...");
+      list.push(totalPages);
+    } else if (activePage >= totalPages - 3) {
+      list.push(1);
+      list.push("...");
+      for (let i = totalPages - 4; i <= totalPages; i++) list.push(i);
+    } else {
+      list.push(1);
+      list.push("...");
+      list.push(activePage - 1);
+      list.push(activePage);
+      list.push(activePage + 1);
+      list.push("...");
+      list.push(totalPages);
+    }
+    return list;
+  };
+
+  const pageNumbers = getPageNumbers();
+
+  return (
+    <div className={`cms-pagination ${className}`.trim()} role="navigation" aria-label="Pagination">
+      <span className="cms-page-info">
+        {hasExplicitCount
+          ? `Showing ${start}–${end} of ${resolvedTotal} ${unit} · Page ${activePage} of ${totalPages}`
+          : `Page ${activePage} of ${totalPages}`}
+      </span>
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={activePage <= 1 || (hasExplicitCount && resolvedTotal === 0)}
+        onClick={() => handlePageChange(activePage - 1)}
+        aria-label="Previous Page"
+      >
+        Previous
+      </button>
+      {showPageNumbers && pageNumbers.map((p, idx) =>
+        p === "..." ? (
+          <span key={`ellipsis-${idx}`} className="cms-page-ellipsis" style={{ padding: "0 6px", alignSelf: "center", color: "var(--cms-muted, #64748b)" }}>
+            …
+          </span>
+        ) : (
+          <button
+            key={`page-${p}`}
+            type="button"
+            className={`cms-page-btn ${p === activePage ? "is-active" : ""}`}
+            onClick={() => handlePageChange(p)}
+            aria-current={p === activePage ? "page" : undefined}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={activePage >= totalPages || (hasExplicitCount && resolvedTotal === 0)}
+        onClick={() => handlePageChange(activePage + 1)}
+        aria-label="Next Page"
+      >
+        Next
+      </button>
+    </div>
+  );
+}
+
+export const ExamCellPagination = Pagination;
+
+

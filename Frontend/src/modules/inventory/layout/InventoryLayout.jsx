@@ -21,7 +21,7 @@ import {
   FileText,
   Wallet,
 } from "lucide-react";
-import logo from "@/assets/pirnav-colleges-logo.png";
+import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { inventoryLogout } from "../data/inventorySession.js";
 import { useInventory } from "../InventoryDataContext.jsx";
 const menu = [
@@ -69,7 +69,7 @@ export default function InventoryLayout({ children }) {
       )}
       <aside className={`ip-sidebar ${open ? "is-open" : ""}`}>
         <div className="ip-brand">
-          <img src={logo} alt="Pirnav College" />
+          <CampusBrandImage slot="dashboardLogo" alt="Pirnav College" />
           <button className="ip-mobile" aria-label="Close menu" onClick={() => setOpen(false)}>
             <X />
           </button>

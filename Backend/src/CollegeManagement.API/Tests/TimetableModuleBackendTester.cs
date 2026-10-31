@@ -267,7 +267,7 @@ namespace CollegeManagement.API.Tests
                 var breakTypes = await breakTypeRepo.GetAllAsync();
                 Console.WriteLine($"  - sp_GetBreakTypes returned {breakTypes.Count()} break types.");
 
-                var subs = await subRepo.GetSubstitutionsAsync(null, null, null, null, null);
+                var subs = await subRepo.GetSubstitutionsAsync(null, null, null, null);
                 Console.WriteLine($"  - sp_GetTimetableSubstitutions returned {subs.Count()} substitutions.");
 
                 Console.WriteLine("  [PASS] Break types and substitutions stored procedures verified.");

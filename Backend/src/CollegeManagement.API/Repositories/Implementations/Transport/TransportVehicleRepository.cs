@@ -5,6 +5,9 @@ using CollegeManagement.API.Common;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
@@ -17,14 +20,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
+        private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<PagedResult<TransportVehicleDto>> GetAllAsync(TransportVehicleFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var items = await c.QueryAsync<TransportVehicleDto>(
                 "sp_GetTransportVehicles", 
-                new { p_Search = filter.Search ?? "", p_CampusId = filter.CampusId }, 
+                new 
+                { 
+                    p_Search = filter.Search ?? "", 
+                    p_VehicleType = (string?)null,
+                    p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
+                    p_CampusId = filter.CampusId 
+                }, 
                 commandType: CommandType.StoredProcedure);
             
             var list = items.AsQueryable();
@@ -37,36 +46,37 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<TransportVehicleDto?> GetByIdAsync(long vehicleId)
         {
-            using var c = Connection();
-            return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>("sp_GetTransportVehiclesById", new { p_Id = vehicleId }, commandType: CommandType.StoredProcedure);
+            var c = Connection;
+            return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
+                "sp_GetTransportVehiclesById", 
+                new { p_Id = vehicleId }, 
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreateTransportVehicleDto dto, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateTransportVehicles",
                 new
                 {
                     p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleType = dto.VehicleType,
-                    p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status ? 1 : 0,
                     p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_MaximumCapacity = dto.Capacity,
+                    p_VehicleName = dto.VehicleNumber,
+                    p_VehicleType = dto.VehicleType,
                     p_Make = dto.Manufacturer,
                     p_Model = dto.Model,
-                    p_YearOfManufacture = (int?)null,
                     p_ChassisNumber = dto.ChassisNumber,
                     p_EngineNumber = dto.EngineNumber,
-                    p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_FitnessExpiry = dto.FitnessExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
                     p_GpsDeviceId = dto.GpsDeviceId,
-                    p_IsAC = dto.IsAC ? 1 : 0,
                     p_InsuranceNumber = dto.InsuranceNumber,
+                    p_InsuranceExpiry = dto.InsuranceExpiry,
+                    p_PollutionExpiry = dto.PollutionExpiry,
+                    p_FitnessExpiry = dto.FitnessExpiry,
+                    p_Capacity = dto.Capacity,
+                    p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
+                    p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_CreatedBy = userId,
-                    p_UpdatedBy = (long?)null,
                     p_CampusId = dto.CampusId ?? 1
                 },
                 commandType: CommandType.StoredProcedure);
@@ -74,32 +84,30 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<bool> UpdateAsync(long vehicleId, UpdateTransportVehicleDto dto, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             var rows = await c.ExecuteAsync(
                 "sp_UpdateTransportVehicles",
                 new
                 {
-                    p_Id = vehicleId,
+                    p_VehicleId = vehicleId,
                     p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleType = dto.VehicleType,
-                    p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status ? 1 : 0,
                     p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_MaximumCapacity = dto.Capacity,
+                    p_VehicleName = dto.VehicleNumber,
+                    p_VehicleType = dto.VehicleType,
                     p_Make = dto.Manufacturer,
                     p_Model = dto.Model,
-                    p_YearOfManufacture = (int?)null,
                     p_ChassisNumber = dto.ChassisNumber,
                     p_EngineNumber = dto.EngineNumber,
-                    p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_FitnessExpiry = dto.FitnessExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
                     p_GpsDeviceId = dto.GpsDeviceId,
-                    p_IsAC = dto.IsAC ? 1 : 0,
                     p_InsuranceNumber = dto.InsuranceNumber,
-                    p_CreatedBy = (long?)null,
+                    p_InsuranceExpiry = dto.InsuranceExpiry,
+                    p_PollutionExpiry = dto.PollutionExpiry,
+                    p_FitnessExpiry = dto.FitnessExpiry,
+                    p_Capacity = dto.Capacity,
+                    p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
+                    p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId
+                    p_CampusId = dto.CampusId ?? 1
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -107,23 +115,23 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)
         {
-            using var c = Connection();
+            var c = Connection;
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportVehicles", 
-                new { p_Id = vehicleId, p_UpdatedBy = userId }, 
+                new { p_VehicleId = vehicleId, p_UpdatedBy = userId }, 
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
         public async Task<IEnumerable<TransportVehicleLookupDto>> GetLookupAsync()
         {
-            using var c = Connection();
+            var c = Connection;
             return await c.QueryAsync<TransportVehicleLookupDto>("sp_GetTransportVehicleLookup", commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportVehicleDto?> GetByIdOrNumberAsync(string vehicleIdOrNumber)
         {
-            using var c = Connection();
+            var c = Connection;
             var id = long.TryParse(vehicleIdOrNumber.Trim(), out var i) ? i : -1;
             return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
                 "sp_GetTransportVehicleByIdOrNumber",
@@ -133,7 +141,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<bool> ExistsAsync(string vehicleNumber, string registrationNumber, long? excludeVehicleId = null)
         {
-            using var c = Connection();
+            var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportVehicleExists",
                 new { p_VehicleNumber = vehicleNumber.Trim(), p_RegistrationNumber = registrationNumber.Trim(), p_ExcludeId = excludeVehicleId },
@@ -142,7 +150,3 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         }
     }
 }
-
-
-
-

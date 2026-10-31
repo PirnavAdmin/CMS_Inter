@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -16,6 +18,7 @@ namespace CollegeManagement.API.Controllers.V1
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     [Authorize]
+    [RequirePermission("department-designation")]
     public class DesignationController : ControllerBase
     {
         private readonly IDesignationService _designationService;
@@ -30,6 +33,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get list of designations with optional includeInactive, staffType, and departmentId filters.
         /// </summary>
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<DesignationResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] bool includeInactive = false,
@@ -51,6 +55,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get single designation by ID.
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(DesignationResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetById(int id)
@@ -65,6 +70,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get designation master summary statistics.
         /// </summary>
         [HttpGet("summary")]
+        [BypassPermission]
         [ProducesResponseType(typeof(DesignationSummaryDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId = null)
         {
@@ -118,6 +124,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (message.Contains("not found")) return NotFound(new { message });
                 return BadRequest(new { message });
             }
+
             return NoContent();
         }
 
@@ -126,6 +133,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Validate designation name uniqueness.
         /// </summary>
         [HttpGet("validate-name")]
+        [BypassPermission]
         public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
         {
             var isValid = await _designationService.ValidateNameAsync(name, excludeId, campusId);
@@ -198,6 +206,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("export-template")]
         [HttpGet("template")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;
@@ -211,6 +220,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("export-excel")]
         [HttpGet("export")]
+        [BypassPermission]
         public async Task<IActionResult> ExportExcel(
             [FromQuery] string? staffType = null,
             [FromQuery] string? type = null,

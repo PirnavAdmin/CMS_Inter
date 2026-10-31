@@ -150,8 +150,8 @@
 }
 
 .reimb-kpi-card.total .reimb-kpi-icon-wrap {
-  background: #f1f4e2;
-  color: #6f8400;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
 }
 
 .reimb-kpi-card.pending .reimb-kpi-icon-wrap {
@@ -209,7 +209,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #6f8400;
+  background: var(--cms-primary);
   color: #ffffff;
   font-size: 12px;
   font-weight: 700;
@@ -350,8 +350,8 @@
 .reimb-input:focus,
 .reimb-select:focus,
 .reimb-textarea:focus {
-  border-color: #6f8400;
-  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.12);
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary)  0.12);
 }
 
 .reimb-input.is-readonly {
@@ -379,7 +379,7 @@
   left: 12px;
   font-size: 14px;
   font-weight: 600;
-  color: #6f8400;
+  color: var(--cms-primary);
   pointer-events: none;
 }
 
@@ -411,7 +411,7 @@
 
 /* ---------- File Upload Box ---------- */
 .reimb-upload-box {
-  border: 2px dashed #ccd6c4;
+  border: 2px dashed var(--cms-primary-border, #ccd6c4);
   border-radius: 10px;
   padding: 14px;
   text-align: center;
@@ -427,7 +427,7 @@
 }
 
 .reimb-upload-box:hover {
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
   background: #fafbf7;
 }
 
@@ -438,7 +438,7 @@
 
 .reimb-upload-box.has-file {
   border-style: solid;
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
   background: #f8faf4;
   cursor: default;
 }
@@ -455,8 +455,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #f1f4e2;
-  color: #6f8400;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
   display: grid;
   place-items: center;
 }
@@ -528,8 +528,8 @@
 }
 
 .reimb-file-btn.preview:hover {
-  color: #6f8400;
-  background: #f1f4e2;
+  color: var(--cms-primary);
+  background: var(--cms-primary-soft);
 }
 
 /* Declaration Checkbox */
@@ -551,7 +551,7 @@
 
 .reimb-declaration-label input {
   margin-top: 2px;
-  accent-color: #6f8400;
+  accent-color: var(--cms-primary);
   cursor: pointer;
 }
 
@@ -581,9 +581,9 @@
 }
 
 .reimb-btn-primary {
-  background: #6f8400;
+  background: var(--cms-primary);
   color: #ffffff;
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
 }
 
 .reimb-btn-primary:hover:not(:disabled) {
@@ -658,7 +658,7 @@
 }
 
 .reimb-search-input:focus {
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
 }
 
 .reimb-filter-select {
@@ -705,7 +705,7 @@
 .reimb-claim-id {
   font-family: monospace;
   font-weight: 700;
-  color: #6f8400;
+  color: var(--cms-primary);
 }
 
 .reimb-faculty-cell {
@@ -876,9 +876,9 @@
 }
 
 .reimb-page-btn.is-active {
-  background: #6f8400;
+  background: var(--cms-primary);
   color: #ffffff;
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
 }
 
 /* ---------- Detail & Review Modals ---------- */
@@ -981,7 +981,7 @@
 
 .reimb-filter-field input:focus,
 .reimb-filter-field select:focus {
-  border-color: #6f8400;
+  border-color: var(--cms-primary);
 }
 
 /* ---------- Visual Claim Timeline ---------- */

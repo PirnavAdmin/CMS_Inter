@@ -274,7 +274,7 @@
   border-color: var(--cms-primary);
   color: var(--cms-primary-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.12);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary)  0.12);
 }
 
 /* Student Profile Grid */
@@ -452,7 +452,7 @@
 }
 
 .parent-break-row {
-  background: rgba(111, 132, 0, 0.05);
+  background: color-mix(in srgb, var(--cms-primary)  0.05);
   font-weight: 600;
   text-align: center;
   color: var(--cms-primary-dark);

@@ -1,21 +1,18 @@
 namespace CollegeManagement.API.Services.Implementations;
 
-using Dapper;
-using Microsoft.EntityFrameworkCore;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Data;
 
 public class StudentTransportService : IStudentTransportService
 {
-    private readonly AppDbContext _context;
+    private readonly IStudentTransportAssignmentRepository _repository;
 
-    public StudentTransportService(AppDbContext context)
+    public StudentTransportService(IStudentTransportAssignmentRepository repository)
     {
-        _context = context;
+        _repository = repository;
     }
 
     public Task<TransportDropdownOptionsDto> GetTransportDropdownOptionsAsync()
@@ -30,11 +27,7 @@ public class StudentTransportService : IStudentTransportService
     {
         int targetStudentId = studentId ?? 6;
         
-        using var connection = new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
-        var result = await connection.QueryFirstOrDefaultAsync<StudentTransportResponseDto>(
-            "sp_GetStudentTransportDetails",
-            new { p_StudentId = targetStudentId },
-            commandType: CommandType.StoredProcedure);
+        var result = await _repository.GetStudentTransportDetailsAsync(targetStudentId);
         
         if (result == null)
         {

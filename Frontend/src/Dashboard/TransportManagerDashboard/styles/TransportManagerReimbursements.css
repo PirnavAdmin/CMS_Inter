@@ -1,0 +1,7 @@
+/* Transport Manager Reimbursements Styles */
+
+.tm-reimbursements-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}

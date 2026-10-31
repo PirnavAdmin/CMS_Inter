@@ -92,6 +92,18 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+                public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId)
+        {
+            if (studentId <= 0) return new List<StudentSelfResultDto>();
+            return await _resultRepository.GetStudentSelfResultsAsync(studentId);
+        }
+
+        public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId)
+        {
+            if (studentId <= 0 || examinationId <= 0) return null;
+            return await _resultRepository.GetStudentSelfResultMemoAsync(studentId, examinationId);
+        }
+
         #endregion
 
         #region Core Result Generation & Precondition Verification
@@ -303,16 +315,6 @@ namespace CollegeManagement.API.Services.Implementations
         {
             return await _resultRepository.GetStudentResultAsync(
                 studentId, boardId, academicYearId, academicLevelId, groupId, examId, campusId);
-        }
-
-        public async Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId)
-        {
-            return await _resultRepository.GetStudentSelfResultsAsync(studentId);
-        }
-
-        public async Task<StudentSelfResultMemoDto?> GetStudentSelfResultMemoAsync(int studentId, int examinationId)
-        {
-            return await _resultRepository.GetStudentSelfResultMemoAsync(studentId, examinationId);
         }
 
         #endregion

@@ -47,7 +47,7 @@ namespace CollegeManagement.API.Controllers.V1
                 ?? User.FindFirstValue("name") 
                 ?? User.FindFirstValue(ClaimTypes.Name) 
                 ?? User.FindFirstValue(ClaimTypes.GivenName)
-                ?? "Store Administrator";
+                ?? "Inventory Staff";
             return name;
         }
 

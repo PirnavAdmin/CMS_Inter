@@ -1,0 +1,310 @@
+/* Transport Manager Leave Styles */
+
+.tm-leave-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-leave-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.tm-leave-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tm-leave-card__title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-leave-card__val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--cms-text-primary, #0f172a);
+}
+
+.tm-leave-card__sub {
+  font-size: 0.75rem;
+  color: var(--cms-text-secondary, #94a3b8);
+}
+
+/* ============================================================
+   Transport Manager Leave Application Modal - Reference Design
+   ============================================================ */
+
+.tm-leave-spin {
+  animation: tm-leave-spin-anim 0.85s linear infinite;
+}
+
+@keyframes tm-leave-spin-anim {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.tm-leave-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  background: rgba(15, 23, 42, 0.48) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+  padding: 16px !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  animation: cms-fade 0.18s ease;
+}
+
+.tm-leave-modal {
+  margin: auto !important;
+  position: relative !important;
+  width: min(440px, calc(100vw - 32px)) !important;
+  max-width: 440px !important;
+  background: var(--cms-surface, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.22), 0 8px 18px -6px rgba(15, 23, 42, 0.12) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  animation: cms-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Modal Header */
+.tm-leave-modal .cms-modal-head {
+  padding: 12px 18px !important;
+  border-bottom: 1px solid var(--cms-border, #e4e8f0) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: var(--cms-surface, #ffffff) !important;
+}
+
+.tm-leave-modal .cms-modal-head h3 {
+  margin: 0 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: var(--cms-text, #10203c) !important;
+  letter-spacing: -0.2px !important;
+}
+
+.tm-leave-modal .cms-modal-head .cms-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: var(--cms-muted, #7B8275) !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: all 0.15s ease !important;
+}
+
+.tm-leave-modal .cms-modal-head .cms-icon-btn:hover {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  color: var(--cms-text, #10203c) !important;
+}
+
+/* Modal Body */
+.tm-leave-modal .cms-modal-body {
+  padding: 14px 18px 12px !important;
+  overflow-y: auto !important;
+  max-height: calc(85vh - 110px) !important;
+}
+
+/* Form Grid & Fields */
+.tm-leave-modal .cms-form-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px 12px !important;
+}
+
+.tm-leave-modal .cms-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.tm-leave-modal .cms-field.full {
+  grid-column: 1 / -1 !important;
+}
+
+.tm-leave-modal .cms-field label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.4px !important;
+  text-transform: uppercase !important;
+  color: var(--cms-muted, #64748b) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin: 0 !important;
+  min-height: auto !important;
+  line-height: 1.2 !important;
+}
+
+.tm-leave-modal .cms-field label .req {
+  color: var(--cms-red, #dc2626) !important;
+  font-weight: 700 !important;
+}
+
+.tm-leave-modal .cms-field input[type="date"],
+.tm-leave-modal .cms-field input[type="text"],
+.tm-leave-modal .cms-field select {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 6px 10px !important;
+  font-size: 12.5px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  background: var(--cms-surface, #ffffff) !important;
+  color: var(--cms-text, #10203c) !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+  font-family: inherit !important;
+}
+
+.tm-leave-modal .cms-field input:focus,
+.tm-leave-modal .cms-field select:focus,
+.tm-leave-modal .cms-field textarea:focus {
+  border-color: var(--cms-primary, #6F8400) !important;
+  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.15) !important;
+}
+
+.tm-leave-modal .cms-field textarea {
+  min-height: 54px !important;
+  height: 54px !important;
+  padding: 8px 10px !important;
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  background: var(--cms-surface, #ffffff) !important;
+  color: var(--cms-text, #10203c) !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  resize: vertical !important;
+  font-family: inherit !important;
+}
+
+/* Modal Footer */
+.tm-leave-modal .cms-modal-foot {
+  padding: 10px 18px !important;
+  border-top: 1px solid var(--cms-border, #e4e8f0) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  background: var(--cms-surface, #ffffff) !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  font-family: inherit !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn-ghost {
+  background: #fafbf8 !important;
+  border: 1px solid #dce2d6 !important;
+  color: #475569 !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn-ghost:hover:not(:disabled) {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn-primary {
+  background: var(--cms-primary, #6F8400) !important;
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-dark, #566900) !important;
+}
+
+.tm-leave-modal .cms-modal-foot .cms-btn:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Dark Mode Overrides */
+[data-theme="dark"] .tm-leave-modal-overlay {
+  background: rgba(5, 8, 5, 0.65) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal {
+  background: var(--cms-surface, #1e241b) !important;
+  border-color: var(--cms-border, #2a3326) !important;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal .cms-modal-head,
+[data-theme="dark"] .tm-leave-modal .cms-modal-foot {
+  background: var(--cms-surface, #1e241b) !important;
+  border-color: var(--cms-border, #2a3326) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal .cms-modal-head h3 {
+  color: var(--cms-text, #e6e8e3) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal .cms-field label {
+  color: var(--cms-muted, #959e8f) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal .cms-field input[type="date"],
+[data-theme="dark"] .tm-leave-modal .cms-field input[type="text"],
+[data-theme="dark"] .tm-leave-modal .cms-field select,
+[data-theme="dark"] .tm-leave-modal .cms-field textarea {
+  background: #171c14 !important;
+  border-color: var(--cms-border, #2a3326) !important;
+  color: var(--cms-text, #e6e8e3) !important;
+}
+
+[data-theme="dark"] .tm-leave-modal .cms-modal-foot .cms-btn-ghost {
+  background: #171c14 !important;
+  border-color: var(--cms-border, #2a3326) !important;
+  color: var(--cms-text, #e6e8e3) !important;
+}

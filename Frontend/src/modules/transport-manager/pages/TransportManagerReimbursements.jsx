@@ -499,7 +499,7 @@ export default function TransportManagerReimbursements() {
           <div className="reimb-form-header">
             <div className="reimb-form-title-group">
               <h2>
-                <ReceiptIndianRupee size={18} style={{ color: "#6F8400" }} />
+                <ReceiptIndianRupee size={18} style={{ color: "var(--cms-primary)" }} />
                 Submit Reimbursement Claim
               </h2>
               <p>Complete the three sections below and attach supporting receipts or invoices.</p>
@@ -754,7 +754,7 @@ export default function TransportManagerReimbursements() {
                   ) : (
                     <div className="reimb-file-badge">
                       <div className="reimb-file-info">
-                        <Paperclip size={18} style={{ color: "#6F8400", flexShrink: 0 }} />
+                        <Paperclip size={18} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
                         <div style={{ overflow: "hidden" }}>
                           <div className="reimb-file-name" title={uploadedFile.name}>{uploadedFile.name}</div>
                           <div className="reimb-file-size">
@@ -969,7 +969,7 @@ export default function TransportManagerReimbursements() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
               <div>
                 <dt style={{ fontSize: 12, color: "var(--cms-muted)", fontWeight: 500 }}>Claim Number</dt>
-                <dd style={{ fontSize: 14, fontWeight: 700, margin: "2px 0 0", color: "#6F8400" }}>
+                <dd style={{ fontSize: 14, fontWeight: 700, margin: "2px 0 0", color: "var(--cms-primary)" }}>
                   {selectedClaim.claimNumber}
                 </dd>
               </div>

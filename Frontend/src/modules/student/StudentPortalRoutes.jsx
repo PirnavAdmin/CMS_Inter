@@ -11,6 +11,7 @@ import StudentTransport from "./pages/StudentTransport.jsx";
 import StudentHostel from "./pages/StudentHostel.jsx";
 import StudentCertificates from "./pages/StudentCertificates.jsx";
 import StudentHolidays from "./pages/StudentHolidays.jsx";
+import StudentSettings from "./pages/StudentSettings.jsx";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { AccessDeniedNotice } from "@/modules/faculty/FacultyPortalRoutes.jsx";
 
@@ -35,6 +36,7 @@ export default function StudentPortalRoutes() {
         <Route path="hostel" element={<StudentPermissionRoute moduleKey="hostel-management" moduleName="Hostel"><StudentHostel /></StudentPermissionRoute>} />
         <Route path="certificates" element={<StudentPermissionRoute moduleKey="certificates" moduleName="Certificates"><StudentCertificates /></StudentPermissionRoute>} />
         <Route path="holidays" element={<StudentPermissionRoute moduleKey="holiday-management" moduleName="Holidays"><StudentHolidays /></StudentPermissionRoute>} />
+        <Route path="settings" element={<StudentSettings />} />
         <Route path="*" element={<Navigate to="/student-dashboard" replace />} />
       </Route>
     </Routes>

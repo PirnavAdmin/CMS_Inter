@@ -45,9 +45,6 @@
 	  <Folder Include="Database\Scripts\StoredProcedures\BoardManagement\" />
 	  <Folder Include="wwwroot\uploads\Submissions\" />
 	</ItemGroup>
-  <ItemGroup>
-    <Compile Remove="Tests/**" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Update="Database\99_FixFrontendRelationsAndAdmissionFlow.sql">

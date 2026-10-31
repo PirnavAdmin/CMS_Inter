@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock } from "lucide-react";
+import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock, Palette } from "lucide-react";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
 import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import TransparentAvatar from "@/shared/components/TransparentAvatar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
@@ -48,6 +49,7 @@ const FALLBACK_BOARDS = [
 ];
 
 export default function FacultyNavbar() {
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const navigate = useNavigate();
 
   // Contexts
@@ -875,6 +877,16 @@ export default function FacultyNavbar() {
               >
                 <User size={14} /> My Profile
               </button>
+              <button
+                type="button"
+                className="cms-dropdown-item"
+                onClick={() => {
+                  setProfileDropOpen(false);
+                  setThemePaletteOpen(true);
+                }}
+              >
+                <Palette size={14} /> Theme Appearance
+              </button>
               <button className="cms-dropdown-item danger" onClick={handleLogout}>
                 <LogOut size={14} /> Sign Out
               </button>
@@ -882,6 +894,12 @@ export default function FacultyNavbar() {
           )}
         </div>
       </div>
+
+      <ThemePalettePicker
+        open={themePaletteOpen}
+        onOpenChange={setThemePaletteOpen}
+        hideTrigger={true}
+      />
 
       {/* Scoped Responsive Styles for Faculty Academic Selectors */}
       <style>{`

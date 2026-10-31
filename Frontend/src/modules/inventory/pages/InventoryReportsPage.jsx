@@ -57,7 +57,7 @@ export default function InventoryReportsPage() {
         if (!controller.signal.aborted) setError(e.message);
       });
     return () => controller.abort();
-  }, [report, dates, state]);
+  }, [report, dates]);
   const result = remote || { columns: buildReport(state, report, dates).columns, rows: [] };
   return (
     <>

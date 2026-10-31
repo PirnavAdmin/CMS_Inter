@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import * as staffApi from "@/api/staffApi.js";
 import { attendanceService } from "@/api/attendanceService.js";
+import apiClient from "@/api/apiClient.js";
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr) return null;
@@ -340,18 +341,35 @@ export function FacultyProvider({ children }) {
       });
   }, []);
 
-  const togglePunch = () => {
+  const togglePunch = async () => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const authUser = getAuthUser();
+    const staffId = authUser?.staffId || authUser?.id || profileData?.id;
+
     if (!punchState.isPunchedIn) {
+      try {
+        if (attendanceService?.punchIn) {
+          await attendanceService.punchIn({ staffId, timestamp: now.toISOString() }).catch(() => null);
+        }
+      } catch {}
       const next = { isPunchedIn: true, inTime: timeStr, outTime: null, hoursWorked: "Just punched in" };
       setPunchState(next);
-      localStorage.setItem("staff_punch_state", JSON.stringify(next));
+      try {
+        localStorage.setItem("staff_punch_state", JSON.stringify(next));
+      } catch {}
       notify(`Punched IN successfully at ${timeStr}`);
     } else {
+      try {
+        if (attendanceService?.punchOut) {
+          await attendanceService.punchOut({ staffId, timestamp: now.toISOString() }).catch(() => null);
+        }
+      } catch {}
       const next = { ...punchState, isPunchedIn: false, outTime: timeStr };
       setPunchState(next);
-      localStorage.setItem("staff_punch_state", JSON.stringify(next));
+      try {
+        localStorage.setItem("staff_punch_state", JSON.stringify(next));
+      } catch {}
       notify(`Punched OUT successfully at ${timeStr}`);
     }
   };
@@ -367,14 +385,39 @@ export function FacultyProvider({ children }) {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   // Board & Academic Year Dropdowns
-  const boards = [];
-  const academicYears = [];
-  const [selectedBoard, setSelectedBoard] = useState(boards[0] || null);
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicYears[0] || null);
-  const boardsLoading = false;
-  const academicYearsLoading = false;
+  const [boards, setBoards] = useState([]);
+  const [academicYears, setAcademicYears] = useState([]);
+  const [selectedBoard, setSelectedBoard] = useState(null);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(null);
+  const [boardsLoading, setBoardsLoading] = useState(false);
+  const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
 
-  // Sidebar Layout State
+  useEffect(() => {
+    let isMounted = true;
+    setBoardsLoading(true);
+    setAcademicYearsLoading(true);
+
+    Promise.allSettled([
+      apiClient.get("/api/v1/boards"),
+      apiClient.get("/api/v1/academic-years"),
+    ]).then(([bRes, yRes]) => {
+      if (!isMounted) return;
+      if (bRes.status === "fulfilled") {
+        const bList = bRes.value?.data?.data || bRes.value?.data || [];
+        setBoards(bList);
+        if (bList.length > 0) setSelectedBoard(bList[0]);
+      }
+      if (yRes.status === "fulfilled") {
+        const yList = yRes.value?.data?.data || yRes.value?.data || [];
+        setAcademicYears(yList);
+        if (yList.length > 0) setSelectedAcademicYear(yList[0]);
+      }
+      setBoardsLoading(false);
+      setAcademicYearsLoading(false);
+    });
+
+    return () => { isMounted = false; };
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Compute initials

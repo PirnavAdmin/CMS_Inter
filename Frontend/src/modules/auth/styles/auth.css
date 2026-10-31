@@ -239,10 +239,7 @@
   color: var(--cms-green);
 }
 
-[data-theme="dark"] .cms-auth-card {
-  background: var(--cms-surface);
-  color: var(--cms-text);
-}
+
 
 @media (max-width: 900px) {
   .cms-auth {
@@ -541,17 +538,112 @@
   border-color: var(--cms-primary);
 }
 
-/* Olive glass treatment for every authentication card. */
-[data-theme="light"] .cms-auth-card {
-  background: rgba(239, 243, 222, 0.9) !important;
-  border-color: rgba(111, 132, 78, 0.24) !important;
-  box-shadow: 0 22px 54px rgba(31, 43, 22, 0.2);
+/* Independent theme treatment for authentication card */
+.cms-auth.cms-auth[data-login-mode="light"] .cms-auth-card {
+  background: color-mix(in srgb, var(--cms-primary-soft, #ffffff) 25%, rgba(255, 255, 255, 0.92)) !important;
+  border-color: color-mix(in srgb, var(--cms-primary-border, var(--cms-border)) 40%, rgba(0, 0, 0, 0.1)) !important;
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.16);
   -webkit-backdrop-filter: blur(18px) saturate(120%);
   backdrop-filter: blur(18px) saturate(120%);
+  color: #1e293b;
 }
 
-[data-theme="dark"] .cms-auth-card {
-  background: rgba(42, 55, 36, 0.88) !important;
-  border-color: rgba(178, 197, 134, 0.26) !important;
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.34);
+.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-card {
+  background: color-mix(in srgb, var(--cms-primary) 18%, rgba(20, 24, 34, 0.94)) !important;
+  border-color: color-mix(in srgb, var(--cms-primary-border, var(--cms-border)) 40%, rgba(255, 255, 255, 0.18)) !important;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  backdrop-filter: blur(18px) saturate(120%);
+  color: #f8fafc !important;
+}
+
+/* Explicit high-contrast text visibility in dark auth mode */
+.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-card h1 {
+  color: #ffffff !important;
+  font-weight: 800;
+}
+
+.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-card > p {
+  color: #cbd5e1 !important;
+}
+
+.cms-auth[data-theme="dark"] .cms-field label,
+.cms-auth[data-login-mode="dark"] .cms-field label {
+  color: #f1f5f9 !important;
+  font-weight: 600;
+}
+
+.cms-auth[data-theme="dark"] .cms-field label .req,
+.cms-auth[data-login-mode="dark"] .cms-field label .req {
+  color: #f87171 !important;
+}
+
+.cms-auth[data-theme="dark"] .cms-check,
+.cms-auth[data-theme="dark"] .cms-check span,
+.cms-auth[data-theme="dark"] .cms-field-check,
+.cms-auth[data-theme="dark"] .cms-field-check span,
+.cms-auth[data-theme="dark"] .auth-login-remember,
+.cms-auth[data-theme="dark"] .cms-auth-row,
+.cms-auth[data-theme="dark"] .cms-auth-row span,
+.cms-auth[data-login-mode="dark"] .cms-check,
+.cms-auth[data-login-mode="dark"] .cms-check span,
+.cms-auth[data-login-mode="dark"] .cms-field-check,
+.cms-auth[data-login-mode="dark"] .cms-field-check span,
+.cms-auth[data-login-mode="dark"] .auth-login-remember,
+.cms-auth[data-login-mode="dark"] .cms-auth-row,
+.cms-auth[data-login-mode="dark"] .cms-auth-row span {
+  color: #e2e8f0 !important;
+}
+
+.cms-auth[data-theme="dark"] .cms-auth-row a,
+.cms-auth[data-login-mode="dark"] .cms-auth-row a {
+  color: #93c5fd !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.cms-auth[data-theme="dark"] .cms-auth-row a:hover,
+.cms-auth[data-login-mode="dark"] .cms-auth-row a:hover {
+  color: #ffffff !important;
+  text-decoration: underline;
+}
+
+.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-card input:not([type="checkbox"]) {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1.5px solid #94a3b8 !important;
+}
+
+.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-card input:not([type="checkbox"]):focus {
+  border-color: var(--cms-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary) 30%, transparent) !important;
+}
+
+.cms-auth.cms-auth.cms-auth[data-login-mode="dark"] .cms-auth-links a,
+.cms-auth[data-login-mode="dark"] .auth-login-forgot {
+  color: #93c5fd !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.cms-auth[data-theme="dark"] .cms-auth-links a:hover,
+.cms-auth[data-theme="dark"] .auth-login-forgot:hover,
+[data-theme="dark"] .cms-auth-links a:hover,
+[data-theme="dark"] .auth-login-forgot:hover,
+.cms-auth[data-login-mode="dark"] .cms-auth-links a:hover,
+.cms-auth[data-login-mode="dark"] .auth-login-forgot:hover {
+  color: #ffffff !important;
+  text-decoration: underline;
+}
+
+.cms-auth[data-theme="dark"] .cms-password-toggle,
+.cms-auth[data-login-mode="dark"] .cms-password-toggle {
+  color: #64748b !important;
+}
+
+.cms-auth[data-theme="dark"] .cms-auth-card .cms-btn-primary,
+.cms-auth[data-login-mode="dark"] .cms-auth-card .cms-btn-primary {
+  background: var(--cms-primary) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--cms-primary-dark, transparent) !important;
 }

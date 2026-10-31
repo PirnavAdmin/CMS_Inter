@@ -41,8 +41,12 @@ namespace CollegeManagement.API.Controllers.V1
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         public async Task<IActionResult> GetMyResults([FromQuery] int? studentId)
         {
-            var effectiveStudentId = studentId ?? GetCurrentStudentId() ?? 1;
-            var results = await _resultService.GetStudentSelfResultsAsync(effectiveStudentId);
+            var effectiveStudentId = studentId ?? GetCurrentStudentId();
+            if (!effectiveStudentId.HasValue || effectiveStudentId.Value <= 0)
+            {
+                return BadRequest(new { success = false, message = "Student ID could not be identified." });
+            }
+            var results = await _resultService.GetStudentSelfResultsAsync(effectiveStudentId.Value);
             return Ok(results);
         }
 
@@ -58,8 +62,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] int examinationId,
             [FromQuery] int? studentId)
         {
-            var effectiveStudentId = studentId ?? GetCurrentStudentId() ?? 1;
-            var memo = await _resultService.GetStudentSelfResultMemoAsync(effectiveStudentId, examinationId);
+            var effectiveStudentId = studentId ?? GetCurrentStudentId();
+            if (!effectiveStudentId.HasValue || effectiveStudentId.Value <= 0)
+            {
+                return BadRequest(new { success = false, message = "Student ID could not be identified." });
+            }
+            var memo = await _resultService.GetStudentSelfResultMemoAsync(effectiveStudentId.Value, examinationId);
             if (memo == null)
             {
                 return NotFound(new { success = false, message = "Marks memo is not available or has not been published yet." });

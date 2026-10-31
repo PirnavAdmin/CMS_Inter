@@ -1,23 +1,43 @@
+using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Threading.Tasks;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Reimbursement;
 using CollegeManagement.API.Repositories.Interfaces.Reimbursement;
 using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 {
     public class ReimbursementRepository : IReimbursementRepository
     {
-        private readonly IDbConnection _dbConnection;
+        private readonly AppDbContext _context;
 
-        public ReimbursementRepository(IDbConnection dbConnection)
+        public ReimbursementRepository(AppDbContext context)
         {
-            _dbConnection = dbConnection;
+            _context = context;
+        }
+
+        private async Task<DbConnection> GetOpenConnectionAsync()
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State == ConnectionState.Broken || conn.State == ConnectionState.Closed)
+            {
+                try { await conn.CloseAsync(); } catch { }
+                await _context.Database.OpenConnectionAsync();
+            }
+            else if (conn.State != ConnectionState.Open)
+            {
+                await _context.Database.OpenConnectionAsync();
+            }
+            return conn;
         }
 
         public async Task<CreateClaimResponseDto> CreateClaimAsync(CreateReimbursementClaimRequest request)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_StaffId", request.StaffId);
             parameters.Add("p_CampusId", request.CampusId);
@@ -30,7 +50,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
             parameters.Add("p_AdditionalNotes", request.AdditionalNotes);
             parameters.Add("p_ReceiptUrl", request.ReceiptUrl);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<CreateClaimResponseDto>(
+            return await conn.QueryFirstOrDefaultAsync<CreateClaimResponseDto>(
                 "sp_Reimbursement_Create",
                 parameters,
                 commandType: CommandType.StoredProcedure) ?? new CreateClaimResponseDto();
@@ -38,13 +58,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<IEnumerable<ReimbursementClaimDto>> GetAllClaimsAsync(int? campusId, string? status, string? category, string? search)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_Status", status);
             parameters.Add("p_Category", category);
             parameters.Add("p_Search", search);
 
-            return await _dbConnection.QueryAsync<ReimbursementClaimDto>(
+            return await conn.QueryAsync<ReimbursementClaimDto>(
                 "sp_Reimbursement_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -52,11 +73,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<IEnumerable<ReimbursementClaimDto>> GetMyClaimsAsync(int staffId, int? campusId)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<ReimbursementClaimDto>(
+            return await conn.QueryAsync<ReimbursementClaimDto>(
                 "sp_Reimbursement_GetMyClaims",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -64,10 +86,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<ReimbursementClaimDto?> GetClaimByIdAsync(int id)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<ReimbursementClaimDto>(
+            return await conn.QueryFirstOrDefaultAsync<ReimbursementClaimDto>(
                 "sp_Reimbursement_GetById",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -75,10 +98,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<ReimbursementSummaryDto> GetSummaryAsync(int? campusId)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<ReimbursementSummaryDto>(
+            return await conn.QueryFirstOrDefaultAsync<ReimbursementSummaryDto>(
                 "sp_Reimbursement_GetSummary",
                 parameters,
                 commandType: CommandType.StoredProcedure) ?? new ReimbursementSummaryDto();
@@ -86,13 +110,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<(bool Success, string? AccountRef)> VerifyClaimAsync(int id, decimal? approvedAmount, string? reviewNotes, int reviewedBy)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_ApprovedAmount", approvedAmount);
             parameters.Add("p_ReviewNotes", reviewNotes);
             parameters.Add("p_ReviewedBy", reviewedBy);
 
-            var result = await _dbConnection.QueryFirstOrDefaultAsync<dynamic>(
+            var result = await conn.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_Reimbursement_Verify",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -121,12 +146,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<bool> RequestClarificationAsync(int id, string? notes, int reviewedBy)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_ClarificationNotes", notes);
             parameters.Add("p_ReviewedBy", reviewedBy);
 
-            var rowsAffected = await _dbConnection.QueryFirstOrDefaultAsync<int>(
+            var rowsAffected = await conn.QueryFirstOrDefaultAsync<int>(
                 "sp_Reimbursement_RequestClarification",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -136,12 +162,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<bool> RejectClaimAsync(int id, string? rejectNotes, int reviewedBy)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_RejectNotes", rejectNotes);
             parameters.Add("p_ReviewedBy", reviewedBy);
 
-            var rowsAffected = await _dbConnection.QueryFirstOrDefaultAsync<int>(
+            var rowsAffected = await conn.QueryFirstOrDefaultAsync<int>(
                 "sp_Reimbursement_Reject",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -151,12 +178,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<bool> MarkPaidAsync(int id, string? paymentReference, int paidBy)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_PaymentReference", paymentReference);
             parameters.Add("p_PaidBy", paidBy);
 
-            var rowsAffected = await _dbConnection.QueryFirstOrDefaultAsync<int>(
+            var rowsAffected = await conn.QueryFirstOrDefaultAsync<int>(
                 "sp_Reimbursement_MarkPaid",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -166,11 +194,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<bool> UploadProofAsync(int id, string receiptUrl)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_ReceiptUrl", receiptUrl);
 
-            var rowsAffected = await _dbConnection.QueryFirstOrDefaultAsync<int>(
+            var rowsAffected = await conn.QueryFirstOrDefaultAsync<int>(
                 "sp_Reimbursement_UploadProof",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -180,10 +209,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Reimbursement
 
         public async Task<IEnumerable<AccountEntryDto>> GetAccountEntriesAsync(int? campusId)
         {
+            var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<AccountEntryDto>(
+            return await conn.QueryAsync<AccountEntryDto>(
                 "sp_Reimbursement_GetAccountEntries",
                 parameters,
                 commandType: CommandType.StoredProcedure);

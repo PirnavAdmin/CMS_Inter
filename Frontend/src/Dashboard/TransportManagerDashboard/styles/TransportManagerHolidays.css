@@ -1,0 +1,17 @@
+/* Transport Manager Holidays Styles */
+
+.tm-holidays-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tm-holiday-card {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}

@@ -339,6 +339,6 @@
   border-color: var(--cms-border);
 }
 [data-theme="dark"] .empty-past-icon {
-  background: rgba(111, 132, 0, 0.2);
+  background: color-mix(in srgb, var(--cms-primary)  0.2);
   color: var(--cms-primary);
 }

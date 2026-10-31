@@ -1065,27 +1065,27 @@ END //
 DROP PROCEDURE IF EXISTS `sp_InsertAuditLog` //
 CREATE PROCEDURE `sp_InsertAuditLog`(
     IN p_EventId VARCHAR(64),
-    IN p_CorrelationId VARCHAR(64),
-    IN p_RequestId VARCHAR(64),
+    IN p_CorrelationId VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_RequestId VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_UserId INT,
     IN p_UserName VARCHAR(100),
     IN p_ActorRole VARCHAR(50),
     IN p_ActorType VARCHAR(30),
     IN p_StaffId INT,
-    IN p_Action VARCHAR(100),
+    IN p_Action VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_EntityName VARCHAR(100),
     IN p_EntityId INT,
-    IN p_Module VARCHAR(50),
+    IN p_Module VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_Description LONGTEXT,
     IN p_Severity VARCHAR(20),
-    IN p_Status VARCHAR(30),
-    IN p_IpAddress VARCHAR(50),
+    IN p_Status VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_IpAddress VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_RemoteIpAddress VARCHAR(50),
     IN p_ForwardedClientIp VARCHAR(50),
     IN p_IpSource VARCHAR(30),
     IN p_IpConfidence VARCHAR(30),
     IN p_UserAgent VARCHAR(500),
-    IN p_DeviceId VARCHAR(100),
+    IN p_DeviceId VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_SessionId VARCHAR(100),
     IN p_RequestMethod VARCHAR(10),
     IN p_RouteTemplate VARCHAR(255),
@@ -1115,19 +1115,19 @@ END //
 
 DROP PROCEDURE IF EXISTS `sp_GetAuditLogsPaged` //
 CREATE PROCEDURE `sp_GetAuditLogsPaged`(
-    IN p_Query VARCHAR(100),
-    IN p_Module VARCHAR(50),
-    IN p_Severity VARCHAR(30),
-    IN p_Role VARCHAR(50),
+    IN p_Query VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Module VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Severity VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Role VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_FromDate DATETIME,
     IN p_ToDate DATETIME,
-    IN p_Status VARCHAR(30),
-    IN p_Action VARCHAR(100),
+    IN p_Status VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Action VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_UserId INT,
-    IN p_IpAddress VARCHAR(50),
-    IN p_DeviceId VARCHAR(100),
-    IN p_RequestId VARCHAR(64),
-    IN p_CorrelationId VARCHAR(64),
+    IN p_IpAddress VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_DeviceId VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_RequestId VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_CorrelationId VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_PageNumber INT,
     IN p_PageSize INT
 )
@@ -1244,7 +1244,7 @@ END //
 
 DROP PROCEDURE IF EXISTS `sp_GetRelatedAuditLogs` //
 CREATE PROCEDURE `sp_GetRelatedAuditLogs`(
-    IN p_CorrelationId VARCHAR(64)
+    IN p_CorrelationId VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 

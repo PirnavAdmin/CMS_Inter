@@ -190,3 +190,7 @@ export async function payslipPdf(id) {
     throw new Error("The server did not return a PDF.");
   return response.data;
 }
+
+export async function updateProfileContact(data) {
+  return unwrap(await api.put("/api/v1/staff/me/contact", data));
+}

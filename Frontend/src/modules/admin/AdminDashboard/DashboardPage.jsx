@@ -1364,8 +1364,8 @@ export default function DashboardPage() {
                         <AreaChart data={overviewChartData} margin={{ top: 6, right: 10, left: 15, bottom: 2 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
-                              <stop offset="100%" stopColor="#22a447" stopOpacity={0.02} />
+                              <stop offset="0%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.35} />
+                              <stop offset="100%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
@@ -1383,10 +1383,10 @@ export default function DashboardPage() {
                           <Area
                             type="monotone"
                             dataKey="studentsJoined"
-                            stroke="#22a447"
+                            stroke="var(--cms-primary, #22a447)"
                             strokeWidth={2.5}
                             fill="url(#admissionGradient)"
-                            dot={{ r: 3, fill: "#22a447" }}
+                            dot={{ r: 3, fill: "var(--cms-primary, #22a447)" }}
                           />
                         </AreaChart>
                       </ResponsiveContainer>

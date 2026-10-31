@@ -1,93 +1,46 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Operations;
-using Dapper;
-using Microsoft.EntityFrameworkCore;
-using System.Data;
+using CollegeManagement.API.Services.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/v1/transport/operations")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/transport/operations")]
     [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class TransportOperationsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ITransportOperationsService _operationsService;
 
-        public TransportOperationsController(AppDbContext context)
+        public TransportOperationsController(ITransportOperationsService operationsService)
         {
-            _context = context;
+            _operationsService = operationsService;
         }
 
-        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
-
         [HttpGet("trips")]
-        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         [ProducesResponseType(typeof(VehicleTripsResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetTrips(
             [FromQuery] long? routeId,
             [FromQuery] long? vehicleId,
             [FromQuery] DateTime? tripDate,
             [FromQuery] string? status,
-            [FromQuery] string? search)
+            [FromQuery] string? search,
+            CancellationToken ct = default)
         {
             try
             {
-                using var c = Connection();
-                var trips = (await c.QueryAsync<dynamic>(
-                    "sp_GetTransportTrips",
-                    new
-                    {
-                        p_RouteId = routeId,
-                        p_VehicleId = vehicleId,
-                        p_TripDate = tripDate?.Date,
-                        p_Status = status,
-                        p_Search = search ?? ""
-                    },
-                    commandType: CommandType.StoredProcedure)).ToList();
-
-                var tripCards = trips.Select(t => new VehicleTripCardDto
-                {
-                    TripId = (long)t.TripId,
-                    VehicleId = (long)t.VehicleId,
-                    VehicleNumber = (string)(t.VehicleNumber ?? ""),
-                    RegistrationNumber = (string)(t.RegistrationNumber ?? ""),
-                    RouteId = (long)t.RouteId,
-                    RouteName = (string)(t.RouteName ?? ""),
-                    DriverId = (long)t.DriverId,
-                    DriverName = (string)(t.DriverName ?? ""),
-                    DriverMobile = (string)(t.DriverMobile ?? ""),
-                    AttendantId = (long?)t.AttendantId,
-                    AttendantName = (string)(t.AttendantName ?? "Unassigned"),
-                    AttendantMobile = (string)(t.AttendantMobile ?? "N/A"),
-                    StudentsCount = (int)(t.StudentsPresent ?? 0),
-                    Capacity = (int)(t.VehicleCapacity ?? 50),
-                    MorningTripTime = (string)(t.StartTime ?? "07:00 AM"),
-                    EveningTripTime = (string)(t.EndTime ?? "03:45 PM"),
-                    Status = (string)(t.Status ?? "Completed"),
-                    GpsStatus = "Online"
-                }).ToList();
-
-                var metrics = new VehicleTripMetricsDto
-                {
-                    VehiclesRunning = tripCards.Count(x => x.Status == "Running"),
-                    TripsCompleted = tripCards.Count(x => x.Status == "Completed"),
-                    DelayedTrips = tripCards.Count(x => x.Status == "Delayed" || x.Status == "Cancelled"),
-                    OfflineGpsDevices = 0,
-                    ActiveMorningTrips = tripCards.Count(x => x.Status == "Running"),
-                    StudentsOnBoard = tripCards.Sum(x => x.StudentsCount),
-                    ActiveEveningTrips = 0
-                };
-
+                var result = await _operationsService.GetTripsResponseAsync(routeId, vehicleId, tripDate, status, search, ct);
                 return Ok(new
                 {
                     success = true,
-                    data = new VehicleTripsResponseDto
-                    {
-                        Metrics = metrics,
-                        Trips = tripCards
-                    }
+                    data = result
                 });
             }
             catch (Exception ex)
@@ -97,31 +50,13 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("trips")]
-        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> CreateTrip([FromBody] VehicleTripCardDto dto)
+        public async Task<IActionResult> CreateTrip(
+            [FromBody] VehicleTripCardDto dto,
+            CancellationToken ct = default)
         {
             try
             {
-                using var c = Connection();
-                var id = await c.ExecuteScalarAsync<long>(
-                    "sp_CreateTransportTrip",
-                    new
-                    {
-                        p_AssignmentId = (long?)null,
-                        p_VehicleId = dto.VehicleId,
-                        p_RouteId = dto.RouteId,
-                        p_DriverId = dto.DriverId,
-                        p_AttendantId = dto.AttendantId,
-                        p_TripType = "Morning",
-                        p_TripDate = DateTime.UtcNow.Date,
-                        p_StartTime = dto.MorningTripTime,
-                        p_EndTime = dto.EveningTripTime,
-                        p_StudentsPresent = dto.StudentsCount,
-                        p_Status = dto.Status ?? "Running",
-                        p_CreatedBy = (long?)null
-                    },
-                    commandType: CommandType.StoredProcedure);
-
+                var id = await _operationsService.CreateTripAsync(dto, ct);
                 return Ok(new { success = true, data = id, message = "Trip created successfully" });
             }
             catch (Exception ex)
@@ -131,26 +66,15 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPut("trips/{tripId}")]
-        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> UpdateTrip(long tripId, [FromBody] VehicleTripCardDto dto)
+        public async Task<IActionResult> UpdateTrip(
+            long tripId,
+            [FromBody] VehicleTripCardDto dto,
+            CancellationToken ct = default)
         {
             try
             {
-                using var c = Connection();
-                var rows = await c.ExecuteAsync(
-                    "sp_UpdateTransportTrip",
-                    new
-                    {
-                        p_TripId = tripId,
-                        p_StartTime = dto.MorningTripTime,
-                        p_EndTime = dto.EveningTripTime,
-                        p_StudentsPresent = dto.StudentsCount,
-                        p_Status = dto.Status,
-                        p_UpdatedBy = (long?)null
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-                return Ok(new { success = rows > 0, message = "Trip updated successfully" });
+                var rows = await _operationsService.UpdateTripAsync(tripId, dto, ct);
+                return Ok(new { success = rows, message = "Trip updated successfully" });
             }
             catch (Exception ex)
             {
@@ -159,18 +83,14 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpDelete("trips/{tripId}")]
-        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> DeleteTrip(long tripId)
+        public async Task<IActionResult> DeleteTrip(
+            long tripId,
+            CancellationToken ct = default)
         {
             try
             {
-                using var c = Connection();
-                var rows = await c.ExecuteAsync(
-                    "sp_DeleteTransportTrip",
-                    new { p_TripId = tripId, p_UpdatedBy = (long?)null },
-                    commandType: CommandType.StoredProcedure);
-
-                return Ok(new { success = rows > 0, message = "Trip deleted successfully" });
+                var rows = await _operationsService.DeleteTripAsync(tripId, ct);
+                return Ok(new { success = rows, message = "Trip deleted successfully" });
             }
             catch (Exception ex)
             {
@@ -179,69 +99,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("gps")]
-        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> GetGpsTracking()
+        public async Task<IActionResult> GetGpsTracking(CancellationToken ct = default)
         {
             try
             {
-                using var c = Connection();
-                var assignments = (await c.QueryAsync<dynamic>(
-                    "sp_GetTransportVehicleAssignments",
-                    new
-                    {
-                        p_RouteId = (long?)null,
-                        p_VehicleId = (long?)null,
-                        p_DriverId = (long?)null,
-                        p_Status = (byte)1,
-                        p_Search = ""
-                    },
-                    commandType: CommandType.StoredProcedure)).ToList();
-
-                if (assignments == null || !assignments.Any())
-                {
-                    return Ok(new { success = true, data = new List<GpsVehicleTrackingDto>() });
-                }
-
-                var stops = (await c.QueryAsync<dynamic>(
-                    "sp_GetPickupPoints",
-                    new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null, p_CampusId = (int?)null },
-                    commandType: CommandType.StoredProcedure)).ToList();
-
-                var list = assignments.Select(a =>
-                {
-                    long rId = a.RouteId != null ? Convert.ToInt64(a.RouteId) : 0L;
-                    var routeStops = stops
-                        .Where(s => s.RouteId != null && Convert.ToInt64(s.RouteId) == rId)
-                        .Select(s => new RouteStopDto
-                        {
-                            StopId = s.PickupPointId != null ? Convert.ToInt64(s.PickupPointId) : 0L,
-                            StopName = (string)(s.StopName ?? s.PickupPointName ?? ""),
-                            DistanceKm = s.DistanceKm != null ? Convert.ToDecimal(s.DistanceKm) : (s.DistanceFromStart != null ? Convert.ToDecimal(s.DistanceFromStart) : 5m),
-                            ScheduledTime = s.PickupTime != null ? (s.PickupTime is TimeSpan ts ? ts.ToString(@"hh\:mm") : Convert.ToString(s.PickupTime)) : "07:30 AM"
-                        }).ToList();
-
-                    var currentStopName = routeStops.FirstOrDefault()?.StopName ?? "Campus";
-
-                    return new GpsVehicleTrackingDto
-                    {
-                        VehicleId = a.VehicleId != null ? Convert.ToInt64(a.VehicleId) : 0L,
-                        VehicleNumber = (string)(a.VehicleNumber ?? ""),
-                        VehicleName = (string)(a.VehicleNumber ?? ""),
-                        RouteName = (string)(a.RouteName ?? ""),
-                        DriverName = (string)(a.DriverName ?? "Unassigned"),
-                        DriverMobile = (string)(a.DriverMobile ?? ""),
-                        AttendantName = (string)(a.AttendantName ?? "Unassigned"),
-                        Speed = "42 km/h",
-                        Eta = "12 mins",
-                        GpsSignal = "Active",
-                        CurrentStop = currentStopName,
-                        NextStop = routeStops.Skip(1).FirstOrDefault()?.StopName ?? "Main Gate",
-                        TripStatus = "In Transit",
-                        RouteProgress = $"Heading to {currentStopName}",
-                        RouteStops = routeStops
-                    };
-                }).ToList();
-
+                var list = await _operationsService.GetGpsTrackingAsync(ct);
                 return Ok(new { success = true, data = list });
             }
             catch (Exception)

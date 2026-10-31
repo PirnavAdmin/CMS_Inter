@@ -3853,6 +3853,15 @@ function StaffList({ records = [], setRecords, forced }) {
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState(q);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQ(q);
+    }, 350);
+    return () => clearTimeout(handler);
+  }, [q]);
+
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [designationFilter, setDesignationFilter] = useState("");
   const [staffTypeFilter, setStaffTypeFilter] = useState("");
@@ -3893,7 +3902,7 @@ function StaffList({ records = [], setRecords, forced }) {
         const params = {
           PageNumber: page,
           PageSize: size,
-          SearchTerm: q || undefined,
+          SearchTerm: debouncedQ || undefined,
           Department: departmentFilter || undefined,
           Designation: designationFilter || undefined,
           StaffType: forced !== "All" && forced !== "Completed" && forced !== "Pending" ? forced : (staffTypeFilter || undefined),
@@ -3923,7 +3932,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
+  }, [page, size, debouncedQ, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {

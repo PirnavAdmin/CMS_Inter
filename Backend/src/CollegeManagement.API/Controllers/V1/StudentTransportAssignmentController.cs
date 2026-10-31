@@ -1,13 +1,18 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
 using CollegeManagement.API.Services.Interfaces;
+using System;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/v1/transport/student-assignments")]
-    [AllowAnonymous]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/transport/student-assignments")]
+    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
     public class StudentTransportAssignmentController : ControllerBase
     {
         private readonly IStudentTransportAssignmentService _service;
@@ -27,10 +32,6 @@ namespace CollegeManagement.API.Controllers
             return long.TryParse(claim, out var uid) ? uid : null;
         }
 
-        //---------------------------------------------------------
-        // GET ALL
-        //---------------------------------------------------------
-
         [HttpGet]
         public async Task<IActionResult> GetAll(
             [FromQuery] StudentTransportAssignmentFilterDto filter)
@@ -39,14 +40,10 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
-        //---------------------------------------------------------
-        // GET BY ID
-        //---------------------------------------------------------
-
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(string id)
         {
-            var cleanIdStr = System.Text.RegularExpressions.Regex.Replace(id ?? "", @"[^\d]", "");
+            var cleanIdStr = Regex.Replace(id ?? "", @"[^\d]", "");
             if (long.TryParse(cleanIdStr, out long parsedId) && parsedId > 0)
             {
                 var result = await _service.GetByIdAsync(parsedId);
@@ -55,10 +52,6 @@ namespace CollegeManagement.API.Controllers
 
             return NotFound(new { success = false, message = "Student transport assignment not found." });
         }
-
-        //---------------------------------------------------------
-        // CREATE
-        //---------------------------------------------------------
 
         [HttpPost]
         public async Task<IActionResult> Create(
@@ -82,16 +75,12 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        //---------------------------------------------------------
-        // UPDATE
-        //---------------------------------------------------------
-
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
             string id,
             [FromBody] UpdateStudentTransportAssignmentDto dto)
         {
-            var cleanIdStr = System.Text.RegularExpressions.Regex.Replace(id ?? "", @"[^\d]", "");
+            var cleanIdStr = Regex.Replace(id ?? "", @"[^\d]", "");
             if (!long.TryParse(cleanIdStr, out long parsedId) || parsedId <= 0)
             {
                 return BadRequest(new
@@ -126,14 +115,10 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        //---------------------------------------------------------
-        // DELETE
-        //---------------------------------------------------------
-
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(string id)
         {
-            var cleanIdStr = System.Text.RegularExpressions.Regex.Replace(id ?? "", @"[^\d]", "");
+            var cleanIdStr = Regex.Replace(id ?? "", @"[^\d]", "");
             if (!long.TryParse(cleanIdStr, out long parsedId) || parsedId <= 0)
             {
                 return BadRequest(new

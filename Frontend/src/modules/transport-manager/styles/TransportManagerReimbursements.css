@@ -5,3 +5,68 @@
   flex-direction: column;
   gap: 1.5rem;
 }
+
+/* Theme-based Reimbursement Tabs Pill matching Reference 2 */
+.tm-reimbursements-page .reimb-role-toggle,
+.reimb-page-container .reimb-role-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.tm-reimbursements-page .reimb-toggle-btn,
+.reimb-page-container .reimb-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text-secondary, #475569);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.tm-reimbursements-page .reimb-toggle-btn:hover:not(.is-active),
+.reimb-page-container .reimb-toggle-btn:hover:not(.is-active) {
+  color: var(--cms-primary);
+  background: var(--cms-primary-soft, rgba(0, 0, 0, 0.03));
+}
+
+.tm-reimbursements-page .reimb-toggle-btn.is-active,
+.reimb-page-container .reimb-toggle-btn.is-active {
+  background: var(--cms-primary) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cms-primary) 35%, transparent);
+}
+
+.tm-reimbursements-page .reimb-toggle-btn.is-active img,
+.reimb-page-container .reimb-toggle-btn.is-active img {
+  filter: brightness(0) invert(1);
+}
+
+.tm-reimbursements-page .reimb-toggle-btn.is-active svg,
+.reimb-page-container .reimb-toggle-btn.is-active svg {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .tm-reimbursements-page .reimb-role-toggle,
+[data-theme="dark"] .reimb-page-container .reimb-role-toggle {
+  background: var(--cms-surface, #1e293b);
+  border-color: var(--cms-border, #334155);
+}
+
+[data-theme="dark"] .tm-reimbursements-page .reimb-toggle-btn,
+[data-theme="dark"] .reimb-page-container .reimb-toggle-btn {
+  color: var(--cms-muted, #94a3b8);
+}

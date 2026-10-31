@@ -1,0 +1,19 @@
+.cms-kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+.cms-kv div span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--cms-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cms-kv div strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .cms-kv { grid-template-columns: 1fr; }
+}

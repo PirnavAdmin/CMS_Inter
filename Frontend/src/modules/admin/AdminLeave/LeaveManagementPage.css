@@ -1435,7 +1435,7 @@
 }
 
 .leave-tab-btn:hover:not(.active) {
-  background: var(--cms-hover, rgba(111, 132, 0, 0.08));
+  background: var(--cms-hover, color-mix(in srgb, var(--cms-primary)  0.08));
   color: var(--cms-text, #10203c);
 }
 
@@ -1455,7 +1455,7 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
-  background: rgba(111, 132, 0, 0.14);
+  background: color-mix(in srgb, var(--cms-primary)  0.14);
   color: var(--cms-primary, #6F8400);
   transition: all 0.15s ease;
 }
@@ -1783,7 +1783,7 @@
 }
 
 .leave-history-table-wrap .cms-table tbody tr:hover {
-  background: var(--cms-hover, rgba(111, 132, 0, 0.03));
+  background: var(--cms-hover, color-mix(in srgb, var(--cms-primary)  0.03));
 }
 
 .leave-history-table-wrap .cms-table td.cms-strong {
@@ -2015,7 +2015,7 @@
 .faculty-leave-modal .cms-field select:focus,
 .faculty-leave-modal .cms-field textarea:focus {
   border-color: var(--cms-primary, #6F8400) !important;
-  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.15) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary)  0.15) !important;
 }
 
 .faculty-leave-modal .cms-field textarea {
@@ -2182,8 +2182,8 @@
 }
 
 [data-theme="dark"] .faculty-leave-modal .leave-duration-badge {
-  background: rgba(111, 132, 0, 0.18) !important;
-  border-color: rgba(111, 132, 0, 0.35) !important;
+  background: color-mix(in srgb, var(--cms-primary)  0.18) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.35) !important;
   color: #d4e157 !important;
 }
 

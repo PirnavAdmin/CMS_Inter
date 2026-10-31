@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -225,6 +226,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_SectionId", sectionId);
             parameters.Add("p_ExaminationId", examinationId);
             parameters.Add("p_TargetStatus", (int)targetStatus);
+            parameters.Add("p_Status", (int)targetStatus);
             parameters.Add("p_UserId", userId);
             parameters.Add("p_Remarks", remarks);
             parameters.Add("p_CampusId", campusId ?? 0);
@@ -287,6 +289,122 @@ namespace CollegeManagement.API.Repositories.Implementations
             var json = System.Text.Json.JsonSerializer.Serialize(items);
             var count = await BulkUpsertMarksAsync(json, userId, campusId, ct);
             return count >= 0;
+        }
+    
+        public async Task<bool> SaveFacultyDraftMarksAsync(int subjectId, int sectionId, int examinationId, int? facultyId, SaveFacultyMarksRequestDto request)
+        {
+            try
+            {
+                var inputList = request.Students?.Any() == true ? request.Students
+                              : request.Marks?.Any() == true ? request.Marks
+                              : request.MarksList?.Any() == true ? request.MarksList
+                              : request.StudentMarks;
+
+                if (inputList == null || !inputList.Any()) return false;
+
+                var marksPayload = inputList.Select(s => new
+                {
+                    studentId = s.StudentId,
+                    internalMarks = s.InternalMarks,
+                    practicalMarks = s.PracticalMarks,
+                    theoryMarks = s.TheoryMarks,
+                    totalMarks = s.TotalMarks ?? (s.InternalMarks + s.PracticalMarks + s.TheoryMarks),
+                    passingMarks = 35,
+                    isAbsent = s.IsAbsent,
+                    remarks = s.Remarks
+                });
+
+                var json = JsonSerializer.Serialize(marksPayload);
+
+                var parameters = new DynamicParameters();
+                parameters.Add("p_SubjectId", subjectId, DbType.Int32);
+                parameters.Add("p_SectionId", sectionId, DbType.Int32);
+                parameters.Add("p_ExaminationId", examinationId, DbType.Int32);
+                parameters.Add("p_FacultyId", facultyId ?? 0, DbType.Int32);
+                parameters.Add("p_MarksJson", json, DbType.String);
+
+                var result = await Connection.ExecuteScalarAsync<int>(
+                    "sp_SaveFacultyDraftMarks",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                return result > 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing sp_SaveFacultyDraftMarks for SubjectId: {SubjectId}, SectionId: {SectionId}, ExamId: {ExamId}", subjectId, sectionId, examinationId);
+                throw;
+            }
+        }
+
+        public async Task<bool> SubmitFacultyEvaluationAsync(int subjectId, int sectionId, int examinationId, int? facultyId)
+        {
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_SubjectId", subjectId, DbType.Int32);
+                parameters.Add("p_SectionId", sectionId, DbType.Int32);
+                parameters.Add("p_ExaminationId", examinationId, DbType.Int32);
+                parameters.Add("p_FacultyId", facultyId ?? 0, DbType.Int32);
+
+                var affected = await Connection.ExecuteScalarAsync<int>(
+                    "sp_SubmitFacultyEvaluation",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                return affected > 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing sp_SubmitFacultyEvaluation for SubjectId: {SubjectId}, SectionId: {SectionId}, ExamId: {ExamId}", subjectId, sectionId, examinationId);
+                throw;
+            }
+        }
+
+        public async Task<bool> ResubmitFacultyEvaluationAsync(int subjectId, int sectionId, int examinationId, int? facultyId, string? remarks)
+        {
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_SubjectId", subjectId, DbType.Int32);
+                parameters.Add("p_SectionId", sectionId, DbType.Int32);
+                parameters.Add("p_ExaminationId", examinationId, DbType.Int32);
+                parameters.Add("p_FacultyId", facultyId ?? 0, DbType.Int32);
+                parameters.Add("p_Remarks", remarks ?? string.Empty, DbType.String);
+
+                var affected = await Connection.ExecuteScalarAsync<int>(
+                    "sp_ResubmitFacultyEvaluation",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                return affected > 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing sp_ResubmitFacultyEvaluation for SubjectId: {SubjectId}, SectionId: {SectionId}, ExamId: {ExamId}", subjectId, sectionId, examinationId);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<int>> GetExaminationSubjectIdsAsync(int examId)
+        {
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_ExamId", examId, DbType.Int32);
+
+                var ids = await Connection.QueryAsync<int>(
+                    "sp_GetExaminationSubjectIds",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                return ids ?? Enumerable.Empty<int>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error executing sp_GetExaminationSubjectIds for examId {ExamId}", examId);
+                return Enumerable.Empty<int>();
+            }
         }
     }
 }

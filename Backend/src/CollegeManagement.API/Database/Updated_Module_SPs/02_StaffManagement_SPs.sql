@@ -98,7 +98,7 @@ END //
 DROP PROCEDURE IF EXISTS `sp_DeleteStaff` //
 CREATE PROCEDURE `sp_DeleteStaff`(IN p_Id INT)
 BEGIN
-    UPDATE `Staffs` SET 
+    UPDATE `Staff` SET 
         `IsDeleted` = 1,
         `Status` = 'Inactive',
         `UpdatedAt` = UTC_TIMESTAMP()
@@ -179,7 +179,7 @@ BEGIN
         s.PhotoPath,
         s.CreatedAt,
         s.UpdatedAt
-    FROM Staffs s
+    FROM Staff s
     LEFT JOIN Designations d ON d.Id = s.DesignationId
     LEFT JOIN Departments dep ON dep.DepartmentId = s.DepartmentId
     WHERE s.IsDeleted = 0
@@ -199,7 +199,7 @@ BEGIN
 
     -- Total count
     SELECT COUNT(1) AS TotalCount
-    FROM Staffs s
+    FROM Staff s
     WHERE s.IsDeleted = 0
       AND (p_StaffType IS NULL OR p_StaffType = '' OR p_StaffType = 'All' OR s.StaffType = p_StaffType)
       AND (p_DepartmentId IS NULL OR p_DepartmentId = 0 OR s.DepartmentId = p_DepartmentId)

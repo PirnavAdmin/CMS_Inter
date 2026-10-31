@@ -196,7 +196,7 @@
 .tm-leave-modal .cms-field select:focus,
 .tm-leave-modal .cms-field textarea:focus {
   border-color: var(--cms-primary, #6F8400) !important;
-  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.15) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary)  0.15) !important;
 }
 
 .tm-leave-modal .cms-field textarea {

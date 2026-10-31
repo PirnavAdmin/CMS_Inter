@@ -87,6 +87,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var created = await _designationRepository.AddAsync(entity);
             _cache.RemoveByPrefix("lookup:designations");
+            _cache.RemoveByPrefix("lookup:departments");
             return new DesignationResponseDto
             {
                 Id = created.Id,
@@ -148,6 +149,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             await _designationRepository.UpdateAsync(existing);
             _cache.RemoveByPrefix("lookup:designations");
+            _cache.RemoveByPrefix("lookup:departments");
             int staffCount = await _designationRepository.GetAssignedStaffCountAsync(id);
 
             return new DesignationResponseDto
@@ -215,6 +217,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             await _designationRepository.DeleteAsync(id);
             _cache.RemoveByPrefix("lookup:designations");
+            _cache.RemoveByPrefix("lookup:departments");
             return (true, "Designation deleted successfully.");
         }
 
@@ -410,6 +413,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             result.Success = result.Errors.Count == 0;
             result.Message = $"Designation import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.FailedRowsCount} failed.";
+            _cache.RemoveByPrefix("lookup:designations");
+            _cache.RemoveByPrefix("lookup:departments");
             return result;
         }
 
@@ -480,6 +485,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             result.Success = result.Errors.Count == 0;
             result.Message = $"Bulk designation import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.FailedRowsCount} failed.";
+            _cache.RemoveByPrefix("lookup:designations");
+            _cache.RemoveByPrefix("lookup:departments");
             return result;
         }
 
