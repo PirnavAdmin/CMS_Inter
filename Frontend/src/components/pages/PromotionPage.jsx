@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown, Eye } from "lucide-react";
@@ -996,7 +997,7 @@ export default function PromotionPage({ screen = "promotion" }) {
         {activeTab === "promotion" ? (
           <>
             <section className="cms-card promotion-card">
-              <div className="cms-card-head">
+              <div className="cms-card-head promotion-setup-head">
                 <div>
                   <h2>1. Promotion Setup</h2>
                   <p>Configure the student cohort level, group, and section for promotion.</p>
@@ -1203,31 +1204,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                     </tbody>
                     </table>
                   </div>
-                  <footer className="promotion-pagination student-management-pagination">
-                  <span>
-                    Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
-                    {visibleStudents.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + visibleStudents.length, studentsTotalCount) : 0} of {studentsTotalCount} students
-                  </span>
-                  <div className="student-management-pagination-actions">
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === 1}
-                      onClick={() => changeStudentsPage(studentsPage - 1)}
-                    >
-                      Previous
-                    </button>
-                    <span>Page {studentsPage} of {studentsTotalPages}</span>
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === studentsTotalPages}
-                      onClick={() => changeStudentsPage(studentsPage + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                  </footer>
+                  <AdminPagination currentPage={studentsPage} totalRecords={studentsTotalCount} disabled={studentsLoading} onPageChange={changeStudentsPage} />
                 </>
               ) : (
                 <div className="promotion-empty">Select the source details, then load students.</div>
@@ -1864,7 +1841,7 @@ function CampusTransferScreen({ onSuccess }) {
           <div className="cms-table-wrap"><table className="cms-table campus-transfer-request-table"><thead><tr><th>#</th><th>Student Name</th><th>Admission No</th><th>{requestDirection === "sent" ? "To Campus" : "From Campus"}</th><th>{requestDirection === "sent" ? "Requested To" : "Requested By"}</th><th>Request Date</th><th>Effective Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
             {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" className="cms-action-btn campus-transfer-view-action" title="View Details" aria-label="View Details" onClick={() => setDetailRequest(request)}><Eye size={16} aria-hidden="true" /></button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
           </tbody></table></div>
-          <div className="campus-transfer-request-pagination"><span>Showing {filteredRequests.length ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredRequests.length)} of {filteredRequests.length} entries</span><div><button disabled={currentPage === 1} onClick={() => setRequestPage((page) => Math.max(1, page - 1))}>‹</button><span>{currentPage}</span><button disabled={currentPage === totalPages} onClick={() => setRequestPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div>
+          <AdminPagination currentPage={currentPage} totalRecords={filteredRequests.length} onPageChange={setRequestPage} />
         </div>
       )}
       </section>
@@ -1969,14 +1946,7 @@ function HistoryTable({ rows, onRollback }) {
         </tbody>
       </table>
     </div>
-    <div className="promotion-pagination">
-      <span>Showing {rows.length ? start + 1 : 0}-{start + pagedRows.length} of {rows.length} records</span>
-      <div>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === 1} onClick={() => setHistoryPage(currentPage - 1)}>Previous</button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === totalPages} onClick={() => setHistoryPage(currentPage + 1)}>Next</button>
-      </div>
-    </div>
+    <AdminPagination currentPage={currentPage} totalRecords={rows.length} onPageChange={setHistoryPage} />
     </>
   );
 }
@@ -2693,14 +2663,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
         </table>
       </div>
 
-      <div className="promotion-pagination">
-        <span>Showing {rows.length ? allocationStart + 1 : 0}-{allocationStart + pagedAllocationRows.length} of {rows.length} students</span>
-        <div>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === 1 || saving} onClick={() => setAllocationPage(currentAllocationPage - 1)}>Previous</button>
-          <span>Page {currentAllocationPage} of {allocationTotalPages}</span>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === allocationTotalPages || saving} onClick={() => setAllocationPage(currentAllocationPage + 1)}>Next</button>
-        </div>
-      </div>
+      <AdminPagination currentPage={currentAllocationPage} totalRecords={rows.length} onPageChange={(value) => { if (!saving) setAllocationPage(value); }} />
 
       {isProgram ? <section className="promotion-fee-panel" aria-label="Program fee adjustment">
         <h3>Program Fee Adjustment</h3>

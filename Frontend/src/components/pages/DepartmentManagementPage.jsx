@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
@@ -285,27 +287,7 @@ const PAGE_SIZE = 5;
 const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
 const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={5} />);
 
-function Pager({ page, total, onChange }) {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const start = total ? (page - 1) * PAGE_SIZE + 1 : 0;
-  const end = Math.min(page * PAGE_SIZE, total);
-  return (
-    <footer className="master-pager">
-      <span>
-        Showing {start} to {end} of {total} entries
-      </span>
-      <div>
-        <button disabled={page === 1} onClick={() => onChange(page - 1)}>
-          Prev
-        </button>
-        <strong>{page}</strong>
-        <button disabled={page >= pages} onClick={() => onChange(page + 1)}>
-          Next
-        </button>
-      </div>
-    </footer>
-  );
-}
+function Pager({ page, total, onChange }) { return <AdminPagination currentPage={page} totalRecords={total} onPageChange={onChange} />; }
 
 function EmptyTable({ text, colSpan = 3 }) {
   return (
@@ -2464,7 +2446,7 @@ export function MasterImportPage({ kind = "department" }) {
                 )}
               </div>
               <div className="master-table-wrap">
-                <table>
+                <PaginatedTable>
                   <thead>
                     <tr>
                       <th>Sheet / Type</th>
@@ -2496,7 +2478,7 @@ export function MasterImportPage({ kind = "department" }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
               <footer>
                 <button

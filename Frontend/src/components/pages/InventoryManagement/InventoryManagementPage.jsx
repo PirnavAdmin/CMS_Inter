@@ -4,12 +4,10 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   BarChart3,
-  Boxes,
   LayoutDashboard,
   List,
   Plus,
   RefreshCw,
-  RotateCcw,
   Tags,
   Truck,
 } from "lucide-react";
@@ -237,15 +235,6 @@ export default function InventoryManagementPage() {
       }
     >
       <div className="inventory-module">
-        <div className="inventory-demo-banner">
-          <span>
-            <Boxes size={18} /> Inventory · Changes saved to the backend · Weighted-average
-            valuation
-          </span>
-          <button className="cms-btn cms-btn-ghost" onClick={refresh}>
-            <RotateCcw size={15} /> Reload Inventory
-          </button>
-        </div>
         <nav className="inventory-tabs" aria-label="Inventory sections">
           {TABS.map(([slug, label, Icon]) => (
             <NavLink

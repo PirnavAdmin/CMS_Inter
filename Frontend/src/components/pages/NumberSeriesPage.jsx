@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -820,12 +821,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                >
-                  <option value={5}>5 rows</option>
-                  <option value={10}>10 rows</option>
-                  <option value={25}>25 rows</option>
-                  <option value={50}>50 rows</option>
-                </select>
+                ><option value={5}>5</option></select>
               </div>
             </div>
 
@@ -857,30 +853,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
             </div>
 
             {/* PAGINATION FOOTER */}
-            <div className="ns-pagination-bar">
-              <span className="ns-page-info">
-                Showing {filteredHistory.length ? (currentPage - 1) * pageSize + 1 : 0} to{" "}
-                {Math.min(currentPage * pageSize, filteredHistory.length)} of {filteredHistory.length} entries
-              </span>
-
-              <div className="ns-page-btns">
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <span className="ns-page-num">Page {currentPage} of {totalPages}</span>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <AdminPagination currentPage={currentPage} totalRecords={filteredHistory.length} pageSize={5} onPageChange={setCurrentPage} />
           </div>
         </div>
       </div>

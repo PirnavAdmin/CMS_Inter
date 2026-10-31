@@ -40,29 +40,52 @@
 }
 
 .group-management .cms-table {
-  min-width: 600px;
-  table-layout: fixed;
+  min-width: 640px;
+  table-layout: auto;
 }
 
-.group-management .cms-table th:nth-child(1) {
-  width: 17%;
+.group-management .cms-table th:nth-child(1),
+.group-management .cms-table td:nth-child(1) {
+  min-width: 120px;
 }
 
-.group-management .cms-table th:nth-child(2) {
-  width: 16%;
+.group-management .cms-table th:nth-child(2),
+.group-management .cms-table td:nth-child(2) {
+  min-width: 100px;
 }
 
-.group-management .cms-table th:nth-child(4) {
-  width: 15%;
+.group-management .cms-table th:nth-child(3),
+.group-management .cms-table td:nth-child(3) {
+  min-width: 180px;
 }
 
-.group-management .cms-table th:nth-child(5) {
-  width: 15%;
-  text-align: center;
+.group-management .cms-table th:nth-child(4),
+.group-management .cms-table td:nth-child(4) {
+  min-width: 96px;
+  white-space: nowrap;
 }
 
-.group-management .cms-pagination > .cms-page-btn {
-  flex: 0 0 auto;
+.group-management .cms-table th:nth-child(5),
+.group-management .cms-table td:nth-child(5) {
+  width: 108px;
+  min-width: 108px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.group-management .cms-table td:nth-child(5) .cms-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.group-management .cms-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 @media (max-width: 720px) {
@@ -75,13 +98,22 @@
     max-width: none;
   }
 
-  .group-management .cms-pagination .cms-page-info {
-    flex-basis: 100%;
-    min-width: 0;
+  .group-management .cms-pagination {
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
   }
 
-  .group-management .cms-page-info + .cms-page-btn {
-    margin-left: auto;
+  .group-management .cms-pagination .cms-page-info {
+    width: 100%;
+    text-align: center;
+    margin-right: 0;
+  }
+
+  .group-management .cms-pagination-controls {
+    width: 100%;
+    justify-content: center;
   }
 }
 

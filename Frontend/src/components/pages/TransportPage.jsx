@@ -1,5 +1,23 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+
+function TransportFilterSelect({ value, onChange, options, label }) {
+  const normalized = options.map((option) => option && typeof option === "object" ? { ...option, value: String(option.value) } : { value: String(option), label: option });
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger className="cms-transport-filter-trigger" aria-label={label}>
+      <span>{normalized.find((option) => option.value === String(value))?.label || label}</span><span aria-hidden="true">⌄</span>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content className="cms-transport-filter-menu" align="start" sideOffset={4} collisionPadding={12}>
+        <DropdownMenu.RadioGroup value={String(value)} onValueChange={onChange} aria-label={label}>
+          {normalized.map((option, index) => <DropdownMenu.RadioItem className="cms-transport-filter-option" key={`${option.value}-${index}`} value={option.value}>{option.label}</DropdownMenu.RadioItem>)}
+        </DropdownMenu.RadioGroup>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>;
+}
 import {
   AlertTriangle,
   ArrowRight,
@@ -343,15 +361,12 @@ function TableSection({
           onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
         />
       ) : (
-        <select
+        <TransportFilterSelect
           value={filterValues[filter.name] || "All"}
-          onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
-        >
-          {filter.options.map((option, optionIndex) => {
-            const normalized = option && typeof option === "object" ? option : { value: option, label: option };
-            return <option key={`${normalized.value}-${optionIndex}`} value={normalized.value}>{normalized.label}</option>;
-          })}
-        </select>
+          onChange={(value) => onFilterChange?.(filter.name, value)}
+          options={filter.options}
+          label={filter.label}
+        />
       )}
     </label>
   )) : null;
@@ -409,13 +424,7 @@ function TableSection({
           </table>
         </div>
         {visibleRows.length ? (
-          <div className="cms-transport-pagination">
-            <span>Page {currentPage} of {totalPages} - {visibleRows.length} record{visibleRows.length === 1 ? "" : "s"}</span>
-            <div>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
-            </div>
-          </div>
+          <AdminPagination currentPage={currentPage} totalRecords={visibleRows.length} pageSize={5} onPageChange={setPage} />
         ) : null}
       </div>
     </div>

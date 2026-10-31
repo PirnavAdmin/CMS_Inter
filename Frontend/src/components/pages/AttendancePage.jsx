@@ -1,6 +1,9 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
+import { DayPicker } from "react-day-picker";
+import { CalendarClock, CalendarDays, ChevronDown, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
@@ -15,6 +18,36 @@ import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
+function StudentAttendanceDate({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+  const trigger = useRef(null);
+  const selected = value ? new Date(`${value}T00:00:00`) : undefined;
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
+  const choose = (date) => {
+    if (!date) return;
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    onChange({ target: { value: iso } });
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  return <div className="att-contained-date" ref={root} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }} onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } }}>
+    <button type="button" ref={trigger} className="att-date-trigger" aria-label="Choose attendance date" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      <span>{selected?.toLocaleDateString("en-US") || "Select date"}</span><CalendarDays size={16} />
+    </button>
+    {open && <div className="att-date-calendar" role="dialog" aria-label="Choose attendance date">
+      <DayPicker mode="single" required selected={selected} defaultMonth={selected} onSelect={choose} autoFocus className="att-date-picker" />
+      <button type="button" className="att-date-today" onClick={() => choose(new Date())}>Today</button>
+    </div>}
+  </div>;
+}
 const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
 const dailyStudentStatus = (morning, afternoon) => {
   if (!STUDENT_SESSION_STATUSES.includes(morning) || !STUDENT_SESSION_STATUSES.includes(afternoon)) return "Select both sessions";
@@ -94,29 +127,82 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
 
-function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
-  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
-  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
+  const normalizedItems = useMemo(() => {
+    return items.map((x) => ({
+      id: get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x,
+      name: get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x,
+    }));
+  }, [items]);
+
+  const selected = normalizedItems.find((x) => String(x.id) === String(value));
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutsideClick);
+    return () => document.removeEventListener("pointerdown", handleOutsideClick);
+  }, []);
+
+  const choose = (id) => {
+    onChange({ target: { value: id } });
+    setOpen(false);
+  };
 
   return (
-    <nav className="att-pagination" aria-label="Attendance pages">
-      <span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span>
-      <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
-          Previous
+    <div className="att-field att-custom-select-field" ref={root} data-open={open}>
+      <span>{label}</span>
+      <div className="att-custom-select-wrap">
+        <button
+          type="button"
+          className="att-custom-select-trigger"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => !disabled && setOpen((prev) => !prev)}
+        >
+          <span className={selected ? "att-custom-select-value" : "att-custom-select-placeholder"}>
+            {selected ? selected.name : (all || `Select ${label}`)}
+          </span>
+          <ChevronDown className="att-custom-select-chevron" size={16} aria-hidden="true" />
         </button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
-          Next
-        </button>
+        {open && !disabled && (
+          <div className="att-custom-select-options" role="listbox">
+            {all && (
+              <button
+                type="button"
+                role="option"
+                aria-selected={!value}
+                className={!value ? "is-active" : ""}
+                onClick={() => choose("")}
+              >
+                <strong>{all}</strong>
+              </button>
+            )}
+            {normalizedItems.map((x) => (
+              <button
+                key={String(x.id)}
+                type="button"
+                role="option"
+                aria-selected={String(x.id) === String(value)}
+                className={String(x.id) === String(value) ? "is-active" : ""}
+                onClick={() => choose(x.id)}
+              >
+                <strong>{x.name}</strong>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-    </nav>
+    </div>
   );
 }
+
+function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) { return <AdminPagination currentPage={page} totalRecords={totalRows} onPageChange={onPageChange} unit={unit} />; }
 
 export default function AttendancePage({ area: areaProp } = {}) {
   const { area: areaParam } = useParams();
@@ -342,9 +428,9 @@ function AttendanceImportModal({ staff, say, onClose }) {
       <div className="attendance-import-step"><b>4</b><div><strong>Validation Summary</strong><p>{hasErrors ? "Fix the errors below and upload again." : "Validation passed! You can now import the data."}</p></div></div>
       <div className="attendance-import-summary"><span>Total Rows <b>{results.total}</b></span><span className="is-valid">Valid Rows <b>{results.valid}</b></span><span className="is-error">Error Rows <b>{results.errors.length}</b></span></div>
       
-      {hasErrors && <div className="att-scroll"><table className="cms-table"><thead><tr><th>Row</th><th>{staff ? "Staff ID" : "Admission No"}</th><th>{label} Name</th><th>Date</th><th>Result</th><th>Message</th></tr></thead><tbody>
+      {hasErrors && <div className="att-scroll"><PaginatedTable className="cms-table"><thead><tr><th>Row</th><th>{staff ? "Staff ID" : "Admission No"}</th><th>{label} Name</th><th>Date</th><th>Result</th><th>Message</th></tr></thead><tbody>
         {results.errors.map(([row, id, name, date, message], idx) => <tr key={idx}><td>{row}</td><td>{id}</td><td>{name}</td><td>{date}</td><td><span className="attendance-import-badge error">Error</span></td><td>{message}</td></tr>)}
-      </tbody></table></div>}
+      </tbody></PaginatedTable></div>}
       {hasErrors && <small className="attendance-import-error">Fix validation errors before importing.</small>}
     </section>}
   </div></Modal>;
@@ -928,7 +1014,7 @@ function Filters({ f, update, o, staff, busy, load, exportReport, search, onSear
     .replace(" ", ", ");
   if (!staff) return <>
     <div className="att-student-date-card">
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><StudentAttendanceDate value={f.date} onChange={update("date")} /></Field>}
       <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
       {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>

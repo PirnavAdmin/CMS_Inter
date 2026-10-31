@@ -1,53 +1,69 @@
 /* Admin Dashboard Page CSS — Compact & Responsive */
 .cms-content:has(> .dashboard-page),
 .cms-content:has(.dashboard-page) {
-  padding: 4px 14px 6px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100%;
+  padding: 6px 14px 16px !important;
+  display: block !important;
+  min-height: 100%;
+  height: auto !important;
   box-sizing: border-box;
+  overflow-y: auto !important;
 }
 
 .dashboard-page {
   --dashboard-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  flex: 1;
-  min-height: 0;
+  height: auto;
+  min-height: 100%;
+  flex: none;
   color: var(--cms-text);
   box-sizing: border-box;
 }
 
 /* Top Header Bar & Control Panel */
-.dashboard-header-bar {
+.dashboard-page .dashboard-header-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 6px;
   flex-wrap: wrap;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.dashboard-greeting-title {
+.dashboard-page .dashboard-greeting-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.dashboard-page .dashboard-greeting-title {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
   color: var(--cms-text);
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  text-align: left;
   gap: 6px;
 }
 
-.dashboard-greeting-emoji {
+.dashboard-page .dashboard-greeting-emoji {
   font-size: 19px;
+  flex-shrink: 0;
 }
 
-.dashboard-greeting-sub {
+.dashboard-page .dashboard-greeting-sub {
   margin: 1px 0 0 0;
   font-size: 11px;
   color: var(--cms-muted);
+  text-align: left;
 }
 
 .dashboard-header-controls {
@@ -347,14 +363,17 @@
 /* Dashboard Grid Rows (3 Columns) */
 .dashboard-grid-row {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   width: 100%;
+  height: auto;
+  flex: none;
 }
 
 .dashboard-row-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  flex: 1;
-  min-height: 264px;
+  flex: none;
+  height: auto;
+  min-height: auto;
 }
 
 .dashboard-card {
@@ -365,10 +384,12 @@
   background: var(--cms-surface);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   overflow: hidden;
+  height: auto;
+  box-sizing: border-box;
 }
 
 .dashboard-row-three > .dashboard-card {
-  height: 100%;
+  height: auto;
   min-height: 264px;
   box-sizing: border-box;
 }
@@ -1458,6 +1479,11 @@
 @media (max-width: 1200px) {
   .dashboard-row-three {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+  }
+  .dashboard-row-three > .dashboard-card {
+    height: auto;
+    min-height: auto;
   }
   .dashboard-highlights-strip .highlights-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1471,11 +1497,21 @@
   .dashboard-quick-actions-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+  .dashboard-attendance-kpi-row,
+  .dashboard-staff-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
   .dashboard-row-three {
     grid-template-columns: 1fr;
+    height: auto;
+    gap: 12px;
+  }
+  .dashboard-row-three > .dashboard-card {
+    height: auto;
+    min-height: auto;
   }
   .dashboard-kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1490,6 +1526,33 @@
   .dashboard-highlights-strip .highlights-cards {
     grid-template-columns: 1fr;
   }
+  .dashboard-page .dashboard-header-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px;
+    width: 100%;
+  }
+  .dashboard-page .dashboard-greeting-wrap {
+    align-self: flex-start;
+    margin-inline: 0;
+    min-width: 0;
+    width: 100%;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  .dashboard-page .dashboard-greeting-title {
+    width: 100%;
+    justify-content: flex-start !important;
+    text-align: left !important;
+  }
+  .dashboard-page .dashboard-greeting-sub {
+    width: 100%;
+    text-align: left !important;
+  }
+  .dashboard-header-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1497,6 +1560,39 @@
     grid-template-columns: 1fr;
   }
   .dashboard-quick-actions-list {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-attendance-kpi-row,
+  .dashboard-staff-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dashboard-page .dashboard-header-bar {
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+  .dashboard-page .dashboard-greeting-wrap {
+    align-items: flex-start !important;
+    text-align: left !important;
+    width: 100%;
+  }
+  .dashboard-page .dashboard-greeting-title {
+    font-size: 16px;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: 100%;
+  }
+  .dashboard-page .dashboard-greeting-sub {
+    text-align: left !important;
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .dashboard-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .dashboard-attendance-kpi-row,
+  .dashboard-staff-kpis {
     grid-template-columns: 1fr;
   }
 }

@@ -5,6 +5,15 @@ import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 
+export function isInventoryRole(role, user) {
+  if (user?.roleType === "inventory") return true;
+  return [role, user?.role, ...(Array.isArray(user?.roles) ? user.roles : [user?.roles])].some((value) => {
+    const name = typeof value === "object" && value ? value.roleName || value.name || value.code : value;
+    const normalized = String(name || "").trim().toLowerCase().replace(/[\s_-]/g, "");
+    return normalized.includes("inventory") || normalized === "storemanager" || normalized === "storekeeper";
+  });
+}
+
 export function isWardenRole(role, user) {
   const normalizedRole = String(role || "").trim().toLowerCase();
   if (
@@ -275,6 +284,7 @@ export default function ProtectedRoute({
 
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role || user?.staffType;
+  if (isInventoryRole(role, user)) return <Navigate to="/inventory-dashboard" replace />;
   if (!user && !role) {
     clearAuthSession();
     return <Navigate to="/login" replace />;
@@ -321,9 +331,6 @@ export default function ProtectedRoute({
   }
 
   // Non-Teaching check
-  if (String(role || "").toLowerCase().includes("inventory")) {
-    return <Navigate to="/inventory-dashboard" replace />;
-  }
   if (requireNonTeaching && !isNonTeaching && !isAdmin && !isPrincipal) {
     const destination = isTransportManager
       ? "/transport-manager/overview"
@@ -478,7 +485,7 @@ export function PublicOnlyRoute({ children }) {
   const isStudent = !isAdmin && isStudentRole(role);
 
   if (isTokenValid && (user || role)) {
-    if (String(role || "").toLowerCase().includes("inventory")) return <Navigate to="/inventory-dashboard" replace />;
+    if (isInventoryRole(role, user)) return <Navigate to="/inventory-dashboard" replace />;
     if (isWarden) return <Navigate to="/warden-dashboard" replace />;
     if (isNonTeaching) return <Navigate to="/non-teaching-dashboard" replace />;
     if (isExamCellRole(role)) return <Navigate to="/exam-cell-dashboard" replace />;
@@ -502,6 +509,7 @@ export function PublicOnlyRoute({ children }) {
 
   return children || <Outlet />;
 }
+
 
 
 

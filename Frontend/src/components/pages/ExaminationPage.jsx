@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 // Examination Management Component
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -5604,30 +5606,7 @@ export default function ExaminationPage() {
             </table>
           </div>
 
-          <div className="exam-list-pagination">
-            <span className="exam-record-summary">
-              Showing {rangeStart}–{rangeEnd} of {list.length} records
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </button>
-            <span>
-              {page} / {pages}
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === pages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <AdminPagination currentPage={page} totalRecords={list.length} pageSize={5} onPageChange={setPage} />
         </div>
       ) : (
         <>
@@ -9836,7 +9815,7 @@ function ScheduleSection({
                   </p>
                 </div>
 
-                <table>
+                <PaginatedTable>
                   <thead>
                     <tr>
                       <th>#</th>
@@ -9883,7 +9862,7 @@ function ScheduleSection({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
                 <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
                   <span>Printed on: {new Date().toLocaleString()}</span>
                   <span>Verified & Approved by Examination Cell</span>
@@ -10402,7 +10381,7 @@ function ScheduleTable({
   }, [entries, rooms, faculty]);
 
   const [page, setPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 5;
   const pages = Math.max(1, Math.ceil(displayEntries.length / pageSize));
   const pagedEntries = displayEntries.slice((page - 1) * pageSize, page * pageSize);
   const rangeStart = displayEntries.length ? (page - 1) * pageSize + 1 : 0;
@@ -10842,33 +10821,7 @@ function ScheduleTable({
       </div>
 
       {displayEntries.length > pageSize && (
-        <div
-          className="exam-list-pagination"
-          style={{ border: "1px solid var(--cms-border)", borderRadius: "0 0 12px 12px" }}
-        >
-          <span className="exam-record-summary">
-            Showing {rangeStart}–{rangeEnd} of {displayEntries.length} records (6 per page)
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span>
-            {page} / {pages}
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
+        <AdminPagination currentPage={page} totalRecords={displayEntries.length} pageSize={5} onPageChange={setPage} />
       )}
     </div>
   );
@@ -11293,7 +11246,7 @@ function GlobalSchedulePreviewModal({
                     </div>
 
                     {/* Schedule Table */}
-                    <table className="ref-exam-table">
+                    <PaginatedTable className="ref-exam-table">
                       <thead>
                         <tr>
                           <th style={{ width: "24%" }}>Subject</th>
@@ -11330,7 +11283,7 @@ function GlobalSchedulePreviewModal({
                           </tr>
                         )}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
                 );
               })}

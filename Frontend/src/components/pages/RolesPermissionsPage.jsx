@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -72,7 +73,7 @@ const parseNumericId = (val) => {
   return digits ? parseInt(digits, 10) : undefined;
 };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 5;
 const ROLE_CODES_HIDDEN_FROM_ASSIGNMENT = new Set(["SUPER_ADMIN", "ADMIN"]);
 const MATRIX_ACTION_COLUMNS = [
   { key: ACTIONS.VIEW, label: "View" },
@@ -1902,15 +1903,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
                 </div>
               ))}
             </div>
-            <div className="rbac-pagination">
-              <button type="button" className="rbac-page-btn" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
-                <ChevronLeft size={15} /> Previous
-              </button>
-              <span>Page {page} of {totalPages}</span>
-              <button type="button" className="rbac-page-btn" disabled={page >= totalPages} onClick={() => setPage((value) => value + 1)}>
-                Next <ChevronRight size={15} />
-              </button>
-            </div>
+            <AdminPagination currentPage={page} totalRecords={result.total} onPageChange={setPage} />
           </>
         ) : (
           <EmptyState title="No users found" message="No matching user-role assignments are available from the current data source." />

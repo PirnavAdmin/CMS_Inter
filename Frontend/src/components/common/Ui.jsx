@@ -344,17 +344,19 @@ export function Pagination({
   totalRecords,
   totalCount,
   total,
-  pageSize = 10,
+  pageSize = 5,
   onPageChange,
   setPage,
   unit = "records",
   className = "",
   showPageNumbers = true,
+  currentOnly = true,
+  disabled = false,
 }) {
   const current = Number(page ?? currentPage ?? 1) || 1;
   const handlePageChange = onPageChange || setPage || (() => {});
   const resolvedTotal = Number(totalRecords ?? totalCount ?? total);
-  const limit = Math.max(1, Number(pageSize) || 10);
+  const limit = Math.max(1, Number(pageSize) || 5);
 
   const computedTotalPages = !isNaN(resolvedTotal) && resolvedTotal >= 0
     ? Math.max(1, Math.ceil(resolvedTotal / limit))
@@ -368,6 +370,7 @@ export function Pagination({
   const end = hasExplicitCount ? Math.min(activePage * limit, resolvedTotal) : activePage * limit;
 
   const getPageNumbers = () => {
+    if (currentOnly) return [activePage];
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
     }
@@ -401,15 +404,16 @@ export function Pagination({
           ? `Showing ${start}–${end} of ${resolvedTotal} ${unit} · Page ${activePage} of ${totalPages}`
           : `Page ${activePage} of ${totalPages}`}
       </span>
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={activePage <= 1 || (hasExplicitCount && resolvedTotal === 0)}
-        onClick={() => handlePageChange(activePage - 1)}
-        aria-label="Previous Page"
-      >
-        Previous
-      </button>
+      <div className="cms-pagination-controls">
+        <button
+          type="button"
+          className="cms-page-btn"
+          disabled={disabled || activePage <= 1 || (hasExplicitCount && resolvedTotal === 0)}
+          onClick={() => handlePageChange(activePage - 1)}
+          aria-label="Previous Page"
+        >
+          Prev
+        </button>
       {showPageNumbers && pageNumbers.map((p, idx) =>
         p === "..." ? (
           <span key={`ellipsis-${idx}`} className="cms-page-ellipsis" style={{ padding: "0 6px", alignSelf: "center", color: "var(--cms-muted, #64748b)" }}>
@@ -420,6 +424,7 @@ export function Pagination({
             key={`page-${p}`}
             type="button"
             className={`cms-page-btn ${p === activePage ? "is-active" : ""}`}
+            disabled={disabled}
             onClick={() => handlePageChange(p)}
             aria-current={p === activePage ? "page" : undefined}
           >
@@ -430,12 +435,13 @@ export function Pagination({
       <button
         type="button"
         className="cms-page-btn"
-        disabled={activePage >= totalPages || (hasExplicitCount && resolvedTotal === 0)}
+        disabled={disabled || activePage >= totalPages || (hasExplicitCount && resolvedTotal === 0)}
         onClick={() => handlePageChange(activePage + 1)}
         aria-label="Next Page"
       >
         Next
       </button>
+      </div>
     </div>
   );
 }

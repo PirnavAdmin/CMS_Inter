@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, Plus, Pencil, Trash2, ShieldAlert, ArrowLeft, CheckCircle2 } from "lucide-react";
@@ -254,7 +255,7 @@ export default function AttendanceTimingConfigPage() {
             </div>
           ) : (
             <div className="att-timing-table-wrapper">
-              <table className="cms-table att-timing-table">
+              <PaginatedTable className="cms-table att-timing-table">
                 <thead>
                   <tr>
                     <th>Rule Name</th>
@@ -332,7 +333,7 @@ export default function AttendanceTimingConfigPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           )}
         </section>

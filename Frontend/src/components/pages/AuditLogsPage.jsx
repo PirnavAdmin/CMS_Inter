@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useState, useEffect } from "react";
 import {
   Activity,
@@ -129,7 +131,7 @@ export default function AuditLogsPage() {
 
   // Configurable pagination
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(5);
   const [total, setTotal] = useState(0);
 
   const [logs, setLogs] = useState([]);
@@ -816,93 +818,7 @@ export default function AuditLogsPage() {
             </table>
           </div>
 
-          <div className="audit-pagination">
-            <div className="audit-pagination-info">
-              <span>
-                Showing {total === 0 ? 0 : (page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total} events
-              </span>
-            </div>
-
-            <div className="audit-pagination-controls">
-              <div className="audit-page-size-wrap">
-                <span>Rows per page:</span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                  aria-label="Rows per page"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-
-              <div className="audit-pagination-nav">
-                <button
-                  type="button"
-                  className="audit-page-btn"
-                  disabled={page === 1}
-                  onClick={() => setPage(1)}
-                  title="First page"
-                  aria-label="First page"
-                >
-                  <ChevronsLeft size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="audit-page-btn"
-                  disabled={page === 1}
-                  onClick={() => setPage(page - 1)}
-                  title="Previous page"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-
-                {getPageNumbers(page, totalPages).map((p, idx) =>
-                  p === "..." ? (
-                    <span key={`ellipsis-${idx}`} className="audit-page-ellipsis">
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={`page-${p}`}
-                      type="button"
-                      className={`audit-page-btn ${p === page ? "is-active" : ""}`}
-                      onClick={() => setPage(p)}
-                    >
-                      {p}
-                    </button>
-                  )
-                )}
-
-                <button
-                  type="button"
-                  className="audit-page-btn"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(page + 1)}
-                  title="Next page"
-                  aria-label="Next page"
-                >
-                  <ChevronRight size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="audit-page-btn"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(totalPages)}
-                  title="Last page"
-                  aria-label="Last page"
-                >
-                  <ChevronsRight size={14} />
-                </button>
-              </div>
-            </div>
-          </div>
+          <AdminPagination currentPage={page} totalRecords={total} pageSize={5} onPageChange={setPage} />
         </section>
 
         {showAdminModal && (
@@ -1141,7 +1057,7 @@ export default function AuditLogsPage() {
                     <h3>Property Changes ({selected.changes.length})</h3>
                   </div>
                   <div className="audit-diff-table-wrap">
-                    <table className="audit-diff-table">
+                    <PaginatedTable className="audit-diff-table">
                       <thead>
                         <tr>
                           <th>Field</th>
@@ -1170,7 +1086,7 @@ export default function AuditLogsPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
                 </div>
               )}

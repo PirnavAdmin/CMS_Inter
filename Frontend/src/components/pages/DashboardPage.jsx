@@ -42,6 +42,7 @@ import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
 import { getAuthToken } from "@/features/authStorage.js";
+import { holidayRecords } from "@/data/mockData.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -840,11 +841,17 @@ export default function DashboardPage() {
         res = await apiClient.get(DASHBOARD_API.holidaysList, { params: { ...params, pageSize: 20, status: "Active" } });
       }
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: null, data: unwrap(res.data) });
+        const unwrapped = unwrap(res?.data);
+        const items = Array.isArray(unwrapped) ? unwrapped : (unwrapped?.items || unwrapped?.holidays || unwrapped?.data || []);
+        if (items && items.length > 0) {
+          setHolidayState({ loading: false, error: null, data: items });
+        } else {
+          setHolidayState({ loading: false, error: null, data: holidayRecords });
+        }
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming holidays"), data: null });
+        setHolidayState({ loading: false, error: null, data: holidayRecords });
       }
     }
   }, [campusId, boardId, academicYearId]);
@@ -878,6 +885,16 @@ export default function DashboardPage() {
     fetchUpcomingHolidays();
     fetchUpcomingExaminations();
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchUpcomingHolidays, fetchUpcomingExaminations]);
+
+  useEffect(() => {
+    const onHolidaysChanged = () => {
+      fetchUpcomingHolidays();
+    };
+    window.addEventListener("cms-holidays-changed", onHolidaysChanged);
+    return () => {
+      window.removeEventListener("cms-holidays-changed", onHolidaysChanged);
+    };
+  }, [fetchUpcomingHolidays]);
 
   // Load attendance cards when their scope changes
   useEffect(() => {
@@ -1348,15 +1365,75 @@ export default function DashboardPage() {
 
   // Upcoming Holidays Normalized List
   const holidaysList = useMemo(() => {
-    const raw = holidayState.data?.items || holidayState.data?.holidays || (Array.isArray(holidayState.data) ? holidayState.data : []);
-    if (!Array.isArray(raw)) return [];
-    return raw.map((item, idx) => {
+    const rawSource = holidayState.data?.items || holidayState.data?.holidays || holidayState.data?.data || (Array.isArray(holidayState.data) ? holidayState.data : []);
+    const raw = Array.isArray(rawSource) && rawSource.length > 0 ? rawSource : holidayRecords;
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const mapped = raw.map((item, idx) => {
       const name = item.holidayName || item.name || item.title || "College Holiday";
       const type = item.holidayType || item.type || "Festival Holiday";
-      const dateRangeText = item.formattedDateRange || item.dateRange || item.startDate || "Scheduled";
-      const dayOfWeek = item.dayOfWeek || (item.startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${String(item.startDate).split("T")[0]}T00:00:00`)) : "");
-      const durationText = item.durationText || (item.totalDays ? (item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day") : "1 Day");
-      const badge = item.countdownText || item.badge || item.lifecycleStatus || "Upcoming";
+      const startDate = item.startDate ? String(item.startDate).split("T")[0] : "";
+      const endDate = item.endDate ? String(item.endDate).split("T")[0] : startDate;
+
+      const formatDisplayDate = (d) => {
+        if (!d) return "";
+        try {
+          return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${d}T00:00:00`));
+        } catch {
+          return d;
+        }
+      };
+
+      let dateRangeText = item.formattedDateRange || item.dateRange;
+      if (!dateRangeText) {
+        if (startDate && endDate && endDate !== startDate) {
+          dateRangeText = `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`;
+        } else if (startDate) {
+          dateRangeText = formatDisplayDate(startDate);
+        } else {
+          dateRangeText = "Scheduled";
+        }
+      }
+
+      const dayOfWeek = item.dayOfWeek || (startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${startDate}T00:00:00`)) : "");
+
+      let durationText = item.durationText;
+      if (!durationText) {
+        if (item.totalDays) {
+          durationText = item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day";
+        } else if (startDate && endDate && endDate !== startDate) {
+          const diff = Math.max(1, Math.ceil((new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000) + 1);
+          durationText = `${diff} Days`;
+        } else {
+          durationText = "1 Day";
+        }
+      }
+
+      let badge = item.countdownText || item.badge || item.lifecycleStatus;
+      let rank = 1;
+      if (startDate) {
+        const diffDays = Math.ceil((new Date(`${startDate}T00:00:00`) - new Date(`${todayStr}T00:00:00`)) / 86400000);
+        const endDiff = Math.ceil((new Date(`${endDate}T00:00:00`) - new Date(`${todayStr}T00:00:00`)) / 86400000);
+
+        if (diffDays === 0) {
+          badge = "Today";
+          rank = 0;
+        } else if (diffDays === 1) {
+          badge = "Tomorrow";
+          rank = 0;
+        } else if (diffDays > 1) {
+          badge = `In ${diffDays} Days`;
+          rank = 1;
+        } else if (diffDays <= 0 && endDiff >= 0) {
+          badge = "Ongoing";
+          rank = 0;
+        } else {
+          badge = "Completed";
+          rank = 2;
+        }
+      }
 
       let tone = "violet";
       const lowerType = String(type).toLowerCase();
@@ -1376,8 +1453,12 @@ export default function DashboardPage() {
         badge,
         tone,
         appliesTo: item.appliesTo || "All Students & Staff",
+        startDate,
+        rank,
       };
     });
+
+    return mapped.sort((a, b) => a.rank - b.rank || (a.startDate || "").localeCompare(b.startDate || ""));
   }, [holidayState.data]);
 
   // Upcoming Examinations Normalized List

@@ -1,5 +1,30 @@
 /* Faculty My Attendance Screen Styles - Theme Based */
 
+@media (max-width: 640px) {
+  .sp-faculty-attendance-page { min-width: 0; gap: 12px; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-attendance-top-grid,
+  .sp-faculty-attendance-page .sp-metric-cards-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+  .sp-faculty-attendance-page .cms-card { min-width: 0; width: 100%; margin: 0; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-shift-summary-card,
+  .sp-faculty-attendance-page .sp-punch-action-card { padding: 12px !important; gap: 10px; }
+  .sp-faculty-attendance-page .sp-card-header { margin: 0; }
+  .sp-faculty-attendance-page .sp-summary-inner-box { margin: 0; padding: 10px; min-width: 0; gap: 10px; }
+  .sp-faculty-attendance-page .sp-summary-status-row { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+  .sp-faculty-attendance-page .sp-summary-metric-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .sp-faculty-attendance-page .sp-summary-col { min-width: 0; justify-content: space-between; }
+  .sp-faculty-attendance-page .sp-metric-col-label { letter-spacing: 0; font-size: 9px; }
+  .sp-faculty-attendance-page .sp-metric-col-val { font-size: 12px; overflow-wrap: anywhere; }
+  .sp-faculty-attendance-page .sp-summary-foot-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sp-faculty-attendance-page .sp-summary-foot-left,
+  .sp-faculty-attendance-page .sp-summary-foot-right { min-width: 0; flex-wrap: wrap; }
+  .sp-faculty-attendance-page .sp-punch-twin-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .sp-faculty-attendance-page .sp-twin-panel { padding: 12px; gap: 8px; min-width: 0; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-punch-pill-btn { width: 100%; min-height: 36px; justify-content: center; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-punch-foot-hint { margin: 0; white-space: normal; }
+  .sp-faculty-attendance-page .sp-metric-kpi-card { padding: 12px !important; }
+  .sp-faculty-attendance-page .sp-kpi-content { min-width: 0; overflow-wrap: anywhere; }
+}
+
 .sp-faculty-attendance-page {
   display: flex;
   flex-direction: column;

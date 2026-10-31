@@ -102,6 +102,7 @@ export function Action({ children, onClick, disabled = false }) {
 }
 
 export function InventoryTable({
+  pageSize = 5,
   title,
   columns,
   rows,
@@ -131,6 +132,7 @@ export function InventoryTable({
   );
   return (
     <DataTable
+      pageSize={pageSize}
       title={title}
       columns={columns}
       rows={visible}

@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
@@ -4035,14 +4036,7 @@ export default function CertificatesPage() {
             </tbody>
           </table>
         </div>
-        <footer className="cert-table-footer">
-          <span>Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} records</span>
-          <nav aria-label="Certificate records pagination">
-            <button type="button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
-            <button type="button" className="active" aria-current="page">{currentPage}</button>
-            <button type="button" disabled={currentPage >= totalPages || totalPages === 0} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
-          </nav>
-        </footer>
+        <AdminPagination currentPage={currentPage} totalRecords={filtered.length} pageSize={5} onPageChange={setPage} />
         </section>
         </> : null}
 
@@ -4286,14 +4280,7 @@ export default function CertificatesPage() {
                 </tbody>
               </table>
             </div>
-            <footer className="cert-table-footer">
-              <span>Showing {actionRows.length ? (currentActionPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentActionPage * PAGE_SIZE, actionRows.length)} of {actionRows.length} records</span>
-              <nav aria-label="Certificate workflow pagination">
-                <button type="button" disabled={currentActionPage <= 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
-                <button type="button" className="active" aria-current="page">{currentActionPage}</button>
-                <button type="button" disabled={currentActionPage >= actionTotalPages || actionTotalPages === 0} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
-              </nav>
-            </footer>
+            <AdminPagination currentPage={currentActionPage} totalRecords={actionRows.length} pageSize={5} onPageChange={setActionPage} />
           </section>
         ) : null}
       </div>

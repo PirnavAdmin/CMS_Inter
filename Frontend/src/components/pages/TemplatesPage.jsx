@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import apiClient from "@/api/axios.js";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
@@ -1303,7 +1304,7 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
 function ReportsTableView({ templates, onEdit, onPreview, onDownload, onDuplicate, onDelete }) {
   return (
     <div className="templates-table-wrapper">
-      <table className="templates-table">
+      <PaginatedTable className="templates-table">
         <thead>
           <tr>
             <th>Template Name</th>
@@ -1346,7 +1347,7 @@ function ReportsTableView({ templates, onEdit, onPreview, onDownload, onDuplicat
             </tr>
           ))}
         </tbody>
-      </table>
+      </PaginatedTable>
     </div>
   );
 }

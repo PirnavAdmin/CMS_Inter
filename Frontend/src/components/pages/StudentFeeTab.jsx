@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useEffect, useState } from "react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -289,7 +290,7 @@ function ComponentsTable({ title, rows }) {
     <section className="cms-fee-block">
       <h3>{title}</h3>
       <div className="cms-fee-scroll">
-        <table className="cms-fee-table">
+        <PaginatedTable className="cms-fee-table">
           <thead>
             <tr>
               <th>Fee Type</th>
@@ -314,7 +315,7 @@ function ComponentsTable({ title, rows }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </PaginatedTable>
       </div>
     </section>
   );
@@ -800,7 +801,7 @@ export default function StudentFeeTab({ student, compactContext = false }) {
             <section className="cms-fee-block">
               <h3>Course Fee Schedule</h3>
               <div className="cms-fee-scroll">
-                <table className="cms-fee-table student-profile-fee-schedule">
+                <PaginatedTable className="cms-fee-table student-profile-fee-schedule">
                   <colgroup>
                     <col style={{ width: "12%" }} />
                     <col style={{ width: "20%" }} />
@@ -855,7 +856,7 @@ export default function StudentFeeTab({ student, compactContext = false }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </section>
           ) : null}

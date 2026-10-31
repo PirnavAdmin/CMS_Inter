@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -713,38 +714,7 @@ function AcademicYearWorkspace() {
             </tbody>
           </table>
         </div>
-        <footer>
-          <span>
-            Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-            {Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} records
-          </span>
-          <nav aria-label="Academic year pagination">
-            <button
-              className="bay-page-direction"
-              disabled={listLoading || currentPage === 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              Prev
-            </button>
-            {Array.from({ length: pages }, (_, index) => index + 1).map((number) => (
-              <button
-                key={number}
-                className={number === currentPage ? "active" : ""}
-                disabled={listLoading}
-                onClick={() => setPage(number)}
-              >
-                {number}
-              </button>
-            ))}
-            <button
-              className="bay-page-direction"
-              disabled={listLoading || currentPage === pages}
-              onClick={() => setPage((value) => Math.min(pages, value + 1))}
-            >
-              Next
-            </button>
-          </nav>
-        </footer>
+        <AdminPagination currentPage={currentPage} totalRecords={totalCount} disabled={listLoading} onPageChange={setPage} />
       </section>
       {formOpen || detailsOpen ? (
         <button
@@ -1560,38 +1530,7 @@ export default function BoardAcademicYearManagementPage() {
                 </tbody>
               </table>
             </div>
-            <footer>
-              <span>
-                Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–
-                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} records
-              </span>
-              <nav aria-label="Configuration pagination">
-                <button
-                  className="bay-page-direction"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage((value) => Math.max(1, value - 1))}
-                >
-                  Prev
-                </button>
-                {Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    className={p === currentPage ? "active" : ""}
-                    key={p}
-                    onClick={() => setPage(p)}
-                    aria-current={p === currentPage ? "page" : undefined}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  className="bay-page-direction"
-                  disabled={currentPage === pages}
-                  onClick={() => setPage((value) => Math.min(pages, value + 1))}
-                >
-                  Next
-                </button>
-              </nav>
-            </footer>
+            <AdminPagination currentPage={currentPage} totalRecords={filtered.length} onPageChange={setPage} />
           </section>
         ) : null}
         {formOpen || detailsOpen ? (

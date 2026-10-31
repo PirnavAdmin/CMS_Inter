@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -51,7 +53,7 @@ import "./ReimbursementPage.css";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 export default function ReimbursementPage({ isAccountantView = false }) {
   // ── Authentication & Profile Context ──────────────────────────────
@@ -1682,40 +1684,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
           {/* Pagination Footer */}
           {totalPages > 1 && (
-            <div className="reimb-pagination">
-              <span>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1} to{" "}
-                {Math.min(currentPage * PAGE_SIZE, filteredClaims.length)} of {filteredClaims.length} claims
-              </span>
-              <div className="reimb-pagination-btns">
-                <button
-                  type="button"
-                  className="reimb-page-btn"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i + 1}
-                    type="button"
-                    className={`reimb-page-btn ${currentPage === i + 1 ? "is-active" : ""}`}
-                    onClick={() => setCurrentPage(i + 1)}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="reimb-page-btn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <AdminPagination currentPage={currentPage} totalRecords={filteredClaims.length} pageSize={5} onPageChange={setCurrentPage} />
           )}
         </div>
       )}
@@ -2399,7 +2368,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
               </p>
 
               <div style={{ overflowX: "auto" }}>
-                <table className="reimb-table">
+                <PaginatedTable className="reimb-table">
                   <thead>
                     <tr>
                       <th>Account Ref</th>
@@ -2443,7 +2412,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                       ))
                     )}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </div>
           </Modal>

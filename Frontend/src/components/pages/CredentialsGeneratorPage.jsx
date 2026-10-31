@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
@@ -1010,7 +1011,7 @@ export default function CredentialsGeneratorPage() {
 
             <div className="cred-table-card">
               <div className="cred-table-container">
-                <table className="cred-data-table">
+                <PaginatedTable className="cred-data-table">
                   <thead>
                     <tr>
                       <th style={{ width: 44, textAlign: "center" }}>
@@ -1153,7 +1154,7 @@ export default function CredentialsGeneratorPage() {
                       })
                     )}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
 
               <div className="cred-table-footer">
@@ -1228,7 +1229,7 @@ export default function CredentialsGeneratorPage() {
               </div>
             </div>
             <div className="cred-table-container">
-              <table className="cred-data-table">
+              <PaginatedTable className="cred-data-table">
                 <thead>
                   <tr>
                     <th>Batch ID</th>
@@ -1276,7 +1277,7 @@ export default function CredentialsGeneratorPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </div>
         )}
@@ -1634,7 +1635,7 @@ export default function CredentialsGeneratorPage() {
                   <p className="cred-wsub">Review generated usernames and temporary passwords before finalizing.</p>
 
                   <div className="cred-preview-scroll">
-                    <table className="cred-data-table">
+                    <PaginatedTable className="cred-data-table">
                       <thead>
                         <tr>
                           <th>User ID</th>
@@ -1655,7 +1656,7 @@ export default function CredentialsGeneratorPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
 
                   <div className="cred-info-banner">

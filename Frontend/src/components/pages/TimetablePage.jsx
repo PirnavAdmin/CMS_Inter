@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -838,19 +839,86 @@ function useLookups(initial = {}) {
   };
   return { value, data, change, setValue, reloadSections };
 }
+function TimetableSelect({ label, value, values = [], onChange, disabled = false, emptyLabel = `Select ${label}`, optionLabel }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+
+  const getLabel = (entry) => (optionLabel ? optionLabel(entry) : (entry.name ?? entry.label ?? entry.id));
+  const getId = (entry) => (entry.id ?? entry.value);
+
+  const selected = values.find((entry) => String(getId(entry)) === String(value));
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutsideClick);
+    return () => document.removeEventListener("pointerdown", handleOutsideClick);
+  }, []);
+
+  const choose = (id) => {
+    onChange({ target: { value: id } });
+    setOpen(false);
+  };
+
+  return (
+    <div className="ttm-field ttm-custom-select-field" ref={root} data-open={open}>
+      <span>{label}</span>
+      <div className="ttm-custom-select-wrap">
+        <button
+          type="button"
+          className="ttm-custom-select-trigger"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => !disabled && setOpen((prev) => !prev)}
+        >
+          <span className={selected ? "ttm-custom-select-value" : "ttm-custom-select-placeholder"}>
+            {selected ? getLabel(selected) : emptyLabel}
+          </span>
+          <ChevronDown className="ttm-custom-select-chevron" size={16} aria-hidden="true" />
+        </button>
+        {open && !disabled && (
+          <div className="ttm-custom-select-options" role="listbox">
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              className={!value ? "is-active" : ""}
+              onClick={() => choose("")}
+            >
+              <strong>{emptyLabel}</strong>
+            </button>
+            {values.map((entry) => (
+              <button
+                key={getId(entry)}
+                type="button"
+                role="option"
+                aria-selected={String(getId(entry)) === String(value)}
+                className={String(getId(entry)) === String(value) ? "is-active" : ""}
+                onClick={() => choose(getId(entry))}
+              >
+                <strong>{getLabel(entry)}</strong>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Context({ state, section = true, compact = false, hideGlobalContext = false }) {
   const { value, data, change } = state;
   const select = (label, key, values, disabled, emptyLabel = `Select ${label}`) => (
-    <Field label={label}>
-      <select value={value[key]} onChange={change(key)} disabled={disabled}>
-        <option value="">{emptyLabel}</option>
-        {values.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {entry.name}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <TimetableSelect
+      label={label}
+      value={value[key]}
+      values={values}
+      disabled={disabled}
+      emptyLabel={emptyLabel}
+      onChange={change(key)}
+    />
   );
   return (
     <div className={`ttm-context${compact ? " ttm-draft-context" : ""}${hideGlobalContext ? " ttm-global-context" : ""}`}>
@@ -1201,12 +1269,14 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
     }
   };
   const select = (label, key, values, disabled) => (
-    <Field label={label}>
-      <select value={value[key]} onChange={change(key)} disabled={disabled}>
-        <option value="">Select {label}</option>
-        {values.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
-      </select>
-    </Field>
+    <TimetableSelect
+      label={label}
+      value={value[key]}
+      values={values}
+      disabled={disabled}
+      emptyLabel={`Select ${label}`}
+      onChange={change(key)}
+    />
   );
   return (
     <Modal title="Assign Structure to Group" className="ttm-assign-structure-modal" onClose={saving ? () => {} : close}>
@@ -1312,13 +1382,13 @@ function Structures({ notify, initial }) {
     </Btn>
   </div>
 
-  <section className="ttm-card">
+  <section className="ttm-card ttm-period-structures-card">
         {loading ? (
           <SkeletonTable columns={5} rows={5} />
         ) : !items.length ? (
           <p className="ttm-empty">No period structures are available.</p>
         ) : (
-          <table className="ttm-period-structures-table" aria-label="Period Structures">
+          <PaginatedTable className="ttm-period-structures-table" aria-label="Period Structures">
             <colgroup>
               <col className="ttm-structure-name-column" />
               <col className="ttm-periods-column" />
@@ -1380,7 +1450,7 @@ function Structures({ notify, initial }) {
                 </td>
               </tr>
             ))}</tbody>
-          </table>
+          </PaginatedTable>
         )}
       </section>
       {moreMenu ? createPortal(
@@ -1684,14 +1754,14 @@ function Generate({ goDraft, notify, initial }) {
                 <h3>Subjects ({data.subjects.length})</h3>
               </header>
               <div className="ttm-generate-subject-table-wrap">
-                <table className="ttm-generate-subject-table">
+                <PaginatedTable className="ttm-generate-subject-table">
                   <thead><tr><th>#</th><th>Subject Code</th><th>Subject Name</th><th>Type</th><th>Weekly Periods</th></tr></thead>
                   <tbody>{data.subjects.length ? data.subjects.map((subject, index) => {
                     const type = pick(subject.raw, "subjectType", "SubjectType", "type", "Type") ?? "Subject";
                     const code = pick(subject.raw, "subjectCode", "SubjectCode", "code", "Code") ?? "—";
                     return <tr key={subject.id}><td>{index + 1}</td><td>{code}</td><td>{subject.name}</td><td><span className={`ttm-subject-type ${String(type).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{type}</span></td><td><input type="number" min="0" max={weeklyCapacity} step="1" value={requirements[subject.id] ?? 0} onChange={(event) => updateRequirement(subject.id, event.target.value)} onBlur={() => commitRequirement(subject.id)} aria-invalid={Boolean(inputErrors[subject.id])} aria-label={`${subject.name} weekly periods`} />{inputErrors[subject.id] ? <small className="ttm-weekly-period-error">{inputErrors[subject.id]}</small> : null}</td></tr>;
                   }) : <tr><td colSpan="5" className="ttm-generate-no-subjects"><strong>No subjects available</strong><span>No subjects are available for this timetable context.</span></td></tr>}</tbody>
-                </table>
+                </PaginatedTable>
               </div>
               {capacityError ? <p className="ttm-validation-error ttm-capacity-error">{capacityError}</p> : null}
               <footer className="ttm-screen-actions ttm-generation-footer">
@@ -1812,27 +1882,28 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     }
   };
   const select = (label, key, values, optionLabel = (entry) => entry.name ?? entry.label) => (
-    <Field label={label}>
-      <select value={form[key]} onChange={set(key)} disabled={saving}>
-        <option value="">Select {label}</option>
-        {values.map((entry) => (
-          <option key={entry.id ?? entry.value} value={entry.id ?? entry.value}>
-            {optionLabel(entry)}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <TimetableSelect
+      label={label}
+      value={form[key]}
+      values={values}
+      disabled={saving}
+      emptyLabel={`Select ${label}`}
+      optionLabel={optionLabel}
+      onChange={(event) => set(key)(event)}
+    />
   );
   return (
     <Modal title={lab ? "Add Lab / Practical" : timetableId(slot) ? "Edit Timetable Slot" : "Add Timetable Slot"} className="ttm-slot-editor-modal" onClose={saving ? () => {} : close}>
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
-          <Field label="Slot Type">
-            <select value={slotType} onChange={(event) => { setSlotType(event.target.value); setError(""); }} disabled={saving}>
-              <option value="Teaching">Teaching</option>
-              <option value="Leisure">Leisure</option>
-            </select>
-          </Field>
+          <TimetableSelect
+            label="Slot Type"
+            value={slotType}
+            values={[{ id: "Teaching", name: "Teaching" }, { id: "Leisure", name: "Leisure" }]}
+            disabled={saving}
+            emptyLabel="Select Slot Type"
+            onChange={(event) => { setSlotType(event.target.value); setError(""); }}
+          />
           {select(
             "Day",
             "dayOfWeek",
@@ -1936,7 +2007,7 @@ function SubstitutionPreview({ context, close, notify }) {
         {!loading && !error && !rows.length ? <p className="ttm-empty">No faculty substitutions for this date.</p> : null}
         {!loading && !error && rows.length ? (
           <div className="ttm-substitution-table-wrap">
-            <table className="ttm-substitution-table">
+            <PaginatedTable className="ttm-substitution-table">
               <thead><tr><th>Period</th><th>Time</th><th>Subject</th><th>Class / Section</th><th>Original Faculty</th><th>Substitute Faculty</th><th>Status</th></tr></thead>
               <tbody>{rows.map((row) => (
                 <tr key={row.id}>
@@ -1946,7 +2017,7 @@ function SubstitutionPreview({ context, close, notify }) {
                   <td><span className={`ttm-substitution-status${row.assigned ? " assigned" : ""}`}>{row.assigned ? "Substitute Assigned" : "Pending Substitute"}</span></td>
                 </tr>
               ))}</tbody>
-            </table>
+            </PaginatedTable>
           </div>
         ) : null}
         <footer><Btn className="cms-btn cms-btn-ghost" onClick={close}>Close</Btn></footer>
@@ -2634,18 +2705,20 @@ function Draft({ initial, notify }) {
           <div className="ttm-modal-body">
             <p>Copy the currently selected timetable to another academic year and section.</p>
             <div className="ttm-form-grid">
-              <Field label="Target Academic Year">
-                <select value={copyTarget.academicYearId} onChange={(e) => setCopyTarget((x) => ({ ...x, academicYearId: e.target.value }))}>
-                  <option value="">Select Academic Year</option>
-                  {data.years.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Target Section">
-                <select value={copyTarget.sectionId} onChange={(e) => setCopyTarget((x) => ({ ...x, sectionId: e.target.value }))}>
-                  <option value="">Select Section</option>
-                  {data.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
-                </select>
-              </Field>
+              <TimetableSelect
+                label="Target Academic Year"
+                value={copyTarget.academicYearId}
+                values={data.years}
+                emptyLabel="Select Academic Year"
+                onChange={(e) => setCopyTarget((x) => ({ ...x, academicYearId: e.target.value }))}
+              />
+              <TimetableSelect
+                label="Target Section"
+                value={copyTarget.sectionId}
+                values={data.sections}
+                emptyLabel="Select Section"
+                onChange={(e) => setCopyTarget((x) => ({ ...x, sectionId: e.target.value }))}
+              />
             </div>
             <footer>
               <Btn className="cms-btn cms-btn-ghost" onClick={() => setCopying(false)}>Cancel</Btn>

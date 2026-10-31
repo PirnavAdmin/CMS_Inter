@@ -1,4 +1,7 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
@@ -14,6 +17,27 @@ import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
 import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
 
 const PAGE_SIZE = 5;
+function HolidayFilter({ value, onChange, label, options }) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className="holiday-filter-trigger" aria-label={label}>
+        <span>{options.find((option) => option.value === value)?.label}</span>
+        <span aria-hidden="true">⌄</span>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="admin-holiday-filter-menu" align="start" sideOffset={4} collisionPadding={12}>
+          <DropdownMenu.RadioGroup value={value} onValueChange={onChange} aria-label={label}>
+            {options.map((option) => (
+              <DropdownMenu.RadioItem className="admin-holiday-filter-option" key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
 const APPLIES_TO = ["All Students & Staff", "Students Only", "Staff Only"];
 const EMPTY_HOLIDAY = {
@@ -447,7 +471,7 @@ export default function HolidayManagementPage() {
         </div>
       }
     >
-      <div className="holiday-page">
+      <div className="holiday-page admin-holiday-page">
         <section className="holiday-summary" aria-label="Holiday summary">
           <article className="holiday-stat is-primary"><span><img src={totalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Total Holidays</small><strong>{summary.total}</strong></div></article>
           <article className="holiday-stat is-blue"><span><img src={nationalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>National Holidays</small><strong>{summary.national}</strong></div></article>
@@ -463,11 +487,7 @@ export default function HolidayManagementPage() {
               <Search size={16} />
               <input value={query} onChange={(event) => updateFilter(setQuery)(event.target.value)} placeholder="Search holidays..." />
             </label>
-            <select value={month} onChange={(event) => changeMonth(event.target.value)} aria-label="Filter by month">
-              <option value="All">All Months</option>
-              {months.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              <option value="Custom Range">Custom Range</option>
-            </select>
+            <HolidayFilter value={month} onChange={changeMonth} label="Filter by month" options={[{ value: "All", label: "All Months" }, ...months, { value: "Custom Range", label: "Custom Range" }]} />
             {month === "Custom Range" ? (
               <>
                 <label className="holiday-date-filter">
@@ -480,17 +500,8 @@ export default function HolidayManagementPage() {
                 </label>
               </>
             ) : null}
-            <select value={type} onChange={(event) => updateFilter(setType)(event.target.value)} aria-label="Filter by holiday type">
-              <option value="All">All Types</option>
-              {TYPES.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <select value={status} onChange={(event) => updateFilter(setStatus)(event.target.value)} aria-label="Filter by status">
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Upcoming">Upcoming</option>
-              <option value="Completed">Completed</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+            <HolidayFilter value={type} onChange={updateFilter(setType)} label="Filter by holiday type" options={[{ value: "All", label: "All Types" }, ...TYPES.map((item) => ({ value: item, label: item }))]} />
+            <HolidayFilter value={status} onChange={updateFilter(setStatus)} label="Filter by status" options={[{ value: "All", label: "All Statuses" }, ...["Active", "Upcoming", "Completed", "Inactive"].map((item) => ({ value: item, label: item }))]} />
             {month === "Custom Range" ? (
               <button type="button" className="cms-btn cms-btn-primary holiday-apply" onClick={applyCustomRange}>
                 Apply
@@ -551,21 +562,7 @@ export default function HolidayManagementPage() {
             </table>
           </div>
 
-          <div className="holiday-pagination">
-            <span>
-              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
-                Prev
-              </button>
-              <span>Page {currentPage} of {totalPages}</span>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
-                Next
-              </button>
-              <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
-            </div>
-          </div>
+          <AdminPagination currentPage={currentPage} totalRecords={totalCount} disabled={loading} pageSize={5} onPageChange={setPage} />
         </section>
       </div>
 
@@ -665,7 +662,7 @@ function ImportValidation({ result }) {
       </div>
       {rows.length ? (
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>Row Number</th>
@@ -684,7 +681,7 @@ function ImportValidation({ result }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       ) : null}
     </div>
