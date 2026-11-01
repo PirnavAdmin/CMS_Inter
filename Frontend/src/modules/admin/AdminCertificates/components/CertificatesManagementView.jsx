@@ -32,7 +32,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const workflowSteps = ["Generated", "Reviewed", "Approved", "Issued"];
 const statusChoices = ["All", "Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"];
 
-const CERTIFICATE_TYPES = ["Bonafide Certificate", "Study Certificate", "Conduct Certificate", "Transfer Certificate", "Others"];
+const CERTIFICATE_TYPES = ["Bonafide Certificate", "Study Certificate", "Conduct Certificate", "Transfer Certificate"];
 const CERTIFICATE_BASE = "/api/v1/certificates";
 const CERTIFICATE_API = {
   activeTemplates: `${CERTIFICATE_BASE}/active-templates`,
@@ -1786,7 +1786,6 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       "Study Certificate",
       "Conduct Certificate",
       "Transfer Certificate",
-      "Others",
     ];
   }, []);
 

@@ -521,11 +521,13 @@
 }
 
 .cert-workflow-card .cert-workflow-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   padding: 12px 18px;
 }
 
 .cert-workflow-card .cert-workflow-summary-card {
+  min-width: 0;
   min-height: 52px;
   gap: 2px;
   padding: 8px 11px;
@@ -1351,11 +1353,10 @@
 .cert-workflow-summary-card.cert-status-danger { border-color: #fecaca; }
 
 @media (max-width: 960px) {
-  .cert-workflow-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cert-workflow-card .cert-workflow-summary { grid-template-columns: repeat(6, minmax(120px, 1fr)); overflow-x: auto; }
 }
 
 @media (max-width: 640px) {
-  .cert-workflow-summary { grid-template-columns: 1fr; }
   .cert-table-footer { align-items: flex-start; flex-direction: column; gap: 8px; }
   .cert-table-footer nav { align-self: flex-end; }
 }
@@ -1576,6 +1577,15 @@
 .cert-page .cert-workflow-table .cert-status-pill {
   min-width: min(92px, 100%);
   max-width: 100%;
+}
+.cert-page .cert-records-table .cert-status-pill,
+.cert-page .cert-workflow-table .cert-status-pill {
+  min-width: max-content;
+  max-width: none;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  flex-shrink: 0;
 }
 
 .cert-page .cert-records-card .cert-record-row-actions,
