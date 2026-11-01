@@ -118,6 +118,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 1. GET /api/v1/staff/auto-matched-subjects
         /// Returns master subjects intelligently filtered and pre-ranked for a staff member's department.
         /// </summary>
+        [HttpGet("available-subjects")]
         [HttpGet("auto-matched-subjects")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAutoMatchedSubjects(
@@ -188,7 +189,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assign a subject to a staff member.
         /// </summary>
         [HttpPost("assign-subject")]
-        [Authorize(Roles = "Admin,Super Admin,Principal")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,Staff,Faculty,Teacher,Teaching Staff")]
         [ProducesResponseType(typeof(StaffSubjectAllocationResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -248,12 +249,12 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("{staffId:int}/subject-allocations")]
         [HttpGet("my/subject-allocations")]
-        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Principal,Super Admin")]
         [ProducesResponseType(typeof(System.Collections.Generic.List<StaffSubjectAllocationResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffSubjectAllocations([FromRoute] int? staffId = null)
         {
-            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value ?? User.FindFirst("staff_id")?.Value ?? User.FindFirst("id")?.Value;
             int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
 
             if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))
@@ -275,12 +276,12 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("workload/{staffId:int}")]
         [HttpGet("workload/me")]
-        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Principal,Super Admin")]
         [ProducesResponseType(typeof(StaffWorkloadResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffWorkload([FromRoute] int? staffId = null)
         {
-            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value ?? User.FindFirst("staff_id")?.Value ?? User.FindFirst("id")?.Value;
             int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
 
             if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))

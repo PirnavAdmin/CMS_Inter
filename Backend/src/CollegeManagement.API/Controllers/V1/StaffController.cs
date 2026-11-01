@@ -134,7 +134,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Restricted to Super Admin, Admin, Principal, and HR roles. Returns detailed banking and payroll information.
         /// </summary>
         [HttpGet("{id:int}/payroll-details")]
-        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR")]
+        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR,Faculty,Staff,Teacher")]
         [ProducesResponseType(typeof(StaffPayrollDetailsDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaffPayrollDetails([FromRoute] int id)
         {

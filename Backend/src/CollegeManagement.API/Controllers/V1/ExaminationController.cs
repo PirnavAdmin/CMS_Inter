@@ -552,15 +552,20 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId = null,
             [FromQuery] int? boardId = null)
         {
-            if (!staffId.HasValue || staffId.Value <= 0)
+            var staffClaim = User.FindFirst("staff_id")?.Value
+                ?? User.FindFirst("StaffId")?.Value
+                ?? User.FindFirst("id")?.Value;
+            int? callerStaffId = (!string.IsNullOrEmpty(staffClaim) && int.TryParse(staffClaim, out int parsedStaffId))
+                ? parsedStaffId
+                : null;
+
+            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal") && !User.IsInRole("Examination Cell"))
             {
-                var staffClaim = User.FindFirst("staff_id")?.Value
-                    ?? User.FindFirst("StaffId")?.Value
-                    ?? User.FindFirst("id")?.Value;
-                if (!string.IsNullOrEmpty(staffClaim) && int.TryParse(staffClaim, out int parsedStaffId))
-                {
-                    staffId = parsedStaffId;
-                }
+                staffId = callerStaffId ?? 0;
+            }
+            else if (!staffId.HasValue || staffId.Value <= 0)
+            {
+                staffId = callerStaffId;
             }
 
             var resolvedCampusId = ResolveCampusId(campusId);

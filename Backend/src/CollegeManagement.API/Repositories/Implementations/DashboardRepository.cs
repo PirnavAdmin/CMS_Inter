@@ -177,7 +177,9 @@ public class DashboardRepository : IDashboardRepository
                         WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
                           AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
                           AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
-                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId);",
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId)
+                          AND s.SectionId IS NOT NULL AND s.SectionId > 0
+                          AND s.RollNo IS NOT NULL AND TRIM(s.RollNo) != '';",
                         new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
 
                     if (studentManagementCount.HasValue && studentManagementCount.Value > 0)
@@ -324,6 +326,8 @@ public class DashboardRepository : IDashboardRepository
             if (items.Any())
             {
                 var total = items.Sum(x => x.TotalStudents);
+                var totalBoys = items.Sum(x => x.Boys);
+                var totalGirls = items.Sum(x => x.Girls);
                 var colors = new[] { "#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b" };
                 for (int i = 0; i < items.Count; i++)
                 {
@@ -337,6 +341,8 @@ public class DashboardRepository : IDashboardRepository
                 return new GroupDistributionResponseDto
                 {
                     TotalStudents = total,
+                    Boys = totalBoys,
+                    Girls = totalGirls,
                     Groups = items
                 };
             }
