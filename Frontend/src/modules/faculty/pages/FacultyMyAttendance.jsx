@@ -552,16 +552,33 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  // Real-time dynamic shift duration display
-  const clockShiftDuration = useMemo(() => {
+  // Real-time dynamic working hours display (reflects actual recorded duration, --:-- when not checked in)
+  // Formatted check-out cutoff time based on shift end + grace period
+  const formattedCutoffTime = useMemo(() => {
+    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "16:30");
+    if (shiftEndMins === null) return "04:45 PM";
+    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
+    const cutoffMins = shiftEndMins + grace;
+    let h = Math.floor(cutoffMins / 60);
+    const m = cutoffMins % 60;
+    const ampm = h >= 12 ? "PM" : "AM";
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+  }, [todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes]);
+
+  const clockWorkingHours = useMemo(() => {
     if (todayData.status === "punched_out" && todayData.inTime && todayData.outTime) {
       return calculateDurationStr(todayData.inTime, todayData.outTime, false);
     }
     if (todayData.status === "punched_in" && todayData.inTime) {
       return calculateDurationStr(todayData.inTime, null, true);
     }
-    return todayData.shiftDuration && todayData.shiftDuration !== "--" ? todayData.shiftDuration : "--:--";
-  }, [todayData, shiftUpdateTick]);
+    if (todayData.inTime && isMissedCheckout) {
+      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "04:30 PM", false);
+    }
+    return "--:--";
+  }, [todayData, shiftUpdateTick, isMissedCheckout]);
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -593,12 +610,12 @@ export default function FacultyMyAttendance() {
     <div className="sp-faculty-attendance-page">
       {/* Top Punch & Shift Grid */}
       <div className="sp-attendance-top-grid">
-        {/* Left Card: Attendance & Shift Summary */}
+        {/* Left Card: Today's Attendance Summary */}
         <div className="cms-card sp-shift-summary-card">
           <div className="sp-card-header">
-            <h3 className="sp-card-title">Attendance & Shift Summary</h3>
+            <h3 className="sp-card-title">Today's Attendance Summary</h3>
             <p className="sp-card-desc">
-              Campus shift schedule, check-in status & calculated shift duration.
+              Campus shift schedule, check-in status & calculated working hours.
             </p>
           </div>
 
@@ -628,7 +645,7 @@ export default function FacultyMyAttendance() {
               </span>
             </div>
 
-            {/* 3 Metric Columns: CHECK IN, CHECK OUT, SHIFT DURATION */}
+            {/* 3 Metric Columns: CHECK IN, CHECK OUT, WORKING HOURS */}
             <div className="sp-summary-metric-cols">
               <div className="sp-summary-col">
                 <span className="sp-metric-col-label">CHECK IN</span>
@@ -643,9 +660,9 @@ export default function FacultyMyAttendance() {
                 </span>
               </div>
               <div className="sp-summary-col">
-                <span className="sp-metric-col-label">SHIFT DURATION</span>
+                <span className="sp-metric-col-label">WORKING HOURS</span>
                 <span className={`sp-metric-col-val ${todayData.status === "punched_in" && !isMissedCheckout ? "highlight" : ""}`}>
-                  {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
+                  {clockWorkingHours}
                 </span>
               </div>
             </div>
@@ -665,10 +682,10 @@ export default function FacultyMyAttendance() {
           </div>
         </div>
 
-        {/* Right Card: Check-In / Check-Out Actions */}
+        {/* Right Card: Attendance Check-In & Check-Out Actions */}
         <div className="cms-card sp-punch-action-card">
           <div className="sp-card-header">
-            <h3 className="sp-card-title">Check-In / Check-Out</h3>
+            <h3 className="sp-card-title">Attendance Check-In & Check-Out</h3>
             <p className="sp-card-desc">
               Click below to record your campus entry or exit timestamp.
             </p>
@@ -677,23 +694,6 @@ export default function FacultyMyAttendance() {
           <div className="sp-punch-twin-grid">
             {/* Check In Panel */}
             <div className="sp-twin-panel checkin-panel">
-              {/* Check In Header: Icon beside Title */}
-              <div className="sp-twin-header">
-                <div className="sp-twin-icon-box checkin">
-                  <LogIn size={15} />
-                </div>
-                <div className="sp-twin-title checkin">CHECK IN</div>
-              </div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="sp-digital-display checkin">
-                <span className="sp-digital-time">{todayData.inTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${todayData.inTime ? (todayData.isLate ? "late" : "checked") : "pending"}`}>
-                  <span className="sp-status-dot">•</span>
-                  {todayData.inTime ? (todayData.isLate ? "Checked In (Late)" : "Checked In") : "Not Checked In"}
-                </span>
-              </div>
-
               {/* Check In Button */}
               <button
                 type="button"
@@ -708,7 +708,7 @@ export default function FacultyMyAttendance() {
                 ) : (
                   <LogIn size={15} />
                 )}
-                <span>Check In</span>
+                <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
               </button>
 
               <div className="sp-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
@@ -716,33 +716,6 @@ export default function FacultyMyAttendance() {
 
             {/* Check Out Panel */}
             <div className="sp-twin-panel checkout-panel">
-              {/* Check Out Header: Icon beside Title */}
-              <div className="sp-twin-header">
-                <div className="sp-twin-icon-box checkout">
-                  <LogOut size={15} />
-                </div>
-                <div className="sp-twin-title checkout">CHECK OUT</div>
-              </div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="sp-digital-display checkout">
-                <span className="sp-digital-time">{todayData.outTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${
-                  todayData.outTime 
-                    ? "checked" 
-                    : isMissedCheckout 
-                    ? "missed" 
-                    : "pending"
-                }`}>
-                  <span className="sp-status-dot">•</span>
-                  {todayData.outTime 
-                    ? "Checked Out" 
-                    : isMissedCheckout 
-                    ? "Missed Checkout" 
-                    : "Not Checked Out"}
-                </span>
-              </div>
-
               {/* Check Out Button */}
               {isMissedCheckout ? (
                 <>
@@ -786,10 +759,12 @@ export default function FacultyMyAttendance() {
                     ) : (
                       <LogOut size={15} />
                     )}
-                    <span>Check Out</span>
+                    <span>{todayData.status === "punched_out" ? "Checked Out" : "Check Out"}</span>
                   </button>
 
-                  <div className="sp-punch-foot-hint">15m checkout window after shift end</div>
+                  <div className="sp-punch-foot-hint">
+                    Allowed: 15-minute window after shift end ({todayData.shiftEndTime} – {formattedCutoffTime})
+                  </div>
                 </>
               )}
             </div>
