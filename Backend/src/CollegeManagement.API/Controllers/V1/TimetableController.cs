@@ -138,7 +138,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("faculty/{facultyId:int}")]
         [HttpGet("faculty/me")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Principal,Super Admin")]
         [BypassPermission]
         public async Task<IActionResult> GetByFaculty([FromRoute] int? facultyId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
@@ -164,7 +164,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)
@@ -178,7 +178,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("section/{sectionId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [BypassPermission]
         public async Task<IActionResult> GetBySection(int sectionId, [FromQuery] int? academicYearId = null, [FromQuery] bool? isPublished = null, [FromQuery] int? campusId = null)
         {

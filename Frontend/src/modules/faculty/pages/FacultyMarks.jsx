@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Upload,
@@ -37,9 +36,7 @@ export default function FacultyMarks() {
   };
 
   // Main Tabs State: "entry" | "report"
-  const { params, setParam } = useFacultyViewParams();
-  const activeTab = params.get("tab") === "report" ? "report" : "entry";
-  const setActiveTab = (tab) => setParam("tab", tab);
+  const [activeTab, setActiveTab] = useState("entry");
 
   // 1. Academic Context Filters
   const [selectedBoard, setSelectedBoard] = useState("");
@@ -103,14 +100,7 @@ export default function FacultyMarks() {
   const fileInputRef = useRef(null);
 
   // View Results Modal State
-  const evaluationId = params.get("evaluationId");
-  const sourceResultsEval = evaluationId == null ? null : Object.values(evaluationsLedger).find((ev) => String(ev.evaluationId) === evaluationId);
-  const [resultsDetail, setResultsDetail] = useState(null);
-  const viewResultsEval = useMemo(() => sourceResultsEval ? { ...sourceResultsEval, ...(resultsDetail?.id === evaluationId ? { rows: resultsDetail.rows } : {}) } : null, [sourceResultsEval, resultsDetail, evaluationId]);
-  const resultsLoading = sourceResultsEval && !sourceResultsEval.rows?.length && resultsDetail?.id !== evaluationId;
-  const resultsError = resultsDetail?.id === evaluationId ? resultsDetail.error : "";
-  const setViewResultsEval = (ev) => setParam("evaluationId", ev?.evaluationId ?? null);
-  const [evaluationsLoading, setEvaluationsLoading] = useState(true);
+  const [viewResultsEval, setViewResultsEval] = useState(null);
   const [resultsModalPage, setResultsModalPage] = useState(1);
   const resultsPageSize = 5;
 
@@ -130,15 +120,17 @@ export default function FacultyMarks() {
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
     if (!staffId) return;
 
     const fetchLiveEvaluations = async () => {
-      setEvaluationsLoading(true);
       try {
-        let res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
+        let res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
         if (!res || !res.data) {
-          res = await apiClient.get(`/api/v1/faculty/evaluations?facultyId=${staffId}`).catch(() => null);
+          res = await apiClient.get("/api/v1/faculty/evaluations", { params: { facultyId: staffId } }).catch(() => null);
+        }
+        if (!res || !res.data) {
+          res = await apiClient.get("/api/v1/evaluations/search", { params: { facultyId: staffId } }).catch(() => null);
         }
 
         const rawList = res?.data?.data !== undefined ? res.data.data : res?.data;
@@ -182,7 +174,7 @@ export default function FacultyMarks() {
       } catch (err) {
         console.warn("Could not load faculty evaluations from API:", err);
         if (isMounted) setEvaluationsLedger({});
-      } finally { if (isMounted) setEvaluationsLoading(false); }
+      }
     };
 
     fetchLiveEvaluations();
@@ -229,7 +221,7 @@ export default function FacultyMarks() {
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
     if (!staffId) return;
 
     // 1. Fetch faculty timetable (provides allocated sections and subjects)
@@ -612,8 +604,8 @@ export default function FacultyMarks() {
         mapped = raw.map((s) => {
           const sId = Number(s.studentId || s.id);
           const existingMark = savedMarksMap.get(sId);
-          const internal = existingMark ? Number(existingMark.internalMarks || 0) : 0;
-          const theory = existingMark ? Number(existingMark.theoryMarks || 0) : 0;
+          const internal = existingMark ? Number(existingMark.internalMarks || 0) : 18;
+          const theory = existingMark ? Number(existingMark.theoryMarks || 0) : 55;
           const totalScore = internal + theory;
           const isAbsent = existingMark ? Boolean(existingMark.isAbsent) : false;
           const remarks = existingMark ? (existingMark.remarks || "Regular") : "Regular";
@@ -665,8 +657,8 @@ export default function FacultyMarks() {
           ? {
               ...r,
               absent: isAbsent,
-              theory: isAbsent ? 0 : r.theory || 0,
-              internal: isAbsent ? 0 : r.internal || 0,
+              theory: isAbsent ? 0 : r.theory || 45,
+              internal: isAbsent ? 0 : r.internal || 15,
               remarks: isAbsent ? "Absent" : r.remarks === "Absent" ? "" : r.remarks,
             }
           : r
@@ -680,28 +672,24 @@ export default function FacultyMarks() {
     );
   };
 
-  // Save Draft (via /api/v1/faculty/evaluations/{id}/marks with fallback to bulk)
+  // Save Draft (via /api/v1/marks/bulk and local ledger)
   const handleSaveDraft = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
 
-    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
-    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
-    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+    const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const updatedEval = {
-      evaluationId: evalId,
+      evaluationId: key,
       section: selectedSectionName,
-      sectionId: Number(selectedSection),
       examId: selectedExam,
-      examinationId: Number(selectedExam),
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
-      empId: staffId ? `EMP-${staffId}` : "",
+      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
+      empId: `EMP-${staffId}`,
       status: "DRAFT",
       adminRemarks: "",
       rows: currentStudents,
@@ -710,93 +698,63 @@ export default function FacultyMarks() {
     };
 
     try {
-      const evaluationPayload = {
-        evaluationId: evalId,
-        rowVersion: 1,
-        students: currentStudents.map((s) => ({
+      const payload = {
+        marks: currentStudents.map((s) => ({
+          board: "BIEAP",
+          boardId: selectedBoard ? Number(selectedBoard) : undefined,
+          academicYearId: selectedYear ? Number(selectedYear) : 1,
+          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+          groupId: selectedGroup ? Number(selectedGroup) : 1,
+          sectionId: Number(selectedSection),
+          examinationId: Number(selectedExam),
+          subjectId: Number(selectedSubject),
           studentId: Number(s.studentId),
+          facultyId: Number(staffId),
+          rollNo: s.rollNo,
+          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
-          practicalMarks: Number(s.practical || 0),
-          totalMarks: Number(s.totalScore || ((s.internal || 0) + (s.theory || 0) + (s.practical || 0))),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
 
-      try {
-        await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload)
-          .catch(() => apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload))
-          .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload));
-      } catch (primaryErr) {
-        // Fallback to bulk marks endpoint if needed
-        const bulkPayload = {
-          marks: currentStudents.map((s) => ({
-            board: "BIEAP",
-            boardId: selectedBoard ? Number(selectedBoard) : undefined,
-            academicYearId: selectedYear ? Number(selectedYear) : 1,
-            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-            groupId: selectedGroup ? Number(selectedGroup) : 1,
-            sectionId: Number(selectedSection),
-            examinationId: Number(selectedExam),
-            subjectId: Number(selectedSubject),
-            studentId: Number(s.studentId),
-            facultyId: staffId ? Number(staffId) : undefined,
-            rollNo: s.rollNo,
-            studentName: s.name,
-            internalMarks: Number(s.internal || 0),
-            theoryMarks: Number(s.theory || 0),
-            practicalMarks: Number(s.practical || 0),
-            isAbsent: Boolean(s.absent),
-            remarks: s.remarks || "",
-          })),
-        };
-        await apiClient.post("/api/v1/marks/bulk", bulkPayload).catch(() => null);
-      }
+      await apiClient.post("/api/v1/marks/bulk", payload);
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to save marks.", "error");
         return;
       }
-      console.warn("API save endpoint warning, saving to local evaluations ledger:", err);
+      console.warn("API bulk save endpoint warning, saving to local evaluations ledger:", err);
     }
 
-    setEvaluationsLedger((prev) => ({
-      ...prev,
-      [key]: { ...updatedEval, isLocal: true },
-      [legacyKey]: { ...updatedEval, isLocal: true },
-      [evalId]: { ...updatedEval, isLocal: true },
-    }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("DRAFT");
     setSavingMarks(false);
     notify("Marks draft saved successfully.");
   };
 
-  // Submit Subject / Resubmit (via /api/v1/faculty/evaluations/{id}/submit or resubmit)
+  // Submit Subject / Resubmit (via /api/v1/marks/bulk with SUBMITTED status)
   const handleSubmitSubject = async () => {
     if (!selectedExam || !selectedSubject) return;
     setSavingMarks(true);
 
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || authUser?.userId;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
 
-    const evalId = `${selectedSubject}-${selectedSection}-${selectedExam}`;
-    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
-    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+    const key = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
     const updatedEval = {
-      evaluationId: evalId,
+      evaluationId: key,
       section: selectedSectionName,
-      sectionId: Number(selectedSection),
       examId: selectedExam,
-      examinationId: Number(selectedExam),
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Faculty Member",
-      empId: staffId ? `EMP-${staffId}` : "",
+      faculty: context?.profile?.name || authUser?.fullName || "Tanjiro Kamado",
+      empId: `EMP-${staffId}`,
       status: "SUBMITTED",
       adminRemarks: "Submitted to Admin. Awaiting verification review.",
       rows: currentStudents,
@@ -805,77 +763,38 @@ export default function FacultyMarks() {
     };
 
     try {
-      // 1. Ensure latest marks are saved first
-      const evaluationPayload = {
-        evaluationId: evalId,
-        rowVersion: 1,
-        students: currentStudents.map((s) => ({
+      const payload = {
+        marks: currentStudents.map((s) => ({
+          board: "BIEAP",
+          boardId: selectedBoard ? Number(selectedBoard) : undefined,
+          academicYearId: selectedYear ? Number(selectedYear) : 1,
+          academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
+          groupId: selectedGroup ? Number(selectedGroup) : 1,
+          sectionId: Number(selectedSection),
+          examinationId: Number(selectedExam),
+          subjectId: Number(selectedSubject),
           studentId: Number(s.studentId),
+          facultyId: Number(staffId),
+          rollNo: s.rollNo,
+          studentName: s.name,
           internalMarks: Number(s.internal || 0),
           theoryMarks: Number(s.theory || 0),
-          practicalMarks: Number(s.practical || 0),
-          totalMarks: Number(s.totalScore || ((s.internal || 0) + (s.theory || 0) + (s.practical || 0))),
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
         })),
       };
-      await apiClient.put(`/api/v1/faculty/evaluations/${evalId}/marks`, evaluationPayload)
-        .catch(() => apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, evaluationPayload))
-        .catch(() => null);
 
-      // 2. Submit or Resubmit
-      if (wasRejected) {
-        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/resubmit`, {
-          rowVersion: 1,
-          resubmissionMessage: "Corrected marks submitted for review.",
-        }).catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/resubmit`, {
-          resubmissionMessage: "Corrected marks resubmitted by faculty."
-        })).catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/submit`));
-      } else {
-        await apiClient.post(`/api/v1/faculty/evaluations/${evalId}/submit`)
-          .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/submit`));
-      }
+      await apiClient.post("/api/v1/marks/bulk", payload);
     } catch (err) {
       if (err?.response?.status === 403 || err?.status === 403) {
         setSavingMarks(false);
         notify("Access Denied: You do not have permission to submit marks.", "error");
         return;
       }
-      console.warn("API submit warning, attempting fallback bulk submit:", err);
-      try {
-        const bulkPayload = {
-          marks: currentStudents.map((s) => ({
-            board: "BIEAP",
-            boardId: selectedBoard ? Number(selectedBoard) : undefined,
-            academicYearId: selectedYear ? Number(selectedYear) : 1,
-            academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-            groupId: selectedGroup ? Number(selectedGroup) : 1,
-            sectionId: Number(selectedSection),
-            examinationId: Number(selectedExam),
-            subjectId: Number(selectedSubject),
-            studentId: Number(s.studentId),
-            facultyId: staffId ? Number(staffId) : undefined,
-            rollNo: s.rollNo,
-            studentName: s.name,
-            internalMarks: Number(s.internal || 0),
-            theoryMarks: Number(s.theory || 0),
-            practicalMarks: Number(s.practical || 0),
-            isAbsent: Boolean(s.absent),
-            remarks: s.remarks || "",
-          })),
-        };
-        await apiClient.post("/api/v1/marks/bulk", bulkPayload).catch(() => null);
-      } catch (fallbackErr) {
-        console.warn("Fallback bulk submit also encountered warning:", fallbackErr);
-      }
+      console.warn("API bulk submit warning:", err);
     }
 
-    setEvaluationsLedger((prev) => ({
-      ...prev,
-      [key]: { ...updatedEval, isLocal: true },
-      [legacyKey]: { ...updatedEval, isLocal: true },
-      [evalId]: { ...updatedEval, isLocal: true },
-    }));
+    setEvaluationsLedger((prev) => ({ ...prev, [key]: { ...updatedEval, isLocal: true } }));
     setEvaluationStatus("SUBMITTED");
     setCurrentRejectionRemarks("");
     setSavingMarks(false);
@@ -888,12 +807,9 @@ export default function FacultyMarks() {
   };
 
   // Open student results modal with API fallback
-  const handleOpenResultsModal = (ev) => { setViewResultsEval(ev); setResultsModalPage(1); };
-  useEffect(() => {
-    const ev = sourceResultsEval;
-    if (!ev) return;
-    let cancelled = false;
-    const load = async () => {
+  const handleOpenResultsModal = async (ev) => {
+    setViewResultsEval(ev);
+    setResultsModalPage(1);
     if (!ev.rows || ev.rows.length === 0) {
       try {
         const res = await apiClient.get(`/api/v1/faculty/evaluations/${ev.evaluationId}/students`).catch(() =>
@@ -901,7 +817,7 @@ export default function FacultyMarks() {
         );
         const data = res?.data?.data || res?.data || {};
         const studentsList = data.students || data.studentMarks || data.items || [];
-        {
+        if (studentsList.length > 0) {
           const mappedRows = studentsList.map((s) => ({
             studentId: s.studentId,
             rollNo: s.rollNo || s.admissionNo || "",
@@ -913,17 +829,13 @@ export default function FacultyMarks() {
             absent: Boolean(s.isAbsent || s.absent),
             remarks: s.remarks || "",
           }));
-          if (!cancelled) setResultsDetail({ id: String(ev.evaluationId), rows: mappedRows });
+          setViewResultsEval((prev) => ({ ...prev, rows: mappedRows }));
         }
       } catch (err) {
         console.warn("Could not fetch evaluation students:", err);
-        if (!cancelled) setResultsDetail({ id: String(ev.evaluationId), rows: [], error: "Unable to load evaluation results." });
       }
     }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [sourceResultsEval]);
+  };
 
   // Switch to Marks Entry to edit and resubmit
   const handleEditAndResubmit = (ev) => {
@@ -1383,9 +1295,8 @@ export default function FacultyMarks() {
         </div>
       )}
 
-      {evaluationId != null && (!viewResultsEval || resultsLoading || resultsError) && <div className="sp-modal-overlay"><div className="sp-modal-card" role="dialog" aria-label="Evaluation Results"><p role="status">{evaluationsLoading || resultsLoading ? "Loading evaluation results..." : resultsError || "This evaluation is unavailable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setViewResultsEval(null)}>Close</button></div></div>}
       {/* MODAL 2: View Results Modal */}
-      {viewResultsEval && !resultsLoading && !resultsError && (
+      {viewResultsEval && (
         <div className="sp-modal-overlay" onClick={() => setViewResultsEval(null)}>
           <div className="sp-modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680 }}>
             <div className="sp-modal-head">

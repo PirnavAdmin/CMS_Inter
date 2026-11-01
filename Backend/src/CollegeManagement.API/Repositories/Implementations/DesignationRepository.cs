@@ -89,11 +89,29 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DesignationResponseDto?> GetDtoByIdAsync(int id)
         {
-            var conn = await GetOpenConnectionAsync();
-            return await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
-                "sp_GetDesignationById",
-                new { p_DesignationId = id },
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
+                    "sp_GetDesignationById",
+                    new { p_DesignationId = id, p_CampusId = (int?)null },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                var desig = await _context.Designations.FindAsync(id);
+                if (desig == null) return null;
+                return new DesignationResponseDto
+                {
+                    Id = desig.Id,
+                    Name = desig.Name,
+                    DepartmentId = desig.DepartmentId,
+                    StaffType = desig.StaffType,
+                    IsActive = desig.IsActive,
+                    CreatedAt = desig.CreatedAt,
+                    UpdatedAt = desig.UpdatedAt
+                };
+            }
         }
 
         public async Task<Designation?> GetByNameAsync(string name, int? campusId = null)

@@ -209,7 +209,7 @@ BEGIN
 
     -- 3. Staff Counts
     SELECT 
-        COUNT(CASE WHEN st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR st.StaffType IS NULL THEN 1 END),
+        COUNT(CASE WHEN st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR st.StaffType IS NULL OR st.StaffType NOT IN ('Non-Teaching', 'Support') THEN 1 END),
         COUNT(CASE WHEN st.StaffType = 'Non-Teaching' OR st.StaffType = 'Support' THEN 1 END),
         COUNT(*)
     INTO v_TeachingStaff, v_NonTeachingStaff, v_TotalStaff
@@ -225,7 +225,8 @@ BEGIN
     INNER JOIN `Groups` g ON g.GroupId = sec.GroupId
     WHERE (sec.IsActive = 1 OR sec.IsActive IS NULL)
       AND (sec.CampusId = v_CampusId OR sec.CampusId IS NULL)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId);
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sec.AcademicYearId = p_AcademicYearId);
 
     SELECT COUNT(*) INTO v_TotalGroups
     FROM `Groups` g
@@ -363,13 +364,14 @@ BEGIN
         COALESCE(sec.SectionName, CONCAT('Section ', sec.SectionId)) AS Name,
         COALESCE(SUM(CASE WHEN a.Status IN (1, '1', 'Present', 'P') THEN 1 ELSE 0 END), 0) AS Present,
         COALESCE(SUM(CASE WHEN a.Status IN (2, '2', 'Absent', 'A') THEN 1 ELSE 0 END), 0) AS Absent,
-        COUNT(a.AttendanceId) AS Total,
-        COUNT(a.AttendanceId) AS TotalStudents,
-        ROUND(COALESCE(SUM(CASE WHEN a.Status IN (1, '1', 'Present', 'P') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(a.AttendanceId), 0), 0.0), 1) AS Percentage
+        COALESCE((SELECT COUNT(*) FROM Students s WHERE s.SectionId = sec.SectionId AND (s.IsActive = 1 OR s.IsActive IS NULL)), 0) AS Total,
+        COALESCE((SELECT COUNT(*) FROM Students s WHERE s.SectionId = sec.SectionId AND (s.IsActive = 1 OR s.IsActive IS NULL)), 0) AS TotalStudents,
+        ROUND(COALESCE(SUM(CASE WHEN a.Status IN (1, '1', 'Present', 'P') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COALESCE((SELECT COUNT(*) FROM Students s WHERE s.SectionId = sec.SectionId AND (s.IsActive = 1 OR s.IsActive IS NULL)), 0), 0), 0.0), 1) AS Percentage
     FROM Sections sec
-    LEFT JOIN `Attendances` a ON a.SectionId = sec.SectionId AND DATE(a.AttendanceDate) = v_TargetDate
+    LEFT JOIN Attendances a ON a.SectionId = sec.SectionId AND DATE(a.AttendanceDate) = v_TargetDate
     WHERE (sec.CampusId = v_CampusId OR sec.CampusId IS NULL)
       AND (sec.IsActive = 1 OR sec.IsActive IS NULL)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR sec.AcademicYearId = p_AcademicYearId)
     GROUP BY sec.SectionId, sec.SectionName
     ORDER BY sec.SectionName ASC
     LIMIT 15;

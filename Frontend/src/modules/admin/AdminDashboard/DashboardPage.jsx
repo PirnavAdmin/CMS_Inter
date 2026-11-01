@@ -565,11 +565,17 @@ export default function DashboardPage() {
 
         normalizedItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
         const totalEnrolled = groupData?.totalStudents ?? normalizedItems.reduce((acc, curr) => acc + (curr.value || 0), 0);
+        const enrolledBoys = groupData?.boys ?? groupData?.boysCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.boys) || 0), 0);
+        const enrolledGirls = groupData?.girls ?? groupData?.girlsCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.girls) || 0), 0);
 
         const groupPayload = {
           items: normalizedItems,
           groups: normalizedItems,
           totalStudents: totalEnrolled,
+          boys: enrolledBoys,
+          boysCount: enrolledBoys,
+          girls: enrolledGirls,
+          girlsCount: enrolledGirls,
         };
 
         setGroupState({ loading: false, error: null, data: groupPayload });
@@ -1360,8 +1366,16 @@ export default function DashboardPage() {
   // Group Summary Stats for Bottom Chips (Total Students, Boys, Girls)
   const groupStats = useMemo(() => {
     const totalGroupStudents = groupChartData.reduce((sum, g) => sum + (Number(g.value) || 0), 0) || Number(summaryState.data?.totalStudents ?? 0);
-    let boys = Number(groupState.data?.boysCount ?? groupState.data?.boys ?? summaryState.data?.boysCount ?? 0);
-    let girls = Number(groupState.data?.girlsCount ?? groupState.data?.girls ?? summaryState.data?.girlsCount ?? 0);
+    let boys = Number(groupState.data?.boysCount ?? groupState.data?.boys ?? 0);
+    let girls = Number(groupState.data?.girlsCount ?? groupState.data?.girls ?? 0);
+
+    if (boys > 0 || girls > 0) {
+      return {
+        totalStudents: totalGroupStudents,
+        boys,
+        girls,
+      };
+    }
 
     if (boys === 0 && girls === 0) {
       if (overviewState.data?.totalAdmissions > 0) {

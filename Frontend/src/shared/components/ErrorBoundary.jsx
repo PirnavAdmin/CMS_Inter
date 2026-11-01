@@ -1,6 +1,36 @@
 import React from "react";
 import { AlertCircle, RefreshCw, Home } from "lucide-react";
 
+function getDashboardUrl() {
+  const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
+  if (path.startsWith("/student-dashboard")) return "/student-dashboard";
+  if (path.startsWith("/parent-dashboard")) return "/parent-dashboard";
+  if (path.startsWith("/faculty-dashboard")) return "/faculty-dashboard";
+  if (path.startsWith("/accountant-dashboard")) return "/accountant-dashboard";
+  if (path.startsWith("/warden-dashboard")) return "/warden-dashboard";
+  if (path.startsWith("/transport-manager")) return "/transport-manager/overview";
+  if (path.startsWith("/exam-cell-dashboard")) return "/exam-cell-dashboard";
+  if (path.startsWith("/non-teaching-dashboard")) return "/non-teaching-dashboard";
+  if (path.startsWith("/inventory-dashboard")) return "/inventory-dashboard";
+  if (path.startsWith("/principal-dashboard")) return "/principal-dashboard";
+
+  try {
+    const rawUser = localStorage.getItem("auth_user") || localStorage.getItem("user");
+    const user = rawUser ? JSON.parse(rawUser) : null;
+    const role = (localStorage.getItem("auth_role") || localStorage.getItem("role") || user?.role || user?.staffType || "").toLowerCase();
+    if (role.includes("student")) return "/student-dashboard";
+    if (role.includes("parent")) return "/parent-dashboard";
+    if (role.includes("faculty") || role.includes("teacher")) return "/faculty-dashboard";
+    if (role.includes("accountant")) return "/accountant-dashboard";
+    if (role.includes("warden")) return "/warden-dashboard";
+    if (role.includes("transport") || role.includes("driver")) return "/transport-manager/overview";
+    if (role.includes("exam")) return "/exam-cell-dashboard";
+    if (role.includes("principal")) return "/principal-dashboard";
+  } catch {}
+
+  return "/dashboard";
+}
+
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -45,7 +75,7 @@ export default class ErrorBoundary extends React.Component {
               <RefreshCw size={16} /> Reload Page
             </button>
             <a
-              href="/dashboard"
+              href={getDashboardUrl()}
               className="cms-btn"
               style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 20px", textDecoration: "none", border: "1px solid #cbd5e1", borderRadius: 8, color: "#334155", background: "#f8fafc" }}
             >

@@ -147,6 +147,7 @@ namespace CollegeManagement.API.DTOs.Staff
             set => JoiningDate = value;
         }
 
+        [System.Text.Json.Serialization.JsonConverter(typeof(CollegeManagement.API.Helpers.FlexibleDecimalJsonConverter))]
         public decimal Experience { get; set; } = 0.0m;
 
         [StringLength(50)]

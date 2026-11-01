@@ -1,5 +1,3 @@
-import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -93,31 +91,28 @@ export default function FacultyReimbursement() {
     profileData.id ||
     authUser.employeeId ||
     authUser.staffId ||
-    authUser.userId ||
     authUser.id ||
-    "";
+    "EMP-1042";
 
   const defaultFacultyName =
     profileData.fullName ||
     (profileData.firstName ? `${profileData.firstName} ${profileData.lastName || ""}`.trim() : "") ||
     authUser.fullName ||
     authUser.name ||
-    authUser.username ||
-    "";
+    "tangiro kamado";
 
   const defaultDepartment =
     profileData.department ||
     authUser.department ||
     authUser.departmentName ||
-    "";
+    "Languages";
 
   const defaultDesignation =
     profileData.designation ||
     profileData.role ||
     authUser.designation ||
     authUser.designationName ||
-    authUser.role ||
-    "";
+    "Assistant Professor";
 
   const defaultEmail =
     profileData.email ||
@@ -132,14 +127,12 @@ export default function FacultyReimbursement() {
   );
 
   // Two tabs only: "submit" (Claims) and "my-claims" (My Claims)
-  const { params, setParam } = useFacultyViewParams();
-  const activePortalTab = params.get("tab") === "my-claims" ? "my-claims" : "submit";
-  const setActivePortalTab = (tab) => setParam("tab", tab);
+  const [activePortalTab, setActivePortalTab] = useState("submit");
 
   // ── Live Claims & Account Entries State ─────────────────────────────
   const [claims, setClaims] = useState([]);
   const [accountEntries, setAccountEntries] = useState([]);
-  const [isLoadingClaims, setIsLoadingClaims] = useState(params.has("claimId"));
+  const [isLoadingClaims, setIsLoadingClaims] = useState(false);
   const [toast, setToast] = useState(null);
 
   /**
@@ -334,29 +327,10 @@ export default function FacultyReimbursement() {
   const [currentPage, setCurrentPage] = useState(1);
 
   // ── Modal Dialog States ─────────────────────────────────────────────
-  const [draftClaim, setDraftClaim] = useState(null);
-  const draftClaimRef = useRef(null);
-  const [draftProofOpen, setDraftProofOpen] = useState(false);
-  const claimId = params.get("claimId");
-  const selectedClaim = draftProofOpen ? draftClaim : claimId == null ? null : claims.find((claim) => String(claim.id || claim.claimId) === claimId && isClaimOwnedByFaculty(claim));
-  const setSelectedClaim = (claim) => {
-    if (claim?.claimId === "DRAFT-PROOF") { draftClaimRef.current = claim; setDraftClaim(claim); }
-    else { draftClaimRef.current = null; setDraftProofOpen(false); setParam("claimId", claim ? claim.id || claim.claimId : null); }
-  };
-  const claimDetailModalOpen = params.get("modal") === "claim";
-  const setClaimDetailModalOpen = (open) => setParam("modal", open ? "claim" : null);
-  const previewDocModalOpen = draftProofOpen || params.get("proof") === "1";
-  const setPreviewDocModalOpen = (open) => {
-    // A locally selected file is a temporary preview, not a saved detail link.
-    if (draftClaimRef.current) {
-      setDraftProofOpen(open);
-      if (!open) { draftClaimRef.current = null; setDraftClaim(null); }
-      return;
-    }
-    setParam("proof", open ? "1" : null);
-  };
-  const viewAccountsDrawerOpen = params.get("ledger") === "1";
-  const setViewAccountsDrawerOpen = (open) => setParam("ledger", open ? "1" : null);
+  const [selectedClaim, setSelectedClaim] = useState(null);
+  const [claimDetailModalOpen, setClaimDetailModalOpen] = useState(false);
+  const [previewDocModalOpen, setPreviewDocModalOpen] = useState(false);
+  const [viewAccountsDrawerOpen, setViewAccountsDrawerOpen] = useState(false);
   const [previewClaimModalOpen, setPreviewClaimModalOpen] = useState(false);
   const [previewDraftDocModalOpen, setPreviewDraftDocModalOpen] = useState(false);
 
@@ -958,7 +932,7 @@ export default function FacultyReimbursement() {
           <div className="reimb-form-header">
             <div className="reimb-form-title-group">
               <h2>
-                <ReceiptIndianRupee size={18} style={{ color: "var(--cms-primary)" }} />
+                <ReceiptIndianRupee size={18} style={{ color: "#6F8400" }} />
                 Submit Reimbursement Claim
               </h2>
               <p>Complete the three sections below and attach supporting receipts or invoices.</p>
@@ -1253,7 +1227,7 @@ export default function FacultyReimbursement() {
                   ) : (
                     <div className="reimb-file-badge">
                       <div className="reimb-file-info">
-                        <Paperclip size={18} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
+                        <Paperclip size={18} style={{ color: "#6F8400", flexShrink: 0 }} />
                         <div style={{ overflow: "hidden" }}>
                           <div className="reimb-file-name" title={uploadedFile.name}>{uploadedFile.name}</div>
                           <div className="reimb-file-size">
@@ -1539,7 +1513,7 @@ export default function FacultyReimbursement() {
                   <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
-              <tbody>{isLoadingClaims ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />) : <>
+              <tbody>
                 {paginatedClaims.length === 0 ? (
                   <tr>
                     <td colSpan={9}>
@@ -1619,7 +1593,7 @@ export default function FacultyReimbursement() {
                                 setPreviewDocModalOpen(true);
                               }}
                             >
-                              <Paperclip size={14} style={{ color: "var(--cms-primary)" }} />
+                              <Paperclip size={14} style={{ color: "#6F8400" }} />
                             </button>
                           )}
                         </div>
@@ -1627,7 +1601,7 @@ export default function FacultyReimbursement() {
                     </tr>
                   ))
                 )}
-              </>}</tbody>
+              </tbody>
             </table>
           </div>
 
@@ -1673,7 +1647,6 @@ export default function FacultyReimbursement() {
 
       {/* ── MODALS ── */}
 
-      {(claimDetailModalOpen || previewDocModalOpen) && !selectedClaim && <Modal title="Claim Details" onClose={() => { setClaimDetailModalOpen(false); setPreviewDocModalOpen(false); }}><p role="status">{isLoadingClaims ? "Loading claim details..." : "This claim or unsaved document preview is unavailable."}</p></Modal>}
       {/* 1. Claim Details Modal */}
       {claimDetailModalOpen && selectedClaim && (
         <Modal
@@ -1715,7 +1688,7 @@ export default function FacultyReimbursement() {
               </div>
               <div className="reimb-modal-prop">
                 <span className="reimb-modal-label">Claimed Amount</span>
-                <span className="reimb-modal-value" style={{ color: "var(--cms-primary)", fontSize: 16 }}>
+                <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 16 }}>
                   {formatINR(selectedClaim.amount)}
                 </span>
               </div>
@@ -1773,7 +1746,7 @@ export default function FacultyReimbursement() {
                 <span className="reimb-modal-label">Supporting Document</span>
                 <div className="reimb-doc-preview-card">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Paperclip size={16} style={{ color: "var(--cms-primary)" }} />
+                    <Paperclip size={16} style={{ color: "#6F8400" }} />
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedClaim.proof.name}</span>
                     <span style={{ fontSize: 11, color: "#64748b" }}>
                       ({(selectedClaim.proof.size / 1024).toFixed(1)} KB)
@@ -2006,7 +1979,7 @@ export default function FacultyReimbursement() {
               />
             ) : (
               <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <FileText size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 12px" }} />
+                <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
                 <h4 style={{ margin: "0 0 6px" }}>{selectedClaim.proof.name}</h4>
                 <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                   File size: {(selectedClaim.proof.size / 1024).toFixed(1)} KB • Type: {selectedClaim.proof.type || "Document"}
@@ -2142,7 +2115,7 @@ export default function FacultyReimbursement() {
                   height: 34,
                   borderRadius: "50%",
                   background: "#f1f4e2",
-                  color: "var(--cms-primary)",
+                  color: "#6F8400",
                   display: "grid",
                   placeItems: "center",
                   flexShrink: 0,
@@ -2194,7 +2167,7 @@ export default function FacultyReimbursement() {
 
               <div className="reimb-modal-prop">
                 <span className="reimb-modal-label">Claimed Amount</span>
-                <span className="reimb-modal-value" style={{ color: "var(--cms-primary)", fontSize: 17, fontWeight: 700 }}>
+                <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 17, fontWeight: 700 }}>
                   {formatINR(Number(formData.amount) || 0)}
                 </span>
               </div>
@@ -2233,7 +2206,7 @@ export default function FacultyReimbursement() {
               {uploadedFile ? (
                 <div className="reimb-doc-preview-card">
                   <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-                    <Paperclip size={16} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
+                    <Paperclip size={16} style={{ color: "#6F8400", flexShrink: 0 }} />
                     <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {uploadedFile.name}
                     </span>
@@ -2325,7 +2298,7 @@ export default function FacultyReimbursement() {
               />
             ) : (
               <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <FileText size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 12px" }} />
+                <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
                 <h4 style={{ margin: "0 0 6px" }}>{uploadedFile.name}</h4>
                 <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                   File size: {(uploadedFile.size / 1024).toFixed(1)} KB • Type: {uploadedFile.type || "Document"}

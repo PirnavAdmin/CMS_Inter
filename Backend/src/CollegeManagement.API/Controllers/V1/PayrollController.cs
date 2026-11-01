@@ -583,8 +583,9 @@ namespace CollegeManagement.API.Controllers
 
 
 
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
         [HttpGet("my-payslips")]
+        [HttpGet("payslips/my-payslips")]
         [BypassPermission]
         public async Task<IActionResult> GetMyPayslips(
             [FromQuery] int? payrollMonth,
@@ -619,7 +620,6 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/payroll/payslips
         [HttpGet("payslips")]
-        [HttpGet("payslips/my-payslips")]
         public async Task<IActionResult> GetPayslipHistory(
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
@@ -645,12 +645,9 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
-
         // GET: api/payroll/payslips/5
         [HttpGet("payslips/{id}")]
+        [BypassPermission]
         public async Task<IActionResult> GetPayslipById(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -693,13 +690,10 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
-
         // GET: api/payroll/payslips/{id}/pdf
         [HttpGet("payslips/{id}/pdf")]
         [HttpGet("payslips/{id}/download-pdf")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadPayslipPdf(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -1121,10 +1115,6 @@ namespace CollegeManagement.API.Controllers
             var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
         }
-
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
 
         // GET: api/payroll/payslips/10/advance-repayments
         [HttpGet("payslips/{id}/advance-repayments")]

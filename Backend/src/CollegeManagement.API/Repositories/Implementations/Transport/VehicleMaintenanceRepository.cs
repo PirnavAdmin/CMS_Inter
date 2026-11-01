@@ -68,7 +68,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_NextServiceDue = dto.NextServiceDue,
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = createdBy
+                    p_CreatedBy = createdBy,
+                    p_UpdatedBy = createdBy
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -76,11 +77,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long maintenanceId, UpdateVehicleMaintenanceDto dto, long updatedBy)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateVehicleMaintenances",
                 new
                 {
-                    p_MaintenanceId = maintenanceId,
+                    p_Id = maintenanceId,
                     p_VehicleId = dto.VehicleId,
                     p_ServiceType = dto.ServiceType ?? "Routine",
                     p_ServiceDate = dto.ServiceDate,
@@ -89,6 +90,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_NextServiceDue = dto.NextServiceDue,
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_CreatedBy = (long?)null,
                     p_UpdatedBy = updatedBy
                 },
                 commandType: CommandType.StoredProcedure);
@@ -98,9 +100,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long maintenanceId, long updatedBy)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteVehicleMaintenances",
-                new { p_MaintenanceId = maintenanceId, p_UpdatedBy = updatedBy },
+                new { p_Id = maintenanceId, p_UpdatedBy = updatedBy },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

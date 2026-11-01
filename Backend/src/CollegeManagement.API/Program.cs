@@ -104,6 +104,8 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new FlexibleDecimalJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new FlexibleNullableDecimalJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 #endregion

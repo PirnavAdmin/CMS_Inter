@@ -68,7 +68,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves the profile of the current authenticated student.
         /// </summary>
         [HttpGet("me")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [BypassPermission]
         [ProducesResponseType(typeof(StudentSelfProfileResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -318,7 +318,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetById(int studentId)
@@ -623,7 +623,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("{studentId:int}/dashboard")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent,Principal")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent,Principal")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetDashboard(int studentId)

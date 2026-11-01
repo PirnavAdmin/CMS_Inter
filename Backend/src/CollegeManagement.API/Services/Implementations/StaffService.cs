@@ -2017,13 +2017,83 @@ namespace CollegeManagement.API.Services.Implementations
             var staff = await _staffRepository.GetByIdAsync(dto.StaffId);
             if (staff == null) throw new NotFoundException($"Staff with ID {dto.StaffId} not found.");
 
+            if (dto.SubjectId <= 0 && !string.IsNullOrWhiteSpace(dto.SubjectName))
+            {
+                var allSubjects = await _subjectRepository.GetAllAsync();
+                var cleanName = dto.SubjectName.Trim();
+                var matched = allSubjects.FirstOrDefault(s =>
+                    string.Equals(s.SubjectName.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.SubjectCode.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    cleanName.StartsWith(s.SubjectName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                    s.SubjectName.Trim().StartsWith(cleanName, StringComparison.OrdinalIgnoreCase));
+
+                if (matched != null)
+                {
+                    dto.SubjectId = matched.SubjectId;
+                }
+                else
+                {
+                    var validGroup = await _context.Groups.AsNoTracking().FirstOrDefaultAsync();
+                    var validLevel = await _context.AcademicLevels.AsNoTracking().FirstOrDefaultAsync();
+                    var validBoard = await _context.Boards.AsNoTracking().FirstOrDefaultAsync();
+                    var validYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync();
+
+                    var cleanCode = "SUB-" + (cleanName.Length > 4 ? cleanName.Substring(0, 4).ToUpper() : cleanName.ToUpper()) + "-" + new Random().Next(100, 999);
+                    var newSub = new Subject
+                    {
+                        SubjectName = cleanName,
+                        SubjectCode = cleanCode,
+                        BoardId = staff.BoardId ?? (validBoard?.BoardId ?? 1),
+                        GroupId = validGroup?.GroupId ?? 37,
+                        AcademicLevelId = validLevel?.AcademicLevelId ?? 1,
+                        AcademicYearId = validYear?.AcademicYearId,
+                        SubjectType = "Theory",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Subjects.Add(newSub);
+                    await _context.SaveChangesAsync();
+                    dto.SubjectId = newSub.SubjectId;
+                }
+            }
+
             var subject = await _subjectRepository.GetByIdAsync(dto.SubjectId);
             if (subject == null) throw new NotFoundException($"Subject with ID {dto.SubjectId} not found.");
 
+            var existingAllocs = await _allocationRepository.GetByStaffIdAsync(dto.StaffId);
+            var alreadyAllocated = existingAllocs.FirstOrDefault(a => a.SubjectId == dto.SubjectId);
+            if (alreadyAllocated != null)
+            {
+                alreadyAllocated.Staff = staff;
+                alreadyAllocated.Subject = subject;
+                return _mapper.Map<StaffSubjectAllocationResponseDto>(alreadyAllocated);
+            }
+
             var allocation = _mapper.Map<StaffSubjectAllocation>(dto);
+            allocation.IsActive = true;
+            allocation.CreatedAt = DateTime.UtcNow;
             var created = await _allocationRepository.AddAsync(allocation);
             created.Staff = staff;
             created.Subject = subject;
+
+            try
+            {
+                var deptDict = DeserializeObject<Dictionary<string, object>>(staff.DepartmentSpecificJson) ?? new Dictionary<string, object>();
+                var currentSubs = new List<string>();
+                if (deptDict.TryGetValue("allocatedSubjects", out var sObj) && sObj is IEnumerable<object> sEnum)
+                {
+                    currentSubs = sEnum.Select(x => x.ToString() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+                }
+                if (!currentSubs.Contains(subject.SubjectName))
+                {
+                    currentSubs.Add(subject.SubjectName);
+                    deptDict["allocatedSubjects"] = currentSubs;
+                    deptDict["subjects"] = currentSubs;
+                    staff.DepartmentSpecificJson = JsonSerializer.Serialize(deptDict);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch { }
 
             return _mapper.Map<StaffSubjectAllocationResponseDto>(created);
         }

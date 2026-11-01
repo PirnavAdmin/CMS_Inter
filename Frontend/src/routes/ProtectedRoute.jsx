@@ -303,7 +303,7 @@ export default function ProtectedRoute({
   const userPerms = user?.permissions || user?.rolePermissions;
   const isExplicitlyAllowedModule = Boolean(requiredModule && can(requiredModule, requiredAction, undefined, user, requiredScreen));
   const hasGrantedDashboardAccess = Array.isArray(userPerms) && userPerms.some((p) => p?.canView || (Array.isArray(p?.actions) && p.actions.includes("view")));
-  const canAccessDashboardParentRoute = Boolean(requireAdmin && (isAdmin || isPrincipal || isExplicitlyAllowedModule || hasGrantedDashboardAccess));
+  const canAccessDashboardParentRoute = Boolean(requireAdmin && !isStudent && !isParent && (isAdmin || isPrincipal || isExplicitlyAllowedModule || hasGrantedDashboardAccess));
 
   // Transport Manager check
   if (requireTransportManager && !isTransportManager && !isAdmin) {
