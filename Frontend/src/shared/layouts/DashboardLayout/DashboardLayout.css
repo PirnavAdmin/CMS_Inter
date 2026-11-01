@@ -545,16 +545,22 @@
   line-height: 1;
 }
 
-.cms-profile-btn {
+.cms-top-actions .cms-profile-btn {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 6px;
   background: var(--cms-surface);
   border: 1px solid var(--cms-border);
   border-radius: 999px;
-  padding: 5px 12px 5px 5px;
+  padding: 3px 8px 3px 4px;
   cursor: pointer;
   transition: all 0.18s ease;
+  height: 34px;
+  min-width: 0;
+  max-width: 170px;
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  text-align: left;
 }
 
 .cms-profile-btn:hover {
@@ -564,6 +570,9 @@
 
 .cms-profile-btn .cms-avatar {
   text-transform: uppercase;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
 }
 
 .cms-avatar {
@@ -578,14 +587,26 @@
   font-weight: 700;
 }
 
-.cms-profile-meta strong {
+.cms-profile-btn .cms-profile-meta {
+  min-width: 0;
+  line-height: 1.25;
+  text-align: left;
+}
+.cms-profile-btn .cms-profile-meta strong {
   display: block;
-  font-size: 12.5px;
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cms-profile-meta span {
-  font-size: 11px;
+.cms-profile-btn .cms-profile-meta span {
+  display: block;
+  font-size: 10px;
   color: var(--cms-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cms-dropdown {
