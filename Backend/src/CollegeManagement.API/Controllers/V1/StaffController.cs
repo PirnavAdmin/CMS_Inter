@@ -265,6 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by ID.
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
@@ -274,7 +275,21 @@ namespace CollegeManagement.API.Controllers.V1
                 var callerId = GetCallerStaffId();
                 if (!callerId.HasValue || callerId.Value != id)
                 {
-                    return Forbid();
+                    var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    bool hasPerm = false;
+                    if (int.TryParse(userIdClaim, out int uid))
+                    {
+                        var permRepo = HttpContext.RequestServices.GetService<IPermissionRepository>();
+                        if (permRepo != null)
+                        {
+                            hasPerm = await permRepo.HasModulePermissionAsync(uid, "staff-management", "view");
+                        }
+                    }
+
+                    if (!hasPerm)
+                    {
+                        return Forbid();
+                    }
                 }
             }
 
@@ -287,6 +302,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by Employee ID string (e.g. PCTCH0001, PCNT0001).
         /// </summary>
         [HttpGet("by-employee-id/{employeeId}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
@@ -309,6 +325,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Universal lookup accepting either integer database ID or string Employee ID.
         /// </summary>
         [HttpGet("profile/{identifier}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)

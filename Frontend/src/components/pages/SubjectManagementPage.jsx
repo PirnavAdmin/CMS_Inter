@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, BookOpen, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -577,7 +578,7 @@ export default function SubjectManagementPage() {
     <main className="subject-screen subject-master-screen subject-allocation-screen subject-management-page">
       {subjectView === "languages" ? <>
         <button className="cms-back-link subject-language-back" type="button" onClick={() => setSubjectView("subjects")}><ArrowLeft size={15} /> Back to Subjects</button>
-        <section className="subject-table-card subject-language-list"><header className="subject-table-head"><div><h2>Language Subjects</h2><p>Reusable language records for group-wise allocation.</p></div><button className="cms-btn cms-btn-primary" type="button" onClick={() => { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); setLanguageModalOpen(true); }}><Plus size={16} /> Add Language</button></header><div className="subject-table-scroll"><table className="subject-table subject-master-table subject-language-table"><thead><tr><th>Language</th><th>Subject Code</th><th>Total Marks</th><th>Passing Marks</th><th>Action</th></tr></thead><tbody>{languageSubjects.map((subject) => { const scope = /^english$/i.test(displayLanguageName(subject.name)) ? "common" : "secondLanguage"; return <tr key={subjectKey(subject)}><td>{displayLanguageName(subject.name)}</td><td><b>{subject.code}</b></td><td>{total(subject.marks)}</td><td>{markValue(subject.marks?.passing)}</td><td><div className="subject-master-actions"><button className="cms-action-btn" title="Edit language" onClick={() => openConfiguredLanguageEdit(subject, scope)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete language" onClick={() => setRemoving({ ...subject, scope })}><Trash2 size={16} /></button></div></td></tr>; })}</tbody></table></div></section>
+        <section className="subject-table-card subject-language-list"><header className="subject-table-head"><div><h2>Language Subjects</h2><p>Reusable language records for group-wise allocation.</p></div><button className="cms-btn cms-btn-primary" type="button" onClick={() => { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); setLanguageModalOpen(true); }}><Plus size={16} /> Add Language</button></header><div className="subject-table-scroll"><PaginatedTable className="subject-table subject-master-table subject-language-table"><thead><tr><th>Language</th><th>Subject Code</th><th>Total Marks</th><th>Passing Marks</th><th>Action</th></tr></thead><tbody>{languageSubjects.map((subject) => { const scope = /^english$/i.test(displayLanguageName(subject.name)) ? "common" : "secondLanguage"; return <tr key={subjectKey(subject)}><td>{displayLanguageName(subject.name)}</td><td><b>{subject.code}</b></td><td>{total(subject.marks)}</td><td>{markValue(subject.marks?.passing)}</td><td><div className="subject-master-actions"><button className="cms-action-btn" title="Edit language" onClick={() => openConfiguredLanguageEdit(subject, scope)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete language" onClick={() => setRemoving({ ...subject, scope })}><Trash2 size={16} /></button></div></td></tr>; })}</tbody></PaginatedTable></div></section>
       </> : <>
       <section className="subject-master-context"><Select label="Academic Level" value={context.levelId} options={levels} disabled={subjectBusy || levelsLoading || !navbarBoardId || !levels.length} onChange={(levelId) => { setContextSubjects([]); setContextSubjectsReady(false); setContext({ levelId, groupId: "" }); }} placeholder={levelsLoading ? "Loading academic levels..." : !navbarBoardId ? "No active boards available" : !levels.length ? "No academic levels available" : "Select Academic Level"} /><GroupCombobox value={context.groupId} options={groups} onChange={(groupId) => { setContextSubjects([]); setContextSubjectsReady(false); setContext((current) => ({ ...current, groupId })); }} disabled={subjectBusy || !context.levelId} /></section>
       <section className="subject-allocation-columns" aria-label="Group subject allocation">
@@ -590,7 +591,7 @@ export default function SubjectManagementPage() {
               return <article className="subject-allocation-row" key={subjectKey(subject)}><label className="subject-select-card"><input type="checkbox" checked={selectedSubjectKeys.includes(subjectKey(subject))} onChange={() => toggleSelectedSubject(subject)} /><span><b>{configuration.name}</b><small>{configuration.code} · {configuration.type.join(" + ")}</small><em>Total: {total(configuration.marks)} · Passing: {markValue(configuration.marks.passing)}</em></span></label><button className="cms-btn cms-btn-ghost" type="button" onClick={() => openConfigure(subject)}>Configure</button></article>;
             }) : <div className="subject-panel-empty"><BookOpen size={42} aria-hidden="true" /><span>{context.groupId && !levelYear ? "Curriculum mapping not configured for this academic level." : "No additional predefined subjects are available for this group."}</span></div>}
           </div>
-          <div className="subject-language-picker"><div className="subject-language-controls"><label className="subject-master-field"><span>Language</span><select value="" disabled={!context.groupId || !languageCandidates.length} onChange={(event) => { const language = languageCandidates.find((item) => subjectKey(item) === event.target.value); if (language) setSelectedLanguageKeys((current) => [...current, subjectKey(language)]); }}><option value="">{!context.groupId ? "Select a group first" : languageCandidates.length ? "Select Language" : "No languages available"}</option>{languageCandidates.map((language) => <option key={subjectKey(language)} value={subjectKey(language)}>{displayLanguageName(language.name)}</option>)}</select></label><button className="cms-btn cms-btn-ghost" type="button" onClick={() => setSubjectView("languages")}>Manage Language</button></div>{selectedLanguages.length ? <div className="subject-selected-languages"><span>Selected Languages:</span><div>{selectedLanguages.map((language) => <button key={subjectKey(language)} className="language-chip" type="button" title={`Remove ${displayLanguageName(language.name)}`} onClick={() => setSelectedLanguageKeys((current) => current.filter((key) => key !== subjectKey(language)))}>{displayLanguageName(language.name)} <b aria-hidden="true">×</b></button>)}</div></div> : null}</div>
+          <div className="subject-language-picker"><div className="subject-language-controls"><Select label="Language" value="" disabled={!context.groupId || !languageCandidates.length} placeholder={!context.groupId ? "Select a group first" : languageCandidates.length ? "Select Language" : "No languages available"} options={languageCandidates.map((language) => ({ value: subjectKey(language), label: displayLanguageName(language.name) }))} onChange={(val) => { if (!val) return; const language = languageCandidates.find((item) => subjectKey(item) === val); if (language) setSelectedLanguageKeys((current) => [...current, subjectKey(language)]); }} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => setSubjectView("languages")}>Manage Language</button></div>{selectedLanguages.length ? <div className="subject-selected-languages"><span>Selected Languages:</span><div>{selectedLanguages.map((language) => <button key={subjectKey(language)} className="language-chip" type="button" title={`Remove ${displayLanguageName(language.name)}`} onClick={() => setSelectedLanguageKeys((current) => current.filter((key) => key !== subjectKey(language)))}>{displayLanguageName(language.name)} <b aria-hidden="true">×</b></button>)}</div></div> : null}</div>
           <footer className="subject-allocation-footer"><button className="cms-btn cms-btn-ghost" type="button" disabled={!context.groupId} onClick={() => { setChoice("new"); setDraft(empty()); setAddOpen(true); }}><Plus size={16} /> Add Other Subject</button><span>{selectedSubjectKeys.length} Subject{selectedSubjectKeys.length === 1 ? "" : "s"}{selectedLanguageKeys.length ? ` + ${selectedLanguageKeys.length} Language${selectedLanguageKeys.length === 1 ? "" : "s"}` : ""} Selected</span><button className="cms-btn cms-btn-primary" type="button" disabled={(!selectedSubjectKeys.length && !selectedLanguageKeys.length) || subjectBusy} onClick={saveAllocatedSubjects}>{subjectBusy ? "Saving…" : "Save Allocated Subjects"}</button></footer>
         </section>
         <section className="subject-table-card subject-allocation-panel">
@@ -610,7 +611,73 @@ export default function SubjectManagementPage() {
   </DashboardLayout>;
 }
 
-function Select({ label, value, options, onChange, placeholder, disabled = false }) { return <label className="subject-master-field"><span>{label}</span><select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}><option value="">{placeholder || "Select " + label}</option>{options.map((option) => typeof option === "string" ? <option key={option} value={option}>{option}</option> : <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>; }
+function Select({ label, value, options, onChange, placeholder, disabled = false }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+  const normalizedOptions = useMemo(() => {
+    return options.map((opt) => (typeof opt === "string" ? { value: opt, label: opt } : opt));
+  }, [options]);
+  const selected = normalizedOptions.find((opt) => String(opt.value) === String(value));
+
+  useEffect(() => {
+    const close = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
+
+  const choose = (optValue) => {
+    onChange(optValue);
+    setOpen(false);
+  };
+
+  return (
+    <div className="subject-combobox subject-select-combobox" ref={root} data-open={open}>
+      <label className="subject-master-field">
+        <span>{label}</span>
+        <button
+          type="button"
+          className="subject-select-trigger"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => !disabled && setOpen((prev) => !prev)}
+        >
+          <span className={selected ? "subject-select-value" : "subject-select-placeholder"}>
+            {selected ? selected.label : (placeholder || `Select ${label}`)}
+          </span>
+          <ChevronDown className="subject-select-chevron" size={17} aria-hidden="true" />
+        </button>
+      </label>
+      {open && !disabled && (
+        <div className="subject-combobox-options" role="listbox">
+          <button
+            type="button"
+            role="option"
+            aria-selected={!value}
+            className={!value ? "is-active" : ""}
+            onClick={() => choose("")}
+          >
+            <strong>{placeholder || `Select ${label}`}</strong>
+          </button>
+          {normalizedOptions.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              role="option"
+              aria-selected={String(opt.value) === String(value)}
+              className={String(opt.value) === String(value) ? "is-active" : ""}
+              onClick={() => choose(opt.value)}
+            >
+              <strong>{opt.label}</strong>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function GroupCombobox({ value, options, onChange, disabled }) {
   const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false), [query, setQuery] = useState(""), [active, setActive] = useState(0);
   const root = useRef(null);

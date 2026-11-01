@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, Eye, Inbox, Info, Loader2, Search, Send, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -275,7 +276,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
                   </tr>) : <tr><td colSpan={6} className="cms-requests-empty">No admission requests found.</td></tr>}
                 </tbody>
               </table></div>
-              <div className="cms-pagination"><span className="cms-page-info">Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} requests</span><button type="button" className="cms-page-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><button type="button" className="cms-page-btn is-active" aria-current="page">{currentPage}</button><button type="button" className="cms-page-btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button></div>
+              <AdminPagination currentPage={currentPage} totalRecords={filtered.length} pageSize={5} onPageChange={setPage} />
             </div>
           </div>
         </>}

@@ -331,22 +331,52 @@ namespace CollegeManagement.API.Repositories.Implementations
             public int CampusId { get; set; }
             public int DepartmentId { get; set; }
             public byte StaffType { get; set; }
-            public TimeSpan WorkStartTime { get; set; }
-            public TimeSpan WorkEndTime { get; set; }
-            public TimeSpan LateThreshold { get; set; }
-            public TimeSpan EarlyCheckoutThreshold { get; set; }
+            public object? WorkStartTime { get; set; }
+            public object? WorkEndTime { get; set; }
+            public object? LateThreshold { get; set; }
+            public object? EarlyCheckoutThreshold { get; set; }
             public int GracePeriodMinutes { get; set; }
+
+            public TimeSpan ParsedWorkStartTime => ParseTimeSpan(WorkStartTime, new TimeSpan(9, 0, 0));
+            public TimeSpan ParsedWorkEndTime => ParseTimeSpan(WorkEndTime, new TimeSpan(16, 30, 0));
+            public TimeSpan ParsedLateThreshold => ParseTimeSpan(LateThreshold, new TimeSpan(9, 15, 0));
+            public TimeSpan ParsedEarlyCheckoutThreshold => ParseTimeSpan(EarlyCheckoutThreshold, new TimeSpan(16, 30, 0));
+
+            private static TimeSpan ParseTimeSpan(object? val, TimeSpan defaultVal)
+            {
+                if (val == null || val == DBNull.Value) return defaultVal;
+                if (val is TimeSpan ts) return ts;
+                var str = val.ToString();
+                if (string.IsNullOrWhiteSpace(str)) return defaultVal;
+                if (TimeSpan.TryParse(str, out var parsed)) return parsed;
+                if (DateTime.TryParse(str, out var dt)) return dt.TimeOfDay;
+                return defaultVal;
+            }
         }
 
         private class TodayAttendanceRow
         {
             public int StaffAttendanceId { get; set; }
             public byte Status { get; set; }
-            public TimeSpan? InTime { get; set; }
-            public TimeSpan? OutTime { get; set; }
+            public object? InTime { get; set; }
+            public object? OutTime { get; set; }
             public byte VerificationMethod { get; set; }
             public string? DeviceId { get; set; }
             public string? Remarks { get; set; }
+
+            public TimeSpan? ParsedInTime => ParseTimeSpanNullable(InTime);
+            public TimeSpan? ParsedOutTime => ParseTimeSpanNullable(OutTime);
+
+            private static TimeSpan? ParseTimeSpanNullable(object? val)
+            {
+                if (val == null || val == DBNull.Value) return null;
+                if (val is TimeSpan ts) return ts;
+                var str = val.ToString();
+                if (string.IsNullOrWhiteSpace(str)) return null;
+                if (TimeSpan.TryParse(str, out var parsed)) return parsed;
+                if (DateTime.TryParse(str, out var dt)) return dt.TimeOfDay;
+                return null;
+            }
         }
 
         private class HolidayCheckRow
@@ -365,8 +395,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             public int RegularizationId { get; set; }
             public string Status { get; set; } = string.Empty;
-            public TimeSpan? RequestedInTime { get; set; }
-            public TimeSpan? RequestedOutTime { get; set; }
+            public object? RequestedInTime { get; set; }
+            public object? RequestedOutTime { get; set; }
         }
 
         public async Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date)
@@ -386,10 +416,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var timing = await multi.ReadFirstOrDefaultAsync<StaffTimingRow>() ?? new StaffTimingRow
             {
-                WorkStartTime = new TimeSpan(9, 0, 0),
-                WorkEndTime = new TimeSpan(16, 30, 0),
-                LateThreshold = new TimeSpan(9, 15, 0),
-                EarlyCheckoutThreshold = new TimeSpan(16, 30, 0),
+                WorkStartTime = "09:00:00",
+                WorkEndTime = "16:30:00",
+                LateThreshold = "09:15:00",
+                EarlyCheckoutThreshold = "16:30:00",
                 GracePeriodMinutes = 15
             };
 
@@ -398,9 +428,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             var leaveCheck = await multi.ReadFirstOrDefaultAsync<LeaveCheckRow>();
             var regularization = await multi.ReadFirstOrDefaultAsync<RegularizationCheckRow>();
 
-            var shiftStart = timing.WorkStartTime;
-            var shiftEnd = timing.WorkEndTime;
-            var lateThreshold = timing.LateThreshold;
+            var shiftStart = timing.ParsedWorkStartTime;
+            var shiftEnd = timing.ParsedWorkEndTime;
+            var lateThreshold = timing.ParsedLateThreshold;
             var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
 
             string status = "not_punched";
@@ -410,25 +440,28 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool isLate = false;
             string todayStatus;
 
-            if (attendance != null && attendance.InTime.HasValue)
-            {
-                inTimeStr = DateTime.Today.Add(attendance.InTime.Value).ToString("hh:mm tt");
-                isLate = attendance.InTime.Value > lateThreshold;
+            var inTime = attendance?.ParsedInTime;
+            var outTime = attendance?.ParsedOutTime;
 
-                if (attendance.OutTime.HasValue)
+            if (attendance != null && inTime.HasValue)
+            {
+                inTimeStr = DateTime.Today.Add(inTime.Value).ToString("hh:mm tt");
+                isLate = inTime.Value > lateThreshold;
+
+                if (outTime.HasValue)
                 {
-                    outTimeStr = DateTime.Today.Add(attendance.OutTime.Value).ToString("hh:mm tt");
-                    var diff = attendance.OutTime.Value - attendance.InTime.Value;
+                    outTimeStr = DateTime.Today.Add(outTime.Value).ToString("hh:mm tt");
+                    var diff = outTime.Value - inTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
 
-                    status = attendance.OutTime.Value > checkoutCutoff ? "missed_checkout" : "punched_out";
+                    status = outTime.Value > checkoutCutoff ? "missed_checkout" : "punched_out";
                 }
                 else
                 {
                     var nowTime = DateTime.Now.TimeOfDay;
                     status = nowTime > checkoutCutoff ? "missed_checkout" : "punched_in";
-                    var diff = nowTime - attendance.InTime.Value;
+                    var diff = nowTime - inTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
                 }

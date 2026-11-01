@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronDown, Download } from "lucide-react";
 import Search3DIcon from "./Search3DIcon.jsx";
-import { StatusBadge, SkeletonRow } from "./Ui.jsx";
+import { StatusBadge, SkeletonRow, Pagination } from "./Ui.jsx";
 
-const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 5;
 const PAGE_SIZE = DEFAULT_PAGE_SIZE;
 
 const textValue = (value) => {
@@ -41,7 +41,7 @@ export default function DataTable({
   searchPlaceholder,
   toolbarExtra,
   emptyMessage,
-  paginationCurrentOnly = false,
+  paginationCurrentOnly = true,
   pageSize = DEFAULT_PAGE_SIZE,
   enableExport = true,
   enablePdfExport = false,
@@ -275,33 +275,7 @@ export default function DataTable({
         </table>
       </div>
 
-      <div className="cms-pagination">
-        <span className="cms-page-info">
-          Showing {filtered.length === 0 ? 0 : (current - 1) * effectivePageSize + 1}-
-          {Math.min(current * effectivePageSize, filtered.length)} of {filtered.length} records
-        </span>
-        <button className="cms-page-btn" disabled={current === 1} onClick={() => setPage(current - 1)}>
-          Prev
-        </button>
-        {paginationCurrentOnly ? (
-          <button className="cms-page-btn is-active" aria-current="page">
-            {current}
-          </button>
-        ) : (
-          Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              className={`cms-page-btn ${current === i + 1 ? "is-active" : ""}`}
-              onClick={() => setPage(i + 1)}
-            >
-              {i + 1}
-            </button>
-          ))
-        )}
-        <button className="cms-page-btn" disabled={current === totalPages} onClick={() => setPage(current + 1)}>
-          Next
-        </button>
-      </div>
+      <Pagination currentPage={current} totalRecords={filtered.length} pageSize={effectivePageSize} onPageChange={setPage} currentOnly={paginationCurrentOnly} />
     </div>
   );
 }

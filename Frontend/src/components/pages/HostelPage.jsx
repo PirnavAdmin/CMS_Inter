@@ -1,3 +1,5 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -256,71 +258,10 @@ const DEFAULT_HOSTEL_STAFF = [];
 function HostelPagination({
   currentPage,
   totalItems,
-  pageSize = 10,
+  pageSize = 5,
   onPageChange,
   itemLabel = "records",
-}) {
-  if (!totalItems || totalItems <= 0) return null;
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const currentPageClamped = Math.min(Math.max(1, currentPage), totalPages);
-  const startIndex = (currentPageClamped - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalItems);
-
-  const visiblePages = (() => {
-    if (totalPages <= 1) return [1];
-    if (totalPages === 2) return [1, 2];
-
-    let blockStart = Math.floor((currentPageClamped - 1) / 2) * 2 + 1;
-    if (blockStart >= totalPages) {
-      blockStart = Math.max(1, totalPages - 1);
-    }
-    const pages = [blockStart];
-    if (blockStart + 1 <= totalPages) {
-      pages.push(blockStart + 1);
-    }
-    return pages;
-  })();
-
-  return (
-    <div className="cms-pagination cms-hostel-pagination-attached">
-      <span className="cms-page-info">
-        Showing <strong>{startIndex + 1}</strong> to <strong>{endIndex}</strong> of <strong>{totalItems}</strong> {itemLabel}
-        {totalPages > 1 && (
-          <span style={{ marginLeft: 6, fontWeight: 500, color: "var(--cms-muted)" }}>
-            (Page {currentPageClamped} of {totalPages})
-          </span>
-        )}
-      </span>
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped <= 1}
-        onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
-      >
-        Prev
-      </button>
-      {visiblePages.map((p) => (
-        <button
-          key={p}
-          type="button"
-          className={`cms-page-btn ${p === currentPageClamped ? "is-active" : ""}`}
-          onClick={() => onPageChange(p)}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped >= totalPages}
-        onClick={() => onPageChange(Math.min(totalPages, currentPageClamped + 1))}
-      >
-        Next
-      </button>
-    </div>
-  );
-}
+}) { return <AdminPagination currentPage={currentPage} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} unit={itemLabel} />; }
 
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
@@ -1347,7 +1288,7 @@ export default function HostelPage() {
   const [reportCategoryFilter, setReportCategoryFilter] = useState("");
   const [reportSearch, setReportSearch] = useState("");
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(10);
+  const [reportPageSize, setReportPageSize] = useState(5);
 
   useEffect(() => {
     setReportPage(1);
@@ -3895,7 +3836,7 @@ export default function HostelPage() {
       return String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch;
     });
 
-    const pageSize = 10;
+    const pageSize = 5;
     const totalPages = Math.ceil(filteredDashBlocks.length / pageSize) || 1;
     const currentBlocksPage = filteredDashBlocks.slice(
       (dashBlockPage - 1) * pageSize,
@@ -4573,7 +4514,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 blocks per page)
-    const blocksPerPage = 10;
+    const blocksPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / blocksPerPage));
     const currentPageClamped = Math.min(Math.max(1, blocksCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * blocksPerPage;
@@ -4800,7 +4741,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 categories per page)
-    const categoriesPerPage = 10;
+    const categoriesPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / categoriesPerPage));
     const currentPageClamped = Math.min(Math.max(1, categoriesCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * categoriesPerPage;
@@ -5217,7 +5158,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested)
-    const roomsPerPage = 10;
+    const roomsPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / roomsPerPage));
     const currentPageClamped = Math.min(Math.max(1, roomsCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * roomsPerPage;
@@ -5803,7 +5744,7 @@ export default function HostelPage() {
     const isHostelSelected = !filterHostelWarden || filterHostelWarden === "all" || Boolean(filterHostelWarden);
 
     // Pagination (10 wardens per page)
-    const wardensPerPage = 10;
+    const wardensPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / wardensPerPage));
     const currentPageClamped = Math.min(Math.max(1, wardensCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * wardensPerPage;
@@ -6196,7 +6137,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested: Previous, 1, 2, Next)
-    const allocsPerPage = 10;
+    const allocsPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / allocsPerPage));
     const currentPageClamped = Math.min(Math.max(1, allocCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * allocsPerPage;
@@ -6575,7 +6516,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const outpassPerPage = 10;
+    const outpassPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / outpassPerPage));
     const currentPageClamped = Math.min(Math.max(1, outpassCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * outpassPerPage;
@@ -6850,7 +6791,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const transferPerPage = 10;
+    const transferPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / transferPerPage));
     const currentPageClamped = Math.min(Math.max(1, transferCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * transferPerPage;
@@ -7154,7 +7095,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 students per page)
-    const attendancePerPage = 10;
+    const attendancePerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / attendancePerPage));
     const currentPageClamped = Math.min(Math.max(1, attendanceCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * attendancePerPage;
@@ -9697,7 +9638,7 @@ function StudentAttendanceModal({
 
         {/* Detailed Records Table */}
         <div className="cms-hostel-compact-card" style={{ maxHeight: 320, overflowY: "auto" }}>
-          <table className="cms-hostel-compact-table">
+          <PaginatedTable className="cms-hostel-compact-table">
             <thead>
               <tr>
                 <th>DATE</th>
@@ -9789,7 +9730,7 @@ function StudentAttendanceModal({
                 })
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         {/* Modal Footer */}
@@ -13559,7 +13500,7 @@ function RoomModal({
                       </div>
                     ) : (
                       <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--cms-border)" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+                        <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
                           <thead>
                             <tr style={{ background: "var(--cms-subtle)", borderBottom: "1px solid var(--cms-border)" }}>
                               <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 28 }}>#</th>
@@ -13818,7 +13759,7 @@ function RoomModal({
                               );
                             })}
                           </tbody>
-                        </table>
+                        </PaginatedTable>
                       </div>
                     )}
 

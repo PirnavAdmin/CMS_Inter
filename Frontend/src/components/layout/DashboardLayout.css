@@ -593,7 +593,8 @@
   position: absolute;
   top: 52px;
   right: 0;
-  width: 250px;
+  width: min(250px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
   background: #ffffff;
   border: 1px solid var(--cms-border);
   border-radius: var(--cms-radius);
@@ -1167,8 +1168,8 @@
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  min-width: 280px;
-  max-width: 380px;
+  min-width: min(280px, calc(100vw - 20px));
+  max-width: min(380px, calc(100vw - 20px));
   width: max-content;
   background: #ffffff !important;
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #355e3b) 25%, var(--cms-border, #e2e8f0));
@@ -1186,6 +1187,15 @@
   background: #171d15 !important;
   border-color: rgba(255, 255, 255, 0.14);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+@media (max-width: 768px) {
+  .cms-academic-dropdown-panel {
+    left: auto;
+    right: 0;
+    max-width: calc(100vw - 24px);
+    min-width: min(260px, calc(100vw - 24px));
+  }
 }
 
 @keyframes cmsFadeDown {
@@ -1306,9 +1316,63 @@
   color: #b4df98;
 }
 
+@media (min-width: 769px) and (max-width: 1080px) {
+  .cms-academic-btn {
+    padding: 3px 6px !important;
+    gap: 4px !important;
+  }
+  .cms-academic-btn-label {
+    display: none !important;
+  }
+  .cms-academic-btn-value {
+    max-width: 90px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    font-size: 11px !important;
+  }
+  .cms-search-wrap {
+    max-width: 180px !important;
+  }
+}
+
 @media (max-width: 768px) {
   .cms-academic-selectors {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .cms-topbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .cms-top-actions {
+    gap: 6px;
+  }
+  .cms-icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 360px) {
+  .cms-topbar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .cms-topbar > .cms-menu-toggle {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    flex-basis: 34px !important;
+  }
+  .cms-icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+  .cms-top-actions {
+    gap: 4px;
   }
 }
 

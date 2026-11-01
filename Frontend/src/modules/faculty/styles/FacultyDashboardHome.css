@@ -1,21 +1,23 @@
 .cms-content:has(> .faculty-dashboard-page),
 .cms-content:has(.faculty-dashboard-page) {
-  padding: 6px 14px 8px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100%;
+  padding: 6px 14px 16px !important;
+  display: block !important;
+  min-height: 100%;
+  height: auto !important;
   box-sizing: border-box;
+  overflow-y: auto !important;
 }
 
 .faculty-dashboard-page {
   --dashboard-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   width: 100%;
   min-width: 0;
-  flex: 1;
-  min-height: 0;
+  height: auto;
+  min-height: 100%;
+  flex: none;
   color: var(--cms-text, #1e293b);
   box-sizing: border-box;
 }
@@ -416,8 +418,9 @@
 
 .dashboard-row-three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  flex: 1;
-  min-height: 230px;
+  flex: none;
+  height: auto;
+  min-height: auto;
 }
 
 .dashboard-row-three > .dashboard-card {
@@ -1415,6 +1418,30 @@
 }
 
 @media (max-width: 600px) {
+  .dashboard-header-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .dashboard-greeting-wrap {
+    align-items: flex-start !important;
+    text-align: left !important;
+    width: 100%;
+  }
+
+  .dashboard-greeting-title {
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: 100%;
+  }
+
+  .dashboard-greeting-sub {
+    text-align: left !important;
+    width: 100%;
+  }
+
   .dashboard-kpi-grid {
     grid-template-columns: 1fr;
   }

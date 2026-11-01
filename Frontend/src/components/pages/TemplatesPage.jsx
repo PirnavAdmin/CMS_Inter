@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import apiClient from "@/api/axios.js";
 import templateApi from "@/api/templateApi.js";
 import { useState, useMemo, useCallback, useEffect } from "react";
@@ -1442,7 +1443,7 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
 function ReportsTableView({ templates, onEdit, onPreview, onDownload, onDuplicate, onDelete }) {
   return (
     <div className="templates-table-wrapper">
-      <table className="templates-table">
+      <PaginatedTable className="templates-table">
         <thead>
           <tr>
             <th>Template Name</th>
@@ -1485,7 +1486,7 @@ function ReportsTableView({ templates, onEdit, onPreview, onDownload, onDuplicat
             </tr>
           ))}
         </tbody>
-      </table>
+      </PaginatedTable>
     </div>
   );
 }

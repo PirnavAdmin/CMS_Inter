@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
@@ -448,7 +449,7 @@ export default function CampusConfigurationPage() {
 
         {/* Campuses Table */}
         <div className="campus-table-card">
-          <table className="campus-table">
+          <PaginatedTable className="campus-table">
             <thead>
               <tr>
                 <th>Campus / Branch Name</th>
@@ -582,7 +583,7 @@ export default function CampusConfigurationPage() {
                 })
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         {/* Modal matching Image 1 with Board Multi-Select */}

@@ -73,7 +73,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EmergencyContactNumber = dto.EmergencyContactNumber?.Trim(),
                     p_AssignedVehicleId = dto.AssignedVehicleId > 0 ? dto.AssignedVehicleId : (long?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = userId
+                    p_IsDeleted = (byte)0,
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -81,11 +83,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long attendantId, UpdateTransportAttendantDto dto, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateTransportAttendants",
                 new
                 {
-                    p_AttendantId = attendantId,
+                    p_Id = attendantId,
                     p_StaffId = dto.StaffId,
                     p_EmployeeId = dto.EmployeeId?.Trim(),
                     p_AttendantName = dto.AttendantName?.Trim() ?? string.Empty,
@@ -99,6 +101,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EmergencyContactNumber = dto.EmergencyContactNumber?.Trim(),
                     p_AssignedVehicleId = dto.AssignedVehicleId > 0 ? dto.AssignedVehicleId : (long?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_IsDeleted = (byte)0,
+                    p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
@@ -108,9 +112,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long attendantId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportAttendants",
-                new { p_AttendantId = attendantId, p_UpdatedBy = userId },
+                new { p_Id = attendantId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
