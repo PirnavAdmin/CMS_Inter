@@ -356,6 +356,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private class TodayAttendanceRow
         {
+            public DateTime AttendanceDate { get; set; }
             public int StaffAttendanceId { get; set; }
             public byte Status { get; set; }
             public object? InTime { get; set; }
@@ -379,6 +380,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
+        private class StaffLeaveRecordRow
+        {
+            public DateTime StartDate { get; set; }
+            public DateTime EndDate { get; set; }
+            public string? LeaveReason { get; set; }
+        }
+
         private class HolidayCheckRow
         {
             public int IsHoliday { get; set; }
@@ -394,6 +402,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         private class RegularizationCheckRow
         {
             public int RegularizationId { get; set; }
+            public DateTime AttendanceDate { get; set; }
             public string Status { get; set; } = string.Empty;
             public object? RequestedInTime { get; set; }
             public object? RequestedOutTime { get; set; }
@@ -579,16 +588,256 @@ namespace CollegeManagement.API.Repositories.Implementations
                     break;
             }
 
+            var conn = await GetOpenConnectionAsync();
+
+            const string historySql = @"
+SELECT 
+    COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+    COALESCE(tc.WorkEndTime, '16:30:00') AS WorkEndTime,
+    COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
+    COALESCE(tc.EarlyCheckoutThreshold, '16:30:00') AS EarlyCheckoutThreshold,
+    COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+FROM `Staffs` s
+LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
+                                     AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
+                                     AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+WHERE s.Id = @FacultyId AND s.IsDeleted = 0
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+LIMIT 1;
+
+SELECT 
+    DATE(sas.AttendanceDate) AS AttendanceDate,
+    sa.StaffAttendanceId,
+    sa.Status,
+    sa.InTime,
+    sa.OutTime,
+    sa.DeviceId,
+    sa.VerificationMethod,
+    sa.Remarks
+FROM `StaffAttendances` sa
+JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+WHERE sa.FacultyId = @FacultyId
+  AND sas.AttendanceDate >= @StartDate 
+  AND sas.AttendanceDate <= @EndDate
+  AND sa.IsActive = 1;
+
+SELECT 
+    HolidayName,
+    DATE(StartDate) AS StartDate,
+    DATE(EndDate) AS EndDate
+FROM `Holidays`
+WHERE IsDeleted = 0 AND Status = 'Active'
+  AND StartDate <= @EndDate AND EndDate >= @StartDate
+  AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
+
+SELECT 
+    DATE(StartDate) AS StartDate,
+    DATE(EndDate) AS EndDate,
+    Reason AS LeaveReason
+FROM `StaffLeaveRequests`
+WHERE StaffId = @FacultyId AND IsActive = 1 AND Status = 2
+  AND StartDate <= @EndDate AND EndDate >= @StartDate;
+
+SELECT 
+    RegularizationId,
+    DATE(AttendanceDate) AS AttendanceDate,
+    Status,
+    RequestedInTime,
+    RequestedOutTime
+FROM `StaffAttendanceRegularizations`
+WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
+  AND AttendanceDate >= @StartDate AND AttendanceDate <= @EndDate;
+";
+
+            using var multi = await conn.QueryMultipleAsync(
+                historySql,
+                new
+                {
+                    FacultyId = facultyId,
+                    StartDate = start.Date,
+                    EndDate = end.Date
+                });
+
+            var timing = await multi.ReadFirstOrDefaultAsync<StaffTimingRow>() ?? new StaffTimingRow
+            {
+                WorkStartTime = "09:00:00",
+                WorkEndTime = "16:30:00",
+                LateThreshold = "09:15:00",
+                EarlyCheckoutThreshold = "16:30:00",
+                GracePeriodMinutes = 15
+            };
+
+            var attendanceList = (await multi.ReadAsync<TodayAttendanceRow>()).ToList();
+            var holidayList = (await multi.ReadAsync<HolidayRecordRow>()).ToList();
+            var leaveList = (await multi.ReadAsync<StaffLeaveRecordRow>()).ToList();
+            var regList = (await multi.ReadAsync<RegularizationCheckRow>()).ToList();
+
+            var attMap = attendanceList
+                .GroupBy(a => a.AttendanceDate.Date)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.StaffAttendanceId).First());
+
+            var regMap = regList
+                .GroupBy(r => r.AttendanceDate.Date)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.RegularizationId).First());
+
+            var shiftStart = timing.ParsedWorkStartTime;
+            var shiftEnd = timing.ParsedWorkEndTime;
+            var lateThreshold = timing.ParsedLateThreshold;
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
+            string standardShiftName = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}";
+
             var logs = new List<MyAttendanceLogItemDto>();
             int presentCount = 0;
+            int absentCount = 0;
+            int leaveCount = 0;
+            int workingDaysCount = 0;
 
             for (var d = start; d <= end; d = d.AddDays(1))
             {
                 bool isSunday = d.DayOfWeek == DayOfWeek.Sunday;
-                bool isPastOrToday = d <= now;
+                var holiday = holidayList.FirstOrDefault(h => d.Date >= h.StartDate.Date && d.Date <= h.EndDate.Date);
+                bool isHoliday = holiday != null;
+                var leave = leaveList.FirstOrDefault(l => d.Date >= l.StartDate.Date && d.Date <= l.EndDate.Date);
+                bool isLeave = leave != null;
 
-                var status = isSunday ? "Weekly Off" : (isPastOrToday ? "Present" : "--");
-                if (status == "Present") presentCount++;
+                bool isWorkingDay = !isSunday && !isHoliday;
+                if (isWorkingDay) workingDaysCount++;
+
+                attMap.TryGetValue(d.Date, out var att);
+                regMap.TryGetValue(d.Date, out var reg);
+
+                string shift = isSunday ? "Weekly Off" : (isHoliday ? (holiday?.HolidayName ?? "Holiday") : (isLeave ? "Approved Leave" : standardShiftName));
+                string inTime = "--";
+                string outTime = "--";
+                string hours = isSunday ? "0h 0m" : "--";
+                string device = "--";
+                string status = "--";
+                bool canRegularize = false;
+                string? regState = reg?.Status?.ToLowerInvariant();
+                string? holidayName = holiday?.HolidayName;
+
+                if (att != null)
+                {
+                    device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Web Portal" : att.DeviceId;
+                    var inT = att.ParsedInTime;
+                    var outT = att.ParsedOutTime;
+
+                    if (inT.HasValue)
+                    {
+                        inTime = DateTime.Today.Add(inT.Value).ToString("hh:mm tt");
+                        bool isLate = inT.Value > lateThreshold;
+
+                        if (outT.HasValue)
+                        {
+                            outTime = DateTime.Today.Add(outT.Value).ToString("hh:mm tt");
+                            var diff = outT.Value - inT.Value;
+                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                            hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+
+                            if (outT.Value > checkoutCutoff)
+                            {
+                                status = "Missed Checkout";
+                            }
+                            else if (att.Status == 3 || isLate)
+                            {
+                                status = "Late";
+                            }
+                            else if (att.Status == 4)
+                            {
+                                status = "Half Day";
+                            }
+                            else
+                            {
+                                status = "Present";
+                            }
+                        }
+                        else
+                        {
+                            if (d.Date == now.Date)
+                            {
+                                var nowTime = DateTime.Now.TimeOfDay;
+                                if (nowTime > checkoutCutoff)
+                                {
+                                    status = "Missed Checkout";
+                                    hours = "--";
+                                }
+                                else
+                                {
+                                    status = isLate ? "Late" : "Present";
+                                    var diff = nowTime - inT.Value;
+                                    if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                                    hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                                }
+                            }
+                            else
+                            {
+                                status = "Missed Checkout";
+                                hours = "--";
+                            }
+                        }
+                    }
+                    else
+                    {
+                        status = att.Status switch
+                        {
+                            1 => "Present",
+                            2 => "Absent",
+                            3 => "Late",
+                            4 => "Half Day",
+                            5 => "Holiday",
+                            6 => "Leave",
+                            _ => "Absent"
+                        };
+                    }
+
+                    if (status == "Present" || status == "Late") presentCount++;
+                    else if (status == "Leave") leaveCount++;
+                    else if (status == "Absent" || status == "Missed Checkout") absentCount++;
+
+                    canRegularize = (status == "Late" || status == "Absent" || status == "Half Day" || status == "Missed Checkout")
+                                 && (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                 && d.Date <= now.Date;
+                }
+                else
+                {
+                    if (isSunday)
+                    {
+                        status = "Weekly Off";
+                    }
+                    else if (isHoliday)
+                    {
+                        status = "Holiday";
+                    }
+                    else if (isLeave)
+                    {
+                        status = "Leave";
+                        leaveCount++;
+                    }
+                    else if (d.Date < now.Date)
+                    {
+                        status = "Absent";
+                        absentCount++;
+                        canRegularize = (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase));
+                    }
+                    else if (d.Date == now.Date)
+                    {
+                        var nowTime = DateTime.Now.TimeOfDay;
+                        if (nowTime > shiftEnd)
+                        {
+                            status = "Absent";
+                            absentCount++;
+                            canRegularize = (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else
+                        {
+                            status = "--";
+                        }
+                    }
+                    else
+                    {
+                        status = "--";
+                    }
+                }
 
                 logs.Add(new MyAttendanceLogItemDto
                 {
@@ -596,37 +845,41 @@ namespace CollegeManagement.API.Repositories.Implementations
                     Day = d.ToString("ddd"),
                     Date = d.ToString("dd/MM/yyyy"),
                     RawDate = d.ToString("yyyy-MM-dd"),
-                    Shift = isSunday ? "Weekly Off" : "09:00 AM – 04:30 PM",
-                    InTime = isSunday ? "--" : "09:00 AM",
-                    OutTime = isSunday ? "--" : "04:30 PM",
-                    Hours = isSunday ? "0h 0m" : "7h 30m",
-                    Device = "Web Portal",
+                    Shift = shift,
+                    InTime = inTime,
+                    OutTime = outTime,
+                    Hours = hours,
+                    Device = device,
                     Status = status,
-                    CanRegularize = false,
-                    IsToday = d == now,
-                    RegularizationState = null,
-                    HolidayName = null
+                    CanRegularize = canRegularize,
+                    IsToday = d.Date == now.Date,
+                    RegularizationState = regState,
+                    HolidayName = holidayName
                 });
             }
 
+            string workingDaysSub = periodKey.Contains("month")
+                ? $"{start:MMMM yyyy} Total"
+                : $"{start:dd MMM} – {end:dd MMM yyyy}";
+
             var metrics = new MyAttendanceAnalyticsMetricsDto
             {
-                WorkingDays = $"{logs.Count(l => l.Shift != "Weekly Off")} Days",
-                WorkingDaysSub = $"{now:MMMM yyyy} Total",
+                WorkingDays = $"{workingDaysCount} Days",
+                WorkingDaysSub = workingDaysSub,
                 PresentDays = $"{presentCount} Days",
                 PresentDaysSub = "Biometric / Portal verified",
-                Leaves = "0 Days",
-                LeavesSub = "No leaves applied",
-                AbsentDays = "0 Days",
-                AbsentDaysSub = "No absences"
+                Leaves = $"{leaveCount} Days",
+                LeavesSub = leaveCount > 0 ? $"{leaveCount} approved leave(s)" : "No leaves applied",
+                AbsentDays = $"{absentCount} Days",
+                AbsentDaysSub = absentCount > 0 ? $"{absentCount} unrecorded / missed" : "No absences"
             };
 
-            return await Task.FromResult(new MyAttendanceHistoryResponse
+            return new MyAttendanceHistoryResponse
             {
                 Period = periodKey,
                 Logs = logs,
                 Metrics = metrics
-            });
+            };
         }
 
         public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)

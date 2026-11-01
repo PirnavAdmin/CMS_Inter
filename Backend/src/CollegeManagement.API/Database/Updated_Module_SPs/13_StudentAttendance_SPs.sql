@@ -676,7 +676,35 @@ CREATE PROCEDURE `sp_AdminBulkSaveStudentAttendance`
 BEGIN
     DECLARE v_AffectedCount INT DEFAULT 0;
 
-    -- Process Morning session entries (Session = 1)
+    -- Update existing Morning records if already present for the given date & session (Session = 1)
+    UPDATE Attendances a
+    INNER JOIN JSON_TABLE(
+        p_ItemsJson,
+        '$[*]' COLUMNS(
+            StudentId INT PATH '$.StudentId',
+            MorningStatus INT PATH '$.MorningStatus',
+            MorningRemarks VARCHAR(500) PATH '$.Remarks'
+        )
+    ) AS jt ON a.StudentId = jt.StudentId
+    SET 
+        a.Status = jt.MorningStatus,
+        a.Remarks = jt.MorningRemarks,
+        a.BoardId = COALESCE(NULLIF(p_BoardId, 0), a.BoardId),
+        a.AcademicYearId = COALESCE(NULLIF(p_AcademicYearId, 0), a.AcademicYearId),
+        a.AcademicLevelId = COALESCE(NULLIF(p_AcademicLevelId, 0), a.AcademicLevelId),
+        a.GroupId = COALESCE(NULLIF(p_GroupId, 0), a.GroupId),
+        a.SectionId = COALESCE(NULLIF(p_SectionId, 0), a.SectionId),
+        a.ModifiedByUserId = p_UserId,
+        a.ModifiedAt = UTC_TIMESTAMP(),
+        a.UpdatedAt = UTC_TIMESTAMP()
+    WHERE DATE(a.AttendanceDate) = p_AttendanceDate
+      AND a.Session = 1
+      AND a.IsActive = 1
+      AND jt.MorningStatus IS NOT NULL AND jt.MorningStatus > 0;
+
+    SET v_AffectedCount = v_AffectedCount + ROW_COUNT();
+
+    -- Insert new Morning session entries (Session = 1) if not already present
     INSERT INTO Attendances (
         StudentId,
         AttendanceDate,
@@ -700,11 +728,11 @@ BEGIN
         1, -- Morning
         jt.MorningStatus,
         jt.MorningRemarks,
-        COALESCE(p_BoardId, s.BoardId),
-        COALESCE(p_AcademicYearId, s.AcademicYearId),
-        COALESCE(p_AcademicLevelId, s.AcademicLevelId),
-        COALESCE(p_GroupId, s.GroupId),
-        COALESCE(p_SectionId, s.SectionId),
+        COALESCE(NULLIF(p_BoardId, 0), s.BoardId),
+        COALESCE(NULLIF(p_AcademicYearId, 0), s.AcademicYearId),
+        COALESCE(NULLIF(p_AcademicLevelId, 0), s.AcademicLevelId),
+        COALESCE(NULLIF(p_GroupId, 0), s.GroupId),
+        COALESCE(NULLIF(p_SectionId, 0), s.SectionId),
         p_UserId,
         UTC_TIMESTAMP(),
         1,
@@ -719,17 +747,44 @@ BEGIN
         )
     ) AS jt
     INNER JOIN Students s ON jt.StudentId = s.StudentId
+    LEFT JOIN Attendances existing ON existing.StudentId = jt.StudentId
+                                  AND DATE(existing.AttendanceDate) = p_AttendanceDate
+                                  AND existing.Session = 1
+                                  AND existing.IsActive = 1
     WHERE jt.MorningStatus IS NOT NULL AND jt.MorningStatus > 0
-    ON DUPLICATE KEY UPDATE
-        Status = VALUES(Status),
-        Remarks = VALUES(Remarks),
-        ModifiedByUserId = VALUES(ModifiedByUserId),
-        ModifiedAt = VALUES(ModifiedAt),
-        UpdatedAt = UTC_TIMESTAMP();
+      AND existing.AttendanceId IS NULL;
 
     SET v_AffectedCount = v_AffectedCount + ROW_COUNT();
 
-    -- Process Afternoon session entries (Session = 2)
+    -- Update existing Afternoon records if already present for the given date & session (Session = 2)
+    UPDATE Attendances a
+    INNER JOIN JSON_TABLE(
+        p_ItemsJson,
+        '$[*]' COLUMNS(
+            StudentId INT PATH '$.StudentId',
+            AfternoonStatus INT PATH '$.AfternoonStatus',
+            AfternoonRemarks VARCHAR(500) PATH '$.Remarks'
+        )
+    ) AS jt ON a.StudentId = jt.StudentId
+    SET 
+        a.Status = jt.AfternoonStatus,
+        a.Remarks = jt.AfternoonRemarks,
+        a.BoardId = COALESCE(NULLIF(p_BoardId, 0), a.BoardId),
+        a.AcademicYearId = COALESCE(NULLIF(p_AcademicYearId, 0), a.AcademicYearId),
+        a.AcademicLevelId = COALESCE(NULLIF(p_AcademicLevelId, 0), a.AcademicLevelId),
+        a.GroupId = COALESCE(NULLIF(p_GroupId, 0), a.GroupId),
+        a.SectionId = COALESCE(NULLIF(p_SectionId, 0), a.SectionId),
+        a.ModifiedByUserId = p_UserId,
+        a.ModifiedAt = UTC_TIMESTAMP(),
+        a.UpdatedAt = UTC_TIMESTAMP()
+    WHERE DATE(a.AttendanceDate) = p_AttendanceDate
+      AND a.Session = 2
+      AND a.IsActive = 1
+      AND jt.AfternoonStatus IS NOT NULL AND jt.AfternoonStatus > 0;
+
+    SET v_AffectedCount = v_AffectedCount + ROW_COUNT();
+
+    -- Insert new Afternoon session entries (Session = 2) if not already present
     INSERT INTO Attendances (
         StudentId,
         AttendanceDate,
@@ -753,11 +808,11 @@ BEGIN
         2, -- Afternoon
         jt.AfternoonStatus,
         jt.AfternoonRemarks,
-        COALESCE(p_BoardId, s.BoardId),
-        COALESCE(p_AcademicYearId, s.AcademicYearId),
-        COALESCE(p_AcademicLevelId, s.AcademicLevelId),
-        COALESCE(p_GroupId, s.GroupId),
-        COALESCE(p_SectionId, s.SectionId),
+        COALESCE(NULLIF(p_BoardId, 0), s.BoardId),
+        COALESCE(NULLIF(p_AcademicYearId, 0), s.AcademicYearId),
+        COALESCE(NULLIF(p_AcademicLevelId, 0), s.AcademicLevelId),
+        COALESCE(NULLIF(p_GroupId, 0), s.GroupId),
+        COALESCE(NULLIF(p_SectionId, 0), s.SectionId),
         p_UserId,
         UTC_TIMESTAMP(),
         1,
@@ -772,13 +827,12 @@ BEGIN
         )
     ) AS jt
     INNER JOIN Students s ON jt.StudentId = s.StudentId
+    LEFT JOIN Attendances existing ON existing.StudentId = jt.StudentId
+                                  AND DATE(existing.AttendanceDate) = p_AttendanceDate
+                                  AND existing.Session = 2
+                                  AND existing.IsActive = 1
     WHERE jt.AfternoonStatus IS NOT NULL AND jt.AfternoonStatus > 0
-    ON DUPLICATE KEY UPDATE
-        Status = VALUES(Status),
-        Remarks = VALUES(Remarks),
-        ModifiedByUserId = VALUES(ModifiedByUserId),
-        ModifiedAt = VALUES(ModifiedAt),
-        UpdatedAt = UTC_TIMESTAMP();
+      AND existing.AttendanceId IS NULL;
 
     SET v_AffectedCount = v_AffectedCount + ROW_COUNT();
 

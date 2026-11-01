@@ -78,7 +78,7 @@ export default function SettingsPage() {
       description: "Create, edit and manage education boards, board codes, academic years, date ranges and status.",
       icon: Landmark,
       image: boardAcademicYearImage,
-      to: "/dashboard/settings/board-academic-year",
+      to: "/dashboard/board-academic-year",
       buttonText: "Manage Board & Academic Year",
       primary: true,
     },
