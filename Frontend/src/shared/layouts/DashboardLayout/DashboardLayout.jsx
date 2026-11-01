@@ -1586,6 +1586,15 @@ export default function DashboardLayout({
               </div>
             </div>
             <ThemeToggle variant="dashboard" />
+            <button
+              type="button"
+              className="cms-icon-btn"
+              onClick={() => setThemePaletteOpen(true)}
+              title="Theme Appearance"
+              aria-label="Theme Appearance"
+            >
+              <Palette size={18} />
+            </button>
             {isParent ? (
               <Link
                 to={parentStudentId ? `/parent-dashboard/notifications?studentId=${encodeURIComponent(parentStudentId)}` : "/parent-dashboard/notifications"}

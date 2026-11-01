@@ -331,6 +331,7 @@ export default function FacultyNavbar() {
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [responsiveOpen, setResponsiveOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
 
   const campusRef = useRef(null);
   const boardRef = useRef(null);
@@ -802,6 +803,15 @@ export default function FacultyNavbar() {
 
         {/* Theme Toggle */}
         <ThemeToggle variant="dashboard" />
+        <button
+          type="button"
+          className="cms-icon-btn"
+          onClick={() => setThemePaletteOpen(true)}
+          title="Theme Appearance"
+          aria-label="Theme Appearance"
+        >
+          <Palette size={18} />
+        </button>
 
         {/* Notifications Button */}
         <button className="cms-icon-btn" onClick={() => notify("No new notifications")} title="Notifications">
@@ -879,6 +889,16 @@ export default function FacultyNavbar() {
                 }}
               >
                 <User size={14} /> My Profile
+              </button>
+              <button
+                type="button"
+                className="cms-dropdown-item"
+                onClick={() => {
+                  setProfileDropOpen(false);
+                  setThemePaletteOpen(true);
+                }}
+              >
+                <Palette size={14} /> Theme Appearance
               </button>
               <button className="cms-dropdown-item danger" onClick={handleLogout}>
                 <LogOut size={14} /> Sign Out
