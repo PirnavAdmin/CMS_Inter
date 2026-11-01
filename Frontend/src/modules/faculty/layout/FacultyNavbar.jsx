@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock } from "lucide-react";
+import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock, Palette } from "lucide-react";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
@@ -974,6 +975,11 @@ export default function FacultyNavbar() {
           flex-shrink: 0;
         }
       `}</style>
+      <ThemePalettePicker
+        open={themePaletteOpen}
+        onOpenChange={setThemePaletteOpen}
+        hideTrigger={true}
+      />
     </header>
   );
 }
