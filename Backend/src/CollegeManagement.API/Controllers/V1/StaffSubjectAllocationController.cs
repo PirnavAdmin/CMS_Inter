@@ -248,6 +248,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get all subject allocations for a specific staff member.
         /// </summary>
         [HttpGet("{staffId:int}/subject-allocations")]
+        [HttpGet("subject-allocations/{staffId:int}")]
         [HttpGet("my/subject-allocations")]
         [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Principal,Super Admin")]
         [ProducesResponseType(typeof(System.Collections.Generic.List<StaffSubjectAllocationResponseDto>), StatusCodes.Status200OK)]
