@@ -142,7 +142,15 @@ export default function ThemePalettePicker({
         // User dismissed the eyedropper
       }
     } else if (nativeColorInputRef.current) {
-      nativeColorInputRef.current.click();
+      try {
+        if (typeof nativeColorInputRef.current.showPicker === "function") {
+          nativeColorInputRef.current.showPicker();
+        } else {
+          nativeColorInputRef.current.click();
+        }
+      } catch {
+        nativeColorInputRef.current.click();
+      }
     }
   };
 
@@ -377,20 +385,28 @@ export default function ThemePalettePicker({
                     />
                   </div>
 
-                  <label className="cms-colour-native-wrap" title="Open Color Picker & Eye Dropper">
+                  <div className="cms-colour-native-wrap">
+                    <button
+                      type="button"
+                      className="cms-colour-native-btn"
+                      onClick={handleEyeDropper}
+                      disabled={isThemeLocked}
+                      title="Sample color using Eye Dropper"
+                      aria-label="Open Eye Dropper"
+                    >
+                      <Pipette size={14} />
+                      <span>Eye Dropper</span>
+                    </button>
                     <input
+                      ref={nativeColorInputRef}
                       type="color"
                       value={currentHex}
                       onChange={handleNativeColorPick}
                       className="cms-colour-native-input"
                       disabled={isThemeLocked}
-                      aria-label="Open Color Picker and Eye Dropper"
+                      aria-label="Color input"
                     />
-                    <span className="cms-colour-native-btn">
-                      <Pipette size={14} />
-                      <span>Eye Dropper</span>
-                    </span>
-                  </label>
+                  </div>
 
                   <button
                     type="button"
