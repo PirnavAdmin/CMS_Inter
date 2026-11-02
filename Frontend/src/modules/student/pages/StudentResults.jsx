@@ -9,7 +9,7 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentPage } from "../context/StudentProfileContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
-import { getStudentResult, getStudentExaminations, getPublishedStudentResults } from "../services/studentAcademicService.js";
+import { addStudentResultSubjectGrades, getPublishedStudentResultMemo, getStudentExaminations, getPublishedStudentResults } from "../services/studentAcademicService.js";
 
 const unwrap = (input) => {
   let value = input;
@@ -58,6 +58,7 @@ function StudentResultDetails({ examination }) {
   const [memo, setMemo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [gradeError, setGradeError] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const downloadLock = useRef(false);
@@ -68,11 +69,20 @@ function StudentResultDetails({ examination }) {
     const load = async () => {
       setLoading(true);
       setError("");
+      setGradeError("");
       setMemo(null);
       try {
         if (!student?.studentId) throw new Error("Student ID is unavailable.");
-        const data = await getStudentResult(student, examId || undefined);
-        if (active) setMemo(validateStudentMemo(data, student, examination));
+        const data = await getPublishedStudentResultMemo(student, examId);
+        if (!data) throw new Error("Published marks are not available for this examination.");
+        const validMemo = validateStudentMemo(data, student, examination);
+        if (active) setMemo(validMemo);
+        try {
+          const enrichedMemo = await addStudentResultSubjectGrades(validMemo, student, examId);
+          if (active) setMemo(enrichedMemo);
+        } catch (gradeRequestError) {
+          if (active) setGradeError(getApiErrorMessage(gradeRequestError));
+        }
       } catch (requestError) {
         if (active) setError(getApiErrorMessage(requestError));
       } finally { if (active) setLoading(false); }
@@ -90,8 +100,8 @@ function StudentResultDetails({ examination }) {
     return [read(row, "subjectName", "SubjectName", "name", "Name") || "—", internal, practical, theory, obtained, maximum, read(row, "grade", "Grade") || "—", read(row, "resultStatus", "ResultStatus", "result", "Result") || "—"];
   }), [memo]);
   const percentage = read(memo, "percentage", "Percentage");
-  const obtained = Number(read(memo, "grandTotal", "GrandTotal", "total", "Total") ?? subjects.reduce((sum, row) => sum + Number(row[4] || 0), 0));
-  const maximum = Number(read(memo, "maximumMarks", "MaximumMarks", "maximum", "Maximum") ?? subjects.reduce((sum, row) => sum + Number(row[5] || 0), 0));
+  const obtained = Number(read(memo, "grandTotal", "GrandTotal", "totalMarks", "TotalMarks", "total", "Total") ?? subjects.reduce((sum, row) => sum + Number(row[4] || 0), 0));
+  const maximum = Number(read(memo, "maximumMarks", "MaximumMarks", "maxTotalMarks", "MaxTotalMarks", "maximum", "Maximum") ?? subjects.reduce((sum, row) => sum + Number(row[5] || 0), 0));
   const published = resultState(examination, memo) === "Published";
 
   const downloadMemo = async () => {
@@ -108,7 +118,7 @@ function StudentResultDetails({ examination }) {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
     <StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn" type="button" onClick={downloadMemo} disabled={!published || downloading}><Download size={16}/>{downloading ? " Downloading..." : " Download Marks Memo"}</button>}/>
-    {profileError || error || downloadError ? <div className="sp-api-state is-error" role="alert">{profileError || error || downloadError}</div> : null}
+    {profileError || error || gradeError || downloadError ? <div className="sp-api-state is-error" role="alert">{profileError || error || gradeError || downloadError}</div> : null}
     {!error && !published ? <StudentEmptyState icon={Award} title={resultState(examination, memo)} text="Published marks are available only after the college releases your result."/> : null}
     {published ? <>
       <div className="sp-summary-grid five"><StudentSummaryCard icon={Sigma} label="Total Marks" value={maximum}/><StudentSummaryCard icon={CheckCircle2} label="Obtained" value={obtained} tone="blue"/><StudentSummaryCard icon={Percent} label="Percentage" value={percentage == null ? "—" : `${percentage}%`} tone="orange"/><StudentSummaryCard icon={Award} label="Grade" value={read(memo, "overallGrade", "OverallGrade", "grade", "Grade") || "—"} tone="purple"/><StudentSummaryCard icon={CheckCircle2} label="Result" value={read(memo, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "result", "Result") || "—"} tone="green"/></div>
@@ -145,17 +155,20 @@ function StudentResultsList({ renderDetails }) {
       try {
         if (!["studentId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => Number(student?.[key]) > 0)) throw new Error("Your student academic placement or section is unavailable. Please contact the college office.");
         const [exams, publishedResults] = await Promise.all([getStudentExaminations(student, { allPages: true }), getPublishedStudentResults(student)]);
-        const publishedExamIds = new Set(publishedResults.map(examKey));
+        const publishedByExam = new Map(publishedResults.map((result) => [examKey(result), result]));
         const unique = [...new Map(exams.filter((exam) => examKey(exam) && isCompletedExamination(exam)).map((exam) => [examKey(exam), exam])).values()];
         const results = [];
         for (let offset = 0; offset < unique.length && active; offset += 5) {
           results.push(...await Promise.all(unique.slice(offset, offset + 5).map(async (exam) => {
-            if (!publishedExamIds.has(examKey(exam))) return { exam, memo: null, notPublished: true };
-            if (published(null, exam) === false || ["Upcoming Examination", "Examination in Progress"].includes(resultState(exam, null))) return { exam, memo: null };
+            const publishedResult = publishedByExam.get(examKey(exam));
+            if (!publishedResult) return { exam, memo: null, notPublished: true };
+            const publishedExam = { ...exam, isResultPublished: true };
+            if (["Upcoming Examination", "Examination in Progress"].includes(resultState(publishedExam, null))) return { exam: publishedExam, memo: null };
             try {
-              const memo = validateStudentMemo(await getStudentResult(student, examKey(exam)), student, exam);
-              return { exam, memo, notPublished: memo == null };
-            } catch (requestError) { if (isUnpublishedResultError(requestError)) return { exam, memo: null, notPublished: true }; return { exam, memo: null, error: getApiErrorMessage(requestError) }; }
+              const memo = validateStudentMemo(await getPublishedStudentResultMemo(student, examKey(exam)), student, publishedExam);
+              if (!memo) return { exam: publishedExam, memo: null, error: "The result is published, but its marks memo is unavailable." };
+              return { exam: publishedExam, memo, notPublished: false };
+            } catch (requestError) { if (isUnpublishedResultError(requestError)) return { exam: publishedExam, memo: null, error: "The result is published, but its marks memo is unavailable." }; return { exam: publishedExam, memo: null, error: getApiErrorMessage(requestError) }; }
           })));
         }
         if (active) setEntries(results);

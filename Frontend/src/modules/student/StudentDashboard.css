@@ -347,7 +347,6 @@
   text-transform: uppercase;
 }
 
-.sp-sidebar nav h2,
 .sp-sidebar-note { color: #DBEAFE; }
 
 .sp-sidebar nav a {
@@ -1637,6 +1636,9 @@
   display: grid;
   gap: 13px;
   width: min(500px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px;
   border-radius: 14px;
   background: var(--sp-surface);

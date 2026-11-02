@@ -222,8 +222,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ClassName = (string)(x.ClassName ?? "N/A"),
                 RouteName = (string)(x.RouteName ?? "N/A"),
                 PickupPoint = (string)(x.PickupPointName ?? "N/A"),
+                PickupPointName = (string)(x.PickupPointName ?? "N/A"),
                 VehicleNumber = (string)(x.VehicleNumber ?? "Unassigned"),
                 DriverName = (string)(x.DriverName ?? "Assigned Driver"),
+                FeePlan = (string)(x.FeePlan ?? "Annual"),
+                MonthlyFee = Convert.ToDecimal(x.MonthlyFee ?? 0),
+                AnnualFee = Convert.ToDecimal(x.AnnualFee ?? 0),
                 Status = (string)(x.Status ?? "Active")
             }).ToList();
         }

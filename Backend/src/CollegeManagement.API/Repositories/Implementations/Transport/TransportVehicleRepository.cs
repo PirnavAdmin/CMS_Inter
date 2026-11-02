@@ -61,23 +61,24 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 new
                 {
                     p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_VehicleName = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
+                    p_Capacity = dto.Capacity,
+                    p_IsActive = dto.Status ? (byte)1 : (byte)0,
+                    p_VehicleRegistrationNo = dto.RegistrationNumber,
+                    p_MaximumCapacity = dto.Capacity,
                     p_Make = dto.Manufacturer,
                     p_Model = dto.Model,
+                    p_YearOfManufacture = 0,
                     p_ChassisNumber = dto.ChassisNumber,
                     p_EngineNumber = dto.EngineNumber,
-                    p_GpsDeviceId = dto.GpsDeviceId,
-                    p_InsuranceNumber = dto.InsuranceNumber,
                     p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
                     p_FitnessExpiry = dto.FitnessExpiry,
-                    p_Capacity = dto.Capacity,
+                    p_PollutionExpiry = dto.PollutionExpiry,
+                    p_GpsDeviceId = dto.GpsDeviceId,
                     p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
-                    p_Status = dto.Status ? (byte)1 : (byte)0,
+                    p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -93,7 +94,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_VehicleNumber = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
                     p_Capacity = dto.Capacity,
-                    p_IsActive = (byte)1,
+                    p_IsActive = dto.Status ? (byte)1 : (byte)0,
                     p_VehicleRegistrationNo = dto.RegistrationNumber,
                     p_MaximumCapacity = dto.Capacity,
                     p_Make = dto.Manufacturer,

@@ -66,7 +66,18 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNameAsync(id);
+                long targetId = 0;
+            if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+            {
+                targetId = numId;
+            }
+            else if (!string.IsNullOrWhiteSpace(id))
+            {
+                var existingLookup = await _service.GetByIdOrNameAsync(id);
+                if (existingLookup != null) targetId = existingLookup.AttendantId;
+            }
+
+            var existing = targetId > 0 ? new Dtos.Transport.Attendant.TransportAttendantDto { AttendantId = targetId } : null;
                 if (existing == null)
                 {
                     return NotFound(new { success = false, message = "Bus attendant not found." });
@@ -91,7 +102,18 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> Delete(string id)
         {
             var userId = GetCurrentUserId();
-            var existing = await _service.GetByIdOrNameAsync(id);
+            long targetId = 0;
+            if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+            {
+                targetId = numId;
+            }
+            else if (!string.IsNullOrWhiteSpace(id))
+            {
+                var existingLookup = await _service.GetByIdOrNameAsync(id);
+                if (existingLookup != null) targetId = existingLookup.AttendantId;
+            }
+
+            var existing = targetId > 0 ? new Dtos.Transport.Attendant.TransportAttendantDto { AttendantId = targetId } : null;
             if (existing != null)
             {
                 await _service.DeleteAsync(existing.AttendantId, userId);
