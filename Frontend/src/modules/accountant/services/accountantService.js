@@ -173,32 +173,7 @@ export async function loadSections(loaders) {
 
 export async function loadScopedLedger(params, signal) {
   const response = await apiClient.get(apiEndpoints.fee.ledger, { params, signal });
-  const ledger = rowsOf(response);
-  if (!params.boardId || !ledger.length) return ledger;
-  // The primary ledger query currently ignores boardId; verify membership using student masters.
-  const students = new Map();
-  let pageNumber = 1;
-  let totalPages = 1;
-  do {
-    signal?.throwIfAborted();
-    const page = unwrap(await apiClient.get(apiEndpoints.students.getAll, {
-      params: { ...params, pageNumber, pageSize: 100 }, signal,
-    }));
-    rowsOf(page).forEach((student) => {
-      if (String(student.boardId ?? student.BoardId) === String(params.boardId)) {
-        students.set(String(student.studentId ?? student.StudentId), student);
-      }
-    });
-    totalPages = Number(page?.totalPages ?? page?.TotalPages ?? 1);
-    if (!Number.isInteger(totalPages) || totalPages < 0) {
-      throw Object.assign(new Error("Student context could not be verified. Retry before viewing this board's fees."), { code: "ACCOUNTANT_DATA_ERROR" });
-    }
-    pageNumber += 1;
-  } while (pageNumber <= totalPages);
-  return ledger.filter((row) => students.has(String(row.studentId ?? row.StudentId))).map((row) => {
-    const student = students.get(String(row.studentId ?? row.StudentId));
-    return { ...row, boardName: student.boardName ?? student.BoardName, academicYearName: student.academicYearName ?? student.AcademicYearName, rollNumber: student.rollNo ?? student.RollNo };
-  });
+  return rowsOf(response);
 }
 
 export async function loadPaymentHistory(params, signal, authorize = () => false) {

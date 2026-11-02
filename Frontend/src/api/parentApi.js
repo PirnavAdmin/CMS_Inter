@@ -273,7 +273,7 @@ export const getStudentDailyAttendanceLogs = async (studentId, { month, year } =
   try {
     const now = new Date();
     const params = {
-      month: (month !== undefined && month !== null && month !== "" && month !== "all") ? Number(month) : (now.getMonth() + 1),
+      month: (month === 0 || month === "0" || month === "all") ? 0 : ((month !== undefined && month !== null && month !== "") ? Number(month) : (now.getMonth() + 1)),
       year: (year !== undefined && year !== null && year !== "") ? Number(year) : now.getFullYear(),
     };
     const res = await api.get(`/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`, { params });
@@ -414,3 +414,13 @@ export const getCertificateActiveTemplates = async () => {
 
 
 
+
+/**
+ * 19. POST /api/v1/students/parent/change-password
+ * Changes the authenticated parent's account password.
+ */
+export const changeParentPassword = async ({ oldPassword, newPassword, confirmPassword }) => {
+  const payload = { oldPassword, newPassword, confirmPassword };
+  const res = await api.post("/api/v1/students/parent/change-password", payload);
+  return res?.data ?? res;
+};

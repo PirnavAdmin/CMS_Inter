@@ -179,6 +179,8 @@ public class StudentsOverviewResponseDto
 {
     public int TotalStudents { get; set; }
     public int TotalCount => TotalStudents;
+    public int MarkedStudents { get; set; }
+    public int MarkedCount => MarkedStudents;
     public int ActiveStudents { get; set; }
     public int InactiveStudents { get; set; }
     public int MaleStudents { get; set; }
@@ -246,6 +248,8 @@ public class GroupDistributionItemDto
     public int StudentCount => TotalStudents;
     public int Count => TotalStudents;
     public int Value => TotalStudents;
+    public int Boys { get; set; }
+    public int Girls { get; set; }
     public decimal Percentage { get; set; }
     public string Color { get; set; } = string.Empty;
 }
@@ -253,6 +257,8 @@ public class GroupDistributionItemDto
 public class GroupDistributionResponseDto
 {
     public int TotalStudents { get; set; }
+    public int Boys { get; set; }
+    public int Girls { get; set; }
     public IReadOnlyList<GroupDistributionItemDto> Groups { get; set; } = new List<GroupDistributionItemDto>();
     public IReadOnlyList<GroupDistributionItemDto> Items => Groups;
 }
@@ -291,6 +297,8 @@ public class StudentsAttendanceTodayResponseDto
     public int TotalStudents { get; set; }
     public int Total => TotalStudents;
     public int TotalCount => TotalStudents;
+    public int MarkedStudents { get; set; }
+    public int MarkedCount => MarkedStudents;
     public int Present { get; set; }
     public int PresentCount => Present;
     public int Absent { get; set; }
@@ -338,6 +346,8 @@ public class StaffAttendanceTodayResponseDto
     public int TotalStaff { get; set; }
     public int Total => TotalStaff;
     public int TotalCount => TotalStaff;
+    public int MarkedStaff { get; set; }
+    public int MarkedCount => MarkedStaff;
     public int Present { get; set; }
     public int PresentCount => Present;
     public int Absent { get; set; }
@@ -579,16 +589,64 @@ public class UpcomingHolidayItemDto
     public string Type => HolidayType;
     public string AppliesTo { get; set; } = "All Students & Staff";
     public string DateType { get; set; } = "Single Day";
-    public DateOnly StartDate { get; set; }
-    public DateOnly EndDate { get; set; }
-    public string FormattedDateRange { get; set; } = string.Empty;
+    public DateTime StartDate { get; set; }
+    public DateTime EndDate { get; set; }
+
+    private string? _formattedDateRange;
+    public string FormattedDateRange
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_formattedDateRange)) return _formattedDateRange;
+            if (StartDate == default) return "Scheduled";
+            if (EndDate == default || StartDate.Date == EndDate.Date)
+            {
+                return StartDate.ToString("dd MMM yyyy");
+            }
+            return $"{StartDate:dd MMM yyyy} - {EndDate:dd MMM yyyy}";
+        }
+        set => _formattedDateRange = value;
+    }
     public string DateRange => FormattedDateRange;
-    public string DayOfWeek { get; set; } = string.Empty;
+
+    private string? _dayOfWeek;
+    public string DayOfWeek
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_dayOfWeek)) return _dayOfWeek;
+            return StartDate != default ? StartDate.ToString("ddd") : string.Empty;
+        }
+        set => _dayOfWeek = value;
+    }
+
     public int TotalDays { get; set; } = 1;
     public string DurationText => TotalDays > 1 ? $"{TotalDays} Days" : "1 Day";
     public string Status { get; set; } = "Active";
     public string LifecycleStatus { get; set; } = "Upcoming";
-    public string CountdownText { get; set; } = string.Empty;
+
+    private string? _countdownText;
+    public string CountdownText
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_countdownText)) return _countdownText;
+            var today = DateTime.UtcNow.Date;
+            if (StartDate != default && EndDate != default && today >= StartDate.Date && today <= EndDate.Date)
+            {
+                return "Ongoing";
+            }
+            if (StartDate != default)
+            {
+                var diff = (StartDate.Date - today).Days;
+                if (diff == 0) return "Today";
+                if (diff == 1) return "Tomorrow";
+                if (diff > 1) return $"{diff} Days";
+            }
+            return LifecycleStatus;
+        }
+        set => _countdownText = value;
+    }
     public string? Description { get; set; }
     public int? AcademicYearId { get; set; }
     public int? BoardId { get; set; }
@@ -601,46 +659,3 @@ public class DashboardHolidaysResponseDto
     public int TotalCompleted { get; set; }
     public int TotalHolidays { get; set; }
 }
-
-public class PrincipalDashboardResponseDto
-{
-    public int CampusId { get; set; }
-    public string CampusName { get; set; } = string.Empty;
-    public int StudentCount { get; set; }
-    public int StaffCount { get; set; }
-    public decimal AttendancePercentage { get; set; }
-    public decimal PassPercentage { get; set; }
-    public PrincipalFeeMetricsDto Fees { get; set; } = new();
-    public IReadOnlyList<PerformanceStreamDto> PerformanceStreams { get; set; } = new List<PerformanceStreamDto>();
-    public IReadOnlyList<PrincipalNoticeDto> Notices { get; set; } = new List<PrincipalNoticeDto>();
-}
-
-public class PrincipalFeeMetricsDto
-{
-    public decimal TotalExpected { get; set; }
-    public decimal TotalCollected { get; set; }
-    public decimal TotalPending { get; set; }
-    public decimal CollectionPercentage { get; set; }
-    public decimal TotalPaid => TotalCollected;
-    public decimal TotalOutstanding => TotalPending;
-}
-
-public class PerformanceStreamDto
-{
-    public string Label { get; set; } = string.Empty;
-    public string StreamName => Label;
-    public decimal Current { get; set; }
-    public decimal PassPercentage => Current;
-    public decimal Previous { get; set; }
-}
-
-public class PrincipalNoticeDto
-{
-    public string Id { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string Description { get; set; } = string.Empty;
-    public string Date { get; set; } = string.Empty;
-    public string Type { get; set; } = "Notice";
-    public string Priority { get; set; } = "Normal";
-}
-

@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useCallback } from "react";
 import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
@@ -9,11 +8,8 @@ import "../styles/FacultySettings.css";
 
 export default function FacultySettings() {
   const { profileData, setProfileData, notify } = useFaculty();
-  const { params, setParam } = useFacultyViewParams();
-  const modalOpen = params.get("modal") === "settings";
-  const setModalOpen = useCallback((open) => setParam("modal", open ? "settings" : null), [setParam]);
-  const activeTab = params.get("tab") === "preferences" ? "preferences" : "password";
-  const setActiveTab = (tab) => setParam("tab", tab); // "password" | "preferences"
+  const [modalOpen, setModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
 
   // Password Form State
   const [passwordForm, setPasswordForm] = useState({
@@ -122,7 +118,7 @@ export default function FacultySettings() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalOpen, savingPassword, savingPreferences, setModalOpen]);
+  }, [modalOpen, savingPassword, savingPreferences]);
 
   const handleOpenModal = (tab = "password") => {
     setActiveTab(tab);

@@ -1,6 +1,13 @@
+import { useState } from "react";
 import { useInventory } from "../InventoryDataContext.jsx";
+import { updateProfileContact } from "../data/inventoryUserApi.js";
+
 export default function InventoryProfilePage() {
-  const { state, update } = useInventory();
+  const { state, refresh } = useInventory();
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
   return (
     <>
       <div className="ip-page-head">
@@ -10,19 +17,25 @@ export default function InventoryProfilePage() {
         </div>
       </div>
       <section className="ip-card">
-        <p role="status">
-          Profile details are loaded from the employee record. Self-service name and phone updates
-          require a dedicated backend endpoint.
-        </p>
+        {msg && <p role="status" style={{ color: "#16a34a", marginBottom: 12 }}>{msg}</p>}
+        {err && <p className="ip-error" role="alert" style={{ color: "#dc2626", marginBottom: 12 }}>{err}</p>}
         <form
           className="ip-form"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             const f = Object.fromEntries(new FormData(e.currentTarget));
-            update(
-              (s) => ({ ...s, profile: { ...s.profile, name: f.name, phone: f.phone } }),
-              "Profile updated",
-            );
+            setSaving(true);
+            setMsg("");
+            setErr("");
+            try {
+              await updateProfileContact({ phone: f.phone });
+              setMsg("Contact phone updated successfully.");
+              await refresh();
+            } catch (ex) {
+              setErr(ex.message || "Failed to update contact phone.");
+            } finally {
+              setSaving(false);
+            }
           }}
         >
           <label>
@@ -31,7 +44,7 @@ export default function InventoryProfilePage() {
           </label>
           <label>
             Name
-            <input name="name" defaultValue={state.profile.name} required />
+            <input name="name" defaultValue={state.profile.name} readOnly />
           </label>
           <label>
             Email
@@ -51,7 +64,9 @@ export default function InventoryProfilePage() {
               required
             />
           </label>
-          <button className="cms-btn cms-btn-primary">Save Profile</button>
+          <button className="cms-btn cms-btn-primary" disabled={saving}>
+            {saving ? "Saving..." : "Save Contact Info"}
+          </button>
         </form>
       </section>
     </>

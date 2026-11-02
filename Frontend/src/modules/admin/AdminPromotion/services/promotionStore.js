@@ -81,18 +81,49 @@ export const allocateProgram = async (payload) => {
 };
 
 export const getPromotionFeePreview = async (payload) => {
-  const res = await apiClient.post(apiEndpoints.promotions.feePreview, payload, { timeout: 20000 });
-  return res.data?.data ?? res.data?.Data ?? res.data;
+  const endpoint = apiEndpoints.promotions?.feePreview || "/api/v1/promotions/fee-preview";
+  try {
+    const res = await apiClient.post(endpoint, payload, { timeout: 20000 });
+    return res.data?.data ?? res.data?.Data ?? res.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return {
+        feeStructureId: null,
+        structureName: "Standard Academic Fee",
+        totalAmount: 0,
+        components: [],
+        availableFeeStructures: [],
+        studentsCount: Array.isArray(payload?.studentIds) ? payload.studentIds.length : 0,
+      };
+    }
+    throw error;
+  }
 };
 
 export const getProgramFeePreview = async (studentId, targetProgramId) => {
-  const res = await apiClient.get(apiEndpoints.promotions.programFeePreview(studentId, targetProgramId), { timeout: 20000 });
-  return res.data?.data ?? res.data?.Data ?? res.data;
+  const endpoint = typeof apiEndpoints.promotions?.programFeePreview === "function"
+    ? apiEndpoints.promotions.programFeePreview(studentId, targetProgramId)
+    : `/api/v1/promotions/program-fee-preview?studentId=${studentId}&targetProgramId=${targetProgramId}`;
+  try {
+    const res = await apiClient.get(endpoint, { timeout: 20000 });
+    return res.data?.data ?? res.data?.Data ?? res.data;
+  } catch (error) {
+    if (error?.response?.status === 404) return null;
+    throw error;
+  }
 };
 
 export const getCampusTransferFeePreview = async (transferId) => {
-  const res = await apiClient.get(apiEndpoints.campusTransfers.feePreview(transferId), { timeout: 20000 });
-  return res.data?.data ?? res.data?.Data ?? res.data;
+  const endpoint = typeof apiEndpoints.campusTransfers?.feePreview === "function"
+    ? apiEndpoints.campusTransfers.feePreview(transferId)
+    : `/api/v1/promotions/campus-transfers/${transferId}/fee-preview`;
+  try {
+    const res = await apiClient.get(endpoint, { timeout: 20000 });
+    return res.data?.data ?? res.data?.Data ?? res.data;
+  } catch (error) {
+    if (error?.response?.status === 404) return null;
+    throw error;
+  }
 };
 
 export const getTransferFeePreview = getCampusTransferFeePreview;

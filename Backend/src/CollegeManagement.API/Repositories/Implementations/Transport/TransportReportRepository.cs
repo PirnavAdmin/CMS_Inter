@@ -21,11 +21,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
-        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
+        private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<TransportDashboardReportResponseDto> GetDashboardReportAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
             var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
@@ -68,7 +68,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<TripReportDto>> GetTripReportsAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
                 new { p_ReportType = "trip-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
@@ -100,7 +100,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<VehicleReportDto>> GetVehicleReportsAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
                 new { p_ReportType = "vehicle-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
@@ -134,7 +134,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DriverReportDto>> GetDriverReportsAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
                 new { p_ReportType = "driver-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
@@ -166,7 +166,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<RouteReportDto>> GetRouteReportsAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
                 new { p_ReportType = "route-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
@@ -198,7 +198,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<StudentTransportReportDto>> GetStudentTransportReportsAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
                 new { p_ReportType = "student-transport-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
@@ -230,7 +230,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<VehicleStudentReportDto>> GetVehicleWiseAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             var occupancy = await multi.ReadAsync<dynamic>();
@@ -262,7 +262,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<RouteStudentReportDto>> GetRouteWiseAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             await multi.ReadAsync<dynamic>(); // skip occupancy
@@ -286,7 +286,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<PickupPointReportDto>> GetPickupPointWiseAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetPickupPoints",
                 new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null, p_CampusId = filter.CampusId },
@@ -303,7 +303,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DriverVehicleReportDto>> GetDriverWiseAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportVehicleAssignments",
                 new { p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_DriverId = filter.DriverId, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
@@ -325,7 +325,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<MaintenanceReportDto>> GetMaintenanceAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetVehicleMaintenances",
                 new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
@@ -344,7 +344,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<MonthlyMaintenanceCostDto>> GetMonthlyCostAsync(ReportFilterDto filter)
         {
-            using var c = Connection();
+            var c = Connection;
             var raw = (await c.QueryAsync<VehicleMaintenanceDto>(
                 "sp_GetVehicleMaintenances",
                 new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "" },

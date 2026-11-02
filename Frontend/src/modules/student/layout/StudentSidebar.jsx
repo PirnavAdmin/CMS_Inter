@@ -1,3 +1,4 @@
+import React from "react";
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
 import logo from "@/assets/pirnav-colleges-logo.png";
@@ -12,6 +13,7 @@ import certificateIcon from "@/assets/sidebar-3d/certificates.png";
 import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
+import { Settings } from "lucide-react";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 
 // Shared by the Student sidebar and its navbar search.
@@ -32,6 +34,9 @@ export const studentMenuGroups = [
   ]],
   ["INFORMATION", [
     ["Holidays", "holidays", holidayIcon, "holiday-management"],
+  ]],
+  ["ADMINISTRATION", [
+    ["Settings", "settings", Settings, "settings"],
   ]],
 ];
 
@@ -65,7 +70,13 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
                   title={collapsed && !mobile ? label : undefined}
                   className={({ isActive }) => isActive ? "is-active" : ""}
                 >
-                  <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
+                  {typeof icon === "string" ? (
+                    <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
+                  ) : (
+                    <span className="sp-nav-icon-wrap" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, flexShrink: 0 }}>
+                      {React.createElement(icon, { size: 18, style: { strokeWidth: 2 } })}
+                    </span>
+                  )}
                   <span>{label}</span>
                 </NavLink>
               ))}

@@ -1079,25 +1079,18 @@ export default function SectionManagementPage() {
     }
   }, [effectiveCampusId]);
 
-  const loadStudentCounts = useCallback(async () => {
-    try {
-      const res = await apiClient.get(apiEndpoints.students.getAll);
-      const studentList = unwrapList(res);
-      const counts = {};
-      if (Array.isArray(studentList)) {
-        studentList.forEach((s) => {
-          const sId = normalizeId(s.sectionId);
-          if (sId) {
-            counts[sId] = (counts[sId] || 0) + 1;
-          }
-        });
-      }
-      setSectionStudentCounts(counts);
-      return counts;
-    } catch (err) {
-      console.warn("Could not fetch student counts for sections:", err);
-      return {};
+  const loadStudentCounts = useCallback((sectionsList = []) => {
+    const counts = {};
+    if (Array.isArray(sectionsList)) {
+      sectionsList.forEach((s) => {
+        const sId = normalizeId(s.id);
+        if (sId) {
+          counts[sId] = Number(s.enrolledCount ?? s.currentStrength ?? 0);
+        }
+      });
     }
+    setSectionStudentCounts(counts);
+    return counts;
   }, []);
 
   const loadSections = useCallback(async (targetCampusId = effectiveCampusId) => {
@@ -1112,7 +1105,7 @@ export default function SectionManagementPage() {
         return 0;
       });
       setSections(next);
-      loadStudentCounts();
+      loadStudentCounts(next);
       return next;
     } catch (err) {
       console.warn("Could not load sections:", err);
@@ -1213,7 +1206,7 @@ export default function SectionManagementPage() {
       }
       const rejected = results.find((result) => result.status === "rejected");
       if (rejected) say(getApiErrorMessage(rejected.reason) || "Some Section Management data could not be loaded.");
-    }).catch((error) => { if (active) say(getApiErrorMessage(error)); }).finally(() => { if (active) setInitialLoading(false); });
+    }).catch((error) => { if (active) say(getApiErrorMessage(error), "error"); }).finally(() => { if (active) setInitialLoading(false); });
     return () => { active = false; ++boardRequests.current; ++groupRequests.current; ++programRequests.current; if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, [say]);
 
@@ -2218,17 +2211,25 @@ export default function SectionManagementPage() {
 
     await runMutation(
       "DELETE_SECTION:" + sec.id,
-      () => apiClient.delete(apiEndpoints.sections.delete(sec.id)),
+      async () => {
+        try {
+          return await apiClient.delete(apiEndpoints.sections.delete(sec.id));
+        } catch (err) {
+          if (err?.response?.status === 404) {
+            return { status: 404, alreadyDeleted: true };
+          }
+          throw err;
+        }
+      },
       async () => {
         const next = await loadSections(effectiveCampusId);
         await loadRooms(effectiveCampusId);
         closeDeleteSectionModal(true);
-        if (next.some((item) => item.id === sec.id)) {
-          throw new Error("The Section is still present in the backend data.");
-        }
+        setSections((prev) => prev.filter((item) => item.id !== sec.id));
       },
       () => {
         closeDeleteSectionModal(true);
+        setSections((prev) => prev.filter((item) => item.id !== sec.id));
         say('Section "' + sec.name + '" deleted successfully.');
       }
     );

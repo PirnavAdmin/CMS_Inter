@@ -153,6 +153,7 @@ namespace CollegeManagement.API.DTOs.Staff
             set => JoiningDate = value;
         }
 
+        [System.Text.Json.Serialization.JsonConverter(typeof(CollegeManagement.API.Helpers.FlexibleDecimalJsonConverter))]
         public decimal Experience { get; set; } = 0.0m;
 
         [StringLength(50)]
@@ -285,6 +286,9 @@ namespace CollegeManagement.API.DTOs.Staff
         }
 
         // Dynamic Role Documents Dictionary from Frontend
-        public Dictionary<string, string>? Documents { get; set; }
+        public object? Documents { get; set; }
+        public object? DocumentsList { get; set; }
+        public object? EducationList { get; set; }
+        public object? ExperienceList { get; set; }
     }
 }

@@ -36,6 +36,7 @@ export function formInitial(kind, state, record, itemId, user) {
       unitCost: 0,
       maxStock: "",
       reorderQty: 0,
+      issueValue: 0,
       status: "Active",
       supplierId: "",
       purchaseDate: "",

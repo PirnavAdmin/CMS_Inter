@@ -1,0 +1,15 @@
+/* ==========================================================================
+   Transport Manager Layout Styles — Scoped to .tm-shell
+   Inherits full theme-based design from cms.css & DashboardLayout.css
+   Does NOT override or bleed into Admin (/dashboard) or other modules
+   ========================================================================== */
+
+.tm-shell {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}

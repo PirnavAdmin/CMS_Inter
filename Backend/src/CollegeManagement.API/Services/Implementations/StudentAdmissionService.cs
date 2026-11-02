@@ -331,12 +331,8 @@ namespace CollegeManagement.API.Services.Implementations
                 admission.AdmissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
                 if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
                 {
-                    // Directly update the DB so the approval SP can use it
-                    var updateConn = _context.Database.GetDbConnection();
-                    if (updateConn.State != ConnectionState.Open) await updateConn.OpenAsync();
-                    await Dapper.SqlMapper.ExecuteAsync(updateConn,
-                        "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
-                        new { AdmNo = admission.AdmissionNo, AdmId = admission.AdmissionId });
+                    // Persist generated admission number via repository stored procedure
+                    await _repository.UpdateAdmissionNumberAsync(admission.AdmissionId, admission.AdmissionNo);
                 }
             }
 

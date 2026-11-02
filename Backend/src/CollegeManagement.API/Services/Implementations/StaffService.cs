@@ -547,8 +547,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 2. Insert Staff domain record via EF Core inside this transaction
-                _context.Staffs.Add(staff);
-                await _context.SaveChangesAsync();
+                await _staffRepository.AddAsync(staff);
 
                 // 3. Subject Allocations
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
@@ -876,9 +875,7 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 existingStaff.UpdatedAt = DateTime.UtcNow;
-                // Note: existingStaff is already tracked by EF Core from _staffRepository.GetByIdAsync(id).
-                // Do not call _context.Staffs.Update(existingStaff) as it marks all loaded navigation properties (Campuses, Boards, Departments) as Modified.
-                await _context.SaveChangesAsync();
+                await _staffRepository.UpdateAsync(existingStaff);
 
                 if (emailChanged)
                 {
@@ -899,6 +896,11 @@ namespace CollegeManagement.API.Services.Implementations
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
                 if (subNames != null)
                 {
+                    var deptDict = DeserializeObject<Dictionary<string, object>>(existingStaff.DepartmentSpecificJson) ?? new Dictionary<string, object>();
+                    deptDict["allocatedSubjects"] = subNames;
+                    deptDict["subjects"] = subNames;
+                    existingStaff.DepartmentSpecificJson = JsonSerializer.Serialize(deptDict);
+                    await _context.SaveChangesAsync();
                     await SyncStaffSubjectAllocationsAsync(existingStaff.Id, subNames);
                 }
 
@@ -939,8 +941,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 staff.IsDeleted = true;
                 staff.UpdatedAt = DateTime.UtcNow;
-                _context.Staffs.Update(staff);
-                await _context.SaveChangesAsync();
+                await _staffRepository.SoftDeleteAsync(staff);
 
                 await _userRepository.UpdateStatusByStaffIdAsync(id, false, connection, dbTransaction);
                 await transaction.CommitAsync();
@@ -1687,14 +1688,23 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateTemplateExcelAsync(string? staffType = null)
         {
             using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("Staff Import Template");
+            var isNonTeaching = string.Equals(staffType?.Trim(), "Non-Teaching", StringComparison.OrdinalIgnoreCase);
+            var sheetTitle = isNonTeaching ? "Non-Teaching Template" : "Teaching Template";
+            var worksheet = workbook.Worksheets.Add(sheetTitle);
 
-            var headers = new[]
-            {
-                "Employee ID", "First Name", "Middle Name", "Last Name", "Staff Type",
-                "Department", "Designation", "Board", "Gender", "Date of Birth",
-                "Mobile", "Email", "Joining Date", "Experience (Years)", "Status"
-            };
+            var headers = isNonTeaching
+                ? new[]
+                {
+                    "Board Name", "Employee ID", "First Name", "Middle Name", "Last Name",
+                    "Date of Birth", "Gender", "Mobile", "Email", "Department",
+                    "Designation", "Date of Joining", "Employment Type", "Status"
+                }
+                : new[]
+                {
+                    "Board Name", "Employee ID", "First Name", "Middle Name", "Last Name",
+                    "Date of Birth", "Gender", "Mobile", "Email", "Department",
+                    "Designation", "Subject Allocation", "Date of Joining", "Employment Type", "Status"
+                };
 
             for (int i = 0; i < headers.Length; i++)
             {
@@ -1705,48 +1715,13 @@ namespace CollegeManagement.API.Services.Implementations
                 cell.Style.Font.FontColor = XLColor.White;
             }
 
-            // Sample rows
-            var sType1 = !string.IsNullOrWhiteSpace(staffType) ? staffType : "Teaching";
-            var sType2 = !string.IsNullOrWhiteSpace(staffType) ? staffType : "Non-Teaching";
-
-            worksheet.Cell(2, 1).Value = "PCTCH0001";
-            worksheet.Cell(2, 2).Value = "Rahul";
-            worksheet.Cell(2, 3).Value = "Kumar";
-            worksheet.Cell(2, 4).Value = "Sharma";
-            worksheet.Cell(2, 5).Value = sType1;
-            worksheet.Cell(2, 6).Value = "Mathematics";
-            worksheet.Cell(2, 7).Value = "Lecturer";
-            worksheet.Cell(2, 8).Value = "Board of Intermediate Education";
-            worksheet.Cell(2, 9).Value = "Male";
-            worksheet.Cell(2, 10).Value = "1990-05-15";
-            worksheet.Cell(2, 11).Value = "9876543210";
-            worksheet.Cell(2, 12).Value = "rahul.sharma@example.com";
-            worksheet.Cell(2, 13).Value = "2024-06-01";
-            worksheet.Cell(2, 14).Value = 4.5;
-            worksheet.Cell(2, 15).Value = "Active";
-
-            worksheet.Cell(3, 1).Value = "PCNT0001";
-            worksheet.Cell(3, 2).Value = "Priya";
-            worksheet.Cell(3, 3).Value = "";
-            worksheet.Cell(3, 4).Value = "Reddy";
-            worksheet.Cell(3, 5).Value = sType2;
-            worksheet.Cell(3, 6).Value = "Administration";
-            worksheet.Cell(3, 7).Value = "Administrative Officer";
-            worksheet.Cell(3, 8).Value = "Board of Intermediate Education";
-            worksheet.Cell(3, 9).Value = "Female";
-            worksheet.Cell(3, 10).Value = "1992-08-20";
-            worksheet.Cell(3, 11).Value = "9876543211";
-            worksheet.Cell(3, 12).Value = "priya.reddy@example.com";
-            worksheet.Cell(3, 13).Value = "2024-06-01";
-            worksheet.Cell(3, 14).Value = 3.0;
-            worksheet.Cell(3, 15).Value = "Active";
-
+            // Zero prefilled data rows: template contains column headers only
             worksheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             var bytes = stream.ToArray();
-            var filename = $"Staff_Import_Template_{staffType ?? "Universal"}.xlsx";
+            var filename = $"{sheetTitle.Replace(" ", "_")}.xlsx";
             return (bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
 
@@ -2042,13 +2017,83 @@ namespace CollegeManagement.API.Services.Implementations
             var staff = await _staffRepository.GetByIdAsync(dto.StaffId);
             if (staff == null) throw new NotFoundException($"Staff with ID {dto.StaffId} not found.");
 
+            if (dto.SubjectId <= 0 && !string.IsNullOrWhiteSpace(dto.SubjectName))
+            {
+                var allSubjects = await _subjectRepository.GetAllAsync();
+                var cleanName = dto.SubjectName.Trim();
+                var matched = allSubjects.FirstOrDefault(s =>
+                    string.Equals(s.SubjectName.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.SubjectCode.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    cleanName.StartsWith(s.SubjectName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                    s.SubjectName.Trim().StartsWith(cleanName, StringComparison.OrdinalIgnoreCase));
+
+                if (matched != null)
+                {
+                    dto.SubjectId = matched.SubjectId;
+                }
+                else
+                {
+                    var validGroup = await _context.Groups.AsNoTracking().FirstOrDefaultAsync();
+                    var validLevel = await _context.AcademicLevels.AsNoTracking().FirstOrDefaultAsync();
+                    var validBoard = await _context.Boards.AsNoTracking().FirstOrDefaultAsync();
+                    var validYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync();
+
+                    var cleanCode = "SUB-" + (cleanName.Length > 4 ? cleanName.Substring(0, 4).ToUpper() : cleanName.ToUpper()) + "-" + new Random().Next(100, 999);
+                    var newSub = new Subject
+                    {
+                        SubjectName = cleanName,
+                        SubjectCode = cleanCode,
+                        BoardId = staff.BoardId ?? (validBoard?.BoardId ?? 1),
+                        GroupId = validGroup?.GroupId ?? 37,
+                        AcademicLevelId = validLevel?.AcademicLevelId ?? 1,
+                        AcademicYearId = validYear?.AcademicYearId,
+                        SubjectType = "Theory",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Subjects.Add(newSub);
+                    await _context.SaveChangesAsync();
+                    dto.SubjectId = newSub.SubjectId;
+                }
+            }
+
             var subject = await _subjectRepository.GetByIdAsync(dto.SubjectId);
             if (subject == null) throw new NotFoundException($"Subject with ID {dto.SubjectId} not found.");
 
+            var existingAllocs = await _allocationRepository.GetByStaffIdAsync(dto.StaffId);
+            var alreadyAllocated = existingAllocs.FirstOrDefault(a => a.SubjectId == dto.SubjectId);
+            if (alreadyAllocated != null)
+            {
+                alreadyAllocated.Staff = staff;
+                alreadyAllocated.Subject = subject;
+                return _mapper.Map<StaffSubjectAllocationResponseDto>(alreadyAllocated);
+            }
+
             var allocation = _mapper.Map<StaffSubjectAllocation>(dto);
+            allocation.IsActive = true;
+            allocation.CreatedAt = DateTime.UtcNow;
             var created = await _allocationRepository.AddAsync(allocation);
             created.Staff = staff;
             created.Subject = subject;
+
+            try
+            {
+                var deptDict = DeserializeObject<Dictionary<string, object>>(staff.DepartmentSpecificJson) ?? new Dictionary<string, object>();
+                var currentSubs = new List<string>();
+                if (deptDict.TryGetValue("allocatedSubjects", out var sObj) && sObj is IEnumerable<object> sEnum)
+                {
+                    currentSubs = sEnum.Select(x => x.ToString() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+                }
+                if (!currentSubs.Contains(subject.SubjectName))
+                {
+                    currentSubs.Add(subject.SubjectName);
+                    deptDict["allocatedSubjects"] = currentSubs;
+                    deptDict["subjects"] = currentSubs;
+                    staff.DepartmentSpecificJson = JsonSerializer.Serialize(deptDict);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch { }
 
             return _mapper.Map<StaffSubjectAllocationResponseDto>(created);
         }
@@ -2172,6 +2217,44 @@ namespace CollegeManagement.API.Services.Implementations
                     .Distinct()
                     .ToList();
             }
+
+            if ((dto.AllocatedSubjects == null || !dto.AllocatedSubjects.Any()) && !string.IsNullOrWhiteSpace(staff.DepartmentSpecificJson))
+            {
+                try
+                {
+                    using var jsonDoc = JsonDocument.Parse(staff.DepartmentSpecificJson);
+                    if (jsonDoc.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        if (jsonDoc.RootElement.TryGetProperty("allocatedSubjects", out var allocEl) ||
+                            jsonDoc.RootElement.TryGetProperty("subjects", out allocEl))
+                        {
+                            if (allocEl.ValueKind == JsonValueKind.Array)
+                            {
+                                dto.AllocatedSubjects = allocEl.EnumerateArray()
+                                    .Select(e => e.GetString())
+                                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                                    .Select(s => s!)
+                                    .Distinct()
+                                    .ToList();
+                            }
+                            else if (allocEl.ValueKind == JsonValueKind.String)
+                            {
+                                var str = allocEl.GetString();
+                                if (!string.IsNullOrWhiteSpace(str))
+                                {
+                                    dto.AllocatedSubjects = str.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                        .Select(s => s.Trim())
+                                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                                        .Distinct()
+                                        .ToList();
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+            dto.Subjects = dto.AllocatedSubjects;
 
             // Educational Qualifications
             var eduList = dto.EducationList != null && dto.EducationList.Any() ? dto.EducationList : DeserializeList<StaffEducationItem>(staff.EducationJson);
@@ -2389,7 +2472,7 @@ namespace CollegeManagement.API.Services.Implementations
             string? aadhaarDoc, string? panDoc, string? qualCert, string? expCert, string? resume, string? bankProof, string? drivingLicence, string? otherDocs, string? photo, string? signature,
             string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson,
             Dictionary<string, object>? departmentSpecific = null,
-            Dictionary<string, string>? documentsMap = null,
+            object? documentsMap = null,
             string? rawDeptSpecificJson = null)
         {
             // 1. Bank Details
@@ -2534,13 +2617,40 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("Signature", signature);
 
                 // Dynamic documents from frontend map
-                if (documentsMap != null && documentsMap.Count > 0)
+                if (documentsMap != null)
                 {
-                    foreach (var kvp in documentsMap)
+                    if (documentsMap is Dictionary<string, string> dictStr)
                     {
-                        if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                        foreach (var kvp in dictStr)
                         {
-                            AddOrUpdateDoc(kvp.Key, kvp.Value);
+                            if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                            {
+                                AddOrUpdateDoc(kvp.Key, kvp.Value);
+                            }
+                        }
+                    }
+                    else if (documentsMap is Dictionary<string, object> dictObj)
+                    {
+                        foreach (var kvp in dictObj)
+                        {
+                            if (!string.IsNullOrWhiteSpace(kvp.Key) && kvp.Value != null)
+                            {
+                                AddOrUpdateDoc(kvp.Key, kvp.Value.ToString() ?? "");
+                            }
+                        }
+                    }
+                    else if (documentsMap is JsonElement el && el.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in el.EnumerateObject())
+                        {
+                            if (!string.IsNullOrWhiteSpace(prop.Name))
+                            {
+                                var val = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() : prop.Value.ToString();
+                                if (!string.IsNullOrWhiteSpace(val))
+                                {
+                                    AddOrUpdateDoc(prop.Name, val);
+                                }
+                            }
                         }
                     }
                 }
@@ -2588,7 +2698,35 @@ namespace CollegeManagement.API.Services.Implementations
                         string.Equals(s.SubjectName, name, StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(s.SubjectCode, name, StringComparison.OrdinalIgnoreCase));
 
-                    if (subject != null)
+                    if (subject == null)
+                    {
+                        var cleanCode = "SUB-" + (name.Length > 4 ? name.Substring(0, 4).ToUpper() : name.ToUpper()) + "-" + new Random().Next(100, 999);
+                        var newSubject = new Subject
+                        {
+                            SubjectName = name,
+                            SubjectCode = cleanCode,
+                            BoardId = 1,
+                            GroupId = 1,
+                            AcademicLevelId = 1,
+                            SubjectType = "Theory",
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Subjects.Add(newSubject);
+                        await _context.SaveChangesAsync();
+
+                        var allocation = new StaffSubjectAllocation
+                        {
+                            StaffId = staffId,
+                            SubjectId = newSubject.SubjectId,
+                            AcademicYearId = 1,
+                            MaxWeeklyHours = 18,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        await _allocationRepository.AddAsync(allocation);
+                    }
+                    else
                     {
                         var allocation = new StaffSubjectAllocation
                         {
@@ -2868,6 +3006,75 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 return null;
             }
+        }
+        public async Task<bool> UpdateCurrentStaffContactAsync(System.Security.Claims.ClaimsPrincipal user, UpdateStaffContactDto dto)
+        {
+            var staffIdClaim = user.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            Staff? staff = null;
+            if (int.TryParse(staffIdClaim, out int sId) && sId > 0)
+            {
+                staff = await _staffRepository.GetByIdAsync(sId);
+            }
+
+            if (staff == null)
+            {
+                var empIdClaim = user.Claims.FirstOrDefault(c => c.Type == "EmployeeId" || c.Type == "empId" || c.Type == "employee_id")?.Value;
+                if (!string.IsNullOrWhiteSpace(empIdClaim))
+                {
+                    staff = await _staffRepository.GetByEmployeeIdAsync(empIdClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                var emailClaim = user.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+                if (!string.IsNullOrWhiteSpace(emailClaim))
+                {
+                    staff = await _staffRepository.GetByEmailAsync(emailClaim);
+                }
+            }
+
+            if (staff == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Mobile))
+                staff.Mobile = dto.Mobile.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.EmergencyContact))
+                staff.AlternateMobile = dto.EmergencyContact.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Address))
+                staff.CurrentAddress = dto.Address.Trim();
+
+            await _staffRepository.UpdateAsync(staff);
+            return true;
+        }
+
+        public async Task<bool> UnassignSubjectAsync(int staffId, string? subjectName, int? subjectId)
+        {
+            var allocations = await _allocationRepository.GetByStaffIdAsync(staffId);
+            if (!allocations.Any()) return false;
+
+            StaffSubjectAllocation? target = null;
+            if (subjectId.HasValue && subjectId.Value > 0)
+            {
+                target = allocations.FirstOrDefault(a => a.SubjectId == subjectId.Value);
+            }
+            else if (!string.IsNullOrWhiteSpace(subjectName))
+            {
+                var clean = subjectName.Trim().ToLowerInvariant();
+                target = allocations.FirstOrDefault(a =>
+                    (a.Subject != null && (a.Subject.SubjectName.ToLower() == clean || a.Subject.SubjectCode.ToLower() == clean)) ||
+                    (a.Subject != null && clean.Contains(a.Subject.SubjectName.ToLower())));
+            }
+
+            if (target != null)
+            {
+                await _allocationRepository.DeleteAsync(target);
+                return true;
+            }
+
+            return false;
         }
     }
 }

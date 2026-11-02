@@ -1,5 +1,7 @@
+import React from "react";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, UserRound, Palette, Settings } from "lucide-react";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import { Link, useNavigate } from "react-router-dom";
 import menuIcon from "@/assets/navbar-3d/menu.png";
 import searchIcon from "@/assets/navbar-3d/search.png";
@@ -44,6 +46,7 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const menuRef = useRef(null);
   const searchRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -132,7 +135,7 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
         {searchOpen ? <div id="sp-student-search-results" className="sp-navbar-search-results" role="listbox" aria-label="Student Portal pages">
           {suggestions.length ? suggestions.map((page, index) => <button type="button" role="option" id={`sp-student-search-${index}`} key={page.to} aria-selected={activeResult === index} className={activeResult === index ? "is-highlighted" : ""}
             onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveResult(index)} onClick={() => openPage(page)}>
-            <img src={page.icon} alt="" aria-hidden="true"/><span>{page.label}<small>{page.section}</small></span>
+            {typeof page.icon === "string" ? <img src={page.icon} alt="" aria-hidden="true"/> : React.createElement(page.icon, { size: 16, "aria-hidden": true, style: { flexShrink: 0 } })}<span>{page.label}<small>{page.section}</small></span>
           </button>) : <p role="status">No matching Student Portal pages</p>}
         </div> : null}
       </div>
@@ -220,12 +223,26 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
           {profileOpen ? (
             <div className="sp-profile-dropdown">
               <Link to="/student-dashboard/profile" onClick={() => setProfileOpen(false)}><UserRound size={16} /> My Profile</Link>
+              <Link to="/student-dashboard/settings" onClick={() => setProfileOpen(false)}><Settings size={16} /> Settings</Link>
+              <div className="sp-profile-divider" />
+              <button
+                type="button"
+                className="sp-profile-logout"
+                style={{ color: "var(--cms-text)" }}
+                onClick={() => {
+                  setProfileOpen(false);
+                  setThemePaletteOpen(true);
+                }}
+              >
+                <Palette size={16} /> Theme Appearance
+              </button>
               <div className="sp-profile-divider" />
               <button type="button" className="sp-profile-logout" onClick={logout}><LogOut size={16} /> Logout</button>
             </div>
           ) : null}
         </div>
       </div>
+      <ThemePalettePicker open={themePaletteOpen} onOpenChange={setThemePaletteOpen} hideTrigger={true} />
     </header>
   );
 }

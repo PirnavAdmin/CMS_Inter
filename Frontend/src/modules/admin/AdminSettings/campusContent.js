@@ -20,6 +20,8 @@ export const campusContentDefaults = {
   loginHeading: "Welcome back",
   loginDescription: "Sign in to the Pirnav College management system.",
   loginButton: "Login",
+  loginThemePalette: "olive",
+  loginCustomColor: "",
 };
 export const campusTextFields = {
   landing: [

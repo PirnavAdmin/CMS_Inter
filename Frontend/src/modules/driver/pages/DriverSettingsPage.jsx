@@ -1,3 +1,4 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useSearchParams } from "react-router-dom";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -108,7 +109,10 @@ export default function DriverSettingsPage() {
   };
   return <div className="dp-page-container dp-settings">
     <div className="dp-page-header"><div><h1 className="dp-page-title">Settings</h1><p className="dp-page-subtitle">Manage your driver account, profile settings, password, and general preferences.</p></div></div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", alignItems: "start", marginBottom: "20px" }}>
     <section className="dp-settings-card"><h2><ShieldCheck size={30} /> General Settings</h2><p>Manage personal profile details, contact information, account password, and notification preferences.</p><button type="button" ref={triggerRef} className="dp-btn dp-btn-primary" onClick={openSettings}>Manage General Settings <ArrowRight size={16} /></button></section>
+    <ThemeSettingsCard />
+    </div>
     {open && <div className="dp-modal-backdrop" onClick={close}><div ref={dialogRef} className="dp-modal-card dp-settings-modal" role="dialog" aria-modal="true" aria-labelledby="driver-settings-title" onClick={(event) => event.stopPropagation()}>
       <div className="dp-modal-header"><h2 id="driver-settings-title"><ShieldCheck size={20} /> General Settings Management</h2><button type="button" className="dp-modal-close" aria-label="Close settings" disabled={busy} onClick={close}><X size={20} /></button></div>
       <div className="dp-settings-tabs" role="tablist" aria-label="General settings">{[["profile", "Profile Settings", User], ["password", "Reset / Change Password", Lock], ["preferences", "General Preferences", Bell]].map(([id, label, Icon]) => <button key={id} type="button" role="tab" id={`driver-settings-${id}-tab`} aria-selected={tab === id} aria-controls="driver-settings-panel" className={tab === id ? "is-active" : ""} disabled={busy} onClick={() => { setTab(id); setError(""); setMessage(""); setPassword(emptyPassword); }}><Icon size={15} />{label}</button>)}</div>

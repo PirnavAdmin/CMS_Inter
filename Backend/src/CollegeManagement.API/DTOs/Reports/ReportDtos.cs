@@ -416,3 +416,64 @@ public class CustomReportRequestDto : ReportFilterDto
     [Required, MaxLength(60)]
     public string ReportType { get; set; } = string.Empty;
 }
+
+
+public class ReportFilterBoardDto
+{
+    public int Id { get; set; }
+    public int BoardId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string BoardName { get; set; } = string.Empty;
+    public string? Code { get; set; }
+}
+
+public class ReportFilterAcademicYearDto
+{
+    public int Id { get; set; }
+    public int AcademicYearId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string AcademicYearName { get; set; } = string.Empty;
+    public int BoardId { get; set; }
+    public DateTime? StartDate { get; set; }
+    public DateTime? EndDate { get; set; }
+}
+
+public class ReportFilterAcademicLevelDto
+{
+    public int Id { get; set; }
+    public int AcademicLevelId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string LevelName { get; set; } = string.Empty;
+    public string? Code { get; set; }
+}
+
+public class ReportFilterGroupDto
+{
+    public int Id { get; set; }
+    public int GroupId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string GroupName { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? GroupCode { get; set; }
+    public int? AcademicYearId { get; set; }
+    public int? AcademicLevelId { get; set; }
+    public int BoardId { get; set; }
+    public string? AcademicLevel { get; set; }
+    public string? Board { get; set; }
+}
+
+public class ReportFilterSectionDto
+{
+    public int Id { get; set; }
+    public int SectionId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string SectionName { get; set; } = string.Empty;
+    public int? GroupId { get; set; }
+    public string? GroupName { get; set; }
+    public int BoardId { get; set; }
+    public string? Board { get; set; }
+    public int? AcademicYearId { get; set; }
+    public int? AcademicLevelId { get; set; }
+    public string? AcademicLevel { get; set; }
+    public int MaximumStrength { get; set; }
+}

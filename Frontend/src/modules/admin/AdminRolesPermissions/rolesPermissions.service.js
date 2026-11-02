@@ -223,15 +223,8 @@ export async function createRole(payload = {}) {
     notifyRolesUpdated();
     return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
   } catch (err) {
-    console.warn("Live createRole failed:", err?.message);
-    const role = normalizeRole({
-      ...payload,
-      id: payload.id || normalizeRoleCode(payload.code || payload.name).toLowerCase().replace(/_/g, "-"),
-      code: payload.code || payload.name,
-    });
-    mockRoles.push(role);
-    notifyRolesUpdated();
-    return apiResult(role, "fallback");
+    console.error("createRole failed:", err);
+    throw err;
   }
 }
 
@@ -245,12 +238,8 @@ export async function updateRole(roleId, payload = {}) {
     notifyRolesUpdated();
     return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
   } catch (err) {
-    console.warn("Live updateRole failed:", err?.message);
-    const index = mockRoles.findIndex((r) => String(r.id) === String(roleId) || String(r.roleId) === String(roleId));
-    if (index === -1) throw new Error("Role not found.");
-    mockRoles[index] = normalizeRole({ ...mockRoles[index], ...payload, id: mockRoles[index].id });
-    notifyRolesUpdated();
-    return apiResult(mockRoles[index], "fallback");
+    console.error("updateRole failed:", err);
+    throw err;
   }
 }
 
@@ -260,13 +249,8 @@ export async function deleteRole(roleId) {
     notifyRolesUpdated();
     return apiResult(true, "api");
   } catch (err) {
-    console.warn("Live deleteRole failed:", err?.message);
-    const index = mockRoles.findIndex((r) => String(r.id) === String(roleId));
-    if (index === -1) throw new Error("Role not found.");
-    if (mockRoles[index].isProtected) throw new Error("Protected roles cannot be deleted.");
-    mockRoles.splice(index, 1);
-    notifyRolesUpdated();
-    return apiResult(true, "fallback");
+    console.error("deleteRole failed:", err);
+    throw err;
   }
 }
 
@@ -538,13 +522,8 @@ export async function assignRoleToUser(userId, roleCode, roleId = null) {
     notifyRolesUpdated();
     return apiResult({ userId, roleCode }, "api");
   } catch (err) {
-    console.warn("Live assignRoleToUser failed:", err?.message);
-    const user = mockAssignments.find((item) => String(item.id) === String(userId) || String(item.userId) === String(userId));
-    if (user && !(user.roleCodes || []).includes(roleCode)) {
-      user.roleCodes = [...(user.roleCodes || []), roleCode];
-    }
-    notifyRolesUpdated();
-    return apiResult({ userId, roleCode }, "fallback");
+    console.error("assignRoleToUser failed:", err);
+    throw err;
   }
 }
 
@@ -556,13 +535,8 @@ export async function removeRoleFromUser(userId, roleCode) {
     notifyRolesUpdated();
     return apiResult({ userId, roleCode }, "api");
   } catch (err) {
-    console.warn("Live removeRoleFromUser failed:", err?.message);
-    const user = mockAssignments.find((item) => String(item.id) === String(userId) || String(item.userId) === String(userId));
-    if (user) {
-      user.roleCodes = (user.roleCodes || []).filter((c) => normalizeRoleCode(c) !== normalizeRoleCode(roleCode));
-    }
-    notifyRolesUpdated();
-    return apiResult({ userId, roleCode }, "fallback");
+    console.error("removeRoleFromUser failed:", err);
+    throw err;
   }
 }
 

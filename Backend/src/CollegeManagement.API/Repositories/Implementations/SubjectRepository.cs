@@ -1,216 +1,438 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
-using CollegeManagement.API.Models;
+using CollegeManagement.API.DTOs.Subject;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 
-namespace CollegeManagement.API.Repositories
+namespace CollegeManagement.API.Repositories.Implementations
 {
     public class SubjectRepository : ISubjectRepository
     {
         private readonly AppDbContext _context;
 
-        public SubjectRepository(AppDbContext context) => _context = context;
-
-        private static string Clean(string value) => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim();
-
-        private async Task PopulateNavigationsAsync(List<Subject> subjects)
+        public SubjectRepository(AppDbContext context)
         {
-            if (subjects == null || subjects.Count == 0) return;
+            _context = context;
+        }
 
-            var boardIds = subjects.Where(s => s.BoardId > 0).Select(s => s.BoardId).Distinct().ToList();
-            var groupIds = subjects.Where(s => s.GroupId > 0).Select(s => s.GroupId).Distinct().ToList();
-            var levelIds = subjects.Where(s => s.AcademicLevelId > 0).Select(s => s.AcademicLevelId).Distinct().ToList();
-
-            var boards = await _context.Boards.AsNoTracking().Where(b => boardIds.Contains(b.BoardId)).ToDictionaryAsync(b => b.BoardId);
-            var groups = await _context.Groups.AsNoTracking().Where(g => groupIds.Contains(g.GroupId)).ToDictionaryAsync(g => g.GroupId);
-            var levels = await _context.AcademicLevels.AsNoTracking().Where(l => levelIds.Contains(l.AcademicLevelId)).ToDictionaryAsync(l => l.AcademicLevelId);
-
-            foreach (var s in subjects)
+        private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken cancellationToken = default)
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State == ConnectionState.Broken || conn.State == ConnectionState.Closed)
             {
-                if (s.BoardId > 0 && boards.TryGetValue(s.BoardId, out var b)) s.BoardNavigation = b;
-                if (s.GroupId > 0 && groups.TryGetValue(s.GroupId, out var g)) s.GroupNavigation = g;
-                if (s.AcademicLevelId > 0 && levels.TryGetValue(s.AcademicLevelId, out var l)) s.AcademicLevelNavigation = l;
+                try { await conn.CloseAsync(); } catch { }
+                await _context.Database.OpenConnectionAsync(cancellationToken);
             }
-        }
-
-        public async Task<IEnumerable<Subject>> GetAllAsync()
-        {
-            var subjects = await _context.Subjects
-                .AsNoTracking()
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync();
-
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
-        }
-
-        public async Task<Subject?> GetByIdAsync(int subjectId)
-        {
-            var subject = await _context.Subjects
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.SubjectId == subjectId);
-
-            if (subject != null)
+            else if (conn.State != ConnectionState.Open)
             {
-                await PopulateNavigationsAsync(new List<Subject> { subject });
+                await _context.Database.OpenConnectionAsync(cancellationToken);
             }
-
-            return subject;
+            return conn;
         }
 
-        public async Task<Subject> CreateAsync(Subject subject)
+        // =========================================================
+        // GET ALL SUBJECTS
+        // =========================================================
+
+        public async Task<List<SubjectDto>> GetAllAsync(
+            string? search = null,
+            int? boardId = null,
+            int? groupId = null,
+            int? academicLevelId = null,
+            bool? isActive = null,
+            CancellationToken cancellationToken = default)
         {
-            subject.SubjectName = Clean(subject.SubjectName);
-            subject.SubjectCode = Clean(subject.SubjectCode);
-            subject.SubjectType = Clean(subject.SubjectType);
-            subject.CreatedAt = DateTime.UtcNow;
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            await _context.Subjects.AddAsync(subject);
-            await _context.SaveChangesAsync();
+            var cmd = new CommandDefinition(
+                "sp_GetAllSubjects",
+                new
+                {
+                    p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                    p_BoardId = boardId,
+                    p_GroupId = groupId,
+                    p_AcademicLevelId = academicLevelId,
+                    p_IsActive = isActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            return await GetByIdAsync(subject.SubjectId) ?? subject;
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
         }
 
-        public async Task<Subject?> UpdateAsync(int subjectId, Subject subject)
+        // =========================================================
+        // GET SUBJECT BY ID
+        // =========================================================
+
+        public async Task<SubjectDto?> GetByIdAsync(int subjectId, CancellationToken cancellationToken = default)
         {
-            var existing = await _context.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId);
-            if (existing == null) return null;
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            existing.BoardId = subject.BoardId;
-            existing.GroupId = subject.GroupId;
-            existing.AcademicLevelId = subject.AcademicLevelId;
-            existing.SubjectName = Clean(subject.SubjectName);
-            existing.SubjectCode = Clean(subject.SubjectCode);
-            existing.SubjectType = Clean(subject.SubjectType);
-            existing.Theory = subject.Theory;
-            existing.Practical = subject.Practical;
-            existing.Language = subject.Language;
-            existing.Elective = subject.Elective;
-            existing.InternalMarks = subject.InternalMarks;
-            existing.PracticalMarks = subject.PracticalMarks;
-            existing.ExternalMarks = subject.ExternalMarks;
-            existing.TotalMarks = subject.TotalMarks;
-            existing.PassingMarks = subject.PassingMarks;
-            existing.IsActive = subject.IsActive;
-            existing.UpdatedAt = DateTime.UtcNow;
+            var cmd = new CommandDefinition(
+                "sp_GetSubjectById",
+                new { p_SubjectId = subjectId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            await _context.SaveChangesAsync();
-
-            return await GetByIdAsync(subjectId);
+            return await connection.QueryFirstOrDefaultAsync<SubjectDto>(cmd);
         }
 
-        public async Task<bool> DeleteAsync(int subjectId)
-        {
-            var existing = await _context.Subjects.FirstOrDefaultAsync(s => s.SubjectId == subjectId);
-            if (existing == null) return false;
+        // =========================================================
+        // GET SUBJECTS BY CONTEXT
+        // =========================================================
 
-            _context.Subjects.Remove(existing);
-            await _context.SaveChangesAsync();
-            return true;
+        public async Task<List<SubjectDto>> GetByContextAsync(
+            int boardId,
+            int groupId,
+            int academicLevelId,
+            CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_GetSubjectsByContext",
+                new
+                {
+                    p_BoardId = boardId,
+                    p_GroupId = groupId,
+                    p_AcademicLevelId = academicLevelId
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
         }
 
-        public async Task<IEnumerable<Subject>> GetByGroupIdAsync(int groupId)
-        {
-            var subjects = await _context.Subjects
-                .AsNoTracking()
-                .Where(s => s.GroupId == groupId)
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync();
+        // =========================================================
+        // GET SUBJECTS BY GROUP ID
+        // =========================================================
 
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
+        public async Task<List<SubjectDto>> GetByGroupIdAsync(int groupId, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_GetSubjectsByGroupId",
+                new { p_GroupId = groupId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
         }
 
-        public async Task<IEnumerable<Subject>> GetByContextAsync(int boardId, int groupId, int academicLevelId)
+        // =========================================================
+        // GET SUBJECTS BY BOARD ID
+        // =========================================================
+
+        public async Task<List<SubjectDto>> GetByBoardIdAsync(int boardId, CancellationToken cancellationToken = default)
         {
-            var query = _context.Subjects
-                .AsNoTracking()
-                .AsQueryable();
+            var connection = await GetOpenConnectionAsync(cancellationToken);
 
-            if (boardId > 0)
-                query = query.Where(s => s.BoardId == 0 || s.BoardId == boardId);
+            var cmd = new CommandDefinition(
+                "sp_GetSubjectsByBoardId",
+                new { p_BoardId = boardId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
 
-            if (groupId > 0)
-                query = query.Where(s => s.GroupId == 0 || s.GroupId == groupId);
-
-            if (academicLevelId > 0)
-                query = query.Where(s => s.AcademicLevelId == 0 || s.AcademicLevelId == academicLevelId);
-
-            var subjects = await query
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync();
-
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
         }
 
-        public async Task<IEnumerable<Subject>> SearchAsync(string? search, int? boardId, int? groupId, int? academicLevelId, bool? isActive)
-        {
-            var query = _context.Subjects
-                .AsNoTracking()
-                .AsQueryable();
+        // =========================================================
+        // GET ACTIVE SUBJECTS
+        // =========================================================
 
-            if (!string.IsNullOrWhiteSpace(search))
+        public async Task<List<SubjectDto>> GetActiveAsync(CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_GetActiveSubjects",
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
+        }
+
+        // =========================================================
+        // SEARCH SUBJECTS
+        // =========================================================
+
+        public async Task<List<SubjectDto>> SearchAsync(
+            string? search,
+            int? boardId,
+            int? groupId,
+            int? academicLevelId,
+            bool? isActive,
+            CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_SearchSubjects",
+                new
+                {
+                    p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                    p_BoardId = boardId,
+                    p_GroupId = groupId,
+                    p_AcademicLevelId = academicLevelId,
+                    p_IsActive = isActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var results = await connection.QueryAsync<SubjectDto>(cmd);
+            return results.ToList();
+        }
+
+        // =========================================================
+        // SUBJECT CODE EXISTS
+        // =========================================================
+
+        public async Task<bool> SubjectCodeExistsAsync(
+            string subjectCode,
+            int boardId,
+            int groupId,
+            int academicLevelId,
+            int? excludeSubjectId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_CheckSubjectCodeExists",
+                new
+                {
+                    p_SubjectCode = subjectCode.Trim(),
+                    p_BoardId = boardId,
+                    p_GroupId = groupId,
+                    p_AcademicLevelId = academicLevelId,
+                    p_ExcludeSubjectId = excludeSubjectId
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var exists = await connection.ExecuteScalarAsync<bool>(cmd);
+            return exists;
+        }
+
+        // =========================================================
+        // CHECK DEPENDENCIES
+        // =========================================================
+
+        public async Task<dynamic?> CheckDependenciesAsync(int subjectId, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_CheckSubjectDependencies",
+                new { p_SubjectId = subjectId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            return await connection.QueryFirstOrDefaultAsync<dynamic>(cmd);
+        }
+
+        // =========================================================
+        // CREATE SUBJECT
+        // =========================================================
+
+        public async Task<SubjectDto> CreateAsync(CreateSubjectDto dto, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_CreateSubject",
+                new
+                {
+                    p_BoardId = dto.BoardId,
+                    p_GroupId = dto.GroupId,
+                    p_AcademicLevelId = dto.AcademicLevelId,
+                    p_SubjectName = dto.SubjectName.Trim(),
+                    p_SubjectCode = dto.SubjectCode.Trim(),
+                    p_SubjectType = dto.SubjectType.Trim(),
+                    p_Theory = dto.Theory,
+                    p_Practical = dto.Practical,
+                    p_Language = dto.Language,
+                    p_Elective = dto.Elective,
+                    p_InternalMarks = dto.InternalMarks,
+                    p_PracticalMarks = dto.PracticalMarks,
+                    p_ExternalMarks = dto.ExternalMarks,
+                    p_TotalMarks = dto.TotalMarks,
+                    p_PassingMarks = dto.PassingMarks,
+                    p_IsActive = dto.IsActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var created = await connection.QueryFirstOrDefaultAsync<SubjectDto>(cmd);
+            return created ?? throw new InvalidOperationException("Failed to retrieve created subject from stored procedure.");
+        }
+
+        // =========================================================
+        // UPDATE SUBJECT
+        // =========================================================
+
+        public async Task<SubjectDto?> UpdateAsync(int subjectId, UpdateSubjectDto dto, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_UpdateSubject",
+                new
+                {
+                    p_SubjectId = subjectId,
+                    p_BoardId = dto.BoardId,
+                    p_GroupId = dto.GroupId,
+                    p_AcademicLevelId = dto.AcademicLevelId,
+                    p_SubjectName = dto.SubjectName.Trim(),
+                    p_SubjectCode = dto.SubjectCode.Trim(),
+                    p_SubjectType = dto.SubjectType.Trim(),
+                    p_Theory = dto.Theory,
+                    p_Practical = dto.Practical,
+                    p_Language = dto.Language,
+                    p_Elective = dto.Elective,
+                    p_InternalMarks = dto.InternalMarks,
+                    p_PracticalMarks = dto.PracticalMarks,
+                    p_ExternalMarks = dto.ExternalMarks,
+                    p_TotalMarks = dto.TotalMarks,
+                    p_PassingMarks = dto.PassingMarks,
+                    p_IsActive = dto.IsActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            return await connection.QueryFirstOrDefaultAsync<SubjectDto>(cmd);
+        }
+
+        // =========================================================
+        // DELETE SUBJECT
+        // =========================================================
+
+        public async Task<(bool Success, string Message)> DeleteAsync(int subjectId, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_DeleteSubject",
+                new { p_SubjectId = subjectId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            var result = await connection.QueryFirstOrDefaultAsync<dynamic>(cmd);
+            if (result == null)
             {
-                var cleanSearch = search.Trim().ToLower();
-                query = query.Where(s => s.SubjectName.ToLower().Contains(cleanSearch) || s.SubjectCode.ToLower().Contains(cleanSearch));
+                return (false, "Subject deletion returned an empty result.");
             }
 
-            if (boardId.HasValue && boardId.Value > 0)
-                query = query.Where(s => s.BoardId == boardId.Value);
-
-            if (groupId.HasValue && groupId.Value > 0)
-                query = query.Where(s => s.GroupId == groupId.Value);
-
-            if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
-
-            if (isActive.HasValue)
-                query = query.Where(s => s.IsActive == isActive.Value);
-
-            var subjects = await query.OrderBy(s => s.SubjectId).ToListAsync();
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
+            int success = (int)(result.Success ?? 0);
+            string message = (string)(result.Message ?? "Operation completed.");
+            return (success == 1, message);
         }
 
-        public async Task<IEnumerable<Subject>> GetActiveAsync()
-        {
-            var subjects = await _context.Subjects
-                .AsNoTracking()
-                .Where(s => s.IsActive)
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync();
+        // =========================================================
+        // CHANGE STATUS (SOFT DELETE / REACTIVATE)
+        // =========================================================
 
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
+        public async Task<SubjectDto?> ChangeStatusAsync(int subjectId, bool isActive, CancellationToken cancellationToken = default)
+        {
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            var cmd = new CommandDefinition(
+                "sp_ChangeSubjectStatus",
+                new
+                {
+                    p_SubjectId = subjectId,
+                    p_IsActive = isActive
+                },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken
+            );
+
+            return await connection.QueryFirstOrDefaultAsync<SubjectDto>(cmd);
         }
 
-        public async Task<IEnumerable<Subject>> GetByBoardIdAsync(int boardId)
-        {
-            var subjects = await _context.Subjects
-                .AsNoTracking()
-                .Where(s => s.BoardId == boardId)
-                .OrderBy(s => s.SubjectId)
-                .ToListAsync();
+        // =========================================================
+        // BULK CREATE SUBJECTS (ATOMIC TRANSACTION)
+        // =========================================================
 
-            await PopulateNavigationsAsync(subjects);
-            return subjects;
-        }
-
-        public async Task<bool> SubjectCodeExistsAsync(string subjectCode, int boardId, int groupId, int academicLevelId, int? excludeSubjectId = null)
+        public async Task<List<SubjectDto>> BulkCreateAsync(IEnumerable<CreateSubjectDto> dtos, CancellationToken cancellationToken = default)
         {
-            var cleanCode = subjectCode.Trim().ToLower();
-            return await _context.Subjects.AnyAsync(s =>
-                s.SubjectCode.ToLower() == cleanCode &&
-                s.BoardId == boardId &&
-                s.GroupId == groupId &&
-                s.AcademicLevelId == academicLevelId &&
-                (!excludeSubjectId.HasValue || s.SubjectId != excludeSubjectId.Value));
+            if (dtos == null || !dtos.Any())
+                return new List<SubjectDto>();
+
+            var connection = await GetOpenConnectionAsync(cancellationToken);
+            using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+            var createdList = new List<SubjectDto>();
+
+            try
+            {
+                foreach (var dto in dtos)
+                {
+                    var cmd = new CommandDefinition(
+                        "sp_CreateSubject",
+                        new
+                        {
+                            p_BoardId = dto.BoardId,
+                            p_GroupId = dto.GroupId,
+                            p_AcademicLevelId = dto.AcademicLevelId,
+                            p_SubjectName = dto.SubjectName.Trim(),
+                            p_SubjectCode = dto.SubjectCode.Trim(),
+                            p_SubjectType = dto.SubjectType.Trim(),
+                            p_Theory = dto.Theory,
+                            p_Practical = dto.Practical,
+                            p_Language = dto.Language,
+                            p_Elective = dto.Elective,
+                            p_InternalMarks = dto.InternalMarks,
+                            p_PracticalMarks = dto.PracticalMarks,
+                            p_ExternalMarks = dto.ExternalMarks,
+                            p_TotalMarks = dto.TotalMarks,
+                            p_PassingMarks = dto.PassingMarks,
+                            p_IsActive = dto.IsActive
+                        },
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken
+                    );
+
+                    var created = await connection.QueryFirstOrDefaultAsync<SubjectDto>(cmd);
+                    if (created != null)
+                    {
+                        createdList.Add(created);
+                    }
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+                return createdList;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
         }
     }
 }

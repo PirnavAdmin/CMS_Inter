@@ -2,6 +2,7 @@ namespace CollegeManagement.API.DTOs.Marks
 {
     public class SaveMarkDto
     {
+        public int? CampusId { get; set; }
         public string Board { get; set; } = string.Empty;
         public int? BoardId { get; set; }
         public int AcademicYearId { get; set; }

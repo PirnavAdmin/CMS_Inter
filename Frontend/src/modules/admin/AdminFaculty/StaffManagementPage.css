@@ -640,3 +640,32 @@
 
 
 
+.staff-mock-page .staff-toolbar-filters { flex: 1 1 360px; }
+@media (min-width: 1100px) {
+  .staff-mock-page .staff-toolbar { flex-wrap: nowrap; align-items: center; }
+  .staff-mock-page .staff-toolbar-filters { flex-wrap: nowrap; }
+  .staff-mock-page .staff-toolbar-filters label { flex: 1.5 1 140px; min-width: 120px; max-width: none; }
+  .staff-mock-page .staff-toolbar-filters select { flex: 1 1 95px; width: 95px; min-width: 0; max-width: 150px; }
+  .staff-mock-page .staff-toolbar-actions { flex-wrap: nowrap; margin-left: 0; }
+}
+@media (min-width: 761px) and (max-width: 1099px) {
+  .staff-mock-page .staff-toolbar { flex-direction: column; align-items: stretch; }
+  .staff-mock-page .staff-toolbar-filters { flex: none; width: 100%; }
+  .staff-mock-page .staff-toolbar-filters label { max-width: none; }
+  .staff-mock-page .staff-toolbar-actions { margin-left: 0; justify-content: flex-start; flex-wrap: nowrap; }
+}
+@media (max-width: 760px) {
+  .staff-mock-page .staff-toolbar { flex-direction: column; align-items: stretch; }
+  .staff-mock-page .staff-toolbar-filters { flex: none; width: 100%; }
+  .staff-mock-page .staff-toolbar-actions {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%; min-width: 0; margin-left: 0; gap: 5px; align-items: stretch;
+  }
+  .staff-mock-page .staff-toolbar-actions > *,
+  .staff-mock-page .staff-export-menu > .cms-btn { min-width: 0; width: 100%; box-sizing: border-box; }
+  .staff-mock-page .staff-toolbar-actions .cms-btn {
+    height: 100%; min-height: 40px; padding: 5px 3px; gap: 3px !important;
+    font-size: 10px; white-space: normal; justify-content: center; line-height: 1.2;
+  }
+  .staff-mock-page .staff-export-options { left: auto; right: 0; max-width: calc(100vw - 40px); }
+}

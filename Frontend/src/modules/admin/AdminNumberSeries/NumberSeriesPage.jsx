@@ -57,6 +57,9 @@ const SERIES_ICONS = {
   "receipt-no": Receipt,
 };
 
+const isHiddenSeriesCard = (series) => [series.id, series.key, series.seriesCode, series.name, series.seriesName]
+  .some((value) => ["library-id", "hostel-id", "exam-code"].includes(String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-")));
+
 export default function NumberSeriesPage({ mode = "dashboard" }) {
   const navigate = useNavigate();
   const { seriesId, id } = useParams();
@@ -522,43 +525,11 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
           </Link>
         </div>
 
-        {/* TOP NOTICE BANNER */}
-        <div className="ns-info-banner">
-          <Info size={15} className="ns-info-icon" />
-          <div style={{ flex: 1 }}>
-            <strong>Fixed System Series</strong>
-            <p>
-              Numbering categories are fixed system configurations. You can edit formats, preview next sequence values, and view generation logs.
-            </p>
-          </div>
-          
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={() => setShowAddModal(true)}
-            style={{ alignSelf: "center", marginLeft: "auto", marginRight: "10px" }}
-          >
-            + Add Custom Series
-          </button>
-          
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            onClick={onRefresh}
-            disabled={loading}
-            style={{ alignSelf: "center" }}
-            title="Refresh series"
-          >
-            <RefreshCw size={13} className={loading ? "spin" : ""} />
-            <span>{loading ? "Loading..." : "Refresh"}</span>
-          </button>
-        </div>
-
         {showAddModal && <AddCustomSeriesModal onClose={() => setShowAddModal(false)} onSave={handleCreateCustom} campus={selectedCampus} toast={toast} />}
 
         {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
-          {seriesList.map((series) => {
+          {seriesList.filter((series) => !isHiddenSeriesCard(series)).map((series) => {
             const IconComponent = SERIES_ICONS[series.id] || Hash;
             const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
             const customPreviewTokens = isRollNo 
@@ -588,12 +559,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                               try {
                                 const code = series.seriesCode || series.slug || series.id;
                                 await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
-                                const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                                const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                                let arr = [];
-                                if (existingRaw) arr = JSON.parse(existingRaw);
-                                arr.push(key);
-                                localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                                // Deleted via backend API
                                 setToast({ message: "Series deleted successfully.", type: "success" });
                                 if (forceSyncLocal) forceSyncLocal();
                                 else onRefresh();
@@ -1386,12 +1352,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                         try {
                           const code = series.seriesCode || series.slug || series.id;
                           await numberSeriesApi.deleteNumberSeries(code, selectedCampusId);
-                          const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
-                          const existingRaw = localStorage.getItem('NumberSeries_Deleted');
-                          let arr = [];
-                          if (existingRaw) arr = JSON.parse(existingRaw);
-                          arr.push(key);
-                          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                          // Deleted via backend API
                           setToast({ message: "Series deleted successfully.", type: "success" });
                           if (forceSyncLocal) forceSyncLocal();
                           setTimeout(() => navigate("/dashboard/settings/number-series"), 200);

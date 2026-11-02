@@ -4,36 +4,38 @@
 
 .dp-shell {
   --dp-sidebar-width: 224px;
-  --dp-primary: #6f8700;
-  --dp-primary-dark: #536600;
-  --dp-primary-hover: #819b08;
-  --dp-primary-soft: #eef3d9;
-  --dp-soft: #f3f6e8;
-  --dp-bg: #f7f9f0;
-  --dp-sidebar: #e1eabb;
-  --dp-header: #dce7b9;
-  --dp-surface: #ffffff;
-  --dp-border: #d7ddc6;
-  --dp-text: #1d2519;
-  --dp-muted: #7b8375;
+  --dp-primary: var(--cms-primary, #6f8700);
+  --dp-primary-dark: var(--cms-primary-dark, #536600);
+  --dp-primary-hover: var(--cms-primary-hover, #819b08);
+  --dp-primary-soft: var(--cms-primary-soft, rgba(0, 0, 0, 0.04));
+  --dp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(0, 0, 0, 0.035)));
+  --dp-bg: transparent;
+  --dp-sidebar: var(--cms-sidebar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
+  --dp-header: var(--cms-topbar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
+  --dp-surface: var(--cms-surface, #ffffff);
+  --dp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, var(--cms-border, rgba(0, 0, 0, 0.12))));
+  --dp-text: var(--cms-text, #1d2519);
+  --dp-muted: var(--cms-muted, #7b8375);
   --dp-danger: #d94841;
   --dp-success: #2e8540;
   --dp-warning: #cf7900;
   --dp-purple: #7c35ce;
   --dp-blue: #1673ca;
-  --dp-shadow: 0 3px 12px rgba(41, 55, 30, 0.055);
+  --dp-shadow: 0 3px 12px rgba(0, 0, 0, 0.055);
+  background: transparent;
 }
 
-:root[data-theme="dark"] .dp-shell {
-  --dp-bg: #151b13;
-  --dp-sidebar: #192116;
-  --dp-header: #202a1c;
-  --dp-surface: #1d251a;
-  --dp-border: #35422e;
-  --dp-text: #edf2e7;
-  --dp-muted: #aab5a2;
-  --dp-soft: #29351f;
-  --dp-primary-soft: #29351f;
+:root[data-theme="dark"] .dp-shell,
+[data-theme="dark"] .dp-shell {
+  --dp-bg: transparent;
+  --dp-sidebar: var(--cms-sidebar-surface-bg, #0f1c36);
+  --dp-header: var(--cms-topbar-surface-bg, #0f1c36);
+  --dp-surface: var(--cms-surface, #151b28);
+  --dp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, rgba(255, 255, 255, 0.12)));
+  --dp-text: var(--cms-text, #edf2e7);
+  --dp-muted: var(--cms-muted, #aab5a2);
+  --dp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(255, 255, 255, 0.06)));
+  --dp-primary-soft: var(--cms-primary-soft, rgba(255, 255, 255, 0.06));
 }
 
 /* ==========================================================================

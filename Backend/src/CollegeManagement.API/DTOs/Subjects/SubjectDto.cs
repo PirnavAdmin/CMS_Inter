@@ -43,5 +43,32 @@ namespace CollegeManagement.API.DTOs.Subject
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+
+        public static implicit operator CollegeManagement.API.Models.Subject?(SubjectDto? dto)
+        {
+            if (dto == null) return null;
+            return new CollegeManagement.API.Models.Subject
+            {
+                SubjectId = dto.SubjectId,
+                BoardId = dto.BoardId,
+                GroupId = dto.GroupId,
+                AcademicLevelId = dto.AcademicLevelId,
+                SubjectName = dto.SubjectName,
+                SubjectCode = dto.SubjectCode,
+                SubjectType = dto.SubjectType,
+                Theory = dto.Theory,
+                Practical = dto.Practical,
+                Language = dto.Language,
+                Elective = dto.Elective,
+                InternalMarks = dto.InternalMarks,
+                PracticalMarks = dto.PracticalMarks,
+                ExternalMarks = dto.ExternalMarks,
+                TotalMarks = dto.TotalMarks,
+                PassingMarks = dto.PassingMarks,
+                IsActive = dto.IsActive,
+                CreatedAt = dto.CreatedAt,
+                UpdatedAt = dto.UpdatedAt
+            };
+        }
     }
 }

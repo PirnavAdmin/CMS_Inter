@@ -52,7 +52,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             if (request.MaxStock.HasValue && request.MaxStock.Value < request.MinStock)
                 throw new ArgumentException("Maximum stock must be at least minimum stock.");
 
-            var item = await _repository.CreateItemAsync(request, userId);
+            var item = await _repository.CreateItemAsync(request, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Create Item",
@@ -77,7 +77,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             if (request.MaxStock.HasValue && request.MaxStock.Value < request.MinStock)
                 throw new ArgumentException("Maximum stock must be at least minimum stock.");
 
-            var item = await _repository.UpdateItemAsync(itemId, request, userId);
+            var item = await _repository.UpdateItemAsync(itemId, request, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Update Item",
@@ -96,7 +96,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             var item = await _repository.GetItemByIdAsync(itemId);
             if (item == null) throw new KeyNotFoundException("Item not found.");
 
-            bool deleted = await _repository.DeleteItemAsync(itemId);
+            bool deleted = await _repository.DeleteItemAsync(itemId, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Delete Item",
@@ -115,7 +115,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             var item = await _repository.GetItemByIdAsync(itemId);
             if (item == null) throw new KeyNotFoundException("Item not found.");
 
-            bool deactivated = await _repository.DeactivateItemAsync(itemId);
+            bool deactivated = await _repository.DeactivateItemAsync(itemId, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Deactivate Item",
@@ -141,7 +141,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             if (string.IsNullOrWhiteSpace(request.Code))
                 throw new ArgumentException("Category Code is required.");
 
-            var category = await _repository.SaveCategoryAsync(categoryId, request);
+            var category = await _repository.SaveCategoryAsync(categoryId, request, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: categoryId.HasValue ? "Update Category" : "Create Category",
@@ -157,7 +157,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
 
         public async Task<bool> DeactivateCategoryAsync(int categoryId, int userId, string userName)
         {
-            bool ok = await _repository.DeactivateCategoryAsync(categoryId);
+            bool ok = await _repository.DeactivateCategoryAsync(categoryId, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Deactivate Category",
@@ -187,7 +187,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
             if (string.IsNullOrWhiteSpace(request.Phone))
                 throw new ArgumentException("Phone is required.");
 
-            var supplier = await _repository.SaveSupplierAsync(supplierId, request);
+            var supplier = await _repository.SaveSupplierAsync(supplierId, request, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: supplierId.HasValue ? "Update Supplier" : "Create Supplier",
@@ -203,7 +203,7 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
 
         public async Task<bool> DeactivateSupplierAsync(int supplierId, int userId, string userName)
         {
-            bool ok = await _repository.DeactivateSupplierAsync(supplierId);
+            bool ok = await _repository.DeactivateSupplierAsync(supplierId, userId, userName);
 
             await _auditLoggingService.LogAsync(
                 action: "Deactivate Supplier",

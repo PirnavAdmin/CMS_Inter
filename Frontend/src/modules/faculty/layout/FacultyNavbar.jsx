@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock } from "lucide-react";
+import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock, Palette } from "lucide-react";
+import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
@@ -34,6 +35,8 @@ export const STAFF_SEARCH_INDEX = [
   { id: "myattendance", label: "My Attendance", group: "HR & FINANCE", moduleId: "myattendance", keywords: "biometric punch logs clock in check in history hours worked faculty attendance daily log punch status biometric machine" },
   { id: "leave", label: "Leave Management", group: "HR & FINANCE", moduleId: "leave", keywords: "apply leave casual leave sick leave earned leave on duty od balance leave history cl sl el leave request permissions" },
   { id: "salary", label: "Salary & Payslips", group: "HR & FINANCE", moduleId: "salary", keywords: "payslip download salary slip ctc gross net pay deductions hra da pf allowances earnings payroll tax tds" },
+  { id: "reimbursements", label: "Reimbursements", group: "HR & FINANCE", moduleId: "reimbursements", keywords: "reimbursements claim expenses bills travel food transport allowance settlement refund" },
+  { id: "holidays", label: "Holidays", group: "HR & FINANCE", moduleId: "holidays", keywords: "holidays calendar vacation festivals public holiday academic calendar" },
 ];
 
 const FALLBACK_ACADEMIC_YEARS = [
@@ -328,6 +331,7 @@ export default function FacultyNavbar() {
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [responsiveOpen, setResponsiveOpen] = useState(false);
+  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
 
   const campusRef = useRef(null);
   const boardRef = useRef(null);
@@ -389,8 +393,10 @@ export default function FacultyNavbar() {
   }, [searchQuery]);
 
   const handleSelectSearchResult = (item) => {
-    if (item.step) navigate(`/faculty-dashboard/profile?step=${item.step}`);
-    else setActiveModule(item.moduleId);
+    setActiveModule(item.moduleId);
+    if (item.step) {
+      setProfileStep(item.step);
+    }
     setSearchOpen(false);
     setSearchQuery("");
     if (window.innerWidth <= 768) setSidebarOpen(false);
@@ -797,6 +803,15 @@ export default function FacultyNavbar() {
 
         {/* Theme Toggle */}
         <ThemeToggle variant="dashboard" />
+        <button
+          type="button"
+          className="cms-icon-btn"
+          onClick={() => setThemePaletteOpen(true)}
+          title="Theme Appearance"
+          aria-label="Theme Appearance"
+        >
+          <Palette size={18} />
+        </button>
 
         {/* Notifications Button */}
         <button className="cms-icon-btn" onClick={() => notify("No new notifications")} title="Notifications">
@@ -874,6 +889,16 @@ export default function FacultyNavbar() {
                 }}
               >
                 <User size={14} /> My Profile
+              </button>
+              <button
+                type="button"
+                className="cms-dropdown-item"
+                onClick={() => {
+                  setProfileDropOpen(false);
+                  setThemePaletteOpen(true);
+                }}
+              >
+                <Palette size={14} /> Theme Appearance
               </button>
               <button className="cms-dropdown-item danger" onClick={handleLogout}>
                 <LogOut size={14} /> Sign Out
@@ -970,6 +995,11 @@ export default function FacultyNavbar() {
           flex-shrink: 0;
         }
       `}</style>
+      <ThemePalettePicker
+        open={themePaletteOpen}
+        onOpenChange={setThemePaletteOpen}
+        hideTrigger={true}
+      />
     </header>
   );
 }

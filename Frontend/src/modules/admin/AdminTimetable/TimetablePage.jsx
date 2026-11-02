@@ -715,19 +715,19 @@ function useLookups(initial = {}) {
     if (!context.boardId || !context.academicYearId || !context.academicLevelId) return undefined;
     const load = async () => {
       try {
-        const response = await apiClient.get(apiEndpoints.masterGroups.list, { params: { boardId: Number(context.boardId) } });
-        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load master groups.");
+        const groupRes = await apiClient.get(apiEndpoints.groups.dropdown, {
+          params: { boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), academicLevelId: Number(context.academicLevelId) },
+        });
+        if (groupRes.data?.success === false) throw new Error(groupRes.data.message || "Unable to load groups.");
         if (cancelled) return;
-        const masters = list(response.data);
-        const masterIds = [...new Set(masters.filter(isActiveRecord).map((master) => Number(pick(master, "masterGroupId", "MasterGroupId"))).filter((id) => Number.isInteger(id) && id > 0))];
-        // This existing filter returns the explicit master/context link;
-        // older unfiltered stored procedures can omit MasterGroupId.
-        const responses = await Promise.all(masterIds.map((masterGroupId) => apiClient.get(apiEndpoints.groups.list, {
-          params: { masterGroupId, boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), isActive: true },
-        })));
-        if (cancelled) return;
-        if (responses.some((result) => result.data?.success === false)) throw new Error("Unable to load contextual groups.");
-        const groups = validTimetableGroups(masters, responses.flatMap((result) => list(result.data)), { ...context, groupId: selectedGroupRef.current });
+        const groupsRaw = list(groupRes.data);
+        const groups = groupsRaw.map((item) => ({
+          id: String(item.groupId ?? item.id),
+          groupId: String(item.groupId ?? item.id),
+          name: item.groupName || item.name || "-",
+          code: item.groupCode || item.code || "-",
+          ...item,
+        }));
         setData((current) => ({ ...current, groups, groupsLoading: false }));
         setValue((current) => Object.keys(context).every((key) => String(current[key]) === String(context[key]))
           && current.groupId && !groups.some((group) => group.id === String(current.groupId))

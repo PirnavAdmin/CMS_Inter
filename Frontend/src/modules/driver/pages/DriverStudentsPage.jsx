@@ -38,10 +38,12 @@ export default function DriverStudentsPage() {
         getRoute()
       ]);
       
-      const fetchedStudents = studentsRes.data?.students || (Array.isArray(studentsRes.data) ? studentsRes.data : []);
+      const sPayload = studentsRes.data?.data ?? studentsRes.data ?? {};
+      const fetchedStudents = sPayload.students ?? (Array.isArray(sPayload) ? sPayload : []);
       setStudents(fetchedStudents);
 
-      const fetchedRoute = routeRes.data?.route || { stops: [
+      const rPayload = routeRes.data?.data ?? routeRes.data ?? {};
+      const fetchedRoute = rPayload.route || { stops: [
         { name: "Green Park" }, { name: "City Center" }, { name: "University Gate" }
       ]};
       setRouteDetails(fetchedRoute);

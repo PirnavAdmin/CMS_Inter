@@ -120,8 +120,8 @@
   border-radius: 9px;
 }
 .cms-table td:last-child .cms-action-btn.view {
-  color: #6F8400;
-  background: #F7F8EF;
+  color: var(--cms-primary);
+  background: var(--cms-subtle, var(--cms-primary-soft));
   border-color: #D9DCCB;
 }
 .cms-table td:last-child .cms-action-btn.edit {

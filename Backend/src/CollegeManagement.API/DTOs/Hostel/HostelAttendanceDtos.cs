@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Hostel
@@ -62,6 +63,31 @@ namespace CollegeManagement.API.DTOs.Hostel
         public string AttendanceStatus { get; set; } = string.Empty;
 
         [StringLength(500)]
+        public string? Remarks { get; set; }
+    }
+
+    public class BulkHostelAttendanceDto
+    {
+        public int? HostelId { get; set; }
+
+        [Required]
+        public DateTime AttendanceDate { get; set; }
+
+        [Required]
+        public string Session { get; set; } = "Morning";
+
+        [Required]
+        public List<HostelAttendanceItemDto> Records { get; set; } = new();
+    }
+
+    public class HostelAttendanceItemDto
+    {
+        public int StudentId { get; set; }
+        public int HostelId { get; set; }
+        public int RoomId { get; set; }
+        public int BedId { get; set; }
+        public int? WardenAssignmentId { get; set; }
+        public string AttendanceStatus { get; set; } = "Present";
         public string? Remarks { get; set; }
     }
 

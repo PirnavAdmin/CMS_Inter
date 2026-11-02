@@ -34,7 +34,7 @@
 
 .cms-tabs button,
 .cms-tab-btn {
-  border: 1.5px solid rgba(111, 132, 0, 0.35);
+  border: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.35);
   border-radius: 10px;
   padding: 7px 18px;
   background: var(--cms-surface, #ffffff);
@@ -50,7 +50,7 @@
 .cms-tabs button:hover:not(.active),
 .cms-tab-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: var(--cms-primary-soft, rgba(111, 132, 0, 0.08));
+  background: var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary)  0.08));
   border-color: var(--cms-primary, #6f8400);
 }
 
@@ -59,7 +59,7 @@
   background: var(--cms-primary, #6f8400);
   border-color: var(--cms-primary, #6f8400);
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.28);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary)  0.28);
 }
 
 [data-theme="dark"] .cms-tabs button,
@@ -427,7 +427,7 @@
 .cms-custom-select-combobox.is-focused,
 .cms-custom-select-combobox:focus-within {
   border-color: var(--cms-primary, #6f8400) !important;
-  box-shadow: 0 0 0 3px var(--cms-primary-soft, rgba(111, 132, 0, 0.16)) !important;
+  box-shadow: 0 0 0 3px var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary)  0.16)) !important;
 }
 
 .cms-custom-select-combobox.is-disabled {
@@ -773,7 +773,7 @@
   align-items: center;
   gap: 4px;
   background: var(--cms-surface-subtle, #f5f6f0);
-  border: 1.5px solid rgba(111, 132, 0, 0.28);
+  border: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.28);
   border-radius: 8px;
   padding: 3px;
 }
@@ -796,7 +796,7 @@
 
 .cms-subtab-pill-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
-  background: rgba(111, 132, 0, 0.08);
+  background: color-mix(in srgb, var(--cms-primary)  0.08);
 }
 
 .cms-subtab-pill-btn.active {
@@ -952,7 +952,7 @@
   width: 72px;
   height: 30px;
   padding: 0 6px;
-  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
+  border: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.45) !important;
   border-radius: 6px;
   text-align: center;
   font-weight: 600;
@@ -977,7 +977,7 @@
 .cms-number-input:disabled {
   opacity: 0.65;
   cursor: not-allowed;
-  border-color: rgba(111, 132, 0, 0.22) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.22) !important;
   background: var(--cms-subtle, #f7f8ef) !important;
 }
 
@@ -987,7 +987,7 @@
   max-width: 220px;
   height: 30px;
   padding: 0 8px;
-  border: 1.5px solid rgba(111, 132, 0, 0.45) !important;
+  border: 1.5px solid color-mix(in srgb, var(--cms-primary)  0.45) !important;
   border-radius: 6px;
   font-size: 12px;
   background: #ffffff !important;
@@ -1010,7 +1010,7 @@
 .cms-remarks-input:disabled {
   opacity: 0.65;
   cursor: not-allowed;
-  border-color: rgba(111, 132, 0, 0.22) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.22) !important;
   background: var(--cms-subtle, #f7f8ef) !important;
 }
 

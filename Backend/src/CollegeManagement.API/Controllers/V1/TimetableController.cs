@@ -138,7 +138,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("faculty/{facultyId:int}")]
         [HttpGet("faculty/me")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        [Authorize(Roles = "Admin,Teacher,Principal,Super Admin")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Principal,Super Admin")]
         [BypassPermission]
         public async Task<IActionResult> GetByFaculty([FromRoute] int? facultyId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
@@ -164,29 +164,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [CollegeManagement.API.Filters.ParentStudentAuthorization]
         [BypassPermission]
         public async Task<IActionResult> GetByStudent([FromRoute] int studentId)
         {
-            try
-            {
-                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
-                var connection = dbContext.Database.GetDbConnection();
-                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync();
-                
-                var result = await Dapper.SqlMapper.QueryAsync<TimetableResponseDto>(
-                    connection,
-                    "CALL sp_GetStudentTimetable(@StudentId);",
-                    new { StudentId = studentId },
-                    commandType: System.Data.CommandType.Text);
-
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An error occurred while retrieving student timetable.", details = ex.Message });
-            }
+            var result = await _timetableService.GetStudentTimetableAsync(studentId);
+            return Ok(result);
         }
 
         /// <summary>
@@ -194,7 +178,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("section/{sectionId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [BypassPermission]
         public async Task<IActionResult> GetBySection(int sectionId, [FromQuery] int? academicYearId = null, [FromQuery] bool? isPublished = null, [FromQuery] int? campusId = null)
         {

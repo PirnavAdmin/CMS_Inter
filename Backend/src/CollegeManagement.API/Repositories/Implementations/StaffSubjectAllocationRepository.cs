@@ -166,7 +166,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
             }
 
-            var query = _context.Subjects.AsQueryable();
+            var query = _context.Subjects.AsNoTracking().AsQueryable();
             if (!string.IsNullOrWhiteSpace(subjectName))
             {
                 var name = subjectName.Trim().ToLower();
@@ -174,8 +174,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (s != null) return s.SubjectId;
             }
 
-            var first = await query.FirstOrDefaultAsync();
-            return first?.SubjectId;
+            return null;
         }
 
         public async Task<Subject?> GetSubjectByIdAsync(int subjectId)
@@ -209,16 +208,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                     },
                     commandType: CommandType.StoredProcedure);
 
-                allocation.Id = id;
-                return allocation;
+                if (id > 0)
+                {
+                    allocation.Id = id;
+                    return allocation;
+                }
             }
             catch
             {
-                allocation.CreatedAt = DateTime.UtcNow;
-                await _context.StaffSubjectAllocations.AddAsync(allocation);
-                await _context.SaveChangesAsync();
-                return allocation;
             }
+
+            allocation.CreatedAt = DateTime.UtcNow;
+            await _context.StaffSubjectAllocations.AddAsync(allocation);
+            await _context.SaveChangesAsync();
+            return allocation;
         }
 
         public async Task UpdateAsync(StaffSubjectAllocation allocation)
@@ -233,14 +236,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
-                var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
-                if (existing != null)
-                {
-                    existing.StaffId = allocation.StaffId;
-                    existing.SubjectId = allocation.SubjectId;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
-                }
+            }
+
+            var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
+            if (existing != null)
+            {
+                existing.StaffId = allocation.StaffId;
+                existing.SubjectId = allocation.SubjectId;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
             }
         }
 
@@ -256,12 +260,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
-                var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
-                if (existing != null)
-                {
-                    _context.StaffSubjectAllocations.Remove(existing);
-                    await _context.SaveChangesAsync();
-                }
+            }
+
+            var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
+            if (existing != null)
+            {
+                _context.StaffSubjectAllocations.Remove(existing);
+                await _context.SaveChangesAsync();
             }
         }
     }

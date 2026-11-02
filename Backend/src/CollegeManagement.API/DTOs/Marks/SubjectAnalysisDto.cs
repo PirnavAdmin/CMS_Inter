@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace CollegeManagement.API.DTOs.Evaluations
 {
@@ -7,10 +7,16 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public int SubjectId { get; set; }
         public string SubjectCode { get; set; } = string.Empty;
         public string SubjectName { get; set; } = string.Empty;
+        public string ExaminationName { get; set; } = string.Empty;
+        public string SectionName { get; set; } = string.Empty;
         public string FacultyName { get; set; } = string.Empty;
         public int TotalStudents { get; set; }
+        public int PresentStudents { get; set; }
+        public int AbsentStudents { get; set; }
         public int TotalPassed { get; set; }
         public int TotalFailed { get; set; }
+        public int PassedStudents { get => TotalPassed; set => TotalPassed = value; }
+        public int FailedStudents { get => TotalFailed; set => TotalFailed = value; }
         public decimal PassPercentage { get; set; }
         public decimal AverageMarks { get; set; }
         public decimal HighestMarks { get; set; }

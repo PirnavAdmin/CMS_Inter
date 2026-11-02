@@ -1,12 +1,16 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport;
 using CollegeManagement.API.Services.Interfaces;
+using System;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/v1/transport/routes")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/transport/routes")]
     [Authorize]
     public class TransportRoutesController : ControllerBase
     {
@@ -31,7 +35,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
+                return StatusCode(500, new { success = false, message = "Failed to retrieve transport routes.", error = ex.Message });
             }
         }
 
@@ -54,7 +58,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
+                return StatusCode(500, new { success = false, message = "Failed to retrieve transport route.", error = ex.Message });
             }
         }
 

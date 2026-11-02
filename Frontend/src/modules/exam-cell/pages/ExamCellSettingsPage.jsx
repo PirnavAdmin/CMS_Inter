@@ -1,3 +1,4 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -138,20 +139,14 @@ export default function ExamCellSettingsPage() {
         allowNegativeMarking: Boolean(settings.allowNegativeMarking),
       };
 
-      try {
-        const result = await updateExaminationSettings(campusId, payload);
-        if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
-      } catch {}
+      const result = await updateExaminationSettings(campusId, payload);
+      if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      showToast("Exam Cell settings saved and applied successfully!", "success");
+      showToast("Exam Cell settings saved and applied to database successfully!", "success");
     } catch (err) {
       console.error("Failed to save examination settings:", err);
-      // Fallback save locally
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      } catch {}
-      showToast("Backend save failed. Stored settings locally.", "error");
+      showToast("Failed to save settings: " + (err?.response?.data?.message || err.message || "Server error"), "error");
     } finally {
       setSaving(false);
     }
@@ -173,10 +168,10 @@ export default function ExamCellSettingsPage() {
         const result = await updateExaminationSettings(campusId, defaultPayload);
         if (result?.updatedAt) setLastUpdatedAt(result.updatedAt);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
-        showToast("Restored system default Exam Cell settings.", "info");
+        showToast("Restored system default Exam Cell settings in database.", "info");
       } catch (err) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SETTINGS));
-        showToast("Restored local defaults (Backend unavailable).", "info");
+        console.error("Failed to reset examination settings:", err);
+        showToast("Failed to restore default settings: " + (err?.response?.data?.message || err.message || "Server error"), "error");
       } finally {
         setSaving(false);
       }
@@ -226,6 +221,9 @@ export default function ExamCellSettingsPage() {
       )}
 
       {/* QUICK SYSTEM MODULES CARDS */}
+      <div style={{ marginBottom: "20px" }}>
+        <ThemeSettingsCard />
+      </div>
       <section className="ec-settings-quick-grid">
         {quickLinks.map((item) => (
           <article key={item.title} className="ec-settings-quick-card">

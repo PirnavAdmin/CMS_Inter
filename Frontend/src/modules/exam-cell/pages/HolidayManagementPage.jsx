@@ -78,9 +78,9 @@ function HolidayStatus({ holiday }) {
 
 function HolidayForm({ holiday, onClose, onSave, saving }) {
   const [values, setValues] = useState(() => {
-    if (holiday) return holiday;
+    if (holiday) return { ...EMPTY_HOLIDAY, ...holiday, description: holiday.description ?? "" };
     const draft = getModuleState("holidays", {})?.draftHoliday;
-    if (draft && typeof draft === "object") return { ...EMPTY_HOLIDAY, ...draft };
+    if (draft && typeof draft === "object") return { ...EMPTY_HOLIDAY, ...draft, description: draft.description ?? "" };
     return EMPTY_HOLIDAY;
   });
 
@@ -176,7 +176,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : null}
         <div className={`${fieldClass("description")} full`}>
           <label htmlFor="holiday-description">Description</label>
-          <textarea id="holiday-description" value={values.description} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
+          <textarea id="holiday-description" value={values.description ?? ""} onChange={(event) => setValue("description", event.target.value)} placeholder="Optional holiday details" />
         </div>
       </div>
     </Modal>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Boxes, CircleAlert, IndianRupee, ShoppingCart } from "lucide-react";
+import { Boxes, CircleAlert, Eye, IndianRupee, Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import {
   actionColumn,
   Action,
@@ -63,7 +63,6 @@ export function InventoryDashboard({ state, open, refresh }) {
   const alerts = items.filter(lowStock);
   const recent = chronological(state.movements)
     .reverse()
-    .slice(0, 8)
     .map((m) => enrichMovement(state, m));
   const stats = [
     ["Total Items", items.length, Boxes, "Distinct item records"],
@@ -105,6 +104,7 @@ export function InventoryDashboard({ state, open, refresh }) {
       </div>
       <InventoryTable
         title="Recent Stock Movements"
+        pageSize={5}
         columns={[
           column("date", "Date"),
           column("item", "Item Name"),
@@ -117,28 +117,6 @@ export function InventoryDashboard({ state, open, refresh }) {
         ]}
         rows={recent}
         onView={(m) => open("movement-detail", m)}
-        exportable={false}
-      />
-      <div className="inventory-panel-head">
-        <h2>Low Stock Alerts</h2>
-        <span>{alerts.length} items need attention</span>
-      </div>
-      <InventoryTable
-        title="Low Stock Alerts"
-        rows={alerts}
-        columns={[
-          column("name", "Item Name"),
-          column("code", "Item Code"),
-          column("quantity", "Current Stock"),
-          column("minStock", "Minimum Stock"),
-          column("stockStatus", "Status"),
-          actionColumn((item) => (
-            <div className="inventory-row-actions">
-              <Action onClick={() => open("item-detail", item)}>View Item</Action>
-              <Action onClick={() => open("stock-in", null, item.id)}>Restock</Action>
-            </div>
-          )),
-        ]}
         exportable={false}
       />
     </>

@@ -382,7 +382,7 @@ const formDefinitions = {
       "select",
       ["Teaching", "Non-Teaching"],
     ],
-    ["departmentId", "Department", false, "Select Department", "department-select"],
+    ["departmentId", "Department", true, "Select Department", "department-select"],
     ["status", "Status", true, "Select status", "select", ["Active", "Inactive"]],
   ],
 };
@@ -797,10 +797,15 @@ export default function DepartmentManagementPage() {
   }, [routeParams, setRouteParams]);
   const [deletingDept, setDeletingDept] = useState(false);
   const [deletingDesig, setDeletingDesig] = useState(false);
-  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [downloadingDeptTemplate, setDownloadingDeptTemplate] = useState(false);
+  const [downloadingDesigTemplate, setDownloadingDesigTemplate] = useState(false);
 
   const handleDownloadTemplate = async (kind = "department") => {
-    setDownloadingTemplate(true);
+    if (kind === "department") {
+      setDownloadingDeptTemplate(true);
+    } else {
+      setDownloadingDesigTemplate(true);
+    }
     try {
       const endpoint =
         kind === "department"
@@ -837,18 +842,12 @@ export default function DepartmentManagementPage() {
         if (kind === "department") {
           const deptSheet = XLSX.utils.aoa_to_sheet([
             ["Department Code", "Department Name", "Status"],
-            ["DEP_CSE", "Computer Science and Engineering", "Active"],
-            ["DEP_ECE", "Electronics and Communication Engineering", "Active"],
-            ["DEP_MEC", "Mechanical Engineering", "Active"],
           ]);
           XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
           XLSX.writeFile(book, "Department_Import_Template.xlsx");
         } else {
           const desigSheet = XLSX.utils.aoa_to_sheet([
-            ["Designation Code", "Designation Name", "Status"],
-            ["DES_PROF", "Professor", "Active"],
-            ["DES_ASST_PROF", "Assistant Professor", "Active"],
-            ["DES_ASSOC_PROF", "Associate Professor", "Active"],
+            ["Designation Code", "Designation Name", "Department", "Status"],
           ]);
           XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
           XLSX.writeFile(book, "Designation_Import_Template.xlsx");
@@ -862,7 +861,11 @@ export default function DepartmentManagementPage() {
         });
       }
     } finally {
-      setDownloadingTemplate(false);
+      if (kind === "department") {
+        setDownloadingDeptTemplate(false);
+      } else {
+        setDownloadingDesigTemplate(false);
+      }
     }
   };
 
@@ -1091,7 +1094,7 @@ export default function DepartmentManagementPage() {
     setDeletingDept(true);
     try {
       await apiClient.delete(apiEndpoints.departments.delete(pendingDeleteDept.id));
-      setToast(`Department "${pendingDeleteDept.name}" deleted successfully.`);
+      setToast({ message: `Department "${pendingDeleteDept.name}" deleted successfully.`, type: "success" });
       setDepartments((prev) => {
         const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
         setCachedDepartments(next);
@@ -1100,7 +1103,7 @@ export default function DepartmentManagementPage() {
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
-        setToast("Department was not found on the server.");
+        setToast({ message: "Department was not found on the server.", type: "warning" });
         setDepartments((prev) => {
           const next = prev.filter((d) => d.id !== pendingDeleteDept.id);
           setCachedDepartments(next);
@@ -1111,7 +1114,7 @@ export default function DepartmentManagementPage() {
           error,
           "This department cannot be deleted because it is currently assigned to designations or staff."
         );
-        setToast(msg);
+        setToast({ message: msg, type: "error" });
       }
     } finally {
       setDeletingDept(false);
@@ -1223,12 +1226,12 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  disabled={downloadingTemplate}
+                  disabled={downloadingDeptTemplate}
                   onClick={() => handleDownloadTemplate("department")}
                   title="Download Departments & Designations Excel Template"
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} />
-                  {downloadingTemplate ? "Downloading..." : "Download Template"}
+                  {downloadingDeptTemplate ? "Downloading..." : "Download Template"}
                 </button>
                 <button
                   type="button"
@@ -1356,12 +1359,12 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  disabled={downloadingTemplate}
+                  disabled={downloadingDesigTemplate}
                   onClick={() => handleDownloadTemplate("designation")}
                   title="Download Departments & Designations Excel Template"
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} />
-                  {downloadingTemplate ? "Downloading..." : "Download Template"}
+                  {downloadingDesigTemplate ? "Downloading..." : "Download Template"}
                 </button>
                 <button
                   type="button"
@@ -2210,14 +2213,12 @@ const importColumns = {
   department: [
     "Department Code",
     "Department Name",
-    "Staff Type",
     "Status",
   ],
   designation: [
     "Designation Code",
     "Designation Name",
-    "Department Name",
-    "Staff Type",
+    "Department",
     "Status",
   ],
 };
@@ -2235,6 +2236,8 @@ export function MasterImportPage({ kind = "department" }) {
   const [importResult, setImportResult] = useState(null);
   const [sheetCounts, setSheetCounts] = useState({ departments: 0, designations: 0 });
 
+  const currentStaffType = (routeParams.get("tab") || "").toLowerCase().includes("non") ? "Non-Teaching" : "Teaching";
+
   const download = async () => {
     try {
       const endpoint =
@@ -2243,6 +2246,7 @@ export function MasterImportPage({ kind = "department" }) {
           : (apiEndpoints.departments.exportTemplate || apiEndpoints.departments.template || "/api/v1/departments/template");
 
       const res = await apiClient.get(endpoint, {
+        params: { staffType: currentStaffType },
         responseType: "blob",
         skipGlobalLoader: true,
       });
@@ -2253,7 +2257,7 @@ export function MasterImportPage({ kind = "department" }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "Department_Designation_Import_Template.xlsx";
+      a.download = kind === "department" ? "Department_Import_Template.xlsx" : "Designation_Import_Template.xlsx";
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -2261,23 +2265,21 @@ export function MasterImportPage({ kind = "department" }) {
       return;
     } catch (error) {
       console.warn("Backend template download failed, using client fallback:", error);
-      // Fallback to client-side XLSX generation
+      // Fallback to client-side XLSX generation (zero dummy data rows)
       const book = XLSX.utils.book_new();
-      const deptSheet = XLSX.utils.aoa_to_sheet([
-        ["Department Code", "Department Name", "Status"],
-        ["DEP_CSE", "Computer Science and Engineering", "Active"],
-        ["DEP_ECE", "Electronics and Communication Engineering", "Active"],
-        ["DEP_MEC", "Mechanical Engineering", "Active"],
-      ]);
-      const desigSheet = XLSX.utils.aoa_to_sheet([
-        ["Designation Code", "Designation Name", "Status"],
-        ["DES_PROF", "Professor", "Active"],
-        ["DES_ASST_PROF", "Assistant Professor", "Active"],
-        ["DES_ASSOC_PROF", "Associate Professor", "Active"],
-      ]);
-      XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
-      XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
-      XLSX.writeFile(book, "Department_Designation_Import_Template.xlsx");
+      if (kind === "department") {
+        const deptSheet = XLSX.utils.aoa_to_sheet([
+          ["Department Code", "Department Name", "Status"],
+        ]);
+        XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
+        XLSX.writeFile(book, "Department_Import_Template.xlsx");
+      } else {
+        const desigSheet = XLSX.utils.aoa_to_sheet([
+          ["Designation Code", "Designation Name", "Department", "Status"],
+        ]);
+        XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
+        XLSX.writeFile(book, "Designation_Import_Template.xlsx");
+      }
     }
   };
 
@@ -2363,13 +2365,16 @@ export function MasterImportPage({ kind = "department" }) {
           if (rawName) desigNames.add(desigKey);
 
           const deptNameVal = String(
+            row["Department"] ||
             row["Department Name"] ||
             row["DepartmentName"] ||
-            row["Department"] ||
             row["Department Code"] ||
             row["DepartmentCode"] ||
             ""
           ).trim();
+          if (!deptNameVal) {
+            problems.push("Department is required");
+          }
 
           const status = String(row["Status"] || "").trim();
           if (status && !["Active", "Inactive", "active", "inactive"].includes(status)) {
@@ -2435,7 +2440,8 @@ export function MasterImportPage({ kind = "department" }) {
     try {
       const formData = new FormData();
       formData.append("file", rawFile);
-      formData.append("DefaultStaffType", "Teaching");
+      formData.append("DefaultStaffType", currentStaffType);
+      formData.append("StaffType", currentStaffType);
 
       const endpoint =
         kind === "designation"
@@ -2448,6 +2454,9 @@ export function MasterImportPage({ kind = "department" }) {
 
       const result = response.data?.data || response.data?.Data || response.data;
       setImportResult(result);
+      // Evict master caches so DepartmentManagementPage immediately fetches freshly imported data
+      setCachedDepartments(null);
+      setCachedDesignations(null);
     } catch (err) {
       setImportError(getApiErrorMessage(err, "Failed to import Excel data. Please review the file and try again."));
     } finally {
@@ -2462,8 +2471,8 @@ export function MasterImportPage({ kind = "department" }) {
 
   return (
     <DashboardLayout
-      title="Import Departments & Designations"
-      subtitle="Validate and bulk import departments and designations from Excel spreadsheet."
+      title={`Import ${currentStaffType} ${kind === "department" ? "Departments" : "Designations"}`}
+      subtitle={`Validate and bulk import ${currentStaffType.toLowerCase()} ${kind === "department" ? "departments" : "designations"} from Excel spreadsheet.`}
       breadcrumb={["Administration", "Department & Designation"]}
     >
       <main className="master-import">
@@ -2473,8 +2482,8 @@ export function MasterImportPage({ kind = "department" }) {
         <section>
           <header>
             <div>
-              <h1>Import Departments & Designations</h1>
-              <p>Upload unified or sheet-specific Excel workbook (.xlsx / .xls) to review and import in bulk.</p>
+              <h1>Import {currentStaffType} {kind === "department" ? "Departments" : "Designations"}</h1>
+              <p>Upload {currentStaffType} {kind === "department" ? "Department" : "Designation"} Excel workbook (.xlsx / .xls) to review and import in bulk.</p>
             </div>
             <button type="button" className="cms-btn secondary" onClick={download}>
               <Download /> Download Template Excel

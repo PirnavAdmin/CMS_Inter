@@ -3325,8 +3325,8 @@ export default function AdmissionPage() {
   const groupOptions = useMemo(() => {
     const rows = masterOptions.groups || [];
     return rows.filter((item) => (
-      idsMatchOrLoose(values.board, item.boardId)
-      && idsMatchOrLoose(values.year, item.academicYearId)
+      (!values.board || idsMatchOrLoose(values.board, item.boardId))
+      && (!values.year || !item.academicYearId || idsMatchOrLoose(values.year, item.academicYearId))
     ));
   }, [masterOptions.groups, values.board, values.year]);
   const sectionOptions = useMemo(() => {
@@ -4425,7 +4425,7 @@ export default function AdmissionPage() {
       academicYearId: values.year || undefined,
       isActive: true,
     };
-    apiClient.get(apiEndpoints.groups.getAll, { params })
+    apiClient.get(apiEndpoints.groups.dropdown, { params: { ...params, academicLevelId: values.level || undefined } })
       .then((response) => {
         if (ignore) return;
         const groups = [...new Map(getCollection(response.data)

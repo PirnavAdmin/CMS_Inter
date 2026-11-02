@@ -12,18 +12,18 @@ namespace CollegeManagement.API.Repositories.Interfaces.Inventory
         Task<IEnumerable<ItemDto>> GetItemsAsync(ItemFilterRequest filter);
         Task<ItemDetailDto?> GetItemByIdAsync(int itemId);
         Task<IEnumerable<ItemLedgerEntryDto>> GetItemLedgerAsync(int itemId, DateTime? fromDate, DateTime? toDate);
-        Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId);
-        Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId);
-        Task<bool> DeleteItemAsync(int itemId);
-        Task<bool> DeactivateItemAsync(int itemId);
+        Task<ItemDto> CreateItemAsync(CreateItemRequest request, int userId, string userName);
+        Task<ItemDto> UpdateItemAsync(int itemId, UpdateItemRequest request, int userId, string userName);
+        Task<bool> DeleteItemAsync(int itemId, int userId, string userName);
+        Task<bool> DeactivateItemAsync(int itemId, int userId, string userName);
 
         Task<IEnumerable<CategoryDto>> GetCategoriesAsync(bool includeInactive = false);
-        Task<CategoryDto> SaveCategoryAsync(int? categoryId, CreateCategoryRequest request);
-        Task<bool> DeactivateCategoryAsync(int categoryId);
+        Task<CategoryDto> SaveCategoryAsync(int? categoryId, CreateCategoryRequest request, int userId, string userName);
+        Task<bool> DeactivateCategoryAsync(int categoryId, int userId, string userName);
 
         Task<IEnumerable<SupplierDto>> GetSuppliersAsync(bool includeInactive = false);
-        Task<SupplierDto> SaveSupplierAsync(int? supplierId, CreateSupplierRequest request);
-        Task<bool> DeactivateSupplierAsync(int supplierId);
+        Task<SupplierDto> SaveSupplierAsync(int? supplierId, CreateSupplierRequest request, int userId, string userName);
+        Task<bool> DeactivateSupplierAsync(int supplierId, int userId, string userName);
 
         Task<IEnumerable<TransactionDto>> GetMovementsAsync(MovementFilterRequest filter);
         Task<TransactionDto?> GetMovementByIdAsync(int transactionId);

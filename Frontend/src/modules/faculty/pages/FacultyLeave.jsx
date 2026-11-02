@@ -1,6 +1,4 @@
-import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import "../styles/FacultyLeave.css";
@@ -30,17 +28,7 @@ export default function FacultyLeave() {
   const [staffBalance, setStaffBalance] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [routeParams, setRouteParams] = useSearchParams();
-  const cardParam = routeParams.get("card");
-  const showLeaveModal = cardParam === "apply" || cardParam === "apply-leave";
-
-  const handleCloseModal = () => {
-    setRouteParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("card");
-      return next;
-    });
-  };
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
     categoryId: "",
     customLeaveType: "",
@@ -275,17 +263,13 @@ export default function FacultyLeave() {
 
   // Handle opening the Apply Leave modal
   const handleOpenModal = () => {
+    setShowLeaveModal(true);
     setLeaveForm({
       categoryId: categories.length > 0 ? categories[0].leaveCategoryId : "OTHERS",
       customLeaveType: "",
       fromDate: "",
       toDate: "",
       reason: "",
-    });
-    setRouteParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("card", "apply");
-      return next;
     });
   };
 
@@ -479,7 +463,7 @@ export default function FacultyLeave() {
       const res = await apiClient.post("/api/v1/staff-attendance/leave", payload);
       if (res.data?.status || res.status === 200 || res.status === 201) {
         notify("Leave application submitted successfully!");
-        handleCloseModal();
+        setShowLeaveModal(false);
         setLeaveForm({
           categoryId: categories[0]?.leaveCategoryId || 1,
           customLeaveType: "",
@@ -638,7 +622,14 @@ export default function FacultyLeave() {
             </thead>
             <tbody>
               {loading ? (
-                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
+                <tr>
+                  <td colSpan="9" style={{ textAlign: "center", padding: "32px 20px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                      <Loader2 size={24} className="leave-spin" style={{ color: "var(--cms-primary)" }} />
+                      <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>Loading leave applications...</span>
+                    </div>
+                  </td>
+                </tr>
               ) : leaveList.length === 0 ? (
                 <tr>
                   <td colSpan="9" style={{ textAlign: "center", padding: "40px 20px" }}>
@@ -694,7 +685,7 @@ export default function FacultyLeave() {
           ? createPortal(
               <div
                 className="cms-overlay faculty-leave-modal-overlay"
-                onClick={(e) => e.target === e.currentTarget && handleCloseModal()}
+                onClick={(e) => e.target === e.currentTarget && setShowLeaveModal(false)}
               >
                 <div className="cms-modal sm faculty-leave-modal" role="dialog" aria-modal="true">
                   <div className="cms-modal-head">
@@ -702,7 +693,7 @@ export default function FacultyLeave() {
                     <button
                       type="button"
                       className="cms-icon-btn"
-                      onClick={handleCloseModal}
+                      onClick={() => setShowLeaveModal(false)}
                       aria-label="Close"
                     >
                       <X size={15} />
@@ -825,7 +816,7 @@ export default function FacultyLeave() {
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
-                      onClick={handleCloseModal}
+                      onClick={() => setShowLeaveModal(false)}
                     >
                       Cancel
                     </button>

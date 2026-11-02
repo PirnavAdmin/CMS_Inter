@@ -7,12 +7,15 @@ using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using CollegeManagement.API.Filters;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/periods")]
     [Authorize]
+    [RequirePermission("timetable")]
     public class PeriodController : ControllerBase
     {
         private readonly IPeriodService _periodService;

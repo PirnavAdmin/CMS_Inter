@@ -3,14 +3,16 @@ import { CalendarCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { payrollApi } from "../services/accountantService.js";
 import { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import StudentCard from "@/modules/student/components/StudentCard.jsx";
-import StudentDataTable from "@/modules/student/components/StudentDataTable.jsx";
-import StudentPageHeader from "@/modules/student/components/StudentPageHeader.jsx";
-import StudentSummaryCard from "@/modules/student/components/StudentSummaryCard.jsx";
+import {
+  AccountantCard,
+  AccountantDataTable,
+  AccountantPageHeader,
+  AccountantSummaryCard,
+  PageState,
+} from "../components/AccountantUI.jsx";
 import "@/modules/admin/AdminProfile/AdminProfilePage.css";
 
 import { getRows, getNumber, formatMoney, normalizePayroll, useAccountantPage as useFinancePage, useCampusParams } from "../services/accountantService.js";
-import { PageState } from "../components/AccountantUI.jsx";
 
 export function AccountantPayroll() {
   const campusParams = useCampusParams();
@@ -31,18 +33,18 @@ export function AccountantPayroll() {
   const summary = state.data?.summary || {};
   const total = getNumber(summary, ["totalNetSalary", "TotalNetSalary", "totalPayroll", "TotalPayroll", "netSalary", "NetSalary"]) ?? (state.data?.payslips || []).reduce((sum, row) => sum + row.amount, 0);
   return <>
-    <StudentPageHeader title="Payroll" subtitle="Financial payroll visibility for salary amounts, payslips, and processing status." action={<Link className="sp-btn" to="/accountant-dashboard/payroll/attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
+    <AccountantPageHeader title="Payroll" subtitle="Financial payroll visibility for salary amounts, payslips, and processing status." action={<Link className="sp-btn" to="/accountant-dashboard/payroll/attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
     <PageState {...state} />
     {!state.loading && !state.error ? <>
       <section className="sp-summary-grid four">
-        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(total)} note="Current payroll summary" />
-        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payslips" value={state.data?.payslips?.length || 0} note="Available records" tone="blue" />
-        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Processed" value={getNumber(summary, ["processedCount", "ProcessedCount"]) ?? "-"} note="From payroll API" tone="purple" />
-        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingCount", "PendingCount"]) ?? "-"} note="From payroll API" tone="orange" />
+        <AccountantSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(total)} note="Current payroll summary" />
+        <AccountantSummaryCard icon={adminIconAssets.payroll} label="Payslips" value={state.data?.payslips?.length || 0} note="Available records" tone="blue" />
+        <AccountantSummaryCard icon={adminIconAssets.attendanceImpact} label="Processed" value={getNumber(summary, ["processedCount", "ProcessedCount"]) ?? "-"} note="From payroll API" tone="purple" />
+        <AccountantSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingCount", "PendingCount"]) ?? "-"} note="From payroll API" tone="orange" />
       </section>
-      <StudentCard title="Payroll Records" subtitle="Read-only payroll information">
+      <AccountantCard title="Payroll Records" subtitle="Read-only payroll information">
         <AccountantPayrollRecords key={JSON.stringify(campusParams)} records={state.data?.payslips || []} formatAmount={formatMoney} />
-      </StudentCard>
+      </AccountantCard>
     </> : null}
   </>;
 }
@@ -60,7 +62,7 @@ function AccountantPayrollRecords({ records, formatAmount }) {
   }, [totalPages]);
 
   return <>
-    <StudentDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={records.slice(startIndex, endIndex).map(row => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatAmount(row.amount), Status: row.status }))} empty="No payroll records available." />
+    <AccountantDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={records.slice(startIndex, endIndex).map(row => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatAmount(row.amount), Status: row.status }))} empty="No payroll records available." />
     {records.length > 0 && <div className="acct-payroll-pagination">
       <span role="status" aria-live="polite">Showing {startIndex + 1}–{endIndex} of {records.length} records</span>
       {totalPages > 1 && <nav aria-label="Payroll records pagination">

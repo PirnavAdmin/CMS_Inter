@@ -20,11 +20,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
+        private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<TransportDashboardResponseDto> GetDashboardAsync()
         {
-            using var c = Connection();
+            var c = Connection;
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
                 commandType: CommandType.StoredProcedure);
@@ -74,7 +74,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<OperationDetailsDto?> GetOperationDetailsAsync(long assignmentId)
         {
-            using var c = Connection();
+            var c = Connection;
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportOperationDetails",
                 new { p_AssignmentId = assignmentId },

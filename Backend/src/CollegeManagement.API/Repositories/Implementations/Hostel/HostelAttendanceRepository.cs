@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 
@@ -107,6 +108,51 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 commandType: CommandType.StoredProcedure);
 
             return result == 1;
+        }
+
+        public async Task<int> BulkSaveAsync(BulkHostelAttendanceDto dto)
+        {
+            if (dto?.Records == null || dto.Records.Count == 0) return 0;
+
+            if (_dbConnection.State != ConnectionState.Open)
+                _dbConnection.Open();
+
+            using var transaction = _dbConnection.BeginTransaction();
+            try
+            {
+                int savedCount = 0;
+                foreach (var record in dto.Records)
+                {
+                    var parameters = new
+                    {
+                        p_StudentId = record.StudentId,
+                        p_HostelId = record.HostelId > 0 ? record.HostelId : (dto.HostelId ?? 1),
+                        p_RoomId = record.RoomId,
+                        p_BedId = record.BedId,
+                        p_WardenAssignmentId = record.WardenAssignmentId,
+                        p_AttendanceDate = dto.AttendanceDate.Date,
+                        p_Session = dto.Session,
+                        p_AttendanceStatus = record.AttendanceStatus,
+                        p_Remarks = record.Remarks
+                    };
+
+                    await _dbConnection.ExecuteScalarAsync<int>(
+                        "sp_CreateHostelAttendance",
+                        parameters,
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure);
+
+                    savedCount++;
+                }
+
+                transaction.Commit();
+                return savedCount;
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
         }
 
         public async Task<bool> DeleteAsync(int attendanceId)

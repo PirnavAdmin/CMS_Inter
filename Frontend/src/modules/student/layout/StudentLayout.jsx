@@ -5,6 +5,7 @@ import StudentSidebar from "./StudentSidebar.jsx";
 import StudentNavbar from "./StudentNavbar.jsx";
 import "../StudentDashboard.css";
 import { StudentProfileProvider, useStudentProfile } from "../context/StudentProfileContext.jsx";
+import useTheme from "@/hooks/useTheme.js";
 
 function StudentPortalContent() {
   const { profile, loading, error, refreshProfile } = useStudentProfile();
@@ -14,6 +15,7 @@ function StudentPortalContent() {
 }
 
 export default function StudentLayout() {
+  const { palette } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 900px)").matches);
@@ -36,7 +38,7 @@ export default function StudentLayout() {
     : setSidebarCollapsed((value) => !value);
 
   return <StudentProfileProvider>
-    <div className={`sp-shell${sidebarCollapsed ? " sp-sidebar-collapsed" : ""}`}>
+    <div className={`sp-shell${sidebarCollapsed ? " sp-sidebar-collapsed" : ""}`} data-dashboard-palette={palette}>
       <StudentSidebar open={sidebarOpen} collapsed={sidebarCollapsed} mobile={mobile} onClose={() => setSidebarOpen(false)}/>
       {mobile && sidebarOpen ? <button className="sp-overlay" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"/> : null}
       <div className="sp-workspace">

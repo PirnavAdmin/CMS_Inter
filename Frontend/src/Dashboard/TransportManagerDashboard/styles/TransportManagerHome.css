@@ -1,0 +1,341 @@
+/* Transport Manager Dashboard - Home Styles Matching TransportPage */
+@import "@/components/pages/TransportPage.css";
+
+.tm-home {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.tm-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.tm-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--cms-text-primary, #1e293b);
+  margin: 0;
+}
+
+.tm-header-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text-primary, #0f172a);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--cms-shadow, 0 1px 2px rgba(0, 0, 0, 0.05));
+  transition: all 0.2s ease;
+}
+
+.tm-sync-btn:hover:not(:disabled) {
+  background: var(--cms-subtle, #f8fafc);
+  border-color: var(--cms-primary-border, #cbd5e1);
+}
+
+.tm-sync-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.tm-spin {
+  animation: tmSpin 1s linear infinite;
+}
+
+@keyframes tmSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Trip Badge styling */
+.tm-trip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tm-trip-badge::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.tm-trip-badge--running {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.tm-trip-badge--running::before {
+  background: #16a34a;
+}
+
+.tm-trip-badge--completed {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.tm-trip-badge--completed::before {
+  background: #64748b;
+}
+
+.tm-trip-badge--pending,
+.tm-trip-badge--scheduled {
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
+
+.tm-trip-badge--pending::before,
+.tm-trip-badge--scheduled::before {
+  background: #d97706;
+}
+
+.tm-trip-badge--delayed,
+.tm-trip-badge--cancelled {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.tm-trip-badge--delayed::before,
+.tm-trip-badge--cancelled::before {
+  background: #dc2626;
+}
+
+/* Details Modal Grid */
+.tm-trip-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.tm-trip-details-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--cms-subtle, #f8fafc);
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.tm-trip-details-item label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--cms-text-secondary, #64748b);
+}
+
+.tm-trip-details-item span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cms-text-primary, #0f172a);
+}
+
+/* ==========================================================================
+   Dashboard Skeleton Styles matching Admin Dashboard (Reference Screenshot 2)
+   ========================================================================== */
+.tm-dashboard-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.tm-dashboard-skeleton .dashboard-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tm-dashboard-skeleton .dashboard-greeting-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.tm-dashboard-skeleton .dashboard-viewing-banner {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-surface, #ffffff);
+}
+
+.tm-dashboard-skeleton .dashboard-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.tm-dashboard-skeleton .dashboard-kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--cms-surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  min-height: 70px;
+}
+
+.tm-dashboard-skeleton .dashboard-kpi-card > div {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.tm-dashboard-skeleton .dashboard-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.tm-dashboard-skeleton .dashboard-quick-actions-list {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  flex: 1;
+}
+
+.tm-dashboard-skeleton .dashboard-grid-row {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.tm-dashboard-skeleton .dashboard-row-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.tm-dashboard-skeleton .dashboard-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 10px;
+  background: var(--cms-surface, #ffffff);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+.tm-dashboard-skeleton .dashboard-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0);
+  background: color-mix(in srgb, var(--cms-subtle, #f1f5f9) 40%, var(--cms-surface, #ffffff));
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.tm-dashboard-skeleton .dashboard-card-body {
+  padding: 14px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-chart {
+  height: 166px;
+  width: 100%;
+  margin-bottom: 14px;
+  border-radius: 10px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-donut {
+  width: 142px;
+  height: 142px;
+  margin: 4px auto 18px;
+  border-radius: 50%;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-chips {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-chips .cms-skeleton {
+  height: 38px;
+  border-radius: 6px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-list {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 220px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-list > div {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.tm-dashboard-skeleton .dashboard-skeleton-list-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+@media (max-width: 1024px) {
+  .tm-dashboard-skeleton .dashboard-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tm-dashboard-skeleton .dashboard-quick-actions-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .tm-dashboard-skeleton .dashboard-row-three {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tm-dashboard-skeleton .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tm-dashboard-skeleton .dashboard-quick-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tm-dashboard-skeleton .dashboard-quick-actions-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

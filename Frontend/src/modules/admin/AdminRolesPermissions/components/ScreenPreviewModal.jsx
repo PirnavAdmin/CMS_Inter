@@ -636,7 +636,7 @@ export function ScreenPreviewModal({
                         gap: "6px",
                       }}
                     >
-                      <CheckCircle2 size={13} color="#6F8400" />
+                      <CheckCircle2 size={13} color="var(--cms-primary)" />
                       {feat}
                     </span>
                   ))}

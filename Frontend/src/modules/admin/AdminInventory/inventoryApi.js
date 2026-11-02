@@ -102,9 +102,53 @@ export async function saveInventoryApi(kind, values) {
     if (source in payload) payload[target] = payload[source];
     delete payload[source];
   }
-  for (const key of ["categoryId", "supplierId", "itemId"])
-    if (key in payload) payload[key] = payload[key] === "" ? null : Number(payload[key]);
-  if (payload.categoryIds) payload.categoryIds = payload.categoryIds.map(Number);
+
+  // Sanitize reference IDs
+  for (const key of ["categoryId", "supplierId", "itemId"]) {
+    if (key in payload) {
+      payload[key] = (payload[key] === "" || payload[key] == null) ? null : Number(payload[key]);
+    }
+  }
+  if (payload.categoryIds) {
+    payload.categoryIds = payload.categoryIds.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  }
+
+  // Sanitize numeric fields (convert "" to 0 or valid numbers, never send empty strings to decimal/int endpoints)
+  const numericKeys = [
+    "openingQuantity",
+    "unitCost",
+    "minStock",
+    "reorderQty",
+    "issueValue",
+    "quantity",
+    "totalAmount",
+    "total",
+  ];
+  for (const key of numericKeys) {
+    if (key in payload) {
+      if (payload[key] === "" || payload[key] == null) {
+        payload[key] = 0;
+      } else {
+        const parsed = Number(payload[key]);
+        payload[key] = Number.isFinite(parsed) ? parsed : 0;
+      }
+    }
+  }
+
+  // maxStock is nullable decimal (never send "" to decimal? endpoints)
+  if ("maxStock" in payload) {
+    if (payload.maxStock === "" || payload.maxStock == null) {
+      payload.maxStock = null;
+    } else {
+      const parsed = Number(payload.maxStock);
+      payload.maxStock = Number.isFinite(parsed) ? parsed : null;
+    }
+    if (payload.maxStock !== null && payload.minStock != null && payload.maxStock < payload.minStock) {
+      payload.maxStock = payload.minStock;
+    }
+  }
+
+  // Movement receipt upload
   if (movement && payload.cashReceipt?.dataUrl) {
     const receipt = payload.cashReceipt;
     const blob = await (await fetch(receipt.dataUrl)).blob();
@@ -115,8 +159,70 @@ export async function saveInventoryApi(kind, values) {
     if (!payload.cashReceiptPath) throw new Error("Receipt upload did not return a file path.");
   }
   delete payload.cashReceipt;
-  for (const key of ["purchaseDate", "warrantyDate", "expiryDate", "expectedReturnDate"])
-    if (payload[key] === "") payload[key] = null;
+
+  // Sanitize all date fields (convert "" to null)
+  const dateKeys = [
+    "purchaseDate",
+    "warrantyDate",
+    "expiryDate",
+    "expectedReturnDate",
+    "lastPurchaseDate",
+    "transactionDate",
+    "date",
+  ];
+  for (const key of dateKeys) {
+    if (key in payload) {
+      payload[key] = payload[key] && String(payload[key]).trim() !== "" ? String(payload[key]).trim() : null;
+    }
+  }
+
+  // Clean empty strings on optional string fields so DataAnnotations (e.g. [EmailAddress]) do not fail
+  const optionalStringKeys = [
+    "description",
+    "brand",
+    "model",
+    "sku",
+    "department",
+    "location",
+    "rack",
+    "supplierItemCode",
+    "remarks",
+    "alternatePhone",
+    "email",
+    "gstin",
+    "pan",
+    "address1",
+    "address2",
+    "city",
+    "state",
+    "postalCode",
+    "address",
+    "paymentTerms",
+    "bankName",
+    "accountHolder",
+    "accountNumber",
+    "ifsc",
+    "notes",
+  ];
+  for (const key of optionalStringKeys) {
+    if (key in payload && (payload[key] === "" || payload[key] == null)) {
+      payload[key] = null;
+    }
+  }
+
+  // Items specific cleanup
+  if (kind === "items") {
+    delete payload.lastPurchaseDate;
+    if (values.id) {
+      delete payload.openingQuantity;
+      delete payload.unitCost;
+      delete payload.quantity;
+      delete payload.openingCost;
+      delete payload.createdAt;
+      delete payload.updatedAt;
+    }
+  }
+
   delete payload.id;
   const path = movement
     ? `movements/${kind}`

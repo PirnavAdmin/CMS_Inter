@@ -81,7 +81,7 @@
 .dark-theme .ec-punch-live-clock-card {
   background: linear-gradient(135deg, #182212 0%, #25331a 100%) !important;
   color: #ffffff !important;
-  border-color: rgba(111, 132, 0, 0.45) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.45) !important;
   box-shadow: 0 8px 24px rgba(24, 34, 18, 0.25) !important;
 }
 
@@ -97,15 +97,15 @@
   text-transform: uppercase;
   padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(111, 132, 0, 0.25) !important;
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.25) !important;
 }
 
 [data-theme="dark"] .ec-punch-live-badge,
 :root[data-theme="dark"] .ec-punch-live-badge,
 .dark-theme .ec-punch-live-badge {
-  background: rgba(111, 132, 0, 0.28) !important;
+  background: color-mix(in srgb, var(--cms-primary)  0.28) !important;
   color: #d7e89a !important;
-  border-color: rgba(111, 132, 0, 0.45) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.45) !important;
 }
 
 .ec-punch-live-clock-time {
@@ -288,15 +288,15 @@
 .ec-punch-punch-status-badge.completed {
   background: var(--cms-primary-soft, #f1f4e2) !important;
   color: var(--cms-primary, #6f8400) !important;
-  border: 1px solid rgba(111, 132, 0, 0.35) !important;
+  border: 1px solid color-mix(in srgb, var(--cms-primary)  0.35) !important;
 }
 
 [data-theme="dark"] .ec-punch-punch-status-badge.completed,
 :root[data-theme="dark"] .ec-punch-punch-status-badge.completed,
 .dark-theme .ec-punch-punch-status-badge.completed {
-  background: rgba(111, 132, 0, 0.35) !important;
+  background: color-mix(in srgb, var(--cms-primary)  0.35) !important;
   color: #d7e89a !important;
-  border-color: rgba(111, 132, 0, 0.55) !important;
+  border-color: color-mix(in srgb, var(--cms-primary)  0.55) !important;
 }
 
 .ec-punch-punch-status-badge.pending {

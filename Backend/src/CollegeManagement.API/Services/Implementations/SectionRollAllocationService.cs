@@ -1,11 +1,13 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using CollegeManagement.API.DTOs;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 
 namespace CollegeManagement.API.Services.Implementations
 {
-    public class SectionRollAllocationService
-        : ISectionRollAllocationService
+    public class SectionRollAllocationService : ISectionRollAllocationService
     {
         private readonly ISectionRollAllocationRepository _repository;
         private readonly CollegeManagement.API.Services.IGroupService _groupService;
@@ -24,29 +26,26 @@ namespace CollegeManagement.API.Services.Implementations
             _campusService = campusService;
         }
 
-
         // =========================================================
         // SECTION PREVIEW
         // =========================================================
 
-        public async Task<SectionAllocationPreviewResponse>
-            PreviewSectionAllocationAsync(
-                SectionRollAllocationFilterRequest request)
+        public async Task<SectionAllocationPreviewResponse> PreviewSectionAllocationAsync(
+            SectionRollAllocationFilterRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateRequest(request);
 
-            return await _repository
-                .PreviewSectionAllocationAsync(request);
+            return await _repository.PreviewSectionAllocationAsync(request, cancellationToken);
         }
-
 
         // =========================================================
         // SECTION CONFIRM
         // =========================================================
 
-        public async Task<int>
-            ConfirmSectionAllocationAsync(
-                ConfirmSectionAllocationRequest request)
+        public async Task<int> ConfirmSectionAllocationAsync(
+            ConfirmSectionAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -58,36 +57,35 @@ namespace CollegeManagement.API.Services.Implementations
                 request.GroupId,
                 request.ProgramId);
 
-            return await _repository
-                .ConfirmSectionAllocationAsync(request);
+            return await _repository.ConfirmSectionAllocationAsync(request, cancellationToken);
         }
-
 
         // =========================================================
         // ROLL PREVIEW
         // =========================================================
 
-        public async Task<RollNumberAllocationPreviewResponse>
-            PreviewRollNumberAllocationAsync(
-                SectionRollAllocationFilterRequest request)
+        public async Task<RollNumberAllocationPreviewResponse> PreviewRollNumberAllocationAsync(
+            SectionRollAllocationFilterRequest request,
+            CancellationToken cancellationToken = default)
         {
             ValidateRequest(request);
 
-            var preview = await _repository.PreviewRollNumberAllocationAsync(request);
-            if (preview == null || preview.Students.Count == 0) return preview ?? new RollNumberAllocationPreviewResponse();
+            var preview = await _repository.PreviewRollNumberAllocationAsync(request, cancellationToken);
+            if (preview == null || preview.Students.Count == 0)
+                return preview ?? new RollNumberAllocationPreviewResponse();
 
             var subCode = $"ROLL_NO|{request.CampusId}|{request.BoardId}|{request.AcademicYearId}|{request.AcademicLevelId}|{request.GroupId}|{request.ProgramId}";
-            var seriesDto = await _numberSeriesService.GetSeriesByCodeAsync(subCode, request.CampusId) 
+            var seriesDto = await _numberSeriesService.GetSeriesByCodeAsync(subCode, request.CampusId)
                             ?? await _numberSeriesService.GetSeriesByCodeAsync("ROLL_NO", request.CampusId);
 
-            if (seriesDto == null || string.IsNullOrWhiteSpace(seriesDto.FormatPattern)) 
+            if (seriesDto == null || string.IsNullOrWhiteSpace(seriesDto.FormatPattern))
             {
                 throw new InvalidOperationException("Number series configuration 'ROLL_NO' was not found. Please configure it in settings.");
             }
 
             var group = await _groupService.GetByIdAsync(request.GroupId);
             var groupCode = group?.GroupCode ?? "";
-            
+
             var campusCode = "";
             if (request.CampusId.HasValue && request.CampusId.Value > 0)
             {
@@ -96,10 +94,10 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var meta = await _repository.GetContextMetadataAsync(
-                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId);
+                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId, cancellationToken);
 
-            var contextDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
-            { 
+            var contextDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto
+            {
                 GroupCode = meta.GroupCode ?? groupCode,
                 BoardId = request.BoardId,
                 AcademicYearId = request.AcademicYearId,
@@ -138,14 +136,13 @@ namespace CollegeManagement.API.Services.Implementations
             return preview;
         }
 
-
         // =========================================================
         // ROLL CONFIRM
         // =========================================================
 
-        public async Task<int>
-            ConfirmRollNumberAllocationAsync(
-                ConfirmRollNumberAllocationRequest request)
+        public async Task<int> ConfirmRollNumberAllocationAsync(
+            ConfirmRollNumberAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -167,12 +164,12 @@ namespace CollegeManagement.API.Services.Implementations
                 CampusId = request.CampusId
             };
 
-            var preview = await _repository.PreviewRollNumberAllocationAsync(filter);
+            var preview = await _repository.PreviewRollNumberAllocationAsync(filter, cancellationToken);
             if (preview == null || preview.Students.Count == 0) return 0;
 
             var group = await _groupService.GetByIdAsync(request.GroupId);
             var groupCode = group?.GroupCode ?? "";
-            
+
             var campusCode = "";
             if (request.CampusId.HasValue && request.CampusId.Value > 0)
             {
@@ -181,14 +178,14 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var meta = await _repository.GetContextMetadataAsync(
-                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId);
+                request.AcademicYearId, request.BoardId, request.AcademicLevelId, request.GroupId, request.ProgramId, cancellationToken);
 
             foreach (var student in preview.Students)
             {
                 var rollResult = await _numberSeriesService.GenerateNextNumberAsync(
                     "ROLL_NO",
-                    new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
-                    { 
+                    new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto
+                    {
                         GroupCode = meta.GroupCode ?? groupCode,
                         BoardId = request.BoardId,
                         AcademicYearId = request.AcademicYearId,
@@ -214,47 +211,38 @@ namespace CollegeManagement.API.Services.Implementations
                 student.RollNo = rollResult.GeneratedNumber;
             }
 
-            return await _repository.SaveRollNumberAllocationsAsync(preview.Students);
+            return await _repository.SaveRollNumberAllocationsAsync(preview.Students, cancellationToken);
         }
-
 
         // =========================================================
         // UPDATE STUDENT ALLOCATION
         // =========================================================
 
-        public async Task<object>
-            UpdateAllocationAsync(
-                int studentId,
-                UpdateStudentAllocationRequest request)
+        public async Task<object> UpdateAllocationAsync(
+            int studentId,
+            UpdateStudentAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
             if (studentId <= 0)
-                throw new ArgumentException(
-                    "Invalid StudentId.");
+                throw new ArgumentException("Invalid StudentId.");
 
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
             if (request.ProgramId <= 0)
-                throw new ArgumentException(
-                    "Invalid ProgramId.");
+                throw new ArgumentException("Invalid ProgramId.");
 
             if (request.SectionId <= 0)
-                throw new ArgumentException(
-                    "Invalid SectionId.");
+                throw new ArgumentException("Invalid SectionId.");
 
-            return await _repository
-                .UpdateAllocationAsync(
-                    studentId,
-                    request);
+            return await _repository.UpdateAllocationAsync(studentId, request, cancellationToken);
         }
 
-
         // =========================================================
-        // VALIDATION
+        // VALIDATION HELPERS
         // =========================================================
 
-        private static void ValidateRequest(
-            SectionRollAllocationFilterRequest request)
+        private static void ValidateRequest(SectionRollAllocationFilterRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
@@ -267,7 +255,6 @@ namespace CollegeManagement.API.Services.Implementations
                 request.ProgramId);
         }
 
-
         private static void ValidateValues(
             int academicYearId,
             int boardId,
@@ -276,24 +263,19 @@ namespace CollegeManagement.API.Services.Implementations
             int programId)
         {
             if (academicYearId <= 0)
-                throw new ArgumentException(
-                    "Invalid AcademicYearId.");
+                throw new ArgumentException("Invalid AcademicYearId.");
 
             if (boardId <= 0)
-                throw new ArgumentException(
-                    "Invalid BoardId.");
+                throw new ArgumentException("Invalid BoardId.");
 
             if (academicLevelId <= 0)
-                throw new ArgumentException(
-                    "Invalid AcademicLevelId.");
+                throw new ArgumentException("Invalid AcademicLevelId.");
 
             if (groupId <= 0)
-                throw new ArgumentException(
-                    "Invalid GroupId.");
+                throw new ArgumentException("Invalid GroupId.");
 
             if (programId <= 0)
-                throw new ArgumentException(
-                    "Invalid ProgramId.");
+                throw new ArgumentException("Invalid ProgramId.");
         }
     }
 }

@@ -1,3 +1,4 @@
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import { useInventory } from "../InventoryDataContext.jsx";
 export default function InventorySettingsPage() {
   const { state, update, reset } = useInventory();
@@ -9,8 +10,10 @@ export default function InventorySettingsPage() {
           <p>Manage your portal preferences.</p>
         </div>
       </div>
-      <section className="ip-card">
-        <p role="status">Saving preferences requires an inventory employee settings API.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", alignItems: "start", marginBottom: "20px" }}>
+        <ThemeSettingsCard />
+        <section className="ip-card" style={{ margin: 0 }}>
+          <p role="status">Saving preferences requires an inventory employee settings API.</p>
         <h2>Preferences</h2>
         {[
           ["lowStock", "Low stock notification badge"],
@@ -32,6 +35,7 @@ export default function InventorySettingsPage() {
           </label>
         ))}
       </section>
+      </div>
       <section className="ip-card">
         <h2>Server Data</h2>
         <p>Reload the current inventory records from the server.</p>

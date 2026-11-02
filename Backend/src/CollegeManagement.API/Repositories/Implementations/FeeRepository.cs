@@ -1,10 +1,14 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
-using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Repositories.Implementations;
 
@@ -24,34 +28,32 @@ public class FeeRepository : IFeeRepository
         return _db.Database.GetDbConnection();
     }
 
-
     // =========================================================
-    // FEE TYPES
+    // SECTION 1: FEE TYPES
     // =========================================================
 
-    public async Task<FeeTypeResponse?> CreateFeeTypeAsync(
-        CreateFeeTypeRequest request)
+    public async Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
-            "sp_CreateFeeType",
+            "sp_FeeType_Create",
             new
             {
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
+                p_CampusId = (int?)null,
+                p_BoardId = (int?)null,
+                p_AcademicYearId = (int?)null,
                 p_IsActive = request.IsActive
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         var c = Connection();
-
         return await c.QueryAsync<FeeTypeResponse>(
-            "sp_GetFeeTypes",
+            "sp_FeeType_GetAll",
             new
             {
                 p_CampusId = campusId,
@@ -61,380 +63,119 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<FeeTypeResponse?> GetFeeTypeByIdAsync(int feeTypeId)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
-            "sp_GetFeeTypeById",
-            new
-            {
-                p_FeeTypeId = feeTypeId
-            },
+            "sp_FeeType_GetById",
+            new { p_FeeTypeId = feeTypeId },
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<FeeTypeResponse?> UpdateFeeTypeAsync(
-        int id,
-        UpdateFeeTypeRequest request)
+    public async Task<FeeTypeResponse?> UpdateFeeTypeAsync(int id, UpdateFeeTypeRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
-            "sp_UpdateFeeType",
+            "sp_FeeType_Update",
             new
             {
                 p_FeeTypeId = id,
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
+                p_CampusId = (int?)null,
+                p_BoardId = (int?)null,
+                p_AcademicYearId = (int?)null,
                 p_IsActive = request.IsActive
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<bool> DeleteFeeTypeAsync(int id)
     {
         var c = Connection();
-
         return await c.ExecuteAsync(
-            "sp_DeleteFeeType",
-            new
-            {
-                p_FeeTypeId = id
-            },
+            "sp_FeeType_Delete",
+            new { p_FeeTypeId = id },
             commandType: CommandType.StoredProcedure) > 0;
     }
 
-
     // =========================================================
-    // FEE STRUCTURES
+    // SECTION 2: FEE STRUCTURES & COMPONENTS
     // =========================================================
 
-    public async Task<FeeStructureResponse?> CreateFeeStructureAsync(
-        CreateFeeStructureRequest request)
+    public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest request)
     {
-        var group = await _db.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.GroupId == request.GroupId);
-        var program = request.ProgramId.HasValue ? await _db.Programs.AsNoTracking().FirstOrDefaultAsync(p => p.ProgramId == request.ProgramId.Value) : null;
-        string baseName = program != null ? $"{group?.GroupName ?? "Group"} ({program.ProgramName})" : (group?.GroupName ?? $"Group {request.GroupId}");
-
-        string yearMode = request.YearFeeMode?.Trim().ToLowerInvariant() ?? "";
-        bool isMultiYear = yearMode == "same" || yearMode == "different";
-
-        // Step 1: Create 1st Year Structure
-        var firstYearEntity = new FeeStructure
-        {
-            CampusId = request.CampusId,
-            BoardId = request.BoardId,
-            AcademicYearId = request.AcademicYearId,
-            AcademicLevelId = request.AcademicLevelId ?? 1,
-            GroupId = request.GroupId,
-            ProgramId = request.ProgramId,
-            StructureName = isMultiYear ? $"{baseName} - 1st Year" : $"Fee Structure {baseName}",
-            YearFeeMode = request.YearFeeMode,
-            IncrementType = request.IncrementType,
-            IncrementValue = request.IncrementValue,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
-        _db.FeeStructures.Add(firstYearEntity);
-        await _db.SaveChangesAsync();
-
-        foreach (var item in request.Items)
-        {
-            _db.FeeStructureComponents.Add(new FeeStructureComponent
-            {
-                FeeStructureId = firstYearEntity.FeeStructureId,
-                FeeTypeId = item.FeeTypeId,
-                Rule = item.Rule,
-                Amount = item.Amount,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
-        await _db.SaveChangesAsync();
-
-        decimal secondYearTotal = 0;
-
-        // Step 2: If year configuration is enabled ("same" or "different"), generate 2nd Year Structure
-        if (isMultiYear)
-        {
-            var secondYearEntity = new FeeStructure
-            {
-                CampusId = request.CampusId,
-                BoardId = request.BoardId,
-                AcademicYearId = request.AcademicYearId,
-                AcademicLevelId = 2, // 2nd Year
-                GroupId = request.GroupId,
-                ProgramId = request.ProgramId,
-                StructureName = $"{baseName} - 2nd Year",
-                YearFeeMode = request.YearFeeMode,
-                IncrementType = request.IncrementType,
-                IncrementValue = request.IncrementValue,
-                PairedStructureId = firstYearEntity.FeeStructureId,
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-            _db.FeeStructures.Add(secondYearEntity);
-            await _db.SaveChangesAsync();
-
-            firstYearEntity.PairedStructureId = secondYearEntity.FeeStructureId;
-
-            var feeTypeIds = request.Items.Select(i => i.FeeTypeId).Distinct().ToList();
-            var feeTypesDict = await _db.FeeTypes.AsNoTracking().Where(ft => feeTypeIds.Contains(ft.FeeTypeId)).ToDictionaryAsync(ft => ft.FeeTypeId);
-
-            decimal incrementRupees = 0;
-            if (yearMode == "different" && request.IncrementValue.HasValue && request.IncrementValue.Value > 0)
-            {
-                decimal firstYearTotal = request.Items.Sum(i => i.Amount);
-                if (string.Equals(request.IncrementType, "percentage", StringComparison.OrdinalIgnoreCase))
-                {
-                    incrementRupees = Math.Round((firstYearTotal * request.IncrementValue.Value) / 100m, 2);
-                }
-                else
-                {
-                    incrementRupees = request.IncrementValue.Value;
-                }
-            }
-
-            var tuitionItem = request.Items.FirstOrDefault(i => feeTypesDict.TryGetValue(i.FeeTypeId, out var ft) &&
-                (ft.FeeTypeName.Contains("Tuition", StringComparison.OrdinalIgnoreCase) || ft.FeeTypeName.Contains("Course", StringComparison.OrdinalIgnoreCase)))
-                ?? request.Items.OrderByDescending(i => i.Amount).FirstOrDefault();
-
-            foreach (var item in request.Items)
-            {
-                feeTypesDict.TryGetValue(item.FeeTypeId, out var ft);
-                bool isAdmission = ft != null && (string.Equals(ft.Category, "Admission", StringComparison.OrdinalIgnoreCase) || ft.FeeTypeName.Contains("Admission", StringComparison.OrdinalIgnoreCase));
-
-                decimal itemAmount = item.Amount;
-                if (yearMode == "different" && isAdmission)
-                {
-                    itemAmount = 0;
-                }
-                else if (item == tuitionItem && incrementRupees > 0)
-                {
-                    itemAmount += incrementRupees;
-                }
-
-                if (itemAmount > 0)
-                {
-                    _db.FeeStructureComponents.Add(new FeeStructureComponent
-                    {
-                        FeeStructureId = secondYearEntity.FeeStructureId,
-                        FeeTypeId = item.FeeTypeId,
-                        Rule = item.Rule,
-                        Amount = itemAmount,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                    secondYearTotal += itemAmount;
-                }
-            }
-
-            await _db.SaveChangesAsync();
-        }
-
-        var response = await GetFeeStructureByIdAsync(firstYearEntity.FeeStructureId);
-        if (response != null && isMultiYear)
-        {
-            response.SecondYearTotalAmount = secondYearTotal;
-        }
-        return response;
-    }
-
-
-    public async Task<IEnumerable<FeeStructureResponse>>
-     GetFeeStructuresAsync(int? campusId = null)
-    {
-        try
-        {
-            var query = _db.FeeStructures
-                .AsNoTracking()
-                .Include(f => f.Board)
-                .Include(f => f.AcademicYear)
-                .Include(f => f.AcademicLevel)
-                .Include(f => f.Group)
-                .Include(f => f.Program)
-                .Include(f => f.Campus)
-                .Include(f => f.Components)
-                    .ThenInclude(c => c.FeeType)
-                .Where(f => f.IsActive);
-
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                query = query.Where(f => f.CampusId == null || f.CampusId == campusId.Value);
-            }
-
-            var list = await query.ToListAsync();
-            return list.Select(f => new FeeStructureResponse
-            {
-                FeeStructureId = f.FeeStructureId,
-                CampusId = f.CampusId,
-                CampusName = f.Campus != null ? f.Campus.CampusName : (f.CampusId.HasValue ? $"Campus {f.CampusId}" : "All Campuses"),
-                BoardId = f.BoardId,
-                BoardName = f.Board?.BoardName ?? string.Empty,
-                AcademicYearId = f.AcademicYearId,
-                AcademicYearName = f.AcademicYear?.AcademicYearName ?? string.Empty,
-                GroupId = f.GroupId,
-                GroupName = f.Group?.GroupName ?? string.Empty,
-                ProgramId = f.ProgramId,
-                ProgramName = f.Program?.ProgramName,
-                StructureName = f.StructureName,
-                AcademicLevelId = f.AcademicLevelId,
-                AcademicLevelName = f.AcademicLevel?.LevelName ?? (f.AcademicLevelId == 2 ? "2nd Year" : "1st Year"),
-                YearFeeMode = f.YearFeeMode,
-                IncrementType = f.IncrementType,
-                IncrementValue = f.IncrementValue,
-                PairedStructureId = f.PairedStructureId,
-                TotalAmount = f.Components.Where(c => c.IsActive).Sum(c => c.Amount),
-                IsActive = f.IsActive,
-                CreatedAt = f.CreatedAt,
-                UpdatedAt = f.UpdatedAt,
-                Items = f.Components.Select(c => new FeeStructureItemResponse
-                {
-                    FeeStructureComponentId = c.FeeStructureComponentId,
-                    FeeStructureId = c.FeeStructureId,
-                    FeeTypeId = c.FeeTypeId,
-                    FeeTypeName = c.FeeType?.FeeTypeName ?? string.Empty,
-                    Category = c.FeeType?.Category ?? string.Empty,
-                    Rule = c.Rule,
-                    Amount = c.Amount,
-                    IsActive = c.IsActive
-                }).ToList()
-            }).ToList();
-        }
-        catch
-        {
-            var c = Connection();
-            using var multi = await c.QueryMultipleAsync(
-                "sp_GetFeeStructures",
-                new { p_CampusId = campusId },
-                commandType: CommandType.StoredProcedure);
-
-            var structures =
-                (await multi.ReadAsync<FeeStructureResponse>())
-                .ToList();
-
-            if (!multi.IsConsumed)
-            {
-                var items =
-                    (await multi.ReadAsync<FeeStructureItemResponse>())
-                    .ToList();
-
-                foreach (var structure in structures)
-                {
-                    structure.Items = items
-                        .Where(x => x.FeeStructureId == structure.FeeStructureId)
-                        .ToList();
-                }
-            }
-
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                structures = structures.Where(s => s.CampusId == null || s.CampusId == campusId.Value).ToList();
-            }
-
-            return structures;
-        }
-    }
-
-
-    public async Task<FeeStructureResponse?> GetFeeStructureByIdAsync(
-        int id)
-    {
-        var f = await _db.FeeStructures
-            .AsNoTracking()
-            .Include(x => x.Board)
-            .Include(x => x.AcademicYear)
-            .Include(x => x.AcademicLevel)
-            .Include(x => x.Group)
-            .Include(x => x.Program)
-            .Include(x => x.Campus)
-            .Include(x => x.Components)
-                .ThenInclude(c => c.FeeType)
-            .FirstOrDefaultAsync(x => x.FeeStructureId == id);
-
-        if (f != null)
-        {
-            return new FeeStructureResponse
-            {
-                FeeStructureId = f.FeeStructureId,
-                CampusId = f.CampusId,
-                CampusName = f.Campus != null ? f.Campus.CampusName : (f.CampusId.HasValue ? $"Campus {f.CampusId}" : "All Campuses"),
-                BoardId = f.BoardId,
-                BoardName = f.Board?.BoardName ?? string.Empty,
-                AcademicYearId = f.AcademicYearId,
-                AcademicYearName = f.AcademicYear?.AcademicYearName ?? string.Empty,
-                GroupId = f.GroupId,
-                GroupName = f.Group?.GroupName ?? string.Empty,
-                ProgramId = f.ProgramId,
-                ProgramName = f.Program?.ProgramName,
-                StructureName = f.StructureName,
-                AcademicLevelId = f.AcademicLevelId,
-                AcademicLevelName = f.AcademicLevel?.LevelName ?? (f.AcademicLevelId == 2 ? "2nd Year" : "1st Year"),
-                YearFeeMode = f.YearFeeMode,
-                IncrementType = f.IncrementType,
-                IncrementValue = f.IncrementValue,
-                PairedStructureId = f.PairedStructureId,
-                TotalAmount = f.Components.Where(c => c.IsActive).Sum(c => c.Amount),
-                IsActive = f.IsActive,
-                CreatedAt = f.CreatedAt,
-                UpdatedAt = f.UpdatedAt,
-                Items = f.Components.Where(c => c.IsActive).Select(c => new FeeStructureItemResponse
-                {
-                    FeeStructureComponentId = c.FeeStructureComponentId,
-                    FeeStructureId = c.FeeStructureId,
-                    FeeTypeId = c.FeeTypeId,
-                    FeeTypeName = c.FeeType?.FeeTypeName ?? string.Empty,
-                    Category = c.FeeType?.Category ?? string.Empty,
-                    Rule = c.Rule,
-                    Amount = c.Amount,
-                    IsActive = c.IsActive
-                }).ToList()
-            };
-        }
-
         var c = Connection();
+        string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>());
 
         using var multi = await c.QueryMultipleAsync(
-            "sp_GetFeeStructureById",
+            "sp_FeeStructure_Create",
             new
             {
-                p_FeeStructureId = id
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_AcademicLevelId = request.AcademicLevelId ?? 1,
+                p_GroupId = request.GroupId,
+                p_ProgramId = request.ProgramId,
+                p_StructureName = request.StructureName,
+                p_Description = (string?)null,
+                p_YearFeeMode = request.YearFeeMode,
+                p_IncrementType = request.IncrementType,
+                p_IncrementValue = request.IncrementValue,
+                p_ItemsJson = itemsJson
             },
             commandType: CommandType.StoredProcedure);
 
-        var result =
-            await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
-
-        if (result == null)
-            return null;
-
-        result.Items =
-            (await multi.ReadAsync<FeeStructureItemResponse>())
-            .ToList();
-
-        return result;
+        var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
+        if (structure != null && !multi.IsConsumed)
+        {
+            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+        }
+        return structure;
     }
 
-
-    public async Task<FeeStructureResponse?> UpdateFeeStructureAsync(
-    int id,
-    UpdateFeeStructureRequest request)
+    public async Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null)
     {
         var c = Connection();
+        using var multi = await c.QueryMultipleAsync(
+            "sp_FeeStructure_GetAll",
+            new { p_CampusId = campusId ?? 0 },
+            commandType: CommandType.StoredProcedure);
 
-        if (string.IsNullOrWhiteSpace(request.StructureName))
+        var structures = (await multi.ReadAsync<FeeStructureResponse>()).ToList();
+        var items = !multi.IsConsumed
+            ? (await multi.ReadAsync<FeeStructureItemResponse>()).ToList()
+            : new List<FeeStructureItemResponse>();
+
+        foreach (var structure in structures)
         {
-            var existing = await GetFeeStructureByIdAsync(id);
-            if (!string.IsNullOrWhiteSpace(existing?.StructureName))
-                request.StructureName = existing.StructureName;
+            structure.Items = items.Where(x => x.FeeStructureId == structure.FeeStructureId).ToList();
         }
+        return structures;
+    }
 
+    public async Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int id)
+    {
+        var c = Connection();
+        using var multi = await c.QueryMultipleAsync(
+            "sp_FeeStructure_GetById",
+            new { p_FeeStructureId = id },
+            commandType: CommandType.StoredProcedure);
+
+        var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
+        if (structure != null && !multi.IsConsumed)
+        {
+            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+        }
+        return structure;
+    }
+
+    public async Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest request)
+    {
+        var c = Connection();
         return await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
-            "sp_UpdateFeeStructure",
+            "sp_FeeStructure_Update",
             new
             {
                 p_FeeStructureId = id,
@@ -445,30 +186,20 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<bool> DeleteFeeStructureAsync(int id)
     {
         var c = Connection();
-
         return await c.ExecuteAsync(
-            "sp_DeleteFeeStructure",
-            new
-            {
-                p_FeeStructureId = id
-            },
+            "sp_FeeStructure_Delete",
+            new { p_FeeStructureId = id },
             commandType: CommandType.StoredProcedure) > 0;
     }
 
-
-    public async Task<FeeStructureItemResponse?>
-        AddFeeStructureItemAsync(
-            int id,
-            CreateFeeStructureItemRequest request)
+    public async Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int id, CreateFeeStructureItemRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
-            "sp_AddFeeStructureItem",
+            "sp_FeeStructureComponent_Add",
             new
             {
                 p_FeeStructureId = id,
@@ -479,31 +210,20 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<IEnumerable<FeeStructureItemResponse>>
-        GetFeeStructureItemsAsync(int id)
+    public async Task<IEnumerable<FeeStructureItemResponse>> GetFeeStructureItemsAsync(int id)
     {
         var c = Connection();
-
         return await c.QueryAsync<FeeStructureItemResponse>(
-            "sp_GetFeeStructureItems",
-            new
-            {
-                p_FeeStructureId = id
-            },
+            "sp_FeeStructureComponent_GetAll",
+            new { p_FeeStructureId = id },
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<FeeStructureItemResponse?>
-        UpdateFeeStructureItemAsync(
-            int id,
-            UpdateFeeStructureItemRequest request)
+    public async Task<FeeStructureItemResponse?> UpdateFeeStructureItemAsync(int id, UpdateFeeStructureItemRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
-            "sp_UpdateFeeStructureItem",
+            "sp_FeeStructureComponent_Update",
             new
             {
                 p_FeeStructureComponentId = id,
@@ -514,50 +234,43 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<bool> DeleteFeeStructureItemAsync(int id)
     {
         var c = Connection();
-
         return await c.ExecuteAsync(
-            "sp_DeleteFeeStructureItem",
-            new
-            {
-                p_FeeStructureComponentId = id
-            },
+            "sp_FeeStructureComponent_Delete",
+            new { p_FeeStructureComponentId = id },
             commandType: CommandType.StoredProcedure) > 0;
     }
 
-
     // =========================================================
-    // SCHOLARSHIPS
+    // SECTION 3: SCHOLARSHIPS
     // =========================================================
 
-    public async Task<ScholarshipResponse?> CreateScholarshipAsync(
-        CreateScholarshipRequest request)
+    public async Task<ScholarshipResponse?> CreateScholarshipAsync(CreateScholarshipRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
-            "sp_CreateScholarship",
+            "sp_Scholarship_Create",
             new
             {
                 p_ScholarshipName = request.ScholarshipName,
-                p_Description = request.Description,
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
+                p_Description = request.Description,
+                p_CampusId = (int?)null,
+                p_BoardId = (int?)null,
+                p_AcademicYearId = (int?)null,
                 p_IsActive = request.IsActive
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         var c = Connection();
-
         return await c.QueryAsync<ScholarshipResponse>(
-            "sp_GetScholarships",
+            "sp_Scholarship_GetAll",
             new
             {
                 p_CampusId = campusId,
@@ -567,67 +280,53 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<ScholarshipResponse?> GetScholarshipByIdAsync(
-        int id)
+    public async Task<ScholarshipResponse?> GetScholarshipByIdAsync(int id)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
-            "sp_GetScholarshipById",
-            new
-            {
-                p_ScholarshipId = id
-            },
+            "sp_Scholarship_GetById",
+            new { p_ScholarshipId = id },
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<ScholarshipResponse?> UpdateScholarshipAsync(
-        int id,
-        UpdateScholarshipRequest request)
+    public async Task<ScholarshipResponse?> UpdateScholarshipAsync(int id, UpdateScholarshipRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
-            "sp_UpdateScholarship",
+            "sp_Scholarship_Update",
             new
             {
                 p_ScholarshipId = id,
                 p_ScholarshipName = request.ScholarshipName,
-                p_Description = request.Description,
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
+                p_Description = request.Description,
+                p_CampusId = (int?)null,
+                p_BoardId = (int?)null,
+                p_AcademicYearId = (int?)null,
                 p_IsActive = request.IsActive
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
     public async Task<bool> DeleteScholarshipAsync(int id)
     {
         var c = Connection();
-
         return await c.ExecuteAsync(
-            "sp_DeleteScholarship",
-            new
-            {
-                p_ScholarshipId = id
-            },
+            "sp_Scholarship_Delete",
+            new { p_ScholarshipId = id },
             commandType: CommandType.StoredProcedure) > 0;
     }
 
+    // =========================================================
+    // SECTION 4: STUDENT FEES & ASSIGNMENT
+    // =========================================================
 
-    // =========================================================
-    // STUDENT FEES
-    // =========================================================
-    public async Task<StudentFeeResponse?> AssignStudentFeeAsync(
-    AssignStudentFeeRequest request)
+    public async Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest request)
     {
         var c = Connection();
-
         using var multi = await c.QueryMultipleAsync(
-            "sp_AssignStudentFee",
+            "sp_StudentFee_Assign",
             new
             {
                 p_StudentId = request.StudentId,
@@ -637,135 +336,75 @@ public class FeeRepository : IFeeRepository
             },
             commandType: CommandType.StoredProcedure);
 
-        // Result Set 1:
-        // sp_AutoCreatePaymentPlan -> FeePaymentPlans
-        var paymentPlan =
-            await multi.ReadFirstOrDefaultAsync<PaymentPlanResponse>();
+        var paymentPlan = await multi.ReadFirstOrDefaultAsync<PaymentPlanResponse>();
+        var schedules = !multi.IsConsumed ? (await multi.ReadAsync<FeeScheduleResponse>()).ToList() : new List<FeeScheduleResponse>();
+        var studentFee = !multi.IsConsumed ? await multi.ReadFirstOrDefaultAsync<StudentFeeResponse>() : null;
 
-        // Result Set 2:
-        // sp_AutoCreatePaymentPlan -> FeeInstallments
-        var schedules =
-            (await multi.ReadAsync<FeeScheduleResponse>())
-            .ToList();
+        if (studentFee == null) return null;
 
-        // Result Set 3:
-        // sp_AssignStudentFee -> StudentFees
-        var studentFee =
-            await multi.ReadFirstOrDefaultAsync<StudentFeeResponse>();
-
-        if (studentFee == null)
-            return null;
-
-        // Attach payment plan information to response
-        if (paymentPlan != null)
-        {
-            studentFee.PaymentPlan = paymentPlan.PlanName;
-        }
-
-        // Attach installments/schedules
+        if (paymentPlan != null) studentFee.PaymentPlan = paymentPlan.PlanName;
         studentFee.Schedules = schedules;
-
         return studentFee;
     }
 
-
-    // =========================================================
-    // STUDENT FEE BY STUDENT FEE ID
-    // =========================================================
-
     public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id)
     {
-        var c = Connection();
-
-        // Resolve studentId: id could be a StudentFeeId or a StudentId directly
-        var studentFee = await c.QueryFirstOrDefaultAsync<StudentFeeDetailsResponse>(
-            "sp_GetStudentFeeDetails",
-            new { p_StudentFeeId = id },
-            commandType: CommandType.StoredProcedure);
-
-        var targetStudentId = (studentFee != null && studentFee.StudentId > 0) ? studentFee.StudentId : id;
-
-        return await GetStudentFeeDetailsByStudentAsync(targetStudentId);
+        // ID could be StudentFeeId or StudentId directly; resolve via GetStudentFeeDetailsByStudentAsync
+        return await GetStudentFeeDetailsByStudentAsync(id);
     }
 
-
-    // =========================================================
-    // STUDENT FEE BY STUDENT ID
-    // =========================================================
-    public async Task<StudentFeeDetailsResponse?>
-    GetStudentFeeDetailsByStudentAsync(int studentId)
+    public async Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId)
     {
         var c = Connection();
-
         using var multi = await c.QueryMultipleAsync(
-            "sp_GetStudentFeeDetailsByStudent",
-            new
-            {
-                p_StudentId = studentId
-            },
+            "sp_StudentFee_GetDetailsByStudent",
+            new { p_StudentId = studentId },
             commandType: CommandType.StoredProcedure);
 
-        // Result Set 1: Student Fee Summary
-        var studentDetails =
-            await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
+        var studentDetails = await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
+        if (studentDetails == null) return null;
 
-        if (studentDetails == null)
-            return null;
-
-        // Result Set 2: Fee Breakdown (safely check if consumed)
         if (!multi.IsConsumed)
         {
-            studentDetails.Breakdown =
-                (await multi.ReadAsync<StudentFeeBreakdownResponse>())
-                .ToList();
+            studentDetails.Breakdown = (await multi.ReadAsync<StudentFeeBreakdownResponse>()).ToList();
         }
-
-        // Result Set 3: Payment Schedules (safely check if consumed)
         if (!multi.IsConsumed)
         {
-            studentDetails.Schedules =
-                (await multi.ReadAsync<FeeScheduleResponse>())
-                .ToList();
+            studentDetails.Schedules = (await multi.ReadAsync<FeeScheduleResponse>()).ToList();
         }
-
         return studentDetails;
     }
 
-    // =========================================================
-    // COMMON STUDENT FEE READER
-    //
-    // Used by sp_GetStudentFeeDetails.
-    // This SP should return its expected result sets.
-    // =========================================================
-
-    private async Task<StudentFeeDetailsResponse?>
-        ReadStudentDetails(SqlMapper.GridReader multi)
+    public async Task<Dictionary<int, StudentFeeDetailsResponse?>> GetBulkStudentFeeDetailsAsync(IEnumerable<int> studentIds)
     {
-        var result =
-            await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
+        var c = Connection();
+        var distinctIds = studentIds.Distinct().ToList();
+        string json = JsonSerializer.Serialize(distinctIds);
 
-        if (result == null)
-            return null;
+        using var multi = await c.QueryMultipleAsync(
+            "sp_StudentFee_GetBulkDetails",
+            new { p_StudentIdsJson = json },
+            commandType: CommandType.StoredProcedure);
 
-        result.Breakdown =
-            (await multi.ReadAsync<StudentFeeBreakdownResponse>())
-            .ToList();
+        var summaries = (await multi.ReadAsync<StudentFeeDetailsResponse>()).ToList();
+        var breakdowns = !multi.IsConsumed ? (await multi.ReadAsync<StudentFeeBreakdownResponse>()).ToList() : new List<StudentFeeBreakdownResponse>();
+        var schedules = !multi.IsConsumed ? (await multi.ReadAsync<FeeScheduleResponse>()).ToList() : new List<FeeScheduleResponse>();
 
-        return result;
+        var dict = new Dictionary<int, StudentFeeDetailsResponse?>();
+        foreach (var sid in distinctIds)
+        {
+            var summary = summaries.FirstOrDefault(s => s.StudentId == sid);
+            if (summary != null)
+            {
+                summary.Breakdown = breakdowns.Where(b => b.StudentFeeId == summary.StudentFeeId).ToList();
+                summary.Schedules = schedules.Where(s => s.StudentFeeId == summary.StudentFeeId).ToList();
+            }
+            dict[sid] = summary;
+        }
+        return dict;
     }
 
-
-    // =========================================================
-    // STUDENT FEE LEDGER
-    //
-    // Current SP signature:
-    // sp_GetStudentFeeLedger(IN p_StudentId INT)
-    //
-    // Therefore repository accepts studentId.
-    // =========================================================
-
-    public async Task<IEnumerable<StudentFeeLedgerResponse>>
-    GetStudentFeeLedgerAsync(
+    public async Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(
         int? campusId = null,
         int? academicYearId = null,
         int? groupId = null,
@@ -775,102 +414,32 @@ public class FeeRepository : IFeeRepository
         string? search = null,
         int? boardId = null)
     {
-        try
-        {
-            var query = _db.StudentFees
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Campus)
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.AcademicYear)
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Group)
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Section)
-                .Include(sf => sf.FeeStructure)
-                .Include(sf => sf.PaymentPlans)
-                    .ThenInclude(p => p.Installments)
-                .Include(sf => sf.Payments)
-                .AsQueryable();
-
-            if (campusId.HasValue && campusId.Value > 0)
+        var c = Connection();
+        return await c.QueryAsync<StudentFeeLedgerResponse>(
+            "sp_StudentFee_GetLedger",
+            new
             {
-                query = query.Where(sf => sf.Student.CampusId == campusId.Value);
-            }
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-            {
-                query = query.Where(sf => sf.Student.AcademicYearId == academicYearId.Value);
-            }
-            if (groupId.HasValue && groupId.Value > 0)
-            {
-                query = query.Where(sf => sf.Student.GroupId == groupId.Value);
-            }
-            if (sectionId.HasValue && sectionId.Value > 0)
-            {
-                query = query.Where(sf => sf.Student.SectionId == sectionId.Value);
-            }
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                query = query.Where(sf => sf.Status == status);
-            }
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim().ToLower();
-                query = query.Where(sf => sf.Student.StudentName.ToLower().Contains(s) ||
-                                          sf.Student.AdmissionNo.ToLower().Contains(s) ||
-                                          (sf.Student.RollNo != null && sf.Student.RollNo.ToLower().Contains(s)));
-            }
-
-            var list = await query.ToListAsync();
-            return list.Select(sf => new StudentFeeLedgerResponse
-            {
-                StudentFeeId = sf.StudentFeeId,
-                StudentId = sf.StudentId,
-                CampusId = sf.Student.CampusId,
-                CampusName = sf.Student.Campus?.CampusName ?? (sf.Student.CampusId.HasValue ? $"Campus {sf.Student.CampusId}" : "Main Campus"),
-                AdmissionNumber = sf.Student.AdmissionNo,
-                StudentName = sf.Student.StudentName,
-                GroupName = sf.Student.Group?.GroupName ?? string.Empty,
-                SectionName = sf.Student.Section?.SectionName ?? string.Empty,
-                TotalPayable = sf.PayableAmount,
-                TotalPaid = sf.PaidAmount,
-                Balance = sf.BalanceAmount,
-                PaymentPlan = sf.PaymentPlan ?? "Standard",
-                Status = sf.Status
-            }).ToList();
-        }
-        catch
-        {
-            var c = Connection();
-
-            return await c.QueryAsync<StudentFeeLedgerResponse>(
-                "sp_GetStudentFeeLedger",
-                new
-                {
-                    p_CampusId = campusId,
-                    p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId,
-                    p_SectionId = sectionId,
-                    p_PaymentPlan = paymentPlan,
-                    p_Status = status,
-                    p_Search = search,
-                    p_BoardId = boardId
-                },
-                commandType: CommandType.StoredProcedure);
-        }
+                p_CampusId = campusId,
+                p_AcademicYearId = academicYearId,
+                p_GroupId = groupId,
+                p_SectionId = sectionId,
+                p_PaymentPlan = paymentPlan,
+                p_Status = status,
+                p_Search = search,
+                p_BoardId = boardId
+            },
+            commandType: CommandType.StoredProcedure);
     }
 
     // =========================================================
-    // FEE CONCESSION
+    // SECTION 5: FEE CONCESSION
     // =========================================================
 
-    public async Task<FeeConcessionResponse?>
-        ApplyFeeConcessionAsync(
-            ApplyFeeConcessionRequest request)
+    public async Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeConcessionResponse>(
-            "sp_ApplyFeeConcession",
+            "sp_FeeConcession_Apply",
             new
             {
                 p_StudentId = request.StudentId,
@@ -885,673 +454,324 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-
     // =========================================================
-    // PAYMENT PLAN
+    // SECTION 6: PAYMENT PLANS & INSTALLMENTS
     // =========================================================
 
-    public async Task<PaymentPlanResponse?>
-        CreatePaymentPlanAsync(
-            CreatePaymentPlanRequest request)
+    public async Task<PaymentPlanResponse?> CreatePaymentPlanAsync(CreatePaymentPlanRequest request)
     {
         var c = Connection();
-
-        c.Open();
-
-        using var tx = c.BeginTransaction();
-
-        try
-        {
-            var plan =
-                await c.QueryFirstOrDefaultAsync<PaymentPlanResponse>(
-                    "sp_CreatePaymentPlan",
-                    new
-                    {
-                        p_StudentFeeId = request.StudentFeeId,
-                        p_PlanName = request.PlanName,
-                        p_NumberOfInstallments =
-                            request.NumberOfInstallments
-                    },
-                    tx,
-                    commandType: CommandType.StoredProcedure);
-
-            if (plan == null)
+        using var multi = await c.QueryMultipleAsync(
+            "sp_PaymentPlan_Create",
+            new
             {
-                tx.Rollback();
-                return null;
-            }
+                p_StudentFeeId = request.StudentFeeId,
+                p_PlanName = request.PlanName,
+                p_NumberOfInstallments = request.NumberOfInstallments
+            },
+            commandType: CommandType.StoredProcedure);
 
-            tx.Commit();
-
-            var c2 = Connection();
-
-            using var multi =
-                await c2.QueryMultipleAsync(
-                    "sp_GetPaymentPlan",
-                    new
-                    {
-                        p_FeePaymentPlanId =
-                            plan.FeePaymentPlanId
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-            var response =
-                await multi.ReadFirstOrDefaultAsync<PaymentPlanResponse>();
-
-            if (response != null)
-            {
-                response.Installments =
-                    (await multi.ReadAsync<FeeScheduleResponse>())
-                    .ToList();
-            }
-
-            return response;
-        }
-        catch
+        var plan = await multi.ReadFirstOrDefaultAsync<PaymentPlanResponse>();
+        if (plan != null && !multi.IsConsumed)
         {
-            tx.Rollback();
-            throw;
+            plan.Installments = (await multi.ReadAsync<FeeScheduleResponse>()).ToList();
         }
+        return plan;
     }
 
-
-    public async Task<FeeScheduleResponse?>
-        AddPaymentPlanInstallmentAsync(
-            int planId,
-            CreateInstallmentRequest request)
+    public async Task<FeeScheduleResponse?> AddPaymentPlanInstallmentAsync(int planId, CreateInstallmentRequest request)
     {
         var c = Connection();
-
         return await c.QueryFirstOrDefaultAsync<FeeScheduleResponse>(
-            "sp_AddPaymentPlanInstallment",
+            "sp_PaymentPlan_AddInstallment",
             new
             {
                 p_FeePaymentPlanId = planId,
-                p_InstallmentNumber =
-                    request.InstallmentNumber,
+                p_InstallmentNumber = request.InstallmentNumber,
                 p_Amount = request.Amount,
                 p_DueDate = request.DueDate
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
     // =========================================================
-    // PAYMENTS
+    // SECTION 7: PAYMENTS & RECEIPTS (WITH CONCURRENCY LOCK)
     // =========================================================
 
     public async Task<FeePaymentResponse?> CreateFeePaymentAsync(CreateFeePaymentRequest request)
     {
-        var strategy = _db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        var c = Connection();
+        string? instJson = request.FeeInstallmentIds != null && request.FeeInstallmentIds.Any()
+            ? JsonSerializer.Serialize(request.FeeInstallmentIds)
+            : null;
+
+        // Auto-generate receipt number if requested
+        string? finalReceiptNo = request.ReceiptNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(finalReceiptNo))
         {
-            using var tx = await _db.Database.BeginTransactionAsync();
             try
-        {
-            var studentFee = await _db.StudentFees
-                .Include(sf => sf.Student)
-                .FirstOrDefaultAsync(sf => sf.StudentFeeId == request.StudentFeeId && sf.StudentId == request.StudentId);
-
-            if (studentFee == null)
-                throw new Exception("Student fee record not found.");
-
-            decimal discount = request.Discount < 0 ? 0 : request.Discount;
-            decimal fine = request.Fine < 0 ? 0 : request.Fine;
-            decimal finalAmount = request.Amount + fine - discount;
-
-            if (finalAmount <= 0)
-                throw new Exception("Final payment amount must be greater than zero.");
-            if (finalAmount > studentFee.BalanceAmount)
-                throw new Exception("Payment amount cannot exceed outstanding balance.");
-
-            var installments = new List<FeeInstallment>();
-            if (request.FeeInstallmentIds != null && request.FeeInstallmentIds.Any())
             {
-                installments = await _db.FeeInstallments
-                    .Include(fi => fi.FeePaymentPlan)
-                    .Where(fi => request.FeeInstallmentIds.Contains(fi.FeeInstallmentId) && fi.FeePaymentPlan.StudentFeeId == request.StudentFeeId)
-                    .OrderBy(fi => fi.DueDate)
-                    .ToListAsync();
-                    
-                if (installments.Count != request.FeeInstallmentIds.Count)
-                    throw new Exception("One or more installments do not belong to this student fee.");
-            }
-
-            decimal remainingToDistribute = finalAmount;
-            foreach (var inst in installments)
-            {
-                if (remainingToDistribute <= 0) break;
-                
-                decimal amountToPay = Math.Min(remainingToDistribute, inst.BalanceAmount);
-                if (amountToPay > 0)
-                {
-                    inst.PaidAmount += amountToPay;
-                    inst.BalanceAmount = Math.Max(0, inst.Amount - inst.PaidAmount);
-                    inst.Status = inst.Amount <= inst.PaidAmount ? "Paid" : "PartiallyPaid";
-                    remainingToDistribute -= amountToPay;
-                }
-            }
-
-            studentFee.PaidAmount += finalAmount;
-            studentFee.BalanceAmount = Math.Max(0, studentFee.PayableAmount - studentFee.PaidAmount);
-            studentFee.Status = studentFee.PayableAmount <= studentFee.PaidAmount ? "Paid" : "PartiallyPaid";
-            studentFee.UpdatedAt = DateTime.UtcNow;
-
-            if (studentFee.Student != null)
-            {
-                studentFee.Student.FeeAmount = studentFee.PayableAmount;
-                studentFee.Student.FeePaid = studentFee.PaidAmount;
-                studentFee.Student.FeeStatus = studentFee.Status;
-                studentFee.Student.UpdatedAt = DateTime.UtcNow;
-            }
-
-            string? remarks = null;
-            if (!string.IsNullOrWhiteSpace(request.Note) || discount > 0 || fine > 0)
-            {
-                var parts = new List<string>();
-                if (!string.IsNullOrWhiteSpace(request.Note)) parts.Add(request.Note);
-                if (discount > 0) parts.Add($"Discount: {discount:F2}");
-                if (fine > 0) parts.Add($"Fine: {fine:F2}");
-                remarks = string.Join(" | ", parts);
-            }
-
-            var paymentDate = request.PaymentDate ?? DateTime.UtcNow;
-            var payment = new FeePayment
-            {
-                StudentId = request.StudentId,
-                StudentFeeId = request.StudentFeeId,
-                FeeInstallmentId = request.FeeInstallmentIds?.Count == 1 ? request.FeeInstallmentIds.First() : null,
-                Amount = finalAmount,
-                PaymentMode = request.PaymentMode.Trim(),
-                TransactionReference = request.TransactionReference,
-                Remarks = remarks,
-                PaymentDate = paymentDate,
-                Status = "Success",
-                CollectedBy = request.CollectedBy
-            };
-
-            _db.FeePayments.Add(payment);
-            await _db.SaveChangesAsync();
-
-            string finalReceiptNo = request.ReceiptNumber?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(finalReceiptNo))
-            {
-                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
-                { 
-                    Board = studentFee.Student?.BoardId?.ToString(),
-                    AcademicYear = studentFee.Student?.AcademicYearId?.ToString()
-                };
-                
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentFee.Student?.CampusId ?? 1);
+                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto();
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, 1);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     finalReceiptNo = generatedDto.GeneratedNumber;
                 }
-                else
-                {
-                    finalReceiptNo = $"FEE-{paymentDate:yyyyMMdd}-{payment.FeePaymentId:D6}";
-                }
             }
-
-            payment.ReceiptNumber = finalReceiptNo;
-            
-            var receipt = new FeeReceipt
+            catch
             {
-                FeePaymentId = payment.FeePaymentId,
-                ReceiptNumber = payment.ReceiptNumber,
-                ReceiptDate = paymentDate,
-                Remarks = request.Note
-            };
-            _db.FeeReceipts.Add(receipt);
-            
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
-
-            return new FeePaymentResponse
-            {
-                FeePaymentId = payment.FeePaymentId,
-                StudentId = payment.StudentId,
-                StudentName = studentFee.Student?.StudentName ?? string.Empty,
-                AdmissionNumber = studentFee.Student?.AdmissionNo ?? string.Empty,
-                StudentFeeId = payment.StudentFeeId,
-                FeeInstallmentId = payment.FeeInstallmentId,
-                Amount = payment.Amount,
-                PaymentMethod = payment.PaymentMode,
-                TransactionReference = payment.TransactionReference,
-                Remarks = payment.Remarks,
-                PaymentDate = payment.PaymentDate,
-                Status = payment.Status,
-                ReceiptNumber = payment.ReceiptNumber
-            };
+                // Fallback to procedure generation
+            }
         }
-        catch
-        {
-            await tx.RollbackAsync();
-            throw;
-        }
-        });
-    }
 
-
-    public async Task<IEnumerable<FeePaymentResponse>>
-        GetFeePaymentsAsync(int studentId)
-    {
-        var c = Connection();
-
-        return await c.QueryAsync<FeePaymentResponse>(
-            "sp_GetPaymentHistoryByStudent",
-            new
-            {
-                p_StudentId = studentId
-            },
-            commandType: CommandType.StoredProcedure);
-    }
-
-
-    public async Task<FeePaymentResponse?>
-        GetFeePaymentByIdAsync(int id)
-    {
-        var c = Connection();
+        int collectedById = request.CollectedBy ?? 0;
 
         return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
-            "sp_GetFeePaymentById",
+            "sp_FeePayment_Collect",
             new
             {
-                p_FeePaymentId = id
+                p_StudentId = request.StudentId,
+                p_StudentFeeId = request.StudentFeeId,
+                p_FeeInstallmentIdsJson = instJson,
+                p_Amount = request.Amount,
+                p_Discount = request.Discount,
+                p_Fine = request.Fine,
+                p_PaymentMode = request.PaymentMode,
+                p_TransactionReference = request.TransactionReference,
+                p_Note = request.Note,
+                p_PaymentDate = request.PaymentDate ?? DateTime.UtcNow,
+                p_ReceiptNumber = finalReceiptNo,
+                p_CollectedBy = collectedById
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<FeeReceiptResponse?>
-        GetReceiptAsync(string receiptNumber)
+    public async Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int studentId)
     {
         var c = Connection();
+        return await c.QueryAsync<FeePaymentResponse>(
+            "sp_FeePayment_GetHistoryByStudent",
+            new { p_StudentId = studentId },
+            commandType: CommandType.StoredProcedure);
+    }
 
+    public async Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds)
+    {
+        var ids = studentIds?.Distinct().Where(id => id > 0).ToList() ?? new List<int>();
+        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
+        if (!ids.Any()) return result;
+
+        var c = Connection();
+        try
+        {
+            var payments = await c.QueryAsync<FeePaymentResponse>(
+                "sp_FeePayment_GetBulkHistory",
+                new { p_StudentIds = string.Join(",", ids) },
+                commandType: CommandType.StoredProcedure);
+
+            var grouped = payments.GroupBy(p => p.StudentId).ToDictionary(g => g.Key, g => (IEnumerable<FeePaymentResponse>)g.ToList());
+            foreach (var id in ids)
+            {
+                result[id] = grouped.TryGetValue(id, out var list) ? list : Enumerable.Empty<FeePaymentResponse>();
+            }
+            return result;
+        }
+        catch
+        {
+            foreach (var id in ids)
+            {
+                result[id] = await GetFeePaymentsAsync(id);
+            }
+            return result;
+        }
+    }
+
+    public async Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id)
+    {
+        var c = Connection();
+        return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
+            "sp_FeePayment_GetById",
+            new { p_FeePaymentId = id },
+            commandType: CommandType.StoredProcedure);
+    }
+
+    public async Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber)
+    {
+        var c = Connection();
         return await c.QueryFirstOrDefaultAsync<FeeReceiptResponse>(
-            "sp_GetFeeReceipt",
+            "sp_FeeReceipt_GetByNumber",
+            new { p_ReceiptNumber = receiptNumber.Trim() },
+            commandType: CommandType.StoredProcedure);
+    }
+
+    // =========================================================
+    // SECTION 8: COLLECTION, DUE, DASHBOARD & REPORTS
+    // =========================================================
+
+    public async Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId = null, string? search = null, int? boardId = null, int? academicYearId = null)
+    {
+        var c = Connection();
+        return await c.QueryAsync<FeeCollectionResponse>(
+            "sp_FeeCollection_Get",
             new
             {
-                p_ReceiptNumber = receiptNumber
+                p_CampusId = campusId,
+                p_Search = search,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
             },
             commandType: CommandType.StoredProcedure);
     }
 
-
-    // =========================================================
-    // COLLECTION
-    // =========================================================
-
-    public async Task<IEnumerable<FeeCollectionResponse>>
-        GetFeeCollectionAsync(int? campusId = null, string? search = null, int? boardId = null, int? academicYearId = null)
+    public async Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
-        try
-        {
-            var query = _db.StudentFees
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Campus)
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Group)
-                .Include(sf => sf.Student)
-                    .ThenInclude(s => s.Section)
-                .Include(sf => sf.PaymentPlans)
-                    .ThenInclude(p => p.Installments)
-                .Include(sf => sf.Payments)
-                .AsQueryable();
-
-            if (campusId.HasValue && campusId.Value > 0)
+        var c = Connection();
+        return await c.QueryAsync<FeeDueResponse>(
+            "sp_FeeDue_Get",
+            new
             {
-                query = query.Where(sf => sf.Student.CampusId == campusId.Value);
-            }
-            if (boardId.HasValue && boardId.Value > 0)
-            {
-                query = query.Where(sf => sf.Student.BoardId == boardId.Value);
-            }
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-            {
-                query = query.Where(sf => sf.Student.AcademicYearId == academicYearId.Value);
-            }
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim().ToLower();
-                query = query.Where(sf => sf.Student.StudentName.ToLower().Contains(s) ||
-                                          sf.Student.AdmissionNo.ToLower().Contains(s) ||
-                                          (sf.Student.RollNo != null && sf.Student.RollNo.ToLower().Contains(s)));
-            }
-
-            var list = await query.ToListAsync();
-            return list.Select(sf => new FeeCollectionResponse
-            {
-                StudentId = sf.StudentId,
-                StudentFeeId = sf.StudentFeeId,
-                CampusId = sf.Student.CampusId,
-                CampusName = sf.Student.Campus?.CampusName ?? (sf.Student.CampusId.HasValue ? $"Campus {sf.Student.CampusId}" : "Main Campus"),
-                AdmissionNumber = sf.Student.AdmissionNo,
-                StudentName = sf.Student.StudentName,
-                GroupName = sf.Student.Group?.GroupName ?? string.Empty,
-                SectionName = sf.Student.Section?.SectionName ?? string.Empty,
-                Payable = sf.PayableAmount,
-                Paid = sf.PaidAmount,
-                Balance = sf.BalanceAmount,
-                NextDue = sf.PaymentPlans.SelectMany(p => p.Installments).Where(i => i.Status != "Paid" && i.DueDate != default).OrderBy(i => i.DueDate).Select(i => (DateTime?)i.DueDate).FirstOrDefault(),
-                Status = sf.Status
-            }).ToList();
-        }
-        catch
-        {
-            var c = Connection();
-
-            return await c.QueryAsync<FeeCollectionResponse>(
-                "sp_GetFeeCollection",
-                new
-                {
-                    p_CampusId = campusId,
-                    p_Search = search,
-                    p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId
-                },
-                commandType: CommandType.StoredProcedure);
-        }
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
+            commandType: CommandType.StoredProcedure);
     }
 
-
-    public async Task<IEnumerable<FeeDueResponse>>
-        GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
+    public async Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
-        try
-        {
-            var query = _db.FeeInstallments
-                .Include(i => i.FeePaymentPlan)
-                    .ThenInclude(p => p.StudentFee)
-                        .ThenInclude(sf => sf.Student)
-                            .ThenInclude(s => s.Campus)
-                .Include(i => i.FeePaymentPlan)
-                    .ThenInclude(p => p.StudentFee)
-                        .ThenInclude(sf => sf.Student)
-                            .ThenInclude(s => s.Group)
-                .Include(i => i.FeePaymentPlan)
-                    .ThenInclude(p => p.StudentFee)
-                        .ThenInclude(sf => sf.Student)
-                            .ThenInclude(s => s.Section)
-                .Where(i => i.Status != "Paid" && i.BalanceAmount > 0);
+        var c = Connection();
+        using var multi = await c.QueryMultipleAsync(
+            "sp_FeeDashboard_Get",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
+            commandType: CommandType.StoredProcedure);
 
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.CampusId == campusId.Value);
-            }
-            if (boardId.HasValue && boardId.Value > 0)
-            {
-                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.BoardId == boardId.Value);
-            }
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-            {
-                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.AcademicYearId == academicYearId.Value);
-            }
-
-            var list = await query.ToListAsync();
-            return list.Select(i => new FeeDueResponse
-            {
-                StudentFeeId = i.FeePaymentPlan.StudentFee.StudentFeeId,
-                StudentId = i.FeePaymentPlan.StudentFee.StudentId,
-                CampusId = i.FeePaymentPlan.StudentFee.Student.CampusId,
-                CampusName = i.FeePaymentPlan.StudentFee.Student.Campus?.CampusName,
-                AdmissionNumber = i.FeePaymentPlan.StudentFee.Student.AdmissionNo,
-                StudentName = i.FeePaymentPlan.StudentFee.Student.StudentName,
-                GroupName = i.FeePaymentPlan.StudentFee.Student.Group?.GroupName ?? string.Empty,
-                SectionName = i.FeePaymentPlan.StudentFee.Student.Section?.SectionName ?? string.Empty,
-                FeeSchedule = $"Installment {i.InstallmentNumber}",
-                DueDate = i.DueDate,
-                Amount = i.Amount,
-                Balance = i.BalanceAmount,
-                Status = i.Status
-            }).ToList();
-        }
-        catch
-        {
-            var c = Connection();
-
-            return await c.QueryAsync<FeeDueResponse>(
-                "sp_GetDueFees",
-                new { 
-                    p_CampusId = campusId,
-                    p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId
-                },
-                commandType: CommandType.StoredProcedure);
-        }
+        var r = await multi.ReadFirstOrDefaultAsync<FeeDashboardResponse>() ?? new FeeDashboardResponse();
+        if (!multi.IsConsumed) r.GroupWiseCollection = (await multi.ReadAsync<GroupCollectionResponse>()).ToList();
+        if (!multi.IsConsumed) r.UpcomingSchedules = (await multi.ReadAsync<FeeDueResponse>()).ToList();
+        if (!multi.IsConsumed) r.RecentPayments = (await multi.ReadAsync<FeePaymentResponse>()).ToList();
+        return r;
     }
 
-
-    // =========================================================
-    // DASHBOARD
-    // =========================================================
-
-    public async Task<FeeDashboardResponse>
-        GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
-    {
-        try
-        {
-            var c = Connection();
-
-            using var multi =
-                await c.QueryMultipleAsync(
-                    "sp_GetFeeDashboard",
-                    new { 
-                        p_CampusId = campusId,
-                        p_BoardId = boardId,
-                        p_AcademicYearId = academicYearId 
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-            var r =
-                await multi.ReadFirstAsync<FeeDashboardResponse>();
-
-            if (!multi.IsConsumed)
-            {
-                r.GroupWiseCollection =
-                    (await multi.ReadAsync<GroupCollectionResponse>())
-                    .ToList();
-            }
-
-            if (!multi.IsConsumed)
-            {
-                r.UpcomingSchedules =
-                    (await multi.ReadAsync<FeeDueResponse>())
-                    .ToList();
-            }
-
-            if (!multi.IsConsumed)
-            {
-                r.RecentPayments =
-                    (await multi.ReadAsync<FeePaymentResponse>())
-                    .ToList();
-            }
-
-            return r;
-        }
-        catch
-        {
-            var feesQuery = _db.StudentFees
-                .Include(sf => sf.Student)
-                .AsQueryable();
-
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                feesQuery = feesQuery.Where(sf => sf.Student.CampusId == campusId.Value);
-            }
-
-            var fees = await feesQuery.ToListAsync();
-            var totalExpected = fees.Sum(f => f.PayableAmount);
-            var totalCollected = fees.Sum(f => f.PaidAmount);
-            var totalOutstanding = fees.Sum(f => f.BalanceAmount);
-
-            return new FeeDashboardResponse
-            {
-                TotalExpected = totalExpected,
-                TotalCollected = totalCollected,
-                TotalOutstanding = totalOutstanding,
-                CollectionPercentage = totalExpected > 0 ? Math.Round((totalCollected / totalExpected) * 100, 2) : 0,
-                TotalStudents = fees.Count,
-                PendingStudents = fees.Count(f => f.Status == "Pending" || f.Status == "Partial"),
-                OverdueStudents = fees.Count(f => f.Status == "Overdue")
-            };
-        }
-    }
-
-
-    // =========================================================
-    // DAILY REPORT
-    // =========================================================
-
-    public async Task<FeeReportResponse>
-        GetDailyReportAsync(int? campusId = null, DateTime? date = null)
+    public async Task<FeeReportResponse> GetDailyReportAsync(int? campusId = null, DateTime? date = null)
     {
         var targetDate = (date ?? DateTime.Today).Date;
-        try
+        var c = Connection();
+        using var multi = await c.QueryMultipleAsync(
+            "sp_FeeReport_Daily",
+            new
+            {
+                p_CampusId = campusId,
+                p_ReportDate = targetDate
+            },
+            commandType: CommandType.StoredProcedure);
+
+        var r = await multi.ReadFirstOrDefaultAsync<FeeReportResponse>() ?? new FeeReportResponse
         {
-            var c = Connection();
-
-            using var multi =
-                await c.QueryMultipleAsync(
-                    "sp_GetDailyFeeReport",
-                    new
-                    {
-                        p_CampusId = campusId,
-                        p_ReportDate = targetDate
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-            var r =
-                await multi.ReadFirstAsync<FeeReportResponse>();
-
-            if (!multi.IsConsumed)
-            {
-                r.Transactions =
-                    (await multi.ReadAsync<FeePaymentResponse>())
-                    .ToList();
-            }
-
-            return r;
-        }
-        catch
+            FromDate = targetDate,
+            ToDate = targetDate
+        };
+        if (!multi.IsConsumed)
         {
-            var paymentsQuery = _db.FeePayments
-                .Include(p => p.Student)
-                .Where(p => p.PaymentDate.Date == targetDate);
-
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(p => p.Student.CampusId == campusId.Value);
-            }
-
-            var payments = await paymentsQuery.ToListAsync();
-            var totalAmount = payments.Sum(p => p.Amount);
-
-            return new FeeReportResponse
-            {
-                FromDate = targetDate,
-                ToDate = targetDate,
-                TotalCollected = totalAmount,
-                TransactionCount = payments.Count,
-                Transactions = payments.Select(p => new FeePaymentResponse
-                {
-                    FeePaymentId = p.FeePaymentId,
-                    StudentId = p.StudentId,
-                    StudentName = p.Student?.StudentName ?? string.Empty,
-                    StudentFeeId = p.StudentFeeId,
-                    ReceiptNumber = p.ReceiptNumber ?? string.Empty,
-                    Amount = p.Amount,
-                    PaymentDate = p.PaymentDate,
-                    PaymentMethod = p.PaymentMode,
-                    TransactionReference = p.TransactionReference,
-                    Remarks = p.Remarks,
-                    Status = p.Status
-                }).ToList()
-            };
+            r.Transactions = (await multi.ReadAsync<FeePaymentResponse>()).ToList();
         }
+        return r;
     }
 
-
-    // =========================================================
-    // MONTHLY REPORT
-    // =========================================================
-
-    public async Task<FeeReportResponse>
-        GetMonthlyReportAsync(
-            int? campusId = null,
-            int? year = null,
-            int? month = null)
+    public async Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId = null, int? year = null, int? month = null)
     {
-        var d = new DateTime(
-            year ?? DateTime.Today.Year,
-            month ?? DateTime.Today.Month,
-            1);
+        var d = new DateTime(year ?? DateTime.Today.Year, month ?? DateTime.Today.Month, 1);
+        var c = Connection();
+        using var multi = await c.QueryMultipleAsync(
+            "sp_FeeReport_Monthly",
+            new
+            {
+                p_CampusId = campusId,
+                p_Year = d.Year,
+                p_Month = d.Month
+            },
+            commandType: CommandType.StoredProcedure);
 
-        try
+        var r = await multi.ReadFirstOrDefaultAsync<FeeReportResponse>() ?? new FeeReportResponse
         {
-            var c = Connection();
-
-            using var multi =
-                await c.QueryMultipleAsync(
-                    "sp_GetMonthlyFeeReport",
-                    new
-                    {
-                        p_CampusId = campusId,
-                        p_Year = d.Year,
-                        p_Month = d.Month
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-            var r =
-                await multi.ReadFirstAsync<FeeReportResponse>();
-
-            if (!multi.IsConsumed)
-            {
-                r.Transactions =
-                    (await multi.ReadAsync<FeePaymentResponse>())
-                    .ToList();
-            }
-
-            return r;
-        }
-        catch
+            FromDate = d,
+            ToDate = d.AddMonths(1).AddDays(-1)
+        };
+        if (!multi.IsConsumed)
         {
-            var paymentsQuery = _db.FeePayments
-                .Include(p => p.Student)
-                .Where(p => p.PaymentDate.Year == d.Year && p.PaymentDate.Month == d.Month);
-
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                paymentsQuery = paymentsQuery.Where(p => p.Student.CampusId == campusId.Value);
-            }
-
-            var payments = await paymentsQuery.ToListAsync();
-            var totalAmount = payments.Sum(p => p.Amount);
-
-            return new FeeReportResponse
-            {
-                FromDate = d,
-                ToDate = d.AddMonths(1).AddDays(-1),
-                TotalCollected = totalAmount,
-                TransactionCount = payments.Count,
-                Transactions = payments.Select(p => new FeePaymentResponse
-                {
-                    FeePaymentId = p.FeePaymentId,
-                    StudentId = p.StudentId,
-                    StudentName = p.Student?.StudentName ?? string.Empty,
-                    StudentFeeId = p.StudentFeeId,
-                    ReceiptNumber = p.ReceiptNumber ?? string.Empty,
-                    Amount = p.Amount,
-                    PaymentDate = p.PaymentDate,
-                    PaymentMethod = p.PaymentMode,
-                    TransactionReference = p.TransactionReference,
-                    Remarks = p.Remarks,
-                    Status = p.Status
-                }).ToList()
-            };
+            r.Transactions = (await multi.ReadAsync<FeePaymentResponse>()).ToList();
         }
+        return r;
+    }
+
+    // =========================================================
+    // SECTION 9: TRANSITION & LIFECYCLE HELPERS
+    // =========================================================
+
+    public async Task<FeeStructureResponse?> GetMatchingFeeStructureAsync(int? campusId, int boardId, int academicYearId, int? academicLevelId, int groupId, int? programId = null)
+    {
+        var c = Connection();
+        var match = await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
+            "sp_FeeTransition_GetMatchingStructure",
+            new
+            {
+                p_CampusId = campusId ?? 0,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId,
+                p_AcademicLevelId = academicLevelId ?? 0,
+                p_GroupId = groupId,
+                p_ProgramId = programId ?? 0
+            },
+            commandType: CommandType.StoredProcedure);
+
+        if (match != null && match.FeeStructureId > 0)
+        {
+            var full = await GetFeeStructureByIdAsync(match.FeeStructureId);
+            return full ?? match;
+        }
+        return null;
+    }
+
+    public async Task<CampusTransferFeePreviewDto?> PreviewCampusTransferFeeAsync(int transferId)
+    {
+        var c = Connection();
+        return await c.QueryFirstOrDefaultAsync<CampusTransferFeePreviewDto>(
+            "sp_FeeTransition_PreviewTransfer",
+            new { p_TransferId = transferId },
+            commandType: CommandType.StoredProcedure);
+    }
+
+    public async Task<bool> ApplyCampusTransferFeeAsync(int studentId, int toCampusId, int? destinationFeeStructureId, bool transferPaidCredit, string performedBy)
+    {
+        var c = Connection();
+        int rows = await c.ExecuteAsync(
+            "sp_FeeTransition_ApplyTransfer",
+            new
+            {
+                p_StudentId = studentId,
+                p_ToCampusId = toCampusId,
+                p_DestinationFeeStructureId = destinationFeeStructureId,
+                p_TransferPaidCredit = transferPaidCredit,
+                p_PerformedBy = performedBy
+            },
+            commandType: CommandType.StoredProcedure);
+        return rows > 0;
+    }
+
+    public async Task<ProgramFeeAdjustmentPreviewDto?> PreviewProgramFeeAdjustmentAsync(int studentId, int targetProgramId)
+    {
+        var c = Connection();
+        return await c.QueryFirstOrDefaultAsync<ProgramFeeAdjustmentPreviewDto>(
+            "sp_FeeTransition_PreviewProgramAdjustment",
+            new
+            {
+                p_StudentId = studentId,
+                p_TargetProgramId = targetProgramId
+            },
+            commandType: CommandType.StoredProcedure);
     }
 }
-
-
-

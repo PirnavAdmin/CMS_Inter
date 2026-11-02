@@ -485,10 +485,17 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
       const duplicateChecks = await Promise.all(configurations.map(({ configuration }) => apiClient.get(apiEndpoints.subjects.checkCode, { params: { subjectCode: configuration.code, boardId: saveContext.boardId, groupId: saveContext.groupId, academicLevelId: saveContext.academicLevelId } })));
       const duplicateIndex = duplicateChecks.findIndex((result) => Boolean(body(result)?.exists));
       if (duplicateIndex >= 0) throw new Error(`${configurations[duplicateIndex].configuration.code} already exists in this academic context.`);
-      for (const { subject, configuration } of configurations) {
+      if (apiEndpoints.subjects.bulkCreate) {
         postAttempted = true;
-        await apiClient.post(apiEndpoints.subjects.create, subjectPayload(configuration, saveContext));
-        savedKeys.push(subjectKey(subject));
+        const payloads = configurations.map(({ configuration }) => subjectPayload(configuration, saveContext));
+        await apiClient.post(apiEndpoints.subjects.bulkCreate, payloads);
+        configurations.forEach(({ subject }) => savedKeys.push(subjectKey(subject)));
+      } else {
+        for (const { subject, configuration } of configurations) {
+          postAttempted = true;
+          await apiClient.post(apiEndpoints.subjects.create, subjectPayload(configuration, saveContext));
+          savedKeys.push(subjectKey(subject));
+        }
       }
     } catch (requestError) {
       const remaining = configurations.length - savedKeys.length;

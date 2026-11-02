@@ -55,6 +55,7 @@ public class CreateFeeStructureRequest
     public string? YearFeeMode { get; set; }
     public string? IncrementType { get; set; }
     public decimal? IncrementValue { get; set; }
+    public string? StructureName { get; set; }
     public List<CreateFeeStructureItemRequest> Items { get; set; } = new();
 }
 
@@ -281,6 +282,7 @@ public class PaymentPlanResponse
 public class FeeScheduleResponse
 {
     public int FeeInstallmentId { get; set; }
+    public int StudentFeeId { get; set; }
     public int FeePaymentPlanId { get; set; }
     public int InstallmentNumber { get; set; }
     public string FeeSchedule { get; set; } = string.Empty;
@@ -332,6 +334,7 @@ public class FeePaymentResponse
 public class FeeReceiptResponse
 {
     public int FeeReceiptId { get; set; }
+    public int StudentId { get; set; }
     public int FeePaymentId { get; set; }
     public string ReceiptNumber { get; set; } = string.Empty;
     public DateTime ReceiptDate { get; set; }
@@ -355,12 +358,18 @@ public class StudentFeeLedgerResponse
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNumber { get; set; } = string.Empty;
+    public string? RollNumber { get; set; }
+    public string? BoardName { get; set; }
+    public string? AcademicYearName { get; set; }
     public string GroupName { get; set; } = string.Empty;
     public string SectionName { get; set; } = string.Empty;
     public string PaymentPlan { get; set; } = string.Empty;
     public decimal TotalPayable { get; set; }
     public decimal TotalPaid { get; set; }
     public decimal Balance { get; set; }
+    public decimal Concession { get; set; }
+    public decimal Fine { get; set; }
+    public DateTime? NextDueDate { get; set; }
     public string Status { get; set; } = string.Empty;
 }
 
@@ -454,6 +463,15 @@ public class StudentFeeDetailsResponse
     public decimal OutstandingBalance { get; set; }
     public string PaymentPlan { get; set; } = string.Empty;
     public string FeeStatus { get; set; } = string.Empty;
+    public int FeeStructureId { get; set; }
+    public string? StructureName { get; set; }
+    public int? GroupId { get; set; }
+    public int? ProgramId { get; set; }
+    public decimal TotalAmount { get => OriginalFee; set => OriginalFee = value; }
+    public decimal PaidAmount { get => TotalPaid; set => TotalPaid = value; }
+    public decimal BalanceAmount { get => OutstandingBalance; set => OutstandingBalance = value; }
+    public string Status { get => FeeStatus; set => FeeStatus = value; }
+
     public List<StudentFeeBreakdownResponse> Breakdown { get; set; } = new();
     public List<FeeScheduleResponse> Schedules { get; set; } = new();
     public List<FeePaymentResponse> PaymentHistory { get; set; } = new();
@@ -461,6 +479,7 @@ public class StudentFeeDetailsResponse
 
 public class StudentFeeBreakdownResponse
 {
+    public int StudentFeeId { get; set; }
     public string FeeType { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string? ConcessionScheme { get; set; }

@@ -739,7 +739,7 @@ public class ReportModuleBackendTester
 
         var repo = new ReportRepository(dbContext);
         var service = new ReportService(repo);
-        var controller = new ReportsController(dbContext, service);
+        var controller = new ReportsController(service);
         var filter = new ReportFilterDto();
 
         // 1. Test Database Connectivity

@@ -30,6 +30,7 @@ public interface IFeeService
     Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id);
     Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? academicYearId, int? groupId, int? sectionId, string? paymentPlan, string? status, string? search, int? boardId = null);
     Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId);
+    Task<Dictionary<int, StudentFeeDetailsResponse?>> GetBulkStudentFeeDetailsAsync(IEnumerable<int> studentIds);
     Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request);
 
     Task<PaymentPlanResponse?> CreatePaymentPlanAsync(CreatePaymentPlanRequest request);
@@ -37,6 +38,7 @@ public interface IFeeService
 
     Task<FeePaymentResponse?> CreateFeePaymentAsync(CreateFeePaymentRequest request);
     Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int studentId);
+    Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds);
     Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id);
     Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber);
 

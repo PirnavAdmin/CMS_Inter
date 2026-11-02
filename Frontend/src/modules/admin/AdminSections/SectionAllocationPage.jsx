@@ -237,7 +237,16 @@ export default function SectionAllocationPage() {
     }
   }, [readyContext, say, scopeContext, scopeToken]);
   useEffect(() => { const controller = new AbortController(); loadStudents({ signal: controller.signal }); return () => { controller.abort(); workflowRequestRef.current += 1; }; }, [loadStudents]);
-  useEffect(() => { if (!readyContext || !masters.sections.length) return setSectionCounts({}); let active = true; Promise.allSettled(masters.sections.map(async (section) => ({ id: sectionId(section), rows: list(body(await apiClient.get(apiEndpoints.students.getBySection(sectionId(section))))) }))).then((results) => active && setSectionCounts(Object.fromEntries(results.filter((result) => result.status === "fulfilled").map((result) => [String(result.value.id), result.value.rows.length])))); return () => { active = false; }; }, [masters.sections, readyContext, refresh]);
+  useEffect(() => {
+    if (!readyContext || !masters.sections.length) return setSectionCounts({});
+    const counts = Object.fromEntries(
+      masters.sections.map((section) => [
+        String(sectionId(section)),
+        Number(section.enrolledCount ?? section.currentStrength ?? count(section) ?? 0)
+      ])
+    );
+    setSectionCounts(counts);
+  }, [masters.sections, readyContext, refresh]);
   useEffect(() => { setSectionStudents([]); if (!readySection) return undefined; let active = true; apiClient.get(apiEndpoints.students.getBySection(filters.sectionId)).then((response) => active && setSectionStudents(list(body(response)))).catch((error) => { if (active) say(error); }); return () => { active = false; }; }, [filters.sectionId, readySection, refresh, say, scopeToken]);
 
   const sections = useMemo(() => masters.sections.map((section) => { const id = sectionId(section); const maximum = number(capacity(section)); const allocated = sectionCounts[String(id)] ?? number(count(section)); return { ...section, id, maximum, allocated, available: Math.max(0, maximum - allocated) }; }), [masters.sections, sectionCounts]);

@@ -51,6 +51,7 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public string? Description { get; set; }
 
         public string Status { get; set; } = string.Empty;
+        public bool IsActive { get; set; } = true;
         public int TotalSubjects { get; set; }
         public int TotalEligibleSubjects { get; set; }
         public int ScheduledSubjectsCount { get; set; }
@@ -61,6 +62,7 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public DateTime? UpdatedAt { get; set; }
 
         public List<int> SelectedSubjectIds { get; set; } = new();
+        public List<int> AllocatedSubjectIds { get => SelectedSubjectIds; set => SelectedSubjectIds = value; }
         public List<int> UnscheduledSubjectIds { get; set; } = new();
 
         public bool RequiresRescheduling { get; set; } = false;

@@ -109,4 +109,8 @@ public interface ICertificateRepository
     Task<bool> DeleteAsync(
         int id,
         CancellationToken ct = default);
+
+    Task<StudentGenerationLookupDto?> GetStudentForGenerationAsync(
+        string admissionNo,
+        CancellationToken ct = default);
 }

@@ -50,6 +50,7 @@ namespace CollegeManagement.API.DTOs.Timetable
         public bool IsPublished { get; set; } = false;
 
         public string? Remarks { get; set; }
+        public string? SlotType { get; set; } = "Teaching";
     }
 
     public class UpdateTimetableDto
@@ -73,6 +74,7 @@ namespace CollegeManagement.API.DTOs.Timetable
         public int RoomId { get; set; }
         public bool IsPublished { get; set; } = false;
         public string? Remarks { get; set; }
+        public string? SlotType { get; set; } = "Teaching";
     }
 
     public class CopyTimetableDto
