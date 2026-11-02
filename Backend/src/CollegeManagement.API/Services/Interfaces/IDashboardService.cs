@@ -13,7 +13,7 @@ public interface IDashboardService
     Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default);
     Task<dynamic> GetAdmissionTrendAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
     Task<GroupDistributionResponseDto> GetGroupDistributionAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
-    Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, int? campusId = null, CancellationToken ct = default);
+    Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, DateTime? date = null, int? campusId = null, CancellationToken ct = default);
     Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, int? campusId = null, CancellationToken ct = default);
     Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
@@ -22,4 +22,9 @@ public interface IDashboardService
     Task<IReadOnlyList<RecentActivityItemDto>> GetRecentActivityAsync(int limit = 15, CancellationToken ct = default);
     Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, int? campusId = null, CancellationToken ct = default);
+    Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(int? academicYearId, int? boardId, DateTime? date, int campusId, CancellationToken ct = default);
+    Task<int> CreateNoticeAsync(CreateCampusNoticeRequest request, string publisherRole = "Principal", CancellationToken ct = default);
+    Task<IReadOnlyList<PrincipalNoticeDto>> GetNoticesAsync(int campusId, string? targetAudience = null, int limit = 10, CancellationToken ct = default);
+    Task InvalidateDashboardCacheAsync(int? campusId = null, CancellationToken ct = default);
+    Task<PrincipalDashboardResponseDto> GetPrincipalOverviewAsync(int campusId, int? academicYearId, int? boardId, CancellationToken ct = default);
 }

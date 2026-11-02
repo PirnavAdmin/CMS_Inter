@@ -545,6 +545,134 @@ namespace CollegeManagement.API.Services.Implementations
 
         #endregion
 
+        #region 4. Hall Ticket PDF Export
+
+        public byte[] GenerateHallTicketPdf(Models.Student student, Models.Examination exam, IEnumerable<Models.ExamSchedule> schedules)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            var pdfBytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Portrait());
+                    page.Margin(30);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily("Arial"));
+
+                    page.Header().Column(col =>
+                    {
+                        col.Item().AlignCenter().Text(t =>
+                        {
+                            t.Span("COLLEGE MANAGEMENT SYSTEM").FontSize(16).Bold().FontColor(Colors.Green.Darken3);
+                        });
+                        col.Item().AlignCenter().Text("EXAMINATION HALL TICKET / ADMIT CARD").FontSize(12).Bold().FontColor(Colors.Grey.Darken3);
+                        col.Item().PaddingVertical(5).LineHorizontal(1).LineColor(Colors.Green.Darken2);
+                    });
+
+                    page.Content().Column(col =>
+                    {
+                        col.Item().Border(1).BorderColor(Colors.Grey.Lighten1).Padding(10).Row(row =>
+                        {
+                            row.RelativeItem(3).Column(info =>
+                            {
+                                info.Item().Text(t => { t.Span("Student Name: ").Bold(); t.Span(student.StudentName); });
+                                info.Item().Text(t => { t.Span("Roll Number: ").Bold(); t.Span(!string.IsNullOrEmpty(student.RollNo) ? student.RollNo : student.AdmissionNo); });
+                                info.Item().Text(t => { t.Span("Admission No: ").Bold(); t.Span(student.AdmissionNo); });
+                                info.Item().Text(t => { t.Span("Examination: ").Bold(); t.Span($"{exam.ExamName} ({(string.IsNullOrEmpty(exam.ExamCode) ? exam.ExaminationId.ToString() : exam.ExamCode)})"); });
+                            });
+
+                            row.RelativeItem(2).Column(info =>
+                            {
+                                info.Item().Text(t => { t.Span("Exam Window: ").Bold(); t.Span($"{exam.StartDate:dd-MMM-yyyy} to {exam.EndDate:dd-MMM-yyyy}"); });
+                                info.Item().Text(t => { t.Span("Gender: ").Bold(); t.Span(student.Gender); });
+                                info.Item().Text(t => { t.Span("Generated On: ").Bold(); t.Span(DateTime.UtcNow.ToString("dd-MMM-yyyy HH:mm")); });
+                            });
+                        });
+
+                        col.Item().PaddingVertical(10).Text("EXAMINATION TIMETABLE").FontSize(11).Bold().FontColor(Colors.Green.Darken3);
+
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(35);
+                                columns.RelativeColumn(2);
+                                columns.RelativeColumn(4);
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(2);
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("#").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Subject Code").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Subject Name").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Exam Date").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Time").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Hall / Room").Bold().FontColor(Colors.White);
+                            });
+
+                            int idx = 1;
+                            foreach (var s in schedules)
+                            {
+                                var bg = idx % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
+                                var subjectName = s.Subject?.SubjectName ?? $"Subject #{s.SubjectId}";
+                                var subjectCode = s.Subject?.SubjectCode ?? "-";
+                                var hallName = !string.IsNullOrEmpty(s.Hall) ? s.Hall : (s.RoomId.HasValue ? $"Room {s.RoomId}" : "TBA");
+
+                                table.Cell().Background(bg).Padding(5).Text(idx.ToString());
+                                table.Cell().Background(bg).Padding(5).Text(subjectCode);
+                                table.Cell().Background(bg).Padding(5).Text(subjectName);
+                                table.Cell().Background(bg).Padding(5).Text(s.ExamDate.ToString("dd-MMM-yyyy"));
+                                table.Cell().Background(bg).Padding(5).Text($"{s.StartTime:HH:mm} - {s.EndTime:HH:mm}");
+                                table.Cell().Background(bg).Padding(5).Text(hallName);
+                                idx++;
+                            }
+                        });
+
+                        col.Item().PaddingTop(15).Text("IMPORTANT INSTRUCTIONS TO CANDIDATES:").Bold().FontSize(9).FontColor(Colors.Red.Darken2);
+                        col.Item().PaddingTop(3).Column(inst =>
+                        {
+                            inst.Item().Text("1. Candidates must carry this Hall Ticket and a valid College Identity Card to the examination hall.");
+                            inst.Item().Text("2. Candidates should be seated in the examination hall at least 15 minutes before the commencement of the exam.");
+                            inst.Item().Text("3. Electronic devices including mobile phones, smart watches, and programmable calculators are strictly prohibited.");
+                            inst.Item().Text("4. Candidates will not be permitted to leave the examination hall until half the time of the examination has elapsed.");
+                        });
+
+                        col.Item().PaddingTop(25).Row(sig =>
+                        {
+                            sig.RelativeItem().Column(c =>
+                            {
+                                c.Item().PaddingTop(25).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                                c.Item().AlignCenter().Text("Candidate's Signature").FontSize(8);
+                            });
+                            sig.ConstantItem(50);
+                            sig.RelativeItem().Column(c =>
+                            {
+                                c.Item().PaddingTop(25).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                                c.Item().AlignCenter().Text("Controller of Examinations").FontSize(8).Bold();
+                            });
+                        });
+                    });
+
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                        x.Span(" of ");
+                        x.TotalPages();
+                        x.Span(" | This is a computer generated document.");
+                    });
+                });
+            }).GeneratePdf();
+
+            return pdfBytes;
+        }
+
+        #endregion
+
         #region Private Helpers
 
         private string EscapeCsv(string? value)

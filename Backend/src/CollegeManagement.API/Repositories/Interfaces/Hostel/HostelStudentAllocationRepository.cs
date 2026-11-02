@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Models.Hostel;
+using CollegeManagement.API.Models.Hostel;
 
 namespace CollegeManagement.API.Repositories.Interfaces.Hostel
 {
@@ -20,6 +20,8 @@ namespace CollegeManagement.API.Repositories.Interfaces.Hostel
         Task<int> CreateAsync(HostelStudentAllocation allocation);
 
         Task<bool> UpdateAsync(HostelStudentAllocation allocation);
+
+        Task<bool> VacateAsync(int allocationId, string? reason = null);
 
         Task<bool> DeleteAsync(int allocationId);
 

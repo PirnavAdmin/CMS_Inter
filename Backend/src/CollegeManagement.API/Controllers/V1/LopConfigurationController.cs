@@ -1,8 +1,10 @@
 using System;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.LopConfiguration;
 using CollegeManagement.API.Services.Interfaces.LopConfiguration;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -12,6 +14,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [Route("api/v1/lop-configuration")]
     [EnableCors("AllowFrontend")]
+    [Authorize]
     [Produces("application/json")]
     public class LopConfigurationController : ControllerBase
     {
@@ -35,11 +38,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 1. Get Common LOP Policy
         /// </summary>
         [HttpGet("policy")]
-        public async Task<IActionResult> GetPolicy()
+        public async Task<IActionResult> GetPolicy(CancellationToken ct = default)
         {
             try
             {
-                var policy = await _service.GetPolicyAsync();
+                var policy = await _service.GetPolicyAsync(ct);
                 return Ok(new
                 {
                     success = true,
@@ -63,7 +66,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("policy")]
         [HttpPut("policy")]
-        public async Task<IActionResult> SavePolicy([FromBody] SaveLopPolicyRequest request)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> SavePolicy([FromBody] SaveLopPolicyRequest request, CancellationToken ct = default)
         {
             try
             {
@@ -73,7 +77,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var userId = GetCurrentUserId();
-                var saved = await _service.SavePolicyAsync(request, userId);
+                var saved = await _service.SavePolicyAsync(request, userId, ct);
 
                 return Ok(new
                 {
@@ -102,11 +106,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3. All Staff Deduction Preview Table
         /// </summary>
         [HttpGet("preview")]
-        public async Task<IActionResult> GetPreview([FromQuery] string? month = null, [FromQuery] string? search = null)
+        public async Task<IActionResult> GetPreview([FromQuery] string? month = null, [FromQuery] string? search = null, CancellationToken ct = default)
         {
             try
             {
-                var preview = await _service.GetPreviewAsync(month, search);
+                var preview = await _service.GetPreviewAsync(month, search, ct);
                 return Ok(new
                 {
                     success = true,
@@ -129,11 +133,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Staff Dropdown List with Monthly Salaries
         /// </summary>
         [HttpGet("staff")]
-        public async Task<IActionResult> GetStaffList()
+        public async Task<IActionResult> GetStaffList(CancellationToken ct = default)
         {
             try
             {
-                var staff = await _service.GetStaffListAsync();
+                var staff = await _service.GetStaffListAsync(ct);
                 return Ok(new
                 {
                     success = true,
@@ -156,11 +160,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Staff LOP History & 3 KPI Cards
         /// </summary>
         [HttpGet("records")]
-        public async Task<IActionResult> GetRecords([FromQuery] string? month = null, [FromQuery] string? search = null)
+        public async Task<IActionResult> GetRecords([FromQuery] string? month = null, [FromQuery] string? search = null, CancellationToken ct = default)
         {
             try
             {
-                var result = await _service.GetRecordsWithKpisAsync(month, search);
+                var result = await _service.GetRecordsWithKpisAsync(month, search, ct);
                 return Ok(new
                 {
                     success = true,
@@ -183,11 +187,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// 6. Standalone KPI Cards
         /// </summary>
         [HttpGet("kpis")]
-        public async Task<IActionResult> GetKpis([FromQuery] string? month = null)
+        public async Task<IActionResult> GetKpis([FromQuery] string? month = null, CancellationToken ct = default)
         {
             try
             {
-                var kpis = await _service.GetKpisAsync(month);
+                var kpis = await _service.GetKpisAsync(month, ct);
                 return Ok(new
                 {
                     success = true,
@@ -200,28 +204,24 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while fetching KPIs.",
+                    message = "An error occurred while fetching LOP KPIs.",
                     details = ex.Message
                 });
             }
         }
 
         /// <summary>
-        /// 7. Get Single Staff LOP Record
+        /// 7. Single Staff LOP Record Details
         /// </summary>
         [HttpGet("records/{id:int}")]
-        public async Task<IActionResult> GetRecordById([FromRoute] int id)
+        public async Task<IActionResult> GetRecordById([FromRoute] int id, CancellationToken ct = default)
         {
             try
             {
-                var record = await _service.GetRecordByIdAsync(id);
+                var record = await _service.GetRecordByIdAsync(id, ct);
                 if (record == null)
                 {
-                    return NotFound(new
-                    {
-                        success = false,
-                        message = $"Staff LOP record with ID {id} not found."
-                    });
+                    return NotFound(new { success = false, message = $"LOP record with ID {id} not found." });
                 }
 
                 return Ok(new
@@ -232,21 +232,22 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching LOP record by id: {Id}", id);
+                _logger.LogError(ex, "Error fetching LOP record: {Id}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while fetching LOP record.",
+                    message = "An error occurred while fetching record details.",
                     details = ex.Message
                 });
             }
         }
 
         /// <summary>
-        /// 8. Add Staff LOP Entry
+        /// 8. Create Manual Staff LOP Record
         /// </summary>
         [HttpPost("records")]
-        public async Task<IActionResult> CreateRecord([FromBody] SaveLopStaffRecordRequest request)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> SaveRecord([FromBody] SaveLopStaffRecordRequest request, CancellationToken ct = default)
         {
             try
             {
@@ -256,12 +257,12 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var userId = GetCurrentUserId();
-                var created = await _service.CreateRecordAsync(request, userId);
+                var created = await _service.CreateRecordAsync(request, userId, ct);
 
-                return CreatedAtAction(nameof(GetRecordById), new { id = created.Id }, new
+                return Ok(new
                 {
                     success = true,
-                    message = "Staff LOP entry added successfully.",
+                    message = "Staff LOP record created successfully.",
                     data = created
                 });
             }
@@ -271,21 +272,22 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error adding staff LOP entry");
+                _logger.LogError(ex, "Error creating staff LOP record");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while creating LOP record.",
+                    message = "An error occurred while creating staff LOP record.",
                     details = ex.Message
                 });
             }
         }
 
         /// <summary>
-        /// 9. Edit Staff LOP Entry
+        /// 9. Update Staff LOP Record
         /// </summary>
         [HttpPut("records/{id:int}")]
-        public async Task<IActionResult> UpdateRecord([FromRoute] int id, [FromBody] UpdateLopStaffRecordRequest request)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> UpdateRecord([FromRoute] int id, [FromBody] UpdateLopStaffRecordRequest request, CancellationToken ct = default)
         {
             try
             {
@@ -295,9 +297,9 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var userId = GetCurrentUserId();
-                var success = await _service.UpdateRecordAsync(id, request, userId);
+                var updated = await _service.UpdateRecordAsync(id, request, userId, ct);
 
-                if (!success)
+                if (!updated)
                 {
                     return NotFound(new { success = false, message = $"Staff LOP record with ID {id} not found." });
                 }
@@ -305,7 +307,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return Ok(new
                 {
                     success = true,
-                    message = "Staff LOP entry updated successfully."
+                    message = "Staff LOP record updated successfully."
                 });
             }
             catch (KeyNotFoundException ex)
@@ -318,28 +320,29 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error updating staff LOP entry: {Id}", id);
+                _logger.LogError(ex, "Error updating staff LOP record: {Id}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while updating LOP record.",
+                    message = "An error occurred while updating staff LOP record.",
                     details = ex.Message
                 });
             }
         }
 
         /// <summary>
-        /// 10. Delete Staff LOP Entry
+        /// 10. Delete Staff LOP Record (Soft Delete)
         /// </summary>
         [HttpDelete("records/{id:int}")]
-        public async Task<IActionResult> DeleteRecord([FromRoute] int id)
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> DeleteRecord([FromRoute] int id, CancellationToken ct = default)
         {
             try
             {
                 var userId = GetCurrentUserId();
-                var success = await _service.DeleteRecordAsync(id, userId);
+                var deleted = await _service.DeleteRecordAsync(id, userId, ct);
 
-                if (!success)
+                if (!deleted)
                 {
                     return NotFound(new { success = false, message = $"Staff LOP record with ID {id} not found." });
                 }
@@ -347,27 +350,32 @@ namespace CollegeManagement.API.Controllers.V1
                 return Ok(new
                 {
                     success = true,
-                    message = "Staff LOP entry deleted successfully."
+                    message = "Staff LOP record deleted successfully."
                 });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error deleting staff LOP entry: {Id}", id);
+                _logger.LogError(ex, "Error deleting staff LOP record: {Id}", id);
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred while deleting LOP record.",
+                    message = "An error occurred while deleting staff LOP record.",
                     details = ex.Message
                 });
             }
         }
 
         /// <summary>
-        /// 11. Live LOP Deduction Calculation Helper
+        /// 11. Calculate LOP Deduction & Net Salary Preview (Pure In-Memory Calculator)
         /// </summary>
         [HttpPost("calculate")]
         public IActionResult Calculate([FromBody] LopCalculateRequest request)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { success = false, message = "Invalid calculation request.", errors = ModelState });
+            }
+
             try
             {
                 var result = _service.CalculateLop(request);
@@ -377,17 +385,13 @@ namespace CollegeManagement.API.Controllers.V1
                     data = result
                 });
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error calculating LOP deduction");
+                _logger.LogError(ex, "Error executing LOP calculation");
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "An error occurred during calculation.",
+                    message = "Error calculating LOP deduction.",
                     details = ex.Message
                 });
             }

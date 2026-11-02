@@ -1,10 +1,12 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Data;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -18,54 +20,101 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
+        private IDbConnection Connection()
+        {
+            return _context.Database.GetDbConnection();
+        }
+
         public async Task<FineRule> CreateAsync(FineRule fineRule)
         {
-            _context.FineRules.Add(fineRule);
-            await _context.SaveChangesAsync();
-            return fineRule;
+            var c = Connection();
+            var created = await c.QueryFirstOrDefaultAsync<FineRule>(
+                "sp_FineRule_Create",
+                new
+                {
+                    p_FineRuleName = fineRule.FineRuleName,
+                    p_ApplicableFeeId = fineRule.ApplicableFeeId,
+                    p_FineType = fineRule.FineType,
+                    p_FineAmount = fineRule.FineAmount,
+                    p_GracePeriod = fineRule.GracePeriod,
+                    p_Status = fineRule.Status,
+                    p_CampusId = fineRule.CampusId,
+                    p_BoardId = fineRule.BoardId,
+                    p_AcademicYearId = fineRule.AcademicYearId
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return created ?? fineRule;
         }
 
         public async Task<IEnumerable<FineRule>> GetAllAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            var query = _context.FineRules
-                .Include(f => f.ApplicableFee)
-                .AsNoTracking()
-                .AsQueryable();
-
-            if (campusId.HasValue && campusId.Value > 0)
-                query = query.Where(f => f.CampusId == null || f.CampusId == campusId.Value);
-
-            if (boardId.HasValue && boardId.Value > 0)
-                query = query.Where(f => f.BoardId == null || f.BoardId == boardId.Value);
-
-            if (academicYearId.HasValue && academicYearId.Value > 0)
-                query = query.Where(f => f.AcademicYearId == null || f.AcademicYearId == academicYearId.Value);
-
-            return await query.ToListAsync();
+            var c = Connection();
+            return await c.QueryAsync<FineRule, FeeType, FineRule>(
+                "sp_FineRule_GetAll",
+                (rule, fee) =>
+                {
+                    rule.ApplicableFee = fee;
+                    return rule;
+                },
+                new
+                {
+                    p_CampusId = campusId ?? 0,
+                    p_BoardId = boardId ?? 0,
+                    p_AcademicYearId = academicYearId ?? 0
+                },
+                splitOn: "FeeTypeId",
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<FineRule?> GetByIdAsync(int id)
         {
-            return await _context.FineRules
-                .Include(f => f.ApplicableFee)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(f => f.FineRuleId == id);
+            var c = Connection();
+            var results = await c.QueryAsync<FineRule, FeeType, FineRule>(
+                "sp_FineRule_GetById",
+                (rule, fee) =>
+                {
+                    rule.ApplicableFee = fee;
+                    return rule;
+                },
+                new { p_FineRuleId = id },
+                splitOn: "FeeTypeId",
+                commandType: CommandType.StoredProcedure);
+
+            return System.Linq.Enumerable.FirstOrDefault(results);
         }
 
         public async Task<bool> UpdateAsync(FineRule fineRule)
         {
-            _context.FineRules.Update(fineRule);
-            var rows = await _context.SaveChangesAsync();
+            var c = Connection();
+            int rows = await c.ExecuteAsync(
+                "sp_FineRule_Update",
+                new
+                {
+                    p_FineRuleId = fineRule.FineRuleId,
+                    p_FineRuleName = fineRule.FineRuleName,
+                    p_ApplicableFeeId = fineRule.ApplicableFeeId,
+                    p_FineType = fineRule.FineType,
+                    p_FineAmount = fineRule.FineAmount,
+                    p_GracePeriod = fineRule.GracePeriod,
+                    p_Status = fineRule.Status,
+                    p_CampusId = fineRule.CampusId,
+                    p_BoardId = fineRule.BoardId,
+                    p_AcademicYearId = fineRule.AcademicYearId
+                },
+                commandType: CommandType.StoredProcedure);
+
             return rows > 0;
         }
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var fineRule = await _context.FineRules.FindAsync(id);
-            if (fineRule == null) return false;
+            var c = Connection();
+            int rows = await c.ExecuteAsync(
+                "sp_FineRule_Delete",
+                new { p_FineRuleId = id },
+                commandType: CommandType.StoredProcedure);
 
-            fineRule.Status = "Inactive";
-            var rows = await _context.SaveChangesAsync();
             return rows > 0;
         }
     }

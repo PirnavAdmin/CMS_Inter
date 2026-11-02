@@ -20,6 +20,93 @@ export const flagIsTrue = (flag) => flag === true || flag === 1 || ["true", "1"]
 
 export const flagIsFalse = (flag) => flag === false || flag === 0 || ["false", "0"].includes(String(flag ?? "").trim().toLowerCase());
 
+// Match Admission's board/year group catalog. Keep backend GroupIds intact.
+export const adminGroupRows = (payload, scope = {}) => {
+  const collect = (source, inherited = {}, depth = 0) => {
+    if (!source || depth > 8) return [];
+    if (Array.isArray(source)) return source.flatMap((item) => collect(item, inherited, depth + 1));
+    if (typeof source !== "object") return [];
+    if (source.success === false || source.Success === false) throw new Error(source.message || source.Message || "Unable to load groups.");
+    const context = { ...inherited };
+    for (const key of ["boardId", "academicYearId", "academicLevelId", "campusId"]) {
+      const actual = value(source, key, key[0].toUpperCase() + key.slice(1));
+      if (actual != null) context[key] = actual;
+    }
+    if (value(source, "groupId", "GroupId", "id", "Id") != null && value(source, "groupName", "GroupName", "name", "Name") != null) return [{ ...context, ...source }];
+    for (const key of ["groups", "Groups", "groupList", "GroupList", "items", "Items", "records", "Records", "results", "Results", "$values", "data", "Data", "result", "Result"]) {
+      if (source[key] != null) return collect(source[key], context, depth + 1);
+    }
+    throw new Error("The group API returned an invalid list response.");
+  };
+  const seen = new Set();
+  return collect(payload).filter((row) => {
+    const id = String(value(row, "groupId", "GroupId", "id", "Id") ?? "");
+    const status = String(value(row, "status", "Status") ?? "").trim().toLowerCase();
+    if (!Number.isInteger(Number(id)) || Number(id) <= 0 || seen.has(id)
+      || flagIsFalse(value(row, "isActive", "IsActive", "active", "Active"))
+      || flagIsTrue(value(row, "isDeleted", "IsDeleted")) || ["inactive", "deleted"].includes(status)) return false;
+    if (!["boardId", "campusId"].every((key) => {
+      const actual = value(row, key, key[0].toUpperCase() + key.slice(1));
+      return !scope[key] || actual == null || String(actual) === String(scope[key]);
+    })) return false;
+    if (scope.academicLevelId) {
+      const actual = value(row, "academicLevelId", "AcademicLevelId", "levelId", "LevelId");
+      const mappings = value(row, "academicLevels", "AcademicLevels", "eligibleAcademicLevels", "EligibleAcademicLevels", "eligibleLevels", "EligibleLevels", "academicLevelIds", "AcademicLevelIds");
+      if (actual != null ? String(actual) !== String(scope.academicLevelId) : Array.isArray(mappings) && !mappings.some((level) => {
+        const levelId = typeof level === "object" ? value(level, "academicLevelId", "AcademicLevelId", "levelId", "LevelId", "id", "Id") : level;
+        return String(levelId) === String(scope.academicLevelId) && !flagIsFalse(value(level, "isActive", "IsActive"));
+      })) return false;
+    }
+    seen.add(id);
+    return true;
+  }).map((row) => ({ ...row, groupId: value(row, "groupId", "GroupId", "id", "Id"), groupName: value(row, "groupName", "GroupName", "name", "Name") }));
+};
+
+export const fetchAdminGroups = async (scope, { signal } = {}) => {
+  if (!scope.boardId) return [];
+  const response = await apiClient.get(apiEndpoints.groups.dropdown, {
+    params: { boardId: scope.boardId, academicYearId: scope.academicYearId, academicLevelId: scope.academicLevelId },
+    signal,
+  });
+  return adminGroupRows(response.data, { ...scope, academicLevelId: undefined });
+};
+
+export const adminLevelRows = (payload, board = {}, scope = {}) => {
+  const source = payload?.data ?? payload?.Data ?? payload;
+  const rows = list(source?.academicLevels ?? source?.AcademicLevels ?? source).map((row) => ({ ...row,
+    academicLevelId: value(row, "academicLevelId", "AcademicLevelId", "id", "Id"),
+    levelName: value(row, "levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"),
+  })).filter((row) => row.academicLevelId && row.levelName);
+  const nested = list(value(board, "academicLevels", "AcademicLevels", "levels", "Levels"));
+  const ids = value(board, "academicLevelIds", "AcademicLevelIds", "levelIds", "LevelIds");
+  const names = value(board, "academicLevelNames", "AcademicLevelNames", "levelNames", "LevelNames");
+  const mappedIds = Array.isArray(ids) && ids.length ? ids : nested.map((row) => value(row, "academicLevelId", "AcademicLevelId", "id", "Id")).filter(Boolean);
+  const mappedNames = Array.isArray(names) && names.length ? names : nested.map((row) => value(row, "levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name")).filter(Boolean);
+  let matched;
+  if (mappedIds.length) matched = rows.filter((row) => mappedIds.map(String).includes(String(row.academicLevelId)));
+  else if (mappedNames.length) matched = rows.filter((row) => mappedNames.some((name) => String(name).trim().toLowerCase() === String(row.levelName).trim().toLowerCase()));
+  else {
+    matched = rows.filter((row) => String(value(row, "boardId", "BoardId") ?? "") === String(scope.boardId));
+    if (!matched.length) matched = rows.filter((row) => scope.academicYearId && String(value(row, "academicYearId", "AcademicYearId")) === String(scope.academicYearId));
+    if (!matched.length) matched = rows.filter((row) => !value(row, "boardId", "BoardId") && !value(row, "academicYearId", "AcademicYearId"));
+    if (!matched.length) matched = rows;
+  }
+  return [...new Map(matched.map((row) => [String(row.academicLevelId), row])).values()];
+};
+
+export const fetchAdminLevels = async (scope, { signal } = {}) => {
+  if (!scope.boardId) return [];
+  const [levelsResult, boardResult] = await Promise.allSettled([
+    apiClient.get(apiEndpoints.boards.getAcademicLevels, { params: { boardId: scope.boardId }, signal }),
+    apiClient.get(apiEndpoints.boards.getById(scope.boardId), { signal }),
+  ]);
+  if (levelsResult.status === "rejected") throw levelsResult.reason;
+  if (levelsResult.value.data?.success === false) throw new Error(levelsResult.value.data.message || "Unable to load academic levels.");
+  const response = boardResult.status === "fulfilled" ? boardResult.value.data : {};
+  const board = response?.data ?? response?.Data ?? response;
+  return adminLevelRows(levelsResult.value.data, board, scope);
+};
+
 export const isEligibleAdmission = (admission) => {
   const status = String(value(admission, "status", "Status", "admissionStatus", "AdmissionStatus") ?? "").trim().toLowerCase();
   return flagIsTrue(value(admission, "isApproved", "IsApproved"))

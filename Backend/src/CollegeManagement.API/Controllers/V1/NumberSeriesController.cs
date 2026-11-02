@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Settings;
@@ -32,7 +33,11 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null, [FromQuery] bool includeSubCounters = false)
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? board = null,
+            [FromQuery] string? academicYear = null,
+            [FromQuery] bool includeSubCounters = false)
         {
             campusId = GetCampusIdFromRequest(campusId);
             var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear, includeSubCounters);
@@ -48,7 +53,11 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
+        public async Task<IActionResult> GetByCode(
+            string seriesCode,
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? board = null,
+            [FromQuery] string? academicYear = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
             var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId, board, academicYear);
@@ -64,10 +73,14 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates configuration: prefix, formatPattern, numberLength, startNumber, description.
         /// </summary>
         [HttpPut("{seriesCode}")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Update(string seriesCode, [FromBody] UpdateNumberSeriesDto dto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> Update(
+            string seriesCode,
+            [FromBody] UpdateNumberSeriesDto dto,
+            [FromQuery] int? campusId = null)
         {
             if (!ModelState.IsValid)
             {
@@ -89,10 +102,13 @@ namespace CollegeManagement.API.Controllers.V1
         /// Executes thread-safe atomic sequence increment and returns the newly generated sequence ID.
         /// </summary>
         [HttpPost("{seriesCode}/generate-next")]
-        [AllowAnonymous]
+        [Authorize]
         [ProducesResponseType(typeof(GenerateNumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> GenerateNext(
+            string seriesCode,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null,
+            [FromQuery] int? campusId = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
             var result = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, context, campusId);
@@ -130,7 +146,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes or deactivates the specified series configuration.
         /// </summary>
         [HttpDelete("{seriesCode}")]
-        [AllowAnonymous]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete(string seriesCode, [FromQuery] int? campusId = null)
@@ -144,6 +160,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             return Ok(new { message = $"Number series configuration '{seriesCode}' deleted successfully." });
         }
+
         private int? GetCampusIdFromRequest(int? queryCampusId)
         {
             if (queryCampusId.HasValue && queryCampusId > 0)

@@ -1,79 +1,90 @@
+import React, { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
-import LandingPage from "@/components/pages/LandingPage.jsx";
-import ExamCellPortalRoutes from "@/Dashboard/ExamCellDashboard/ExamCellPortalRoutes.jsx";
-import DashboardPage from "@/components/pages/DashboardPage.jsx";
-import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
-import ListPage from "@/components/pages/ListPage.jsx";
-import FormPage from "@/components/pages/FormPage.jsx";
-import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/components/pages/BoardManagementPage.jsx";
-import AcademicYearPage, { pageConfig as academicYearConfig } from "@/components/pages/AcademicYearPage.jsx";
-import BoardAcademicYearManagementPage from "@/components/pages/BoardAcademicYearManagementPage.jsx";
-import CourseGroupPage, { CourseGroupFormRoute, pageConfig as courseGroupConfig } from "@/components/pages/CourseGroupPage.jsx";
-import SubjectManagementPage from "@/components/pages/SubjectManagementPage.jsx";
-import SectionManagementPage, { pageConfig as sectionManagementConfig } from "@/components/pages/SectionManagementPage.jsx";
-import StaffManagementPage from "@/components/pages/StaffManagementPage.jsx";
-import DepartmentManagementPage, { DepartmentDetailsPage, DesignationDetailsPage, MasterFormPage, MasterImportPage } from "@/components/pages/DepartmentManagementPage.jsx";
-import StudentAdmissionPage from "@/components/pages/StudentAdmissionPage.jsx";
-import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/components/pages/StudentManagementPage.jsx";
-import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
-import TimetablePage from "@/components/pages/TimetablePage.jsx";
-import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
-import AcademicCalendarPage from "@/components/pages/AcademicCalendarPage.jsx";
-import AttendancePage from "@/components/pages/AttendancePage.jsx";
-import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
-import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
-import ExaminationPage, { pageConfig as examinationConfig } from "@/components/pages/ExaminationPage.jsx";
-import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
-import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
-import PromotionPage from "@/components/pages/PromotionPage.jsx";
-import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
-import TransportPage from "@/components/pages/TransportPage.jsx";
-import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
-import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
-import InventoryManagementPage from "@/components/pages/InventoryManagement/InventoryManagementPage.jsx";
-import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
-import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
-import SettingsPage from "@/components/pages/SettingsPage.jsx";
-import LOPConfigurationPage from "@/components/pages/LOPConfiguration/LOPConfigurationPage.jsx";
-import CampusImagesConfigurationPage from "@/components/pages/CampusImagesConfigurationPage.jsx";
-import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
-import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
-import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
-import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
-import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
-import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
-import PayrollPage from "@/components/pages/PayrollPage.jsx";
-import ReimbursementPage from "@/components/pages/ReimbursementPage.jsx";
-import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
-import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
-import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
-import Login from "@/features/auth/pages/Login.jsx";
-import Register from "@/features/auth/pages/Register.jsx";
-import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
-import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
-import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
-import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
-import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
-import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
-import NonTeachingPortalRoutes from "@/Dashboard/NonTeachingDashboard/NonTeachingPortalRoutes.jsx";
-import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
-import TransportManagerRoutes from "@/Dashboard/TransportManagerDashboard/TransportManagerRoutes.jsx";
-import InventoryDashboard from "@/Dashboard/InventoryDashboard/InventoryDashboard.jsx";
-import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
-import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
-import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
-import ParentAcademicsPage from "@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx";
-import ParentExaminationsPage from "@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx";
-import ParentFeesPage from "@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx";
-import ParentTimetablePage from "@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx";
-import ParentCommunicationPage from "@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx";
-import ParentAnnouncementsPage from "@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx";
-import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx";
-import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
-import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
-import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
-import { ParentPortalProvider } from "@/Dashboard/Parent Dashboard/context/ParentPortalContext.jsx";
-import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
+import LandingPage from "@/modules/landing/LandingPage.jsx";
+import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
+import DashboardPage from "@/modules/admin/AdminDashboard/DashboardPage.jsx";
+import PrincipalDashboard from "@/modules/principal/PrincipalDashboard.jsx";
+import ListPage from "@/modules/admin/AdminCommon/ListPage.jsx";
+import FormPage from "@/modules/admin/AdminCommon/FormPage.jsx";
+import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/modules/admin/AdminBoards/BoardManagementPage.jsx";
+import AcademicYearPage, { pageConfig as academicYearConfig } from "@/modules/admin/AdminAcademicYears/AcademicYearPage.jsx";
+import BoardAcademicYearManagementPage from "@/modules/admin/AdminBoards/BoardAcademicYearManagementPage.jsx";
+import CourseGroupPage, { CourseGroupFormRoute, pageConfig as courseGroupConfig } from "@/modules/admin/AdminCourses/CourseGroupPage.jsx";
+import SubjectManagementPage from "@/modules/admin/AdminSubjects/SubjectManagementPage.jsx";
+import SectionManagementPage, { pageConfig as sectionManagementConfig } from "@/modules/admin/AdminSections/SectionManagementPage.jsx";
+import StaffManagementPage from "@/modules/admin/AdminFaculty/StaffManagementPage.jsx";
+import DepartmentManagementPage, { DepartmentDetailsPage, DesignationDetailsPage, MasterFormPage, MasterImportPage } from "@/modules/admin/AdminDepartments/DepartmentManagementPage.jsx";
+import StudentAdmissionPage from "@/modules/admin/AdminAdmissions/StudentAdmissionPage.jsx";
+import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/modules/admin/AdminStudents/StudentManagementPage.jsx";
+import SectionAllocationPage from "@/modules/admin/AdminSections/SectionAllocationPage.jsx";
+import TimetablePage from "@/modules/admin/AdminTimetable/TimetablePage.jsx";
+import HolidayManagementPage from "@/modules/admin/AdminAcademicCalendar/HolidayManagementPage.jsx";
+import AcademicCalendarPage from "@/modules/admin/AdminAcademicCalendar/AcademicCalendarPage.jsx";
+import AttendancePage from "@/modules/admin/AdminAttendance/AttendancePage.jsx";
+import AttendanceOverviewPage from "@/modules/admin/AdminAttendance/AttendanceOverviewPage.jsx";
+import LeaveManagementPage from "@/modules/admin/AdminLeave/LeaveManagementPage.jsx";
+import ExaminationPage, { pageConfig as examinationConfig } from "@/modules/admin/AdminExaminations/ExaminationPage.jsx";
+import MarksEntryPage from "@/modules/admin/AdminMarksEntry/MarksEntryPage.jsx";
+import ResultProcessingPage from "@/modules/admin/AdminResults/ResultProcessingPage.jsx";
+import PromotionPage from "@/modules/admin/AdminPromotion/PromotionPage.jsx";
+import FeeManagementPage from "@/modules/admin/AdminFees/FeeManagementPage.jsx";
+import TransportPage from "@/modules/admin/AdminTransport/TransportPage.jsx";
+import CertificatesPage, { pageConfig as certificatesConfig } from "@/modules/admin/AdminCertificates/CertificatesPage.jsx";
+import ReportsAnalyticsPage from "@/modules/admin/AdminReports/ReportsAnalyticsPage.jsx";
+import InventoryManagementPage from "@/modules/admin/AdminInventory/InventoryManagementPage.jsx";
+import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage.jsx";
+import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
+// Code-split Settings & Admin configurations for bundle optimization
+const SettingsPage = lazy(() => import("@/modules/admin/AdminSettings/SettingsPage.jsx"));
+const LOPConfigurationPage = lazy(() => import("@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx"));
+const CampusImagesConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx"));
+const RolesPermissionsPage = lazy(() => import("@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx"));
+const LeaveTypesPage = lazy(() => import("@/modules/admin/AdminLeave/LeaveTypesPage.jsx"));
+const AttendanceTimingConfigPage = lazy(() => import("@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx"));
+const NumberSeriesPage = lazy(() => import("@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx"));
+const TemplatesPage = lazy(() => import("@/modules/admin/AdminTemplates/TemplatesPage.jsx"));
+const CredentialsGeneratorPage = lazy(() => import("@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx"));
+import PayrollPage from "@/modules/admin/AdminPayroll/PayrollPage.jsx";
+import ReimbursementPage from "@/modules/admin/AdminReimbursements/ReimbursementPage.jsx";
+import AdminProfilePage from "@/modules/admin/AdminProfile/AdminProfilePage.jsx";
+const CampusConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusConfigurationPage.jsx"));
+const AuditLogsPage = lazy(() => import("@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx"));
+
+const SettingsFallback = () => (
+  <div className="p-8 text-sm text-slate-500 flex items-center justify-center min-h-[300px]">
+    <div className="flex flex-col items-center gap-2">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <span>Loading settings module...</span>
+    </div>
+  </div>
+);
+import Login from "@/modules/auth/pages/Login.jsx";
+import Register from "@/modules/auth/pages/Register.jsx";
+import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
+import VerifyOTP from "@/modules/auth/pages/VerifyOTP.jsx";
+import ResetPassword from "@/modules/auth/pages/ResetPassword.jsx";
+import StudentPortalRoutes from "@/modules/student/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/modules/accountant/AccountantPortalRoutes.jsx";
+import FacultyPortalRoutes from "@/modules/faculty/FacultyPortalRoutes.jsx";
+import NonTeachingPortalRoutes from "@/modules/non-teaching/NonTeachingPortalRoutes.jsx";
+import DriverDashboard from "@/modules/driver/DriverDashboard.jsx";
+import TransportManagerRoutes from "@/modules/transport-manager/TransportManagerRoutes.jsx";
+import InventoryDashboard from "@/modules/inventory/InventoryDashboard.jsx";
+import ParentDashboard from "@/modules/parent/ParentDashboard.jsx";
+import ParentChildrenPage, { ParentChildDetailsRoute } from "@/modules/parent/pages/ParentChildrenPage.jsx";
+import ParentAttendancePage from "@/modules/parent/pages/ParentAttendancePage.jsx";
+import ParentAcademicsPage from "@/modules/parent/pages/ParentAcademicsPage.jsx";
+import ParentExaminationsPage from "@/modules/parent/pages/ParentExaminationsPage.jsx";
+import ParentFeesPage from "@/modules/parent/pages/ParentFeesPage.jsx";
+import ParentTimetablePage from "@/modules/parent/pages/ParentTimetablePage.jsx";
+import ParentCommunicationPage from "@/modules/parent/pages/ParentCommunicationPage.jsx";
+import ParentAnnouncementsPage from "@/modules/parent/pages/ParentAnnouncementsPage.jsx";
+import ParentDocumentsPage from "@/modules/parent/pages/ParentDocumentsPage.jsx";
+import ParentNotificationsPage from "@/modules/parent/pages/ParentNotificationsPage.jsx";
+import ParentProfilePage from "@/modules/parent/pages/ParentProfilePage.jsx";
+import ParentSettingsPage from "@/modules/parent/pages/ParentSettingsPage.jsx";
+import { ParentPortalProvider } from "@/modules/parent/context/ParentPortalContext.jsx";
+import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -81,7 +92,7 @@ import {
   HostelStudentManagement,
   HostelAttendanceRegister,
   HostelReports,
-} from "@/modules/hostel/index.js";
+} from "@/modules/admin/AdminHostel/index.js";
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -304,6 +315,7 @@ export default function AppRoutes() {
           <Route path="/dashboard/promotions/eligible" element={<PromotionPage screen="promotion" />} />
           <Route path="/dashboard/promotions/single" element={<PromotionPage screen="single" />} />
           <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
+          <Route path="/dashboard/promotions/transfer" element={<PromotionPage screen="transfer" />} />
           <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
           <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
         </Route>
@@ -326,9 +338,10 @@ export default function AppRoutes() {
         {/* Reports */}
         <Route element={<ProtectedRoute requiredModule="reports-analytics" />}>
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
+          <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
         {/* Settings General & Admin Profile */}
-        <Route path="/dashboard/settings" element={<SettingsPage />} />
+        <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
@@ -336,62 +349,62 @@ export default function AppRoutes() {
 
         {/* Settings Sub-Modules */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="lop-configuration" />}>
-          <Route path="/dashboard/settings/lop-configuration" element={<LOPConfigurationPage />} />
+          <Route path="/dashboard/settings/lop-configuration" element={<Suspense fallback={<SettingsFallback />}><LOPConfigurationPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-images" />}>
-          <Route path="/dashboard/settings/campus-images" element={<CampusImagesConfigurationPage />} />
-          <Route path="/dashboard/settings/landing-page" element={<CampusImagesConfigurationPage page="landing" />} />
-          <Route path="/dashboard/settings/login-page" element={<CampusImagesConfigurationPage page="login" />} />
+          <Route path="/dashboard/settings/campus-images" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage /></Suspense>} />
+          <Route path="/dashboard/settings/landing-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="landing" /></Suspense>} />
+          <Route path="/dashboard/settings/login-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="login" /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-configuration" />}>
-          <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
+          <Route path="/dashboard/settings/campus-configuration" element={<Suspense fallback={<SettingsFallback />}><CampusConfigurationPage /></Suspense>} />
           <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="audit-logs" />}>
-          <Route path="/dashboard/settings/audit-logs" element={<AuditLogsPage />} />
+          <Route path="/dashboard/settings/audit-logs" element={<Suspense fallback={<SettingsFallback />}><AuditLogsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="roles-permissions" requiredScreen="role-management" />}>
-          <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
+          <Route path="/dashboard/settings/roles-permissions" element={<Suspense fallback={<SettingsFallback />}><RolesPermissionsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="leave-types" />}>
-          <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
+          <Route path="/dashboard/settings/leave-types" element={<Suspense fallback={<SettingsFallback />}><LeaveTypesPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="attendance-timing" />}>
-          <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
+          <Route path="/dashboard/settings/attendance-timing" element={<Suspense fallback={<SettingsFallback />}><AttendanceTimingConfigPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
-          <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
-          <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
-          <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />
+          <Route path="/dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
+          <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
+          <Route path="/dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
         </Route>
 
         {/* Templates Management Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="templates" />}>
-          <Route path="/dashboard/settings/templates" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/reports/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/letters/:id/edit" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/upload" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/add" element={<TemplatesPage />} />
-          <Route path="/dashboard/settings/templates/:id/preview" element={<TemplatesPage />} />
+          <Route path="/dashboard/settings/templates" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/reports/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/letters/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
         </Route>
 
         {/* Credentials Generator Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="credentials" />}>
-          <Route path="/dashboard/settings/credentials" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/faculty" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/students" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/history" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/settings" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/faculty/generate" element={<CredentialsGeneratorPage />} />
-          <Route path="/dashboard/settings/credentials/students/generate" element={<CredentialsGeneratorPage />} />
+          <Route path="/dashboard/settings/credentials" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/faculty" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/students" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/history" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/settings" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/faculty/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/dashboard/settings/credentials/students/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
         </Route>
 
         {/* Payroll (Finance) Canonical Routes */}
@@ -460,10 +473,9 @@ export default function AppRoutes() {
           <Route path="/dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
         </Route>
 
-        {/* Faculty & Staff Reimbursement Canonical & Finance Routes */}
+        {/* Finance Reimbursement Routes */}
         <Route element={<ProtectedRoute requiredModule="reimbursement" />}>
           <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-          <Route path="/dashboard/reimbursements" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
           <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
         </Route>
@@ -564,7 +576,9 @@ export default function AppRoutes() {
       <Route path="/results" element={<Navigate to="/dashboard/results" replace />} />
       <Route path="/promotion" element={<Navigate to="/dashboard/promotion" replace />} />
       <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
+      <Route path="/certificates" element={<Navigate to="/dashboard/certificates" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
+      <Route path="/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -261,6 +261,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Returns student marks memo with breakdown.</response>
         /// <response code="404">Returned when marks memo is not found.</response>
         [HttpGet("student/{studentId:int}/memo")]
+        [HttpGet("memo/{studentId:int}")]
         [ProducesResponseType(typeof(StudentResultDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStudentMemo(

@@ -112,7 +112,7 @@ export const createStudentAllocation = (data, config = {}) =>
 export const updateStudentAllocation = (id, data, config = {}) =>
   api.put(`/api/v1/hostel/student-allocations/${id}`, data, config);
 
-export const vacateStudentAllocation = (id, data, config = {}) =>
+export const vacateStudentAllocation = (id, data = {}, config = {}) =>
   api.put(`/api/v1/hostel/student-allocations/${id}/vacate`, data, config);
 
 export const deleteStudentAllocation = (id, config = {}) =>
@@ -131,6 +131,9 @@ export const createAttendance = (data, config = {}) =>
 
 export const markAttendance = (data, config = {}) =>
   api.post("/api/v1/hostel/attendance", data, config);
+
+export const bulkSaveAttendance = (data, config = {}) =>
+  api.post("/api/v1/hostel/attendance/bulk", data, config);
 
 export const updateAttendance = (id, data, config = {}) =>
   api.put(`/api/v1/hostel/attendance/${id}`, data, config);
@@ -205,6 +208,23 @@ export const getOutpassLeaveReport = (params, config = {}) =>
 
 export const getTransferVacateReport = (params, config = {}) =>
   api.get("/api/v1/hostel/reports/transfer-vacate", { params, ...config });
+
+// ==================== HOSTEL FEES ====================
+
+export const getHostelFeeConfigs = (params, config = {}) =>
+  api.get("/api/v1/hostel/fees", { params, ...config });
+
+export const getHostelFeeConfigById = (id, config = {}) =>
+  api.get(`/api/v1/hostel/fees/${id}`, config);
+
+export const createHostelFeeConfig = (data, config = {}) =>
+  api.post("/api/v1/hostel/fees", data, config);
+
+export const updateHostelFeeConfig = (id, data, config = {}) =>
+  api.put(`/api/v1/hostel/fees/${id}`, data, config);
+
+export const deleteHostelFeeConfig = (id, config = {}) =>
+  api.delete(`/api/v1/hostel/fees/${id}`, config);
 
 // ==================== COMPLAINTS ====================
 

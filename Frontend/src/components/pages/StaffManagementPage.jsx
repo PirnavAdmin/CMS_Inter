@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
@@ -2052,7 +2054,7 @@ export function PrincipalCampusBoardAssignment({
   };
 
   return (
-    <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
+    <div className="staff-campus-assignments" style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
       </div>
@@ -2062,7 +2064,7 @@ export function PrincipalCampusBoardAssignment({
         const availableBoards = getBoardsForCampus(selectedCampusObj, boardsList);
         
         return (
-          <div key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
+          <div className="staff-campus-assignment-row" key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
             {/* Select Campus */}
             <div className="cms-principal-field" style={{ flex: 1, marginBottom: 0 }}>
               <label>Select Campus</label>
@@ -3742,7 +3744,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
 
         {/* Table preview */}
         <div className="staff-import-table-wrap">
-          <table className="staff-import-table">
+          <PaginatedTable className="staff-import-table">
             <thead>
               <tr>
                 <th style={{ width: "50px" }}>Row</th>
@@ -3812,7 +3814,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         {/* Footer actions */}
@@ -4567,7 +4569,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 </select>
               ) : null}
             </div>
-            <div className="staff-toolbar-actions">
+            <div className={`staff-toolbar-actions ${forced === "Non-Teaching" || (!forced && tab === "Non-Teaching") ? "non-teaching-toolbar-actions" : ""}`}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
@@ -4684,21 +4686,7 @@ function StaffList({ records = [], setRecords, forced }) {
               </tbody>
             </table>
           </div>
-          <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                Prev
-              </button>
-              <strong>{page}</strong>
-              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </button>
-            </div>
-          </footer>
+          <AdminPagination currentPage={page} totalRecords={totalRowsCount} pageSize={5} onPageChange={setPage} />
         </section>
       </main>
       {remove ? (
@@ -5886,7 +5874,7 @@ function Pending({ records = [], setRecords, activity }) {
     });
   }, [mergedTeachingList, tab]);
 
-  const pageSize = 10;
+  const pageSize = 5;
   const shown = rows.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
@@ -6125,16 +6113,7 @@ function Pending({ records = [], setRecords, activity }) {
               </tbody>
             </table>
           </div>
-          <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, rows.length)} of {rows.length}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Prev</button>
-              <strong>{page}</strong>
-              <button disabled={page * pageSize >= rows.length} onClick={() => setPage((current) => current + 1)}>Next</button>
-            </div>
-          </footer>
+          <AdminPagination currentPage={page} totalRecords={rows.length} pageSize={5} onPageChange={setPage} />
         </section>
       </main>
       {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
@@ -6925,7 +6904,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
 
             {hasCustomEducation ? (
               <div style={{ overflowX: "auto", margin: "8px 0" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                   <thead>
                     <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
                       <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Level</th>
@@ -6948,7 +6927,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             ) : hasCustomExperience ? (
               <div style={{ margin: "8px 0" }}>
@@ -6961,7 +6940,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                     <p style={{ fontSize: "12px", color: "var(--cms-muted, #64748b)", marginBottom: "6px" }}>
                       Total Experience: <strong>{record.totalExperience || 0} Years</strong>
                     </p>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                       <thead>
                         <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
                           <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Institution</th>
@@ -6982,7 +6961,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
                 )}
               </div>

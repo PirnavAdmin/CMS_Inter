@@ -1,0 +1,24 @@
+.cms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.cms-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.cms-badge-active { background: var(--cms-green-soft); color: var(--cms-green); }
+.cms-badge-inactive { background: var(--cms-subtle); color: var(--cms-muted); }
+.cms-badge-warn { background: var(--cms-amber-soft); color: var(--cms-amber); }
+.cms-badge-danger { background: var(--cms-red-soft); color: var(--cms-red); }
+.cms-badge-info { background: var(--cms-primary-soft); color: var(--cms-primary); }
+[data-theme="dark"] .cms-badge-active { color: #4ade80; }
+[data-theme="dark"] .cms-badge-danger { color: #f87171; }
+[data-theme="dark"] .cms-badge-warn { color: #fbbf24; }

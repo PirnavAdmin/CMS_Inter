@@ -22,5 +22,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> HasRoomSlotConflictAsync(int academicYearId, int roomId, int dayOfWeek, int periodId, int? excludeId = null);
         Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId, int? campusId = null);
         Task CopySectionTimetableAsync(CopyTimetableDto dto);
+        Task<IEnumerable<TimetableResponseDto>> GetStudentTimetableAsync(int studentId);
+        Task<int> ApproveSectionTimetableAsync(int sectionId, int academicYearId);
     }
 }

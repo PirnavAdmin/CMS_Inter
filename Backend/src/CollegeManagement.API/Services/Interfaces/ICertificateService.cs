@@ -59,6 +59,10 @@ public interface ICertificateService
         string certificateNo,
         CancellationToken ct = default);
 
+    Task<PublicCertificateVerificationDto?> VerifyPublicAsync(
+        string certificateNo,
+        CancellationToken ct = default);
+
     Task<CertificateResponseDto?> ReissueAsync(
         ReissueCertificateDto request,
         CancellationToken ct = default);

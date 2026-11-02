@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs;
@@ -11,8 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
-    public class SectionRollAllocationRepository
-        : ISectionRollAllocationRepository
+    public class SectionRollAllocationRepository : ISectionRollAllocationRepository
     {
         private readonly AppDbContext _context;
 
@@ -23,19 +23,32 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        private Task OpenAsync() => Task.CompletedTask;
+        private async Task EnsureConnectionOpenAsync(CancellationToken cancellationToken = default)
+        {
+            if (Connection.State != ConnectionState.Open)
+            {
+                if (Connection is System.Data.Common.DbConnection dbConn)
+                {
+                    await dbConn.OpenAsync(cancellationToken);
+                }
+                else
+                {
+                    Connection.Open();
+                }
+            }
+        }
 
         // =========================================================
         // SECTION ALLOCATION PREVIEW
         // =========================================================
 
-        public async Task<SectionAllocationPreviewResponse>
-            PreviewSectionAllocationAsync(
-                SectionRollAllocationFilterRequest request)
+        public async Task<SectionAllocationPreviewResponse> PreviewSectionAllocationAsync(
+            SectionRollAllocationFilterRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-            using var grid = await Connection.QueryMultipleAsync(
+            var commandDefinition = new CommandDefinition(
                 "sp_GetStudentsAndSectionsForAllocation",
                 new
                 {
@@ -43,9 +56,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicLevelId = request.AcademicLevelId,
                     p_GroupId = request.GroupId,
                     p_ProgramId = request.ProgramId,
-                    p_CampusId = request.CampusId
+                    p_CampusId = request.CampusId ?? 0
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            using var grid = await Connection.QueryMultipleAsync(commandDefinition);
 
             var students = (await grid.ReadAsync<dynamic>()).ToList();
             var sections = (await grid.ReadAsync<dynamic>()).ToList();
@@ -121,56 +137,68 @@ namespace CollegeManagement.API.Repositories.Implementations
         // CONFIRM SECTION ALLOCATION
         // =========================================================
 
-        public async Task<int>
-            ConfirmSectionAllocationAsync(
-                ConfirmSectionAllocationRequest request)
+        public async Task<int> ConfirmSectionAllocationAsync(
+            ConfirmSectionAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var filter =
-                new SectionRollAllocationFilterRequest
-                {
-                    AcademicYearId = request.AcademicYearId,
-                    AcademicLevelId = request.AcademicLevelId,
-                    GroupId = request.GroupId,
-                    ProgramId = request.ProgramId,
-                    CampusId = request.CampusId
-                };
+            var filter = new SectionRollAllocationFilterRequest
+            {
+                AcademicYearId = request.AcademicYearId,
+                AcademicLevelId = request.AcademicLevelId,
+                GroupId = request.GroupId,
+                ProgramId = request.ProgramId,
+                CampusId = request.CampusId
+            };
 
-            var preview = await PreviewSectionAllocationAsync(filter);
+            var preview = await PreviewSectionAllocationAsync(filter, cancellationToken);
 
             if (preview.Students.Count == 0)
                 return 0;
 
-            await OpenAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
             var count = 0;
 
-            foreach (var allocation in preview.Students)
+            using var tx = Connection.BeginTransaction();
+            try
             {
-                var affected = await Connection.ExecuteAsync(
-                    "sp_ConfirmStudentSectionAllocation",
-                    new
-                    {
-                        p_StudentId = allocation.StudentId,
-                        p_SectionId = allocation.SectionId
-                    },
-                    commandType: CommandType.StoredProcedure);
+                foreach (var allocation in preview.Students)
+                {
+                    var commandDefinition = new CommandDefinition(
+                        "sp_ConfirmStudentSectionAllocation",
+                        new
+                        {
+                            p_StudentId = allocation.StudentId,
+                            p_SectionId = allocation.SectionId
+                        },
+                        transaction: tx,
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken);
 
-                count += affected;
+                    var affected = await Connection.ExecuteAsync(commandDefinition);
+                    count += affected;
+                }
+
+                tx.Commit();
+                return count;
             }
-
-            return count;
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
 
         // =========================================================
         // ROLL NUMBER PREVIEW
         // =========================================================
 
-        public async Task<RollNumberAllocationPreviewResponse>
-            PreviewRollNumberAllocationAsync(
-                SectionRollAllocationFilterRequest request)
+        public async Task<RollNumberAllocationPreviewResponse> PreviewRollNumberAllocationAsync(
+            SectionRollAllocationFilterRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
 
-            var students = (await Connection.QueryAsync<dynamic>(
+            var commandDefinition = new CommandDefinition(
                 "sp_GetAllocatedStudentsForRollNumbering",
                 new
                 {
@@ -178,9 +206,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicLevelId = request.AcademicLevelId,
                     p_GroupId = request.GroupId,
                     p_ProgramId = request.ProgramId,
-                    p_CampusId = request.CampusId
+                    p_CampusId = request.CampusId ?? 0
                 },
-                commandType: CommandType.StoredProcedure)).ToList();
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: cancellationToken);
+
+            var students = (await Connection.QueryAsync<dynamic>(commandDefinition)).ToList();
 
             var unallocatedRollStudents = students
                 .Where(s => string.IsNullOrWhiteSpace(s.RollNo?.ToString()))
@@ -234,83 +265,83 @@ namespace CollegeManagement.API.Repositories.Implementations
         // CONFIRM ROLL NUMBER ALLOCATION
         // =========================================================
 
-        public async Task<int>
-            ConfirmRollNumberAllocationAsync(
-                ConfirmRollNumberAllocationRequest request)
+        public async Task<int> ConfirmRollNumberAllocationAsync(
+            ConfirmRollNumberAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            var filter =
-                new SectionRollAllocationFilterRequest
-                {
-                    AcademicYearId = request.AcademicYearId,
-                    AcademicLevelId = request.AcademicLevelId,
-                    GroupId = request.GroupId,
-                    ProgramId = request.ProgramId,
-                    CampusId = request.CampusId
-                };
+            var filter = new SectionRollAllocationFilterRequest
+            {
+                AcademicYearId = request.AcademicYearId,
+                AcademicLevelId = request.AcademicLevelId,
+                GroupId = request.GroupId,
+                ProgramId = request.ProgramId,
+                CampusId = request.CampusId
+            };
 
-            var preview = await PreviewRollNumberAllocationAsync(filter);
+            var preview = await PreviewRollNumberAllocationAsync(filter, cancellationToken);
 
             if (preview.Students.Count == 0)
                 return 0;
 
-            await OpenAsync();
-            var count = 0;
-
-            foreach (var allocation in preview.Students)
-            {
-                var affected = await Connection.ExecuteAsync(
-                    "sp_ConfirmStudentRollNumberAllocation",
-                    new
-                    {
-                        p_StudentId = allocation.StudentId,
-                        p_RollNo = allocation.RollNo
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-                count += affected;
-            }
-
-            return count;
+            return await SaveRollNumberAllocationsAsync(preview.Students, cancellationToken);
         }
 
-        
-        public async Task<int> SaveRollNumberAllocationsAsync(List<RollNumberPreviewStudentDto> allocations)
+        public async Task<int> SaveRollNumberAllocationsAsync(
+            List<RollNumberPreviewStudentDto> allocations,
+            CancellationToken cancellationToken = default)
         {
             if (allocations == null || allocations.Count == 0) return 0;
-            
-            await OpenAsync();
-            var count = 0;
-            foreach (var allocation in allocations)
-            {
-                var affected = await Connection.ExecuteAsync(
-                    "sp_ConfirmStudentRollNumberAllocation",
-                    new
-                    {
-                        p_StudentId = allocation.StudentId,
-                        p_RollNo = allocation.RollNo
-                    },
-                    commandType: CommandType.StoredProcedure);
 
-                count += affected;
+            await EnsureConnectionOpenAsync(cancellationToken);
+            var count = 0;
+
+            using var tx = Connection.BeginTransaction();
+            try
+            {
+                foreach (var allocation in allocations)
+                {
+                    var commandDefinition = new CommandDefinition(
+                        "sp_ConfirmStudentRollNumberAllocation",
+                        new
+                        {
+                            p_StudentId = allocation.StudentId,
+                            p_RollNo = allocation.RollNo
+                        },
+                        transaction: tx,
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: cancellationToken);
+
+                    var affected = await Connection.ExecuteAsync(commandDefinition);
+                    count += affected;
+                }
+
+                tx.Commit();
+                return count;
             }
-            return count;
+            catch
+            {
+                tx.Rollback();
+                throw;
+            }
         }
 
         // =========================================================
         // UPDATE STUDENT ALLOCATION
         // =========================================================
 
-        public async Task<object>
-            UpdateAllocationAsync(
-                int studentId,
-                UpdateStudentAllocationRequest request)
+        public async Task<object> UpdateAllocationAsync(
+            int studentId,
+            UpdateStudentAllocationRequest request,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
 
             var student = await Connection.QueryFirstOrDefaultAsync<dynamic>(
-                "sp_GetStudentById",
-                new { p_StudentId = studentId },
-                commandType: CommandType.StoredProcedure);
+                new CommandDefinition(
+                    "sp_GetStudentById",
+                    new { p_StudentId = studentId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
 
             if (student == null)
                 throw new KeyNotFoundException("Student not found.");
@@ -328,9 +359,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             var targetGroupId = request.GroupId ?? currentGroupId;
 
             var section = await Connection.QueryFirstOrDefaultAsync<dynamic>(
-                "sp_GetSectionById",
-                new { p_SectionId = request.SectionId },
-                commandType: CommandType.StoredProcedure);
+                new CommandDefinition(
+                    "sp_GetSectionAllocationSectionById",
+                    new { p_SectionId = request.SectionId },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
 
             if (section == null)
                 throw new ArgumentException("Selected section not found or inactive.");
@@ -354,7 +387,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (programChanged)
             {
-                desiredRoll = (await NextRollNo(academicYearId, academicLevelId, targetGroupId)).ToString();
+                desiredRoll = (await NextRollNo(academicYearId, academicLevelId, targetGroupId, cancellationToken)).ToString();
             }
 
             if (string.IsNullOrWhiteSpace(desiredRoll))
@@ -363,16 +396,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             await Connection.ExecuteAsync(
-                "sp_UpdateStudentSectionRollAllocation",
-                new
-                {
-                    p_StudentId = studentId,
-                    p_GroupId = targetGroupId,
-                    p_ProgramId = request.ProgramId,
-                    p_SectionId = request.SectionId,
-                    p_RollNo = desiredRoll
-                },
-                commandType: CommandType.StoredProcedure);
+                new CommandDefinition(
+                    "sp_UpdateStudentSectionRollAllocation",
+                    new
+                    {
+                        p_StudentId = studentId,
+                        p_GroupId = targetGroupId,
+                        p_ProgramId = request.ProgramId,
+                        p_SectionId = request.SectionId,
+                        p_RollNo = desiredRoll
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
 
             return new
             {
@@ -387,26 +422,28 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         // =========================================================
-        // GET NEXT ROLL NUMBER
+        // GET NEXT ROLL NUMBER (100% Stored Procedure)
         // =========================================================
 
-        private async Task<int>
-            NextRollNo(
-                int academicYearId,
-                int academicLevelId,
-                int groupId)
+        private async Task<int> NextRollNo(
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            CancellationToken cancellationToken = default)
         {
-            await OpenAsync();
+            await EnsureConnectionOpenAsync(cancellationToken);
 
             var rolls = await Connection.QueryAsync<string>(
-                "sp_GetMaxRollNumber",
-                new
-                {
-                    p_AcademicYearId = academicYearId,
-                    p_AcademicLevelId = academicLevelId,
-                    p_GroupId = groupId
-                },
-                commandType: CommandType.StoredProcedure);
+                new CommandDefinition(
+                    "sp_GetMaxRollNumber",
+                    new
+                    {
+                        p_AcademicYearId = academicYearId,
+                        p_AcademicLevelId = academicLevelId,
+                        p_GroupId = groupId
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
 
             var maxRoll = rolls
                 .Select(x => int.TryParse(x, out var value) ? value : 0)
@@ -415,26 +452,45 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return maxRoll + 1;
         }
-    
-        public async Task<(string Year, string Board, string BoardCode, string Level, string LevelCode, string Group, string GroupCode, string Program)> GetContextMetadataAsync(int? ayId, int? boardId, int? levelId, int? groupId, int? programId)
-        {
-            var year = ayId.HasValue ? await _context.AcademicYears.Where(x => x.AcademicYearId == ayId.Value).Select(x => x.AcademicYearName).FirstOrDefaultAsync() : "";
-            
-            var boardEntity = boardId.HasValue ? await _context.Boards.Where(x => x.BoardId == boardId.Value).Select(x => new { x.BoardName, x.BoardCode }).FirstOrDefaultAsync() : null;
-            var board = boardEntity?.BoardName ?? "";
-            var boardCode = boardEntity?.BoardCode ?? "";
-            
-            var levelEntity = levelId.HasValue ? await _context.AcademicLevels.Where(x => x.AcademicLevelId == levelId.Value).Select(x => new { x.LevelName, x.LevelCode }).FirstOrDefaultAsync() : null;
-            var level = levelEntity?.LevelName ?? "";
-            var levelCode = levelEntity?.LevelCode ?? "";
-            
-            var groupEntity = groupId.HasValue ? await _context.Groups.Where(x => x.GroupId == groupId.Value).Select(x => new { x.GroupName, x.GroupCode }).FirstOrDefaultAsync() : null;
-            var group = groupEntity?.GroupName ?? "";
-            var groupCode = groupEntity?.GroupCode ?? "";
-            
-            var program = programId.HasValue ? await _context.Programs.Where(x => x.ProgramId == programId.Value).Select(x => x.ProgramName).FirstOrDefaultAsync() : "";
 
-            return (year ?? "", board, boardCode, level, levelCode, group, groupCode, program ?? "");
+        // =========================================================
+        // GET CONTEXT METADATA (100% Stored Procedure, 0% EF Core)
+        // =========================================================
+
+        public async Task<(string Year, string Board, string BoardCode, string Level, string LevelCode, string Group, string GroupCode, string Program)> GetContextMetadataAsync(
+            int? ayId,
+            int? boardId,
+            int? levelId,
+            int? groupId,
+            int? programId,
+            CancellationToken cancellationToken = default)
+        {
+            await EnsureConnectionOpenAsync(cancellationToken);
+
+            var metadata = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(
+                    "sp_GetSectionAllocationContextMetadata",
+                    new
+                    {
+                        p_AcademicYearId = ayId ?? 0,
+                        p_BoardId = boardId ?? 0,
+                        p_AcademicLevelId = levelId ?? 0,
+                        p_GroupId = groupId ?? 0,
+                        p_ProgramId = programId ?? 0
+                    },
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: cancellationToken));
+
+            return (
+                (string)(metadata?.Year ?? ""),
+                (string)(metadata?.Board ?? ""),
+                (string)(metadata?.BoardCode ?? ""),
+                (string)(metadata?.Level ?? ""),
+                (string)(metadata?.LevelCode ?? ""),
+                (string)(metadata?.Group ?? ""),
+                (string)(metadata?.GroupCode ?? ""),
+                (string)(metadata?.Program ?? "")
+            );
         }
     }
 }

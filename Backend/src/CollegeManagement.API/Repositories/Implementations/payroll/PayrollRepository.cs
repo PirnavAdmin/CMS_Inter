@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Text.RegularExpressions;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
@@ -369,20 +369,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             if (string.IsNullOrWhiteSpace(rawId))
                 return null;
 
-            // 1. Direct integer check (safe 32-bit int)
-            if (int.TryParse(rawId, out int directId) && directId > 0 && directId <= 2000000000)
+            int? directId = null;
+            if (int.TryParse(rawId, out int parsedDirect) && parsedDirect > 0 && parsedDirect <= 2000000000)
             {
-                var exists = await _dbConnection.ExecuteScalarAsync<int?>(
-                    "SELECT PayslipId FROM payroll_payslips WHERE PayslipId = @id LIMIT 1;",
-                    new { id = directId });
-                if (exists.HasValue) return exists.Value;
+                directId = parsedDirect;
             }
 
             string? staffStr = null;
             int? year = null;
             int? month = null;
 
-            // 2. Format: slip-{staff}-{year}-{month}-{timestamp}
+            // Format: slip-{staff}-{year}-{month}-{timestamp}
             var m = Regex.Match(rawId, @"^slip-([^-]+)-(\d{4})-(\d{1,2})", RegexOptions.IgnoreCase);
             if (m.Success)
             {
@@ -390,7 +387,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 if (int.TryParse(m.Groups[2].Value, out int y)) year = y;
                 if (int.TryParse(m.Groups[3].Value, out int mo)) month = mo;
             }
-            // 3. Numeric concatenated: {staff}{year:4}{month:2}{timestamp:13} (e.g. 372026091790666200000)
+            // Numeric concatenated: {staff}{year:4}{month:2}{timestamp:13} (e.g. 372026091790666200000)
             else if (rawId.Length >= 19 && Regex.IsMatch(rawId, @"^\d+$"))
             {
                 try
@@ -415,35 +412,23 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 }
             }
 
-            if (year.HasValue && month.HasValue)
+            int? numericStaff = null;
+            if (int.TryParse(staffStr, out int ns) && ns > 0)
             {
-                int.TryParse(staffStr, out int numericStaff);
-
-                string sql = @"
-                    SELECT pp.PayslipId 
-                    FROM payroll_payslips pp
-                    JOIN Staffs s ON s.Id = pp.StaffId
-                    WHERE pp.PayrollYear = @year 
-                      AND pp.PayrollMonth = @month
-                      AND (
-                          (@numericStaff > 0 AND s.Id = @numericStaff)
-                          OR (@staffStr IS NOT NULL AND s.EmployeeId = @staffStr)
-                          OR (@staffStr IS NOT NULL AND s.EmployeeId LIKE CONCAT('%', @staffStr))
-                      )
-                    ORDER BY pp.PayslipId DESC
-                    LIMIT 1;";
-
-                var found = await _dbConnection.ExecuteScalarAsync<int?>(sql, new { year = year.Value, month = month.Value, staffStr, numericStaff });
-                if (found.HasValue) return found.Value;
-
-                // Fallback: If only 1 payslip exists for that year & month, or most recent
-                var fallback = await _dbConnection.ExecuteScalarAsync<int?>(
-                    "SELECT pp.PayslipId FROM payroll_payslips pp WHERE pp.PayrollYear = @year AND pp.PayrollMonth = @month ORDER BY pp.PayslipId DESC LIMIT 1;",
-                    new { year = year.Value, month = month.Value });
-                if (fallback.HasValue) return fallback.Value;
+                numericStaff = ns;
             }
 
-            return null;
+            var parameters = new DynamicParameters();
+            parameters.Add("p_DirectId", directId);
+            parameters.Add("p_StaffId", numericStaff);
+            parameters.Add("p_StaffCode", staffStr);
+            parameters.Add("p_Year", year);
+            parameters.Add("p_Month", month);
+
+            return await _dbConnection.QueryFirstOrDefaultAsync<int?>(
+                "sp_PayrollPayslip_ResolveId",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
 

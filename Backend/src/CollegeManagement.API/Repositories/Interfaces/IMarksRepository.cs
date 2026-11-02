@@ -20,6 +20,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task AddAsync(Mark mark);
         Task<Mark> CreateAsync(Mark mark);
         Task AddRangeAsync(IEnumerable<Mark> marks);
+        Task<int> BulkUpsertMarksAsync(string marksJson, int userId, int? campusId);
         Task<Mark> UpdateAsync(Mark mark);
         Task<Mark> UpdateAsync(Mark mark, int userId);
         Task<Mark> UpdateAsync(int id, Mark mark);

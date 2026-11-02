@@ -1,12 +1,16 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Services.Interfaces;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/v1/transport/lookups")]
-    [AllowAnonymous]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/transport/lookups")]
+    [Authorize]
     public class TransportLookupsController : ControllerBase
     {
         private readonly ITransportRouteService _routeService;

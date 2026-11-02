@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Asp.Versioning;
-using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
 using CollegeManagement.API.Filters;
@@ -11,7 +10,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -25,16 +23,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffAttendanceService _service;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
-        private readonly AppDbContext? _context;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
-            AppDbContext? context = null)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
-            _context = context;
         }
 
         /// <summary>
@@ -54,6 +49,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Bulk saves/submits staff attendance records.
         /// </summary>
         [HttpPost("bulk")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -69,7 +65,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates a single staff attendance record.
         /// </summary>
         [HttpPut("update")]
-        [Authorize]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -90,6 +86,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffDetails(int facultyId, [FromQuery] DateTime date)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (facultyId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view attendance details for other staff members." });
+                }
+            }
+
             var result = await _service.GetStaffDetailsAsync(facultyId, date);
             if (result == null)
             {
@@ -102,7 +107,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates Staff Monthly Calendar Matrix Grid Report via GET query string.
         /// </summary>
         [HttpGet("monthly-report")]
-        [AllowAnonymous]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffMonthlyReportGridGet([FromQuery] StaffMonthlyReportRequest request)
@@ -152,7 +157,17 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffYearlyOverview(int staffId, [FromQuery] int academicYearId)
         {
-            var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId);
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (staffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view yearly attendance for other staff members." });
+                }
+            }
+
+            var campusId = GetCurrentCampusId();
+            var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId, campusId);
             return Ok(result);
         }
 
@@ -182,9 +197,20 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var isAdmin = IsCurrentUserAdmin();
+            var campusId = GetCurrentCampusId();
 
-            var result = await _service.ImportStaffAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
+            var result = await _service.ImportStaffAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId, campusId);
             return Ok(result);
+        }
+
+        private int? GetCurrentCampusId()
+        {
+            var campusClaim = User?.FindFirst("CampusId")?.Value ?? User?.FindFirst("campus_id")?.Value ?? User?.FindFirst("campusId")?.Value;
+            if (!string.IsNullOrEmpty(campusClaim) && int.TryParse(campusClaim, out int cId) && cId > 0)
+            {
+                return cId;
+            }
+            return null;
         }
 
         private int GetCurrentUserId()
@@ -196,6 +222,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
             return userId.Value;
         }
+
         private string GetCurrentUserName()
         {
             var userName = User?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
@@ -224,84 +251,9 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var userId = _jwtTokenHelper.GetUserId(User);
-            if (userId.HasValue && userId.Value > 0 && _context != null)
+            if (userId.HasValue && userId.Value > 0)
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId.Value);
-                if (user?.StaffId.HasValue == true && user.StaffId.Value > 0)
-                {
-                    return user.StaffId.Value;
-                }
-
-                if (!string.IsNullOrEmpty(user?.Email))
-                {
-                    var staff = await _context.Staffs.FirstOrDefaultAsync(s => s.Email == user.Email && !s.IsDeleted);
-                    if (staff != null)
-                    {
-                        if (user != null && !user.StaffId.HasValue)
-                        {
-                            user.StaffId = staff.Id;
-                            await _context.SaveChangesAsync();
-                        }
-                        return staff.Id;
-                    }
-                }
-
-                // Auto-provision if Admin
-                if (IsCurrentUserAdmin() && user != null)
-                {
-                    var campusId = await _context.Campuses.Select(c => c.CampusId).FirstOrDefaultAsync();
-                    if (campusId <= 0) campusId = 1;
-
-                    var names = (user.FullName ?? "Administrator").Split(' ');
-                    var firstName = names[0];
-                    var lastName = names.Length > 1 ? string.Join(" ", names.Skip(1)) : "Admin";
-
-                    var newStaff = new CollegeManagement.API.Models.Staff.Staff
-                    {
-                        EmployeeId = $"ADM{user.UserId:D3}",
-                        FirstName = firstName,
-                        LastName = lastName,
-                        Email = string.IsNullOrWhiteSpace(user.Email) ? $"admin{user.UserId}@college.local" : user.Email,
-                        Mobile = string.IsNullOrWhiteSpace(user.PhoneNumber) ? "9876543210" : user.PhoneNumber,
-                        Gender = "Other",
-                        DateOfBirth = new DateTime(1985, 1, 1),
-                        Qualification = "Master's Degree",
-                        Designation = "Administrator",
-                        StaffType = "Non-Teaching",
-                        DepartmentId = 5,
-                        CampusId = campusId,
-                        JoiningDate = DateTime.UtcNow,
-                        Status = "Active",
-                        Nationality = "Indian",
-                        Country = "India",
-                        EmploymentType = "Full Time",
-                        ProfileStatus = "Approved",
-                        ProfileCompletionPercentage = 100,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    _context.Staffs.Add(newStaff);
-                    await _context.SaveChangesAsync();
-
-                    user.StaffId = newStaff.Id;
-                    await _context.SaveChangesAsync();
-
-                    var hasBalance = await _context.StaffLeaveBalances.AnyAsync(b => b.StaffId == newStaff.Id);
-                    if (!hasBalance)
-                    {
-                        var activeYear = await _context.AcademicYears.Select(y => y.AcademicYearId).FirstOrDefaultAsync();
-                        if (activeYear <= 0) activeYear = 1;
-
-                        _context.StaffLeaveBalances.AddRange(
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Casual, AcademicYearId = activeYear, TotalDays = 15m, UsedDays = 0m, RemainingDays = 15m },
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Sick, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m },
-                            new CollegeManagement.API.Models.StaffLeaveBalance { StaffId = newStaff.Id, LeaveType = CollegeManagement.API.Enums.LeaveType.Earned, AcademicYearId = activeYear, TotalDays = 10m, UsedDays = 0m, RemainingDays = 10m }
-                        );
-                        await _context.SaveChangesAsync();
-                    }
-
-                    return newStaff.Id;
-                }
+                return await _service.ResolveStaffIdByUserIdAsync(userId.Value);
             }
 
             throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");
@@ -313,6 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves today's punch status and shift information for the logged-in staff member.
         /// </summary>
         [HttpGet("my-today")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyTodayStatus()
@@ -326,6 +279,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-in (punch in) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-in")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -350,6 +304,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Records check-out (punch out) timestamp for the logged-in staff member.
         /// </summary>
         [HttpPost("punch-out")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceTodayResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -374,6 +329,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves personal attendance logs and analytics metrics for the requested period (week, last_week, month, last_month).
         /// </summary>
         [HttpGet("my-history")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
@@ -387,6 +343,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Submits an attendance regularization request for missing punch, late arrival, or official on-duty.
         /// </summary>
         [HttpPost("regularize")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -409,20 +366,26 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Retrieves pending/all regularization requests for review by Admin/Principal.
+        /// Retrieves pending/all regularization requests. For non-admin faculty, strictly scopes to caller's own requests.
         /// </summary>
         [HttpGet("regularizations")]
         [ProducesResponseType(typeof(IEnumerable<RegularizationItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetRegularizations([FromQuery] string? status, [FromQuery] int? departmentId)
         {
             var list = await _service.GetRegularizationsAsync(status, departmentId);
+            if (!IsCurrentUserAdmin())
+            {
+                var staffId = await ResolveStaffIdAsync();
+                list = list.Where(r => (r.StaffId == staffId) || (r.FacultyId == staffId));
+            }
             return Ok(new { Status = true, Message = "Regularization requests loaded successfully.", Data = list });
         }
 
         /// <summary>
-        /// Approves or rejects a staff attendance regularization request.
+        /// Approves or rejects a staff attendance regularization request (Restricted to Admin, Super Admin, Principal).
         /// </summary>
         [HttpPut("regularizations/{id:int}/review")]
+        [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

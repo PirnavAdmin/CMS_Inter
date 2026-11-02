@@ -1,186 +1,73 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Attendance.Requests;
 using CollegeManagement.API.DTOs.Attendance.Responses;
-
 using CollegeManagement.API.DTOs.Common;
 
 namespace CollegeManagement.API.Services.Interfaces
 {
     /// <summary>
     /// Service interface for Attendance operations.
+    /// Follows strict Controller -> Service -> Repository -> Dapper -> Stored Procedure architecture.
     /// </summary>
     public interface IAttendanceService
     {
-        /// <summary>
-        /// Creates a new attendance record after performing business validations.
-        /// </summary>
-        /// <param name="request">The creation details.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <param name="userId">The ID of the calling user.</param>
-        /// <returns>The ID of the newly created attendance record.</returns>
-        Task<int> CreateAttendanceAsync(CreateAttendanceRequest request, bool isAdmin, string userName, int? userId = null);
+        Task<int> CreateAttendanceAsync(CreateAttendanceRequest request, bool isAdmin, string userName, int? userId = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Creates student attendance records in bulk after performing business validations.
-        /// </summary>
-        /// <param name="request">The bulk creation details.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <param name="userId">The ID of the calling user.</param>
-        /// <returns>The number of records successfully created.</returns>
-        Task<int> CreateBulkAttendanceAsync(BulkAttendanceRequest request, bool isAdmin, string userName, int? userId = null);
+        Task<int> CreateBulkAttendanceAsync(BulkAttendanceRequest request, bool isAdmin, string userName, int? userId = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Updates an existing attendance record after performing business validations.
-        /// </summary>
-        /// <param name="request">The update details.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <param name="userId">The ID of the calling user.</param>
-        /// <returns>The number of affected records.</returns>
-        Task<int> UpdateAttendanceAsync(UpdateAttendanceRequest request, bool isAdmin, string userName, int? userId = null);
+        Task<int> UpdateAttendanceAsync(UpdateAttendanceRequest request, bool isAdmin, string userName, int? userId = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Updates multiple existing student attendance records in one bulk operation.
-        /// </summary>
-        /// <param name="request">The bulk update details.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <param name="userId">The ID of the calling user.</param>
-        /// <returns>The number of records successfully updated.</returns>
-        Task<int> BulkUpdateAttendanceAsync(BulkUpdateAttendanceRequest request, bool isAdmin, string userName, int? userId = null);
+        Task<int> BulkUpdateAttendanceAsync(BulkUpdateAttendanceRequest request, bool isAdmin, string userName, int? userId = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Bulk saves/updates session-based attendance records for Admin in a single database transaction.
-        /// </summary>
-        Task<int> AdminBulkSaveStudentAttendanceAsync(AdminBulkSaveStudentAttendanceRequest request, string userName, int? userId = null);
+        Task<int> AdminBulkSaveStudentAttendanceAsync(AdminBulkSaveStudentAttendanceRequest request, string userName, int? userId = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves a single detailed attendance record by its ID.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <returns>The matching attendance response DTO, or null if not found.</returns>
-        Task<AttendanceResponse?> GetAttendanceByIdAsync(int attendanceId);
+        Task<AttendanceResponse?> GetAttendanceByIdAsync(int attendanceId, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves a filtered list of attendance records with pagination metadata.
-        /// </summary>
-        /// <param name="request">The search and filter parameters.</param>
-        /// <returns>A paginated response containing items and metadata.</returns>
-        Task<PagedResponse<AttendanceListResponse>> GetAttendancesAsync(AttendanceSearchRequest request);
+        Task<PagedResponse<AttendanceListResponse>> GetAttendancesAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves students available to mark attendance for the specified search criteria.
-        /// </summary>
-        /// <param name="request">The search and filter parameters.</param>
-        /// <returns>A collection of student attendance response DTOs.</returns>
-        Task<IEnumerable<StudentAttendanceResponse>> GetStudentsForAttendanceAsync(AttendanceSearchRequest request);
+        Task<IEnumerable<StudentAttendanceResponse>> GetStudentsForAttendanceAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves students for Admin attendance marking (session-based).
-        /// </summary>
-        Task<IEnumerable<StudentAttendanceResponse>> GetAdminStudentsForAttendanceAsync(AttendanceSearchRequest request);
+        Task<IEnumerable<StudentAttendanceResponse>> GetAdminStudentsForAttendanceAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves statistical summary metrics (present, absent, late, leave counts) for the specified filters.
-        /// </summary>
-        /// <param name="request">The search and filter parameters.</param>
-        /// <returns>An attendance summary response DTO.</returns>
-        Task<AttendanceSummaryResponse> GetAttendanceSummaryAsync(AttendanceSearchRequest request);
+        Task<AttendanceSummaryResponse> GetAttendanceSummaryAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        Task<IEnumerable<AttendanceDefaulterResponse>> GetAttendanceDefaultersAsync(AttendanceDefaultersRequest request);
+        Task<IEnumerable<AttendanceDefaulterResponse>> GetAttendanceDefaultersAsync(AttendanceDefaultersRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves attendance percentages and class counts per student for the specified filters.
-        /// </summary>
-        /// <param name="request">The search and filter parameters.</param>
-        /// <returns>A collection of student attendance percentage DTOs.</returns>
-        Task<IEnumerable<AttendancePercentageResponse>> GetAttendancePercentageAsync(AttendanceSearchRequest request);
+        Task<IEnumerable<AttendancePercentageResponse>> GetAttendancePercentageAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Generates a flat report listing attendance details for the specified filters.
-        /// </summary>
-        /// <param name="request">The search and filter parameters.</param>
-        /// <returns>A collection of attendance report DTOs.</returns>
-        Task<IEnumerable<AttendanceReportResponse>> GetAttendanceReportAsync(AttendanceSearchRequest request);
+        Task<IEnumerable<AttendanceReportResponse>> GetAttendanceReportAsync(AttendanceSearchRequest request, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Changes the active/inactive status of an attendance record.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <param name="isActive">The new active status flag.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <returns>The number of affected records.</returns>
-        Task<int> ChangeAttendanceActiveStatusAsync(int attendanceId, bool isActive, bool isAdmin, string userName);
+        Task<int> ChangeAttendanceActiveStatusAsync(int attendanceId, bool isActive, bool isAdmin, string userName, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Locks an attendance session, preventing further modifications by Faculty members.
-        /// </summary>
-        /// <param name="sessionId">The attendance session identifier.</param>
-        /// <param name="lockedByUserId">The user identifier of who locked the session.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <returns>True if the session was successfully locked.</returns>
-        Task<bool> LockSessionAsync(int sessionId, int lockedByUserId, string userName);
+        Task<bool> LockSessionAsync(int sessionId, int lockedByUserId, string userName, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Unlocks an attendance session, allowing modifications.
-        /// </summary>
-        /// <param name="sessionId">The attendance session identifier.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <returns>True if the session was successfully unlocked.</returns>
-        Task<bool> UnlockSessionAsync(int sessionId, string userName);
+        Task<bool> UnlockSessionAsync(int sessionId, string userName, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Soft deletes an existing attendance record.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <param name="isAdmin">Flag indicating if the user has Admin rights.</param>
-        /// <param name="userName">The username of the caller.</param>
-        /// <returns>True if the record was successfully soft deleted.</returns>
-        Task<bool> DeleteAttendanceAsync(int attendanceId, bool isAdmin, string userName);
+        Task<bool> DeleteAttendanceAsync(int attendanceId, bool isAdmin, string userName, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves Board and Academic Year metadata for the specified Group and Section.
-        /// </summary>
-        Task<AcademicContextResponse?> GetAcademicContextAsync(int groupId, int sectionId);
+        Task<AcademicContextResponse?> GetAcademicContextAsync(int groupId, int sectionId, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves the yearly attendance overview for a specific student.
-        /// </summary>
-        Task<YearlyOverviewResponse> GetStudentYearlyOverviewAsync(int studentId, int academicYearId);
+        Task<YearlyOverviewResponse> GetStudentYearlyOverviewAsync(int studentId, int academicYearId, CancellationToken cancellationToken = default);
 
-        Task<byte[]> GenerateImportTemplateAsync();
-        Task<object> ImportAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId);
+        Task<IEnumerable<SubjectWiseAttendanceResponse>> GetStudentSubjectAttendanceAsync(int studentId, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Auto-derives assigned Subject and Faculty for specified Date, Group, Section, and Period or Session from Timetable/Section.
-        /// </summary>
-        Task<FacultySubjectDerivationResponse?> GetFacultySubjectAllocationAsync(System.DateTime date, int? groupId = null, int? sectionId = null, int? periodId = null, string? sessionType = null);
+        Task<IEnumerable<DailyPunchLogResponse>> GetStudentDailyPunchLogsAsync(int studentId, int month, int year, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Generates the Student Monthly Calendar Matrix Grid Report.
-        /// </summary>
-        Task<StudentMonthlyReportResponse> GetStudentMonthlyReportGridAsync(StudentMonthlyReportRequest request);
+        Task<byte[]> GenerateImportTemplateAsync(CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Exports the Student Monthly Calendar Grid Report to CSV format.
-        /// </summary>
-        Task<byte[]> ExportStudentMonthlyReportToCsvAsync(StudentMonthlyReportRequest request);
+        Task<object> ImportAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Exports the Student Monthly Calendar Grid Report to Excel format.
-        /// </summary>
-        /// <summary>
-        /// Exports the Student Monthly Calendar Grid Report to Excel format.
-        /// </summary>
-        Task<byte[]> ExportStudentMonthlyReportToExcelAsync(CollegeManagement.API.DTOs.Attendance.Requests.StudentMonthlyReportRequest request);
+        Task<FacultySubjectDerivationResponse?> GetFacultySubjectAllocationAsync(DateTime date, int? groupId = null, int? sectionId = null, int? periodId = null, string? sessionType = null, CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Retrieves paginated audit history for attendance operations.
-        /// </summary>
-        Task<CollegeManagement.API.DTOs.Common.PagedResponse<CollegeManagement.API.DTOs.Attendance.Responses.AttendanceAuditHistoryResponse>> GetAuditHistoryAsync(CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request);
+        Task<StudentMonthlyReportResponse> GetStudentMonthlyReportGridAsync(StudentMonthlyReportRequest request, CancellationToken cancellationToken = default);
+
+        Task<byte[]> ExportStudentMonthlyReportToCsvAsync(StudentMonthlyReportRequest request, CancellationToken cancellationToken = default);
+
+        Task<byte[]> ExportStudentMonthlyReportToExcelAsync(StudentMonthlyReportRequest request, CancellationToken cancellationToken = default);
+
+        Task<PagedResponse<AttendanceAuditHistoryResponse>> GetAuditHistoryAsync(AuditHistorySearchRequest request, CancellationToken cancellationToken = default);
     }
 }

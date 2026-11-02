@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
 import * as campusApi from "../api/campusApi.js";
-import { getAuthToken, getAuthUser, saveAuthSession } from "../features/authStorage.js";
+import { getAuthToken, getAuthUser, saveAuthSession } from "../modules/auth/authStorage.js";
 import apiClient from "../api/axios.js";
 import { apiEndpoints } from "../api/apiEndpoints.js";
 

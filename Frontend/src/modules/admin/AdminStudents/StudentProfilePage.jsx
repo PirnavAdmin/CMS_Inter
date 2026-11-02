@@ -1,0 +1,259 @@
+import StudentFeeTab from "./StudentFeeTab.jsx";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { ArrowLeft, Bus, ClipboardList, GraduationCap, Eye, IndianRupee, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
+import { SkeletonPage, StatusBadge } from "@/shared/components/Ui.jsx";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getHostelBlocks } from "@/api/hostelApi.js";
+import { env } from "@/config/env.js";
+import "./StudentManagementPage.css";
+import "../AdminAdmissions/StudentAdmissionPage.css";
+
+const ViewDetails = ({ items }) => <div className="student-profile-read-grid">{items.map(([key, value]) => <div className="student-profile-read-field" key={key}><span>{key}</span><strong>{value || "—"}</strong></div>)}</div>;
+const sectionIcons = {
+  "Personal Information": User,
+  "Contact Information": Mail,
+  "Admission Details": ClipboardList,
+  "Academic Placement": GraduationCap,
+  "Previous Education": School,
+  Address: MapPin,
+  "Parent Details": Users,
+  "Student Type & Residential Allocation": Bus,
+};
+const sectionKey = (title) => ({ "Personal Information": "personal", "Contact Information": "contact", "Admission Details": "academic", "Academic Placement": "academic", "Previous Education": "academic", Address: "contact", "Parent Details": "parent", "Student Type & Residential Allocation": "transport" })[title];
+const profileTabs = [["overview", "Overview", User], ["personal", "Personal Details", User], ["academic", "Academic Details", GraduationCap], ["contact", "Contact & Address", Mail], ["parent", "Parent / Guardian", Users], ["transport", "Transport Details", Bus], ["fee", "Fee", IndianRupee]];
+const ViewSection = ({ title, children, className = "" }) => {
+  const Icon = sectionIcons[title];
+  return <section data-profile-section={sectionKey(title)} className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
+};
+const read = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value != null && value !== "");
+const formatDisplayDate = (value) => {
+  if (!value) return value;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
+};
+const normalizeStudentType = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "2", "yes", "residential", "hostel", "hosteller"].includes(text.toLowerCase())) return "Residential";
+  if (["false", "1", "0", "no", "non-residential", "non residential", "day scholar", "dayscholar"].includes(text.toLowerCase())) return "Non-Residential";
+  return text;
+};
+const normalizeYesNo = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "1", "yes"].includes(text.toLowerCase())) return "Yes";
+  if (["false", "0", "no"].includes(text.toLowerCase())) return "No";
+  return text;
+};
+const normalizeBusType = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "1", "yes", "ac"].includes(text.toLowerCase())) return "AC";
+  if (["false", "0", "no", "non-ac", "non ac", "nonac"].includes(text.toLowerCase())) return "Non-AC";
+  return text;
+};
+const residentialAllocation = (record = {}) => {
+  const allocation = read(record, "allocation", "Allocation", "residentialAllocation", "ResidentialAllocation", "studentAllocation", "StudentAllocation") || {};
+  const transport = read(record, "transport", "Transport", "transportDetails", "TransportDetails", "transportAllocation", "TransportAllocation", "studentTransport", "StudentTransport") || {};
+  const route = read(record, "route", "Route", "busRoute", "BusRoute") || read(transport, "route", "Route", "busRoute", "BusRoute") || {};
+  const pickup = read(record, "pickup", "Pickup", "pickupPoint", "PickupPoint") || read(transport, "pickup", "Pickup", "pickupPoint", "PickupPoint") || {};
+  const hostel = read(record, "hostel", "Hostel", "hostelDetails", "HostelDetails", "hostelAllocation", "HostelAllocation", "studentHostel", "StudentHostel") || {};
+  const block = read(record, "hostelBlock", "HostelBlock") || read(hostel, "block", "Block", "hostelBlock", "HostelBlock") || {};
+  const room = read(record, "hostelRoom", "HostelRoom", "room", "Room") || read(hostel, "room", "Room", "hostelRoom", "HostelRoom") || {};
+  const sources = [record, allocation, transport, hostel];
+  const readAny = (...keys) => sources.map((source) => read(source, ...keys)).find((item) => item != null && item !== "");
+  return {
+    studentType: normalizeStudentType(readAny("studentType", "StudentType", "residentialType", "ResidentialType", "residenceType", "ResidenceType", "isResidential", "IsResidential")),
+    transportRequired: normalizeYesNo(readAny("transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired", "requiresTransport", "RequiresTransport")),
+    busType: normalizeBusType(readAny("busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC", "isAc", "IsAc")),
+    route: read(route, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode") ?? readAny("busRouteName", "BusRouteName", "routeName", "RouteName", "busRoute", "BusRoute"),
+    pickupPoint: read(pickup, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name") ?? readAny("pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint"),
+    hostelBlock: read(block, "hostelName", "HostelName", "name", "Name", "hostelCode", "HostelCode") ?? readAny("hostelBlockName", "HostelBlockName", "hostelName", "HostelName", "hostelBlock", "HostelBlock"),
+    hostelId: read(block, "hostelId", "HostelId", "id", "Id") ?? readAny("hostelId", "HostelId"),
+    hostelRoom: read(room, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name") ?? readAny("hostelRoomName", "HostelRoomName", "roomTypeName", "RoomTypeName", "hostelRoom", "HostelRoom"),
+  };
+};
+const rows = (payload) => {
+  const data = payload?.data ?? payload?.Data ?? payload;
+  return Array.isArray(data) ? data : data?.data ?? data?.items ?? data?.results ?? [];
+};
+const resolvePhotoUrl = (value, version) => {
+  const path = String(value ?? "").trim();
+  if (!path) return "";
+  const resolved = /^(?:https?:|blob:|data:)/i.test(path) ? path : `${env.apiBaseUrl.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`;
+  if (/^(?:blob:|data:)/i.test(resolved)) return resolved;
+  return `${resolved}${resolved.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
+};
+
+export default function StudentProfilePage({ id }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editMode = searchParams.get("view") === "edit";
+  const requestedTab = searchParams.get("tab");
+  const activeTab = profileTabs.some(([key]) => key === requestedTab) && !(editMode && requestedTab === "fee") ? requestedTab : "overview";
+  const setActiveTab = (tab) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (tab === "overview") params.delete("tab"); else params.set("tab", tab);
+    return params;
+  });
+  const setEditMode = (editing) => setSearchParams((previous) => {
+    const params = new URLSearchParams(previous);
+    if (editing) {
+      params.set("view", "edit");
+      if (params.get("tab") === "fee") params.delete("tab");
+    } else params.delete("view");
+    return params;
+  });
+  const [editorBusy, setEditorBusy] = useState(false);
+  const [loadedStudentId, setLoadedStudentId] = useState("");
+  const location = useLocation();
+  const returnState = location.state?.studentManagement;
+  const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState(""), [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setStudent(null);
+    setError("");
+    if (!/^[1-9]\d*$/.test(String(id))) {
+      setError("Invalid student ID.");
+      setLoadedStudentId(String(id));
+      setLoading(false);
+      return () => { active = false; };
+    }
+    apiClient.get(apiEndpoints.students.getById(id)).then(async ({ data }) => {
+      const record = data?.data ?? data?.Data ?? data;
+      if (!record || typeof record !== "object") throw new Error("Student record was not found.");
+      const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
+      const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
+      if (studentId !== String(id)) throw new Error("Student record does not match the requested student.");
+      const [studentsResult, admissionsResult, sectionsResult, hostelBlocksResult] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.students.getAll),
+        apiClient.get(apiEndpoints.admissions.getAll),
+        apiClient.get(apiEndpoints.sections.list),
+        getHostelBlocks(),
+      ]);
+      const studentRows = studentsResult.status === "fulfilled" ? rows(studentsResult.value.data) : [];
+      const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
+      const sectionRows = sectionsResult.status === "fulfilled" ? rows(sectionsResult.value.data) : [];
+      const studentSummary = studentRows.find((item) => String(read(item, "studentId", "StudentId", "id", "Id") ?? "") === studentId
+        || String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo);
+      const admissionSummary = admissionRows.find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo || String(read(item, "studentId", "StudentId") ?? "") === studentId);
+      const admissionId = read(admissionSummary, "admissionId", "AdmissionId", "studentAdmissionId", "StudentAdmissionId", "id", "Id");
+      let admission = admissionSummary;
+      if (admissionId != null) {
+        try {
+          const detail = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
+          admission = { ...admissionSummary, ...(detail.data?.data ?? detail.data?.Data ?? detail.data ?? {}) };
+        } catch { /* The admission list record is still useful when details are unavailable. */ }
+      }
+      // Do not let null/empty values in one API response erase populated
+      // values returned by the other (notably sectionId and admissionType).
+      const source = { ...record };
+      Object.entries(studentSummary || {}).forEach(([key, value]) => {
+        if ((source[key] == null || source[key] === "") && value != null && value !== "") source[key] = value;
+      });
+      Object.entries(admission || {}).forEach(([key, value]) => {
+        if (value != null && value !== "") source[key] = value;
+      });
+      // Admission records keep their original placement after a student moves.
+      // Prefer current student values when displaying an edited placement.
+      const currentAcademic = [record.student ?? record.Student ?? record.profile ?? record.Profile,
+        record.academicDetails ?? record.AcademicDetails ?? record.academic ?? record.Academic, record, studentSummary].filter(Boolean);
+      ["campusId", "boardId", "boardName", "academicYearId", "academicYearName", "academicLevelId", "academicLevelName", "levelName", "groupId", "groupName", "programId", "programName", "programmeName", "sectionId", "sectionName"].forEach((key) => {
+        const keys = [key, key[0].toUpperCase() + key.slice(1)];
+        const current = currentAcademic.find((entry) => keys.some((alias) => entry?.[alias] != null));
+        if (current) keys.forEach((alias) => { source[alias] = current[keys[0]] ?? current[keys[1]]; });
+      });
+      // Admission is historical; select the current student allocation as a whole
+      // so cleared facility fields cannot be repopulated from the admission.
+      const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
+        .filter(Boolean).map(residentialAllocation).find((item) => item.studentType);
+      if (currentAllocation?.studentType === "Residential") {
+        const blocks = hostelBlocksResult.status === "fulfilled" ? rows(hostelBlocksResult.value.data) : [];
+        const normalize = (value) => typeof value === "string" || typeof value === "number" ? String(value).trim().toLowerCase() : "";
+        const saved = [currentAllocation.hostelId, currentAllocation.hostelBlock].map(normalize).filter((value) => value && value !== "0");
+        const block = blocks.find((item) => [read(item, "hostelId", "HostelId", "id", "Id"), read(item, "hostelCode", "HostelCode", "code", "Code"), read(item, "hostelName", "HostelName", "name", "Name")].some((value) => value != null && saved.includes(normalize(value))));
+        const blockName = read(block, "hostelName", "HostelName", "name", "Name");
+        if (blockName) currentAllocation.hostelBlock = blockName;
+        else if (typeof currentAllocation.hostelBlock !== "string" || !currentAllocation.hostelBlock.trim() || /^\d+$/.test(currentAllocation.hostelBlock)) {
+          currentAllocation.hostelBlock = saved.length ? "Saved hostel block unavailable" : "Hostel block not saved";
+        }
+      }
+      const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
+      const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
+      let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
+      if (!sectionRecord && Number(sectionId) > 0) {
+        try {
+          const sectionDetail = await apiClient.get(apiEndpoints.sections.getById(sectionId));
+          sectionRecord = sectionDetail.data?.data ?? sectionDetail.data?.Data ?? sectionDetail.data;
+        } catch { /* Keep the admission value if the detail endpoint is unavailable. */ }
+      }
+      const sectionName = read(source, "sectionName", "SectionName", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName", "sectionCode", "SectionCode") ?? read(sectionValue, "sectionName", "SectionName", "name", "Name", "sectionCode", "SectionCode") ?? read(sectionRecord, "sectionName", "SectionName", "name", "Name", "sectionCode", "SectionCode");
+      let uploadedPhoto = "";
+      try { uploadedPhoto = sessionStorage.getItem(`cms_student_photo_${studentId}`) ?? ""; } catch { /* Storage may be unavailable. */ }
+      if (active) {
+        setPhotoFailed(false);
+        setStudent({ ...source, currentAllocation, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
+      }
+    }).catch((e) => active && setError(getApiErrorMessage(e))).finally(() => {
+      if (active) { setLoadedStudentId(String(id)); setLoading(false); }
+    });
+    return () => { active = false; };
+  }, [id, refreshKey]);
+  const remotePhotoUrl = student?.photo ? resolvePhotoUrl(student.photo, student.photoVersion) : "";
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    setPhotoObjectUrl("");
+    if (!remotePhotoUrl) return () => { active = false; };
+    apiClient.get(remotePhotoUrl, {
+      responseType: "blob",
+      headers: { Accept: "image/*" },
+      skipGlobalLoader: true,
+    }).then((response) => {
+      if (!active) return;
+      const contentType = String(response.headers?.["content-type"] ?? response.data?.type ?? "").toLowerCase();
+      if (!contentType.startsWith("image/")) throw new Error("The photo endpoint did not return an image.");
+      objectUrl = URL.createObjectURL(response.data);
+      setPhotoFailed(false);
+      setPhotoObjectUrl(objectUrl);
+    }).catch(() => active && setPhotoFailed(true));
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [remotePhotoUrl]);
+  const profileBackLink = <Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>;
+  const loadingTitle = editMode ? "EDIT STUDENT PROFILE" : "Student Profile";
+  if (loading || loadedStudentId !== String(id)) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="student-management-profile-page" data-active-section={activeTab}><SkeletonPage /></div></DashboardLayout>;
+  if (!student) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
+  const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
+  const allocation = student.currentAllocation || residentialAllocation(student);
+  const finishEditing = async () => { setEditMode(false); setRefreshKey((value) => value + 1); };
+  return <DashboardLayout
+    title={<span className="student-profile-title">{student.name}<StatusBadge value={student.status} /></span>}
+    subtitle={<><span className="student-profile-header-admission">Admission No: {student.admissionNo} • Roll No: {student.roll || "Not assigned"}</span><span className="student-profile-header-academic">{[student.academicYear, student.group, student.programme, student.section].filter(Boolean).join(" • ")}</span></>}
+    breadcrumb={["People", "Students"]}
+    backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
+    actions={<div className="cms-admission-main-tabs" role="group" aria-label="Student profile mode">
+      <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><Eye size={15} />View</button>
+      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => setEditMode(true)}><Pencil size={15} />Edit</button>
+    </div>}
+  >
+    <div className="student-management-profile-page student-profile-compact" data-active-section={activeTab}>
+      <div className="cms-admission-main-tabs student-profile-section-tabs" role="tablist" aria-label="Student sections">
+        {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><Icon size={17} />{label}</button>)}
+      </div>
+    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage key={id} id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <><StudentFeeTab key={`fees-${student.studentId}-${refreshKey}`} student={student} compactContext /></> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
+      <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>
+      <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
+      <ViewSection title="Contact Information"><ViewDetails items={[["Email", read(student, "studentEmail", "email", "Email")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile", "MobileNumber")]]}/></ViewSection>
+      <ViewSection title="Admission Details"><ViewDetails items={[["Admission Date", formatDisplayDate(read(student, "admissionDate", "AdmissionDate"))], ["Admission Type", student.admissionType], ["Campus", read(student, "campusName", "CampusName", "campus", "Campus")]]}/></ViewSection>
+      <ViewSection title="Parent Details" className="student-profile-parent-section"><ViewDetails items={[["Father Name", read(student, "fatherName", "FatherName")], ["Father Occupation", read(student, "fatherOccupation", "FatherOccupation")], ["Father Mobile", read(student, "fatherMobile", "FatherMobile")], ["Mother Name", read(student, "motherName", "MotherName")], ["Mother Occupation", read(student, "motherOccupation", "MotherOccupation")], ["Mother Mobile", read(student, "motherMobile", "MotherMobile")], ["Guardian Name", read(student, "guardianName", "GuardianName")], ["Guardian Mobile", read(student, "guardianMobile", "GuardianMobile")], ["Parent/Guardian Email", read(student, "parentParentGuardianEmail", "ParentParentGuardianEmail", "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail")]]}/></ViewSection>
+      <ViewSection title="Student Type & Residential Allocation"><ViewDetails items={[["Student Type", allocation.studentType], ["School Transport Facility Required?", allocation.transportRequired], ...(allocation.studentType === "Non-Residential" && allocation.transportRequired === "Yes" ? [["Bus Type", allocation.busType], ["Route", allocation.route], ["Pickup Point", allocation.pickupPoint]] : []), ...(allocation.studentType === "Residential" ? [["Hostel Block", allocation.hostelBlock], ["Room Type", allocation.hostelRoom]] : [])]}/></ViewSection>
+      <ViewSection title="Address"><ViewDetails items={[["Address / House No", read(student, "address", "Address", "addressLine1", "AddressLine1", "houseNo", "HouseNo")], ["Street / Village", read(student, "street", "Street", "village", "Village", "addressLine2", "AddressLine2")], ["City / Town", read(student, "city", "City", "town", "Town")], ["District", read(student, "district", "District")], ["State", read(student, "state", "State")], ["Pincode", read(student, "pincode", "Pincode", "pinCode", "PinCode")]]}/></ViewSection>
+      <ViewSection title="Previous Education"><ViewDetails items={[["Previous School", read(student, "previousSchool", "PreviousSchool")], ["Previous Board", read(student, "previousBoard", "PreviousBoard")], ["Previous Year of Passing", read(student, "previousYearOfPassing", "PreviousYearOfPassing")], ["Previous Hall Ticket Number", read(student, "previousHallTicketNumber", "PreviousHallTicketNumber", "hallTicketNumber")], ["Previous Percentage / Marks", read(student, "previousPercentage", "PreviousPercentage", "previousMarks", "PreviousMarks")]]}/></ViewSection>
+    </div>}
+    </div>
+  </DashboardLayout>;
+}

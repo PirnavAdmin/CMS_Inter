@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useLocation } from "react-router-dom";
 import apiClient from "../api/axios.js";
 import { apiEndpoints } from "../api/apiEndpoints.js";
-import { getAuthToken } from "../features/authStorage.js";
+import { getAuthToken } from "../modules/auth/authStorage.js";
 import { useCampusContext } from "./CampusContext.jsx";
 
 const AcademicContext = createContext(null);

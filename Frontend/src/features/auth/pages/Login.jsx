@@ -6,7 +6,7 @@ import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/features/auth/services/authService.js";
 import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/features/authStorage.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../campusImages.js";
 import { getCampusContent } from "../../campusContent.js";

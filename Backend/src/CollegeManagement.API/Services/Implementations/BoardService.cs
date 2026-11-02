@@ -35,6 +35,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IMemoryCache _memoryCache;
         private readonly IBoardExportService _exportService;
         private readonly AppDbContext _context;
+        private readonly Microsoft.Extensions.Logging.ILogger<BoardService>? _logger;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BoardService"/> class.
@@ -51,7 +52,7 @@ namespace CollegeManagement.API.Services.Implementations
             IAuditLogRepository auditRepository,
             IMemoryCache memoryCache,
             IBoardExportService exportService,
-            AppDbContext context)
+            AppDbContext context, Microsoft.Extensions.Logging.ILogger<BoardService>? logger = null)
         {
             _boardRepository = boardRepository;
             _mapper = mapper;
@@ -65,6 +66,7 @@ namespace CollegeManagement.API.Services.Implementations
             _memoryCache = memoryCache;
             _exportService = exportService;
             _context = context;
+            _logger = logger;
         }
 
         #region Core Board Actions
@@ -577,7 +579,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WARNING] Failed to log audit trail for PDF export: {ex.Message}");
+                _logger?.LogWarning(ex, "Failed to log audit trail for PDF export: {Message}", ex.Message);
             }
 
             return fileBytes;

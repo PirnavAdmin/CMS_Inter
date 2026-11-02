@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { STUDENT_FEES_UPDATED_EVENT } from "@/features/promotion/services/promotionStore.js";
 import {
@@ -1538,22 +1540,7 @@ function SelectFilter({ label, value, options, onChange }) {
   );
 }
 
-function TablePagination({ page, pageSize = PAGE_SIZE, totalItems, onPageChange }) {
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const start = totalItems ? ((page - 1) * pageSize) + 1 : 0;
-  const end = Math.min(page * pageSize, totalItems);
-
-  return (
-    <div className="cms-fee-pagination">
-      <span className="cms-fee-pagination-info">Showing {start}-{end} of {totalItems}</span>
-      <div className="cms-fee-pagination-actions">
-        <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>Previous</button>
-        <button className="cms-btn cms-btn-primary cms-fee-mini-btn" type="button" aria-current="page">{page}</button>
-        <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page >= totalPages} onClick={() => onPageChange(Math.min(totalPages, page + 1))}>Next</button>
-      </div>
-    </div>
-  );
-}
+function TablePagination({ page, pageSize = PAGE_SIZE, totalItems, onPageChange }) { return <AdminPagination currentPage={page} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} />; }
 
 /* ------------------------------- Overview ------------------------------- */
 const normalizeDueRows = (rows) => rows
@@ -2285,7 +2272,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Applicable Fee Breakdown</h3>
             <div className="cms-table-wrap">
-              <table className="cms-table cms-fee-breakdown-table">
+              <PaginatedTable className="cms-table cms-fee-breakdown-table">
                 <colgroup>
                   <col className="cms-fee-breakdown-type-col" />
                   <col className="cms-fee-breakdown-money-col" />
@@ -2316,7 +2303,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                     <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
-              </table>
+              </PaginatedTable>
             </div>
           </section>
 
@@ -2324,7 +2311,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             <section className="cms-fee-block">
               <h3>Fee Schedule</h3>
               <div className="cms-table-wrap">
-                <table className="cms-table">
+                <PaginatedTable className="cms-table">
                   <thead>
                     <tr><th>Fee Schedule</th><th>Due Date</th><th className="num">Amount</th><th className="num">Paid</th><th className="num">Balance</th><th>Status</th></tr>
                   </thead>
@@ -2340,7 +2327,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </section>
           ) : null}
@@ -2348,7 +2335,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Payment History</h3>
             <div className="cms-table-wrap">
-              <table className="cms-table">
+              <PaginatedTable className="cms-table">
                 <thead>
                   <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Action</th></tr>
                 </thead>
@@ -2368,7 +2355,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </section>
       </div>
@@ -2926,7 +2913,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
           <span>{values.academicYear} / {values.group || "Group"} / {programOptions.find((item) => item.value === values.programId)?.label || "Program"}</span>
         </div>
         <div className="cms-table-wrap cms-fee-config-wrap">
-          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-fee-types-table">
+          <PaginatedTable className="cms-table cms-fee-config-table cms-fee-setup-table cms-fee-types-table">
             <colgroup>
               <col style={{ width: "34%" }} />
               <col style={{ width: "22%" }} />
@@ -2972,7 +2959,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
         <div className="cms-fee-progress-head">
           <span>Total Active Fees</span>

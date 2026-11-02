@@ -1,0 +1,24 @@
+.cms-loader { display: grid; place-items: center; padding: 56px 0; gap: 12px; }
+.cms-spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid var(--cms-primary-soft);
+  border-top-color: var(--cms-primary);
+  animation: cms-spin 0.8s linear infinite;
+}
+
+@keyframes cms-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cms-skeleton {
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, var(--cms-secondary), var(--cms-primary-soft), var(--cms-secondary));
+  background-size: 200% 100%;
+  animation: cmsShine 1.2s linear infinite;
+}
+[data-theme="dark"] .cms-skeleton {
+  background: linear-gradient(90deg, var(--cms-secondary), var(--cms-elevated), var(--cms-secondary));
+}

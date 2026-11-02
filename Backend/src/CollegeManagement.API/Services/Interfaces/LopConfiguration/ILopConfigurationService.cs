@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.LopConfiguration;
 
@@ -6,16 +7,16 @@ namespace CollegeManagement.API.Services.Interfaces.LopConfiguration
 {
     public interface ILopConfigurationService
     {
-        Task<LopPolicyDto> GetPolicyAsync();
-        Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? userId = null);
-        Task<LopRecordsResponseDto> GetRecordsWithKpisAsync(string? month = null, string? searchTerm = null);
-        Task<LopStaffRecordDto?> GetRecordByIdAsync(int id);
-        Task<LopKpisDto> GetKpisAsync(string? month = null);
-        Task<LopStaffRecordDto> CreateRecordAsync(SaveLopStaffRecordRequest request, int? userId = null);
-        Task<bool> UpdateRecordAsync(int id, UpdateLopStaffRecordRequest request, int? userId = null);
-        Task<bool> DeleteRecordAsync(int id, int? userId = null);
-        Task<IEnumerable<LopStaffDropdownDto>> GetStaffListAsync();
-        Task<IEnumerable<LopDeductionPreviewDto>> GetPreviewAsync(string? month = null, string? searchTerm = null);
+        Task<LopPolicyDto> GetPolicyAsync(CancellationToken ct = default);
+        Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? userId = null, CancellationToken ct = default);
+        Task<LopRecordsResponseDto> GetRecordsWithKpisAsync(string? month = null, string? searchTerm = null, CancellationToken ct = default);
+        Task<LopStaffRecordDto?> GetRecordByIdAsync(int id, CancellationToken ct = default);
+        Task<LopKpisDto> GetKpisAsync(string? month = null, CancellationToken ct = default);
+        Task<LopStaffRecordDto> CreateRecordAsync(SaveLopStaffRecordRequest request, int? userId = null, CancellationToken ct = default);
+        Task<bool> UpdateRecordAsync(int id, UpdateLopStaffRecordRequest request, int? userId = null, CancellationToken ct = default);
+        Task<bool> DeleteRecordAsync(int id, int? userId = null, CancellationToken ct = default);
+        Task<IEnumerable<LopStaffDropdownDto>> GetStaffListAsync(CancellationToken ct = default);
+        Task<IEnumerable<LopDeductionPreviewDto>> GetPreviewAsync(string? month = null, string? searchTerm = null, CancellationToken ct = default);
         LopCalculateResponseDto CalculateLop(LopCalculateRequest request);
     }
 }

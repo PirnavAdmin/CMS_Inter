@@ -163,6 +163,16 @@ export const getPayslips = async (params = {}) => {
   }
 };
 
+export const getMyPayslips = async (params = {}) => {
+  try {
+    const res = await apiClient.get(apiEndpoints.payroll.myPayslips, { params });
+    return unwrapResponse(res);
+  } catch (error) {
+    console.warn("payrollApi.getMyPayslips error:", getApiErrorMessage(error));
+    throw error;
+  }
+};
+
 export const getPayslipById = async (id) => {
   try {
     const res = await apiClient.get(apiEndpoints.payroll.payslipById(id));

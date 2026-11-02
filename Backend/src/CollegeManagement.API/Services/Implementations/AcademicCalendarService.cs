@@ -8,6 +8,7 @@ using CollegeManagement.API.DTOs.AcademicCalendar;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
@@ -15,16 +16,16 @@ namespace CollegeManagement.API.Services.Implementations
     public class AcademicCalendarService : IAcademicCalendarService
     {
         private readonly IAcademicCalendarRepository _repository;
-        private readonly INotificationService _notificationService;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<AcademicCalendarService> _logger;
 
         public AcademicCalendarService(
             IAcademicCalendarRepository repository,
-            INotificationService notificationService,
+            IServiceScopeFactory scopeFactory,
             ILogger<AcademicCalendarService> logger)
         {
             _repository = repository;
-            _notificationService = notificationService;
+            _scopeFactory = scopeFactory;
             _logger = logger;
         }
 
@@ -145,113 +146,71 @@ namespace CollegeManagement.API.Services.Implementations
                 CreatedAt = DateTime.UtcNow
             };
 
+            // SP handles insertion and returns the full projected record with navigation objects in 1 round trip
             var created = await _repository.CreateAsync(entity);
-
-            // Re-fetch with navigations
-            var saved = await _repository.GetByIdAsync(created.EventId) ?? created;
 
             if (isPublished)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await _notificationService.PublishEventNotificationsAsync(created.EventId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Background notification dispatch failed for created event #{EventId}", created.EventId);
-                    }
-                });
+                DispatchNotificationInBackground(created.EventId);
             }
 
-            return MapToDto(saved);
+            return MapToDto(created);
         }
 
         public async Task<AcademicCalendarEventResponseDto?> UpdateEventAsync(int eventId, UpdateAcademicCalendarEventDto dto, int? userId = null)
         {
-            var entity = await _repository.GetByIdAsync(eventId);
-            if (entity == null || entity.IsDeleted) return null;
+            var existing = await _repository.GetByIdAsync(eventId);
+            if (existing == null || existing.IsDeleted) return null;
 
-            bool wasPublished = entity.IsPublished;
+            bool wasPublished = existing.IsPublished;
             bool isNowPublished = dto.Status.Equals("Published", StringComparison.OrdinalIgnoreCase);
 
-            entity.Title = dto.Title.Trim();
-            entity.EventType = dto.EventType.Trim();
-            entity.Description = dto.Description?.Trim();
-            entity.StartDate = dto.StartDate;
-            entity.EndDate = dto.EndDate;
-            entity.IsAllDay = dto.IsAllDay;
-            entity.StartTime = dto.StartTime;
-            entity.EndTime = dto.EndTime;
-            entity.Status = isNowPublished ? "Published" : dto.Status;
-            entity.CampusId = dto.CampusId > 0 ? dto.CampusId : null;
-            entity.BoardId = dto.BoardId;
-            entity.AcademicYearId = dto.AcademicYearId;
-            entity.AcademicLevelId = dto.AcademicLevelId > 0 ? dto.AcademicLevelId : null;
-            entity.GroupId = dto.GroupId > 0 ? dto.GroupId : null;
-            entity.ProgramId = dto.ProgramId > 0 ? dto.ProgramId : null;
-            entity.SectionId = dto.SectionId > 0 ? dto.SectionId : null;
-            entity.Location = dto.Location?.Trim();
-            entity.UpdatedBy = userId;
-            entity.UpdatedAt = DateTime.UtcNow;
+            existing.Title = dto.Title.Trim();
+            existing.EventType = dto.EventType.Trim();
+            existing.Description = dto.Description?.Trim();
+            existing.StartDate = dto.StartDate;
+            existing.EndDate = dto.EndDate;
+            existing.IsAllDay = dto.IsAllDay;
+            existing.StartTime = dto.StartTime;
+            existing.EndTime = dto.EndTime;
+            existing.Status = isNowPublished ? "Published" : dto.Status;
+            existing.CampusId = dto.CampusId > 0 ? dto.CampusId : null;
+            existing.BoardId = dto.BoardId;
+            existing.AcademicYearId = dto.AcademicYearId;
+            existing.AcademicLevelId = dto.AcademicLevelId > 0 ? dto.AcademicLevelId : null;
+            existing.GroupId = dto.GroupId > 0 ? dto.GroupId : null;
+            existing.ProgramId = dto.ProgramId > 0 ? dto.ProgramId : null;
+            existing.SectionId = dto.SectionId > 0 ? dto.SectionId : null;
+            existing.Location = dto.Location?.Trim();
+            existing.UpdatedBy = userId;
+            existing.UpdatedAt = DateTime.UtcNow;
 
             if (!wasPublished && isNowPublished)
             {
-                entity.IsPublished = true;
-                entity.PublishedAt = DateTime.UtcNow;
-                entity.PublishedBy = userId;
+                existing.IsPublished = true;
+                existing.PublishedAt = DateTime.UtcNow;
+                existing.PublishedBy = userId;
             }
 
-            var updated = await _repository.UpdateAsync(entity);
-            var refreshed = await _repository.GetByIdAsync(updated.EventId) ?? updated;
+            // SP updates and returns the refreshed record with navigation objects in 1 round trip
+            var updated = await _repository.UpdateAsync(existing);
 
             if (!wasPublished && isNowPublished)
             {
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await _notificationService.PublishEventNotificationsAsync(updated.EventId);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Background notification dispatch failed for updated event #{EventId}", updated.EventId);
-                    }
-                });
+                DispatchNotificationInBackground(updated.EventId);
             }
 
-            return MapToDto(refreshed);
+            return MapToDto(updated);
         }
 
         public async Task<AcademicCalendarEventResponseDto?> PublishEventAsync(int eventId, int? userId = null)
         {
-            var entity = await _repository.GetByIdAsync(eventId);
-            if (entity == null || entity.IsDeleted) return null;
+            var updated = await _repository.PublishAsync(eventId, userId);
+            if (updated == null) return null;
 
-            entity.Status = "Published";
-            entity.IsPublished = true;
-            entity.PublishedAt = DateTime.UtcNow;
-            entity.PublishedBy = userId;
-            entity.UpdatedAt = DateTime.UtcNow;
-            entity.UpdatedBy = userId;
+            DispatchNotificationInBackground(updated.EventId);
 
-            var updated = await _repository.UpdateAsync(entity);
-            var refreshed = await _repository.GetByIdAsync(updated.EventId) ?? updated;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _notificationService.PublishEventNotificationsAsync(updated.EventId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Background notification dispatch failed for publish event #{EventId}", updated.EventId);
-                }
-            });
-
-            return MapToDto(refreshed);
+            return MapToDto(updated);
         }
 
         public async Task<bool> DeleteEventAsync(int eventId, int? userId = null)
@@ -290,6 +249,23 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        private void DispatchNotificationInBackground(int eventId)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+                    await notificationService.PublishEventNotificationsAsync(eventId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Background notification dispatch failed for academic calendar event #{EventId}", eventId);
+                }
+            });
         }
     }
 }

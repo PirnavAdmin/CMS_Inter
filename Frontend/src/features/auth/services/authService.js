@@ -1,7 +1,7 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT, BACKEND_TRANSPORT_MANAGER_JWT } from "@/features/authStorage.js";
-import { isExamCellRole } from "@/Dashboard/ExamCellDashboard/navigation.js";
+import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 
 
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
@@ -648,9 +648,9 @@ export function findNonTeachingAccount(input, password) {
     staffId: 1122,
     userId: 1122,
     employeeId: "NTS001",
-    name: "Non-Teaching Staff",
-    fullName: "Non-Teaching Staff",
-    displayName: "Non-Teaching Staff",
+    name: "Harish Kumar",
+    fullName: "Harish Kumar",
+    displayName: "Harish",
     email: val.includes("@") ? val : "nts001@cms.com",
     role: "NON_TEACHING_STAFF",
     department: "Administration",
@@ -677,8 +677,10 @@ export function findNonTeachingAccount(input, password) {
 }
 
 function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType = "user") {
-  const data = getData(payload);
-  assertSuccessful(payload, data);
+  const envelope = getData(payload);
+  assertSuccessful(payload, envelope);
+  const nestedUser = envelope.user || envelope.User || payload.user || payload.User || {};
+  const data = { ...envelope, ...nestedUser };
 
   const token = normalizeToken(getToken(payload, data));
   if (!token) {
@@ -732,6 +734,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     .map((value) => value.trim());
   const inventoryRole = roleNames.find((name) => /inventory/i.test(name) || ["storemanager", "storekeeper"].includes(name.toLowerCase().replace(/[\s_-]/g, "")));
   const role = inventoryRole ? "Inventory Manager" : roleNames[0];
+  const isInventory = Boolean(inventoryRole);
   if (!role) {
     throw new Error("Authentication failed because the server returned an invalid user response.");
   }
@@ -836,6 +839,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     fullName: userName,
     email: userEmail,
     role: Array.isArray(role) ? role[0] : role,
+    roleType: isInventory ? "inventory" : undefined,
     roles: [...new Set(roleNames)],
     designation,
     department: data.Department || data.department || payload.Department || payload.department || (isTransportManager ? "Transport" : ""),
@@ -854,7 +858,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   return {
     token,
     user,
-    roleType: inventoryRole ? "inventory" : isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
+    roleType: isInventory ? "inventory" : isWarden ? "warden" : isAdmin ? "admin" : isExamCell ? "examcell" : isFaculty ? "faculty" : isParent ? "parent" : "student",
     message: getMessage(payload, data, "Login successful."),
   };
 }

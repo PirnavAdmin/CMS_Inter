@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Examination.Responses;
+using CollegeManagement.API.Models;
 
 namespace CollegeManagement.API.Services.Interfaces
 {
@@ -20,5 +22,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<byte[]> GenerateScheduledExamsCsvAsync(IEnumerable<ExaminationResponse> examinations);
         Task<byte[]> GenerateScheduledExamsExcelAsync(IEnumerable<ExaminationResponse> examinations);
         Task<byte[]> GenerateScheduledExamsPdfAsync(IEnumerable<ExaminationResponse> examinations);
+
+        // Hall Ticket PDF Generation
+        byte[] GenerateHallTicketPdf(Student student, Examination exam, IEnumerable<ExamSchedule> schedules);
     }
 }

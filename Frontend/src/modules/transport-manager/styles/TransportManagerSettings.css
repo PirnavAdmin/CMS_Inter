@@ -1,0 +1,133 @@
+/* Transport Manager Settings Styles */
+@import "../../faculty/styles/FacultySettings.css";
+
+.tm-settings-container {
+  padding: 8px 4px 24px;
+  width: 100%;
+}
+
+/* Ensure consistent button & badge themes */
+.tm-settings-container .faculty-settings-card.is-featured {
+  border-color: var(--cms-primary-border, #a3c267);
+  background: linear-gradient(180deg, var(--cms-primary-soft, #f7f9ea) 0%, var(--cms-surface, #ffffff) 100%);
+}
+
+.tm-settings-container .faculty-settings-card-footer .cms-btn-primary {
+  background: var(--cms-primary, #6F8400);
+  border-color: var(--cms-primary, #6F8400);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tm-settings-container .faculty-settings-card-footer .cms-btn-primary:hover {
+  background: var(--cms-primary-dark, #576700);
+  border-color: var(--cms-primary-dark, #576700);
+}
+
+/* Multi-theme modal obedience for Transport Manager Settings */
+.tm-settings-container .faculty-settings-modal-foot .cms-btn-primary {
+  background: var(--cms-primary, #6F8400) !important;
+  border-color: var(--cms-primary, #6F8400) !important;
+  color: #ffffff !important;
+}
+
+.tm-settings-container .faculty-settings-modal-foot .cms-btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-hover, var(--cms-primary-dark, #566900)) !important;
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark, #566900)) !important;
+}
+
+.tm-settings-container .faculty-settings-tab-btn.is-active {
+  color: var(--cms-primary, #6F8400) !important;
+  border-bottom-color: var(--cms-primary, #6F8400) !important;
+}
+
+.tm-settings-container .faculty-settings-tab-btn:hover {
+  color: var(--cms-primary, #6F8400) !important;
+}
+
+.tm-settings-container .faculty-settings-shield-icon,
+.tm-settings-container .faculty-settings-modal-head h2 svg {
+  color: var(--cms-primary, #6F8400) !important;
+}
+
+.tm-settings-container .faculty-settings-field input:focus,
+.tm-settings-container .faculty-settings-field select:focus {
+  border-color: var(--cms-primary, #6F8400) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary, #6F8400) 25%, transparent) !important;
+}
+
+
+/* Theme Swatches in Settings Card */
+.settings-theme-swatches-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 10px 0 14px 0;
+  max-height: 195px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.settings-theme-swatch-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+  cursor: pointer;
+  transition: all 0.16s ease;
+  text-align: left;
+  min-width: 0;
+}
+
+.settings-theme-swatch-item:hover {
+  border-color: var(--cms-primary);
+  background: var(--cms-subtle);
+}
+
+.settings-theme-swatch-item.is-selected {
+  border-color: var(--cms-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 25%, transparent);
+  background: var(--cms-subtle);
+}
+
+.settings-theme-swatch-bars {
+  display: flex;
+  width: 26px;
+  height: 15px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--cms-border);
+  flex-shrink: 0;
+}
+
+.settings-theme-swatch-bars i {
+  flex: 1;
+}
+
+.settings-theme-swatch-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cms-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.settings-theme-swatch-check {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--cms-primary);
+  flex-shrink: 0;
+}

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using CollegeManagement.API.Models.Enums;
 
 namespace CollegeManagement.API.DTOs.Evaluations
@@ -35,5 +35,7 @@ namespace CollegeManagement.API.DTOs.Evaluations
         [Required]
         [MaxLength(500)]
         public string Reason { get; set; } = string.Empty;
+
+        public string Remarks { get => Reason; set => Reason = value; }
     }
 }

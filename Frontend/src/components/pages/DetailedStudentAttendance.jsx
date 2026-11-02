@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
@@ -633,7 +634,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                   </Link>
                 </div>
               ) : (
-                <table className="cms-table detailed-att-table">
+                <PaginatedTable className="cms-table detailed-att-table">
                   <thead>
                     <tr>
                       <th>Roll No</th>
@@ -692,7 +693,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               )}
             </div>
           )}

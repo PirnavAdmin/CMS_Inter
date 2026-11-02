@@ -22,4 +22,11 @@ public interface IReportRepository
     Task<IReadOnlyList<FacultyWorkloadReportDto>> GetFacultyWorkloadAsync(ReportFilterModel filter, CancellationToken ct = default);
     Task<IReadOnlyList<StudentPerformanceReportDto>> GetStudentPerformanceAsync(ReportFilterModel filter, CancellationToken ct = default);
     Task<IReadOnlyList<AuditLogDto>> GetAuditLogsAsync(ReportFilterModel filter, CancellationToken ct = default);
+
+    // Cascading filter dropdowns (100% Stored Procedure executed via Dapper)
+    Task<IReadOnlyList<ReportFilterBoardDto>> GetFilterBoardsAsync(int? campusId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterAcademicLevelDto>> GetFilterAcademicLevelsAsync(int? boardId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterGroupDto>> GetFilterGroupsAsync(int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default);
+    Task<IReadOnlyList<ReportFilterSectionDto>> GetFilterSectionsAsync(int? campusId, int? groupId, int? boardId, int? academicYearId, int? academicLevelId, CancellationToken ct = default);
 }

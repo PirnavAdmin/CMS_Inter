@@ -2,9 +2,7 @@
 -- College Management System - Unified Rooms Module Stored Procedures (Multi-Campus)
 -- Run this script in MySQL Workbench or your MySQL CLI
 -- ====================================================================================
-
-USE `u819242402_CLM_System`;
-
+-- USE statement removed for environment portability; connection establishes database context.
 -- ------------------------------------------------------------------------------------
 -- STEP 1: DROP ALL EXISTING / OLD ROOM PROCEDURES
 -- ------------------------------------------------------------------------------------
