@@ -892,31 +892,21 @@ function readCustomFields(staff) {
 }
 
 function isDriverStaffRecord(staff) {
-  const personal = staff?.personal && typeof staff.personal === "object" ? staff.personal : {};
+  const personal = transportValue(staff, "personal");
+  const personalData = personal && typeof personal === "object" ? personal : {};
   const departmentSpecific = readDepartmentSpecific(staff);
   const customFields = readCustomFields(staff);
-  const explicitDriverFlag = [staff?.isDriver, staff?.driver, departmentSpecific.isDriver, customFields.isDriver]
+  const explicitDriverFlag = [
+    transportValue(staff, "isDriver", "driver"),
+    transportValue(departmentSpecific, "isDriver", "driver"),
+    transportValue(customFields, "isDriver", "driver"),
+  ]
     .some((value) => value === true || value === 1 || String(value).toLowerCase() === "true");
   const driverFields = [
-    staff?.role,
-    staff?.roleName,
-    staff?.roleCode,
-    staff?.designation,
-    staff?.designationName,
-    staff?.designationCode,
-    staff?.transportRole,
-    personal.role,
-    personal.roleName,
-    personal.designation,
-    personal.designationName,
-    departmentSpecific.role,
-    departmentSpecific.roleName,
-    departmentSpecific.designation,
-    departmentSpecific.designationName,
-    customFields.role,
-    customFields.roleName,
-    customFields.designation,
-    customFields.designationName,
+    transportValue(staff, "role", "roleName", "roleCode", "designation", "designationName", "designationCode", "transportRole"),
+    transportValue(personalData, "role", "roleName", "designation", "designationName"),
+    transportValue(departmentSpecific, "role", "roleName", "designation", "designationName"),
+    transportValue(customFields, "role", "roleName", "designation", "designationName"),
   ];
   return explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim()));
 }
@@ -1297,39 +1287,56 @@ function TransportContextPage({ navigation, onNavigate }) {
         setNonTeachingStaff(
           items
             .filter((staff) => {
-              const isNonTeaching = [staff.staffType, staff.facultyType].some((value) => /non[-\s]?teaching/i.test(String(value || "")));
-              const isBusAttendant = [staff.role, staff.roleName, staff.designation, staff.designationName]
-                .some((value) => String(value || "").trim().toLowerCase() === "bus attendant");
+              const isNonTeaching = [transportValue(staff, "staffType", "facultyType")]
+                .some((value) => /non[-\s]?teaching/i.test(String(value || "")));
+              const isBusAttendant = [
+                transportValue(staff, "role", "roleName", "designation", "designationName"),
+              ].some((value) => String(value || "").trim().toLowerCase() === "bus attendant");
               return isNonTeaching && isBusAttendant;
             })
             .map((staff) => ({
-              id: staff.staffId || staff.id || staff.facultyId,
-              name: staff.fullName || staff.staffName || [staff.firstName, staff.middleName, staff.lastName].filter(Boolean).join(" "),
-              employeeId: staff.employeeId || staff.empId || "",
-              mobileNumber: staff.mobile || staff.mobileNumber || staff.phone || "",
-              gender: staff.gender || "",
+              id: transportValue(staff, "staffId", "id", "facultyId"),
+              name: transportValue(staff, "fullName", "staffName")
+                || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" "),
+              employeeId: transportValue(staff, "employeeId", "empId") || "",
+              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+              gender: transportValue(staff, "gender") || "",
             })),
         );
         const driverStaff = items.filter(isDriverStaffRecord);
-        setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [String(staff.staffId || staff.id || staff.facultyId), staff])));
+        setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [String(transportValue(staff, "staffId", "id", "facultyId")), staff])));
         setDrivers(
           driverStaff
             .map((staff) => {
-              const personal = staff.personal && typeof staff.personal === "object" ? staff.personal : {};
-              const contact = staff.contact && typeof staff.contact === "object" ? staff.contact : {};
+              const personalValue = transportValue(staff, "personal");
+              const personal = personalValue && typeof personalValue === "object" ? personalValue : {};
+              const contactValue = transportValue(staff, "contact");
+              const contact = contactValue && typeof contactValue === "object" ? contactValue : {};
               const departmentSpecific = readDepartmentSpecific(staff);
               const customFields = readCustomFields(staff);
               return {
-                id: staff.staffId || staff.id || staff.facultyId,
-                driverName: staff.fullName || staff.staffName || [staff.firstName || personal.firstName, staff.middleName || personal.middleName, staff.lastName || personal.lastName].filter(Boolean).join(" "),
-                employeeId: staff.employeeId || staff.empId || "",
-                mobileNumber: staff.mobile || staff.mobileNumber || staff.phone || contact.primaryMobile || "",
-                email: staff.email || contact.primaryEmail || "",
-                licenseNumber: staff.drivingLicenseNumber || staff.driverLicenseNumber || departmentSpecific.drivingLicenseNumber || departmentSpecific.licenseNumber || customFields.drivingLicenseNumber || customFields.driverLicenseNumber || customFields.licenseNumber || staff.licenseNumber || staff.licenceNumber || "",
-                licenseExpiryDate: String(staff.drivingLicenseExpiryDate || staff.driverLicenseExpiryDate || staff.licenseExpiryDate || departmentSpecific.drivingLicenseExpiryDate || departmentSpecific.licenseExpiry || customFields.drivingLicenseExpiryDate || customFields.driverLicenseExpiryDate || customFields.licenseExpiry || staff.licenceExpiry || "").split("T")[0],
-                address: staff.currentAddress || staff.address || contact.currentAddress || "",
-                experience: Number(staff.experienceYears ?? staff.drivingExperienceYears ?? departmentSpecific.experienceYears ?? customFields.experienceYears ?? staff.experience ?? 0),
-                status: staff.status === true || staff.status === 1 || /^active$/i.test(String(staff.status || "")) ? "Active" : /^on leave$/i.test(String(staff.status || "")) ? "On Leave" : "Inactive",
+                id: transportValue(staff, "staffId", "id", "facultyId"),
+                staffId: transportValue(staff, "staffId", "id", "facultyId"),
+                source: "staff",
+                driverName: transportValue(staff, "fullName", "staffName")
+                  || [transportValue(staff, "firstName") || transportValue(personal, "firstName"), transportValue(staff, "middleName") || transportValue(personal, "middleName"), transportValue(staff, "lastName") || transportValue(personal, "lastName")].filter(Boolean).join(" "),
+                employeeId: transportValue(staff, "employeeId", "empId") || "",
+                mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || transportValue(contact, "primaryMobile") || "",
+                email: transportValue(staff, "email") || transportValue(contact, "primaryEmail") || "",
+                licenseNumber: transportValue(staff, "drivingLicenseNumber", "driverLicenseNumber", "licenseNumber", "licenceNumber")
+                  || transportValue(departmentSpecific, "drivingLicenseNumber", "licenseNumber")
+                  || transportValue(customFields, "drivingLicenseNumber", "driverLicenseNumber", "licenseNumber")
+                  || "",
+                licenseExpiryDate: String(transportValue(staff, "drivingLicenseExpiryDate", "driverLicenseExpiryDate", "licenseExpiryDate", "licenceExpiry")
+                  || transportValue(departmentSpecific, "drivingLicenseExpiryDate", "licenseExpiry")
+                  || transportValue(customFields, "drivingLicenseExpiryDate", "driverLicenseExpiryDate", "licenseExpiry")
+                  || "").split("T")[0],
+                address: transportValue(staff, "currentAddress", "address") || transportValue(contact, "currentAddress") || "",
+                experience: Number(transportValue(staff, "experienceYears", "drivingExperienceYears", "experience")
+                  ?? transportValue(departmentSpecific, "experienceYears")
+                  ?? transportValue(customFields, "experienceYears")
+                  ?? 0),
+                status: [transportValue(staff, "status")].some((value) => value === true || value === 1 || /^active$/i.test(String(value || ""))) ? "Active" : /^on leave$/i.test(String(transportValue(staff, "status") || "")) ? "On Leave" : "Inactive",
               };
             })
         );
@@ -1355,25 +1362,30 @@ function TransportContextPage({ navigation, onNavigate }) {
         const items = scoped(extractList(driversRes.value.data));
         if (items.length) {
           setDrivers(items.map((driver) => {
-            const transportDriverId = Number(driver.driverId) > 0 ? driver.driverId : null;
+            const rawDriverId = transportValue(driver, "driverId");
+            const transportDriverId = Number(rawDriverId) > 0 ? rawDriverId : null;
             const driverApiId = transportDriverId
-              || driver.licenceNumber
-              || driver.licenseNumber
-              || driver.employeeId
-              || driver.id;
+              || transportValue(driver, "licenceNumber", "licenseNumber")
+              || transportValue(driver, "employeeId")
+              || transportValue(driver, "id");
             return {
               id: driverApiId,
+              driverId: rawDriverId,
+              staffId: transportValue(driver, "staffId"),
+              source: "transport",
               transportDriverId,
               driverApiId,
-              driverName: driver.driverName || driver.fullName || driver.name || "",
-              employeeId: driver.employeeId || driver.driverCode || "",
-              mobileNumber: driver.mobileNumber || driver.mobile || driver.phone || "",
-              email: driver.email || "",
-              licenseNumber: driver.licenceNumber || driver.licenseNumber || "",
-              licenseExpiryDate: String(driver.licenceExpiry || driver.licenseExpiryDate || "").split("T")[0],
-              address: driver.address || "",
-              experience: Number(driver.experience || driver.experienceYears || 0),
-              status: driver.status === true || driver.status === 1 || /^active$/i.test(String(driver.status || "")) ? "Active" : "Inactive",
+              driverName: transportValue(driver, "driverName", "driverFullName", "fullName", "name")
+                || transportValue(driver?.staff, "fullName", "staffName", "name")
+                || "",
+              employeeId: transportValue(driver, "employeeId", "driverCode") || "",
+              mobileNumber: transportValue(driver, "mobileNumber", "mobile", "phone") || "",
+              email: transportValue(driver, "email") || "",
+              licenseNumber: transportValue(driver, "licenceNumber", "licenseNumber") || "",
+              licenseExpiryDate: String(transportValue(driver, "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
+              address: transportValue(driver, "address") || "",
+              experience: Number(transportValue(driver, "experience", "experienceYears") || 0),
+              status: [transportValue(driver, "status")].some((value) => value === true || value === 1 || /^active$/i.test(String(value || ""))) ? "Active" : "Inactive",
             };
           }));
         }
@@ -1388,8 +1400,11 @@ function TransportContextPage({ navigation, onNavigate }) {
             routeName: va.routeName || va.RouteName || va.route?.routeName || (typeof va.route === "string" ? va.route : ""),
             vehicleId: va.vehicleId ?? va.VehicleId ?? va.vehicle?.vehicleId,
             vehicleNumber: va.vehicleNumber || va.VehicleNumber || va.busNumber || va.vehicle?.vehicleNumber || "",
-            driverId: va.driverId ?? va.DriverId ?? va.driver?.driverId,
-            driverName: va.driverName || va.DriverName || va.driver?.driverName || (typeof va.driver === "string" ? va.driver : ""),
+            driverId: transportValue(va, "driverId", "driverStaffId", "staffId")
+              ?? transportValue(va.driver, "driverId", "staffId", "id"),
+            driverName: transportValue(va, "driverName", "driverFullName")
+              || transportValue(va.driver, "driverName", "driverFullName", "fullName", "name")
+              || (typeof va.driver === "string" ? va.driver : ""),
             attendantId: va.attendantId ?? va.AttendantId ?? va.busAttendantId,
             attendantName: va.attendantName || va.AttendantName || va.busAttendantName || (typeof va.attendant === "string" ? va.attendant : "") || "Unassigned",
             morningTripTime: va.morningTripTime || "07:00 AM",
@@ -1411,7 +1426,7 @@ function TransportContextPage({ navigation, onNavigate }) {
               vehicleNumber: t.vehicleNumber || t.busNumber || "",
               routeId: t.routeId,
               routeName: t.routeName || "",
-              driverId: t.driverId,
+              driverId: transportValue(t, "driverId", "driverStaffId", "staffId"),
               tripType: t.tripType || (t.startTime ? "Morning" : "Evening"),
               tripDate: t.tripDate ? String(t.tripDate).split("T")[0] : new Date().toISOString().split("T")[0],
               attendantId: t.attendantId,
@@ -1419,7 +1434,9 @@ function TransportContextPage({ navigation, onNavigate }) {
               endTime: t.endTime || t.eveningTripTime || t.eveningTrip || "",
               studentsPresent: t.studentsCount ?? t.studentsPresent ?? t.assignedStudents ?? "",
               status: t.status || t.tripStatus || "",
-              driverName: t.driverName || t.driver || "",
+              driverName: transportValue(t, "driverName", "driverFullName")
+                || transportValue(t.driver, "driverName", "fullName", "name")
+                || (typeof t.driver === "string" ? t.driver : ""),
               attendantName: t.attendantName || t.attendant || "",
             }))
           );
@@ -1582,7 +1599,39 @@ function TransportContextPage({ navigation, onNavigate }) {
 
   const findRoute = (id) => routes.find((route) => route.id === id);
   const findVehicle = (id) => vehicles.find((vehicle) => vehicle.id === id);
-  const findDriver = (id) => drivers.find((driver) => driver.id === id);
+  const driverIdentifiers = (record) => {
+    const nested = record?.driver && typeof record.driver === "object" ? record.driver : {};
+    return [record, nested].flatMap((source) =>
+      ["driverId", "transportDriverId", "driverApiId", "driverStaffId", "staffId", ...(source === nested ? ["id"] : [])]
+        .map((key) => transportValue(source, key)))
+      .filter((value) => value != null && String(value).trim() !== "")
+      .map((value) => String(value).trim());
+  };
+  const resolveDriverName = (record) => {
+    const nested = record?.driver && typeof record.driver === "object" ? record.driver : {};
+    const directName = transportValue(record, "driverName", "driverFullName", "assignedDriver", "assignedDriverName")
+      || transportValue(nested, "driverName", "driverFullName", "fullName", "name")
+      || (typeof record?.driver === "string" ? record.driver : "");
+    if (directName && !/^(unassigned|unknown|n\/a|-)$/i.test(String(directName).trim())) return String(directName).trim();
+
+    const identifiers = driverIdentifiers(record);
+    if (!identifiers.length) return "";
+    const matchesId = (candidate) => [
+      ...driverIdentifiers(candidate),
+      transportValue(candidate, "id"),
+      transportValue(candidate, "facultyId"),
+    ].some((value) => value != null && identifiers.includes(String(value)));
+    const driver = drivers.find(matchesId);
+    if (driver?.driverName) return driver.driverName;
+    const staff = Object.values(driverStaffRecords).find(matchesId);
+    if (!staff) return "";
+    return transportValue(staff, "fullName", "staffName", "name")
+      || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" ");
+  };
+  const findDriver = (id) => drivers.find((driver) => (
+    [driver.id, driver.staffId, driver.driverApiId, driver.transportDriverId, driver.driverId]
+      .some((driverId) => driverId != null && id != null && String(driverId).trim() === String(id).trim())
+  ));
   const findAttendant = (id) => attendants.find((attendant) => attendant.id === id);
   const findAssignment = (id) => vehicleAssignments.find((assignment) => assignment.id === id);
   const summary = (() => {
@@ -2159,14 +2208,20 @@ function TransportContextPage({ navigation, onNavigate }) {
   const confirmDelete = async () => {
     if (isDeleteSubmitting || !deleteConfig) return;
     const { key, row } = deleteConfig;
+    const staffIdToDelete = key === "drivers"
+      ? row.staffId ?? (row.source === "staff" ? row.id : null)
+      : null;
     const numericId = key === "studentAssignments"
       ? getStudentTransportAssignmentId(row)
       : key === "drivers"
-      ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
+      ? row.transportDriverId || row.driverApiId || (row.source !== "staff" && (row.licenseNumber || row.employeeId || row.id))
       : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
 
-    if (numericId === null || numericId === undefined || String(numericId).trim() === "") {
-      showErrorToast("Student Transport assignment ID is unavailable. Refresh the list and try again.");
+    if ((key === "drivers" ? staffIdToDelete == null && numericId == null : numericId == null)
+      || (key !== "drivers" && String(numericId).trim() === "")) {
+      showErrorToast(key === "drivers"
+        ? "Driver or linked staff ID is unavailable. Refresh the list and try again."
+        : "Student Transport assignment ID is unavailable. Refresh the list and try again.");
       return;
     }
 
@@ -2180,7 +2235,33 @@ function TransportContextPage({ navigation, onNavigate }) {
       } else if (key === "vehicles") {
         deleteResponse = await apiClient.delete(apiEndpoints.transport.vehicleById(numericId));
       } else if (key === "drivers") {
-        deleteResponse = await apiClient.delete(apiEndpoints.transport.driverById(numericId));
+        if (row.source !== "staff" && numericId != null) {
+          deleteResponse = await apiClient.delete(apiEndpoints.transport.driverById(numericId));
+          assertTransportDeleteSucceeded(deleteResponse);
+        }
+        if (staffIdToDelete != null) {
+          const staffDeleteResponse = await apiClient.delete(apiEndpoints.faculty.delete(staffIdToDelete));
+          assertTransportDeleteSucceeded(staffDeleteResponse);
+          const staffRecords = await getAllTransportPages(apiClient, apiEndpoints.faculty.list, {
+            CampusId: Number(selectedCampusId),
+          });
+          const staffStillExists = extractList(staffRecords.data).some((staff) =>
+            String(transportValue(staff, "staffId", "id", "facultyId")) === String(staffIdToDelete));
+          if (staffStillExists) {
+            throw new Error("The staff member is still present after the delete request.");
+          }
+        }
+        if (row.source !== "staff" && row.transportDriverId != null) {
+          const driverRecords = await getAllTransportPages(apiClient, apiEndpoints.transport.drivers, {
+            CampusId: Number(selectedCampusId),
+          });
+          const driverStillExists = extractList(driverRecords.data).some((driver) =>
+            String(transportValue(driver, "driverId")) === String(row.transportDriverId)
+            || (row.staffId != null && String(transportValue(driver, "staffId")) === String(row.staffId)));
+          if (driverStillExists) {
+            throw new Error("The transport driver profile is still present after the delete request.");
+          }
+        }
       } else if (key === "attendants") {
         deleteResponse = await apiClient.delete(apiEndpoints.transport.attendantById(numericId));
       } else if (key === "vehicleAssignments") {
@@ -2436,7 +2517,10 @@ function TransportContextPage({ navigation, onNavigate }) {
     vehicleAssignments: {
       title: "Vehicle Assignment",
       subtitle: "Assign vehicles, drivers and attendants to active routes.",
-      rows: vehicleAssignments,
+      rows: vehicleAssignments.map((assignment) => ({
+        ...assignment,
+        driverName: resolveDriverName(assignment),
+      })),
       fields: assignmentFields,
       addLabel: "Add Assignment",
       columns: [
@@ -2896,7 +2980,7 @@ function TransportContextPage({ navigation, onNavigate }) {
                 : [];
     const hasApiReport = Object.prototype.hasOwnProperty.call(reportApiRows, activeReportTab);
     const rawReportRows = activeReportTab === "driver-reports"
-      ? drivers.filter((driver) => String(driver.driverName || "").trim())
+      ? drivers.map((driver) => ({ ...driver, driverName: resolveDriverName(driver) })).filter((driver) => String(driver.driverName || "").trim())
       : activeReportTab === "trip-reports"
         ? trips
       : hasApiReport ? reportApiRows[activeReportTab] : localReportRows;
@@ -2905,7 +2989,7 @@ function TransportContextPage({ navigation, onNavigate }) {
           const vehicle = vehicles.find((item) =>
             (row.vehicleId != null && String(item.id) === String(row.vehicleId))
             || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber)
-            || (row.registrationNumber && item.registrationNumber === row.registrationNumber));
+            || ((row.registrationNumber || row.registrationNo) && item.registrationNumber === (row.registrationNumber || row.registrationNo)));
           const assignment = vehicleAssignments.find((item) =>
             (item.status === "Active" || item.status === true)
             && ((vehicle?.id != null && String(item.vehicleId) === String(vehicle.id))
@@ -2916,7 +3000,7 @@ function TransportContextPage({ navigation, onNavigate }) {
               || (row.vehicleId != null && String(item.vehicleId) === String(row.vehicleId))
               || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber));
           const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
-          const driverName = assignment?.driverName || findDriver(assignment?.driverId)?.driverName;
+          const driverName = resolveDriverName(assignment) || findDriver(assignment?.driverId)?.driverName;
           const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
           const assignedStudents = studentAssignments.filter((student) =>
             (vehicle?.id != null && String(student.vehicleId) === String(vehicle.id))
@@ -2924,35 +3008,46 @@ function TransportContextPage({ navigation, onNavigate }) {
             || (row.vehicleNumber && student.vehicleNumber === row.vehicleNumber)).length;
           return {
             ...row,
-            assignedStudents,
-            assignedRoute: routeName || "-",
-            assignedDriver: driverName || "-",
-            busAttendant: attendantName && attendantName !== "Unassigned" ? attendantName : "-",
+            assignedStudents: row.assignedStudents ?? row.AssignedStudents ?? assignedStudents,
+            assignedRoute: routeName || row.assignedRoute || row.AssignedRoute || "-",
+            assignedDriver: driverName || row.assignedDriver || row.AssignedDriver || "-",
+            busAttendant: (attendantName && attendantName !== "Unassigned" ? attendantName : null)
+              || row.busAttendant
+              || row.BusAttendant
+              || "-",
           };
         })
+      : activeReportTab === "trip-reports" || activeReportTab === "transport-dashboard-report"
+        ? rawReportRows.map((row) => ({
+            ...row,
+            driverName: resolveDriverName(row) || transportValue(row, "driverName") || "",
+          }))
       : activeReportTab === "driver-reports"
         ? rawReportRows.map((row) => {
+            const rowDriverName = resolveDriverName(row);
+            const rowLicense = transportValue(row, "licenseNumber", "licenceNumber");
+            const rowMobile = transportValue(row, "mobileNumber", "mobile", "phone");
+            const rowDriverIds = driverIdentifiers(row);
+            const matchesDriver = (item) => driverIdentifiers(item).some((identifier) =>
+              rowDriverIds.includes(identifier))
+              || (rowDriverName && resolveDriverName(item) === rowDriverName);
             const driver = drivers.find((item) =>
-              (row.driverId != null && (String(item.id) === String(row.driverId) || String(item.transportDriverId) === String(row.driverId)))
-              || (row.driverName && item.driverName === row.driverName)
-              || (row.licenseNumber && item.licenseNumber === row.licenseNumber)
-              || (row.mobileNumber && item.mobileNumber === row.mobileNumber));
+              matchesDriver(item)
+              || (rowLicense && item.licenseNumber === rowLicense)
+              || (rowMobile && item.mobileNumber === rowMobile));
+            const matchesAssignment = (item) => matchesDriver(item)
+              || (driver && driverIdentifiers(item).some((identifier) => [
+                driver.id, driver.driverId, driver.transportDriverId, driver.driverApiId, driver.staffId,
+              ].some((value) => value != null && String(value) === identifier)));
             const assignment = vehicleAssignments.find((item) =>
-              (item.status === "Active" || item.status === true)
-              && ((driver?.id != null && String(item.driverId) === String(driver.id))
-                || (driver?.transportDriverId != null && String(item.driverId) === String(driver.transportDriverId))
-                || (row.driverId != null && String(item.driverId) === String(row.driverId))
-                || (row.driverName && item.driverName === row.driverName)))
-              ?? vehicleAssignments.find((item) =>
-                (driver?.id != null && String(item.driverId) === String(driver.id))
-                || (driver?.transportDriverId != null && String(item.driverId) === String(driver.transportDriverId))
-                || (row.driverId != null && String(item.driverId) === String(row.driverId))
-                || (row.driverName && item.driverName === row.driverName));
+              (item.status === "Active" || item.status === true) && matchesAssignment(item))
+              ?? vehicleAssignments.find(matchesAssignment);
             const vehicleNumber = assignment?.vehicleNumber || findVehicle(assignment?.vehicleId)?.vehicleNumber;
             const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
             const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
             return {
               ...row,
+              driverName: rowDriverName || driver?.driverName || "",
               currentBus: vehicleNumber || "-",
               currentRoute: routeName || "-",
               busAttendant: attendantName && attendantName !== "Unassigned" ? attendantName : "-",
@@ -2977,7 +3072,7 @@ function TransportContextPage({ navigation, onNavigate }) {
               const assignedBuses = [...new Set(applicableAssignments.map((item) =>
                 item.vehicleNumber || findVehicle(item.vehicleId)?.vehicleNumber).filter(Boolean))];
               const assignedDrivers = [...new Set(applicableAssignments.map((item) =>
-                item.driverName || findDriver(item.driverId)?.driverName).filter(Boolean))];
+                resolveDriverName(item) || findDriver(item.driverId)?.driverName).filter(Boolean))];
               const assignedAttendants = [...new Set(applicableAssignments.map((item) =>
                 (item.attendantName !== "Unassigned" ? item.attendantName : "") || findAttendant(item.attendantId)?.attendantName).filter(Boolean))];
               const routePickupCount = pickupPoints.filter((point) =>
@@ -3128,7 +3223,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         row.vehicleId === reportFilters.vehicle ||
         assignment?.vehicleId === reportFilters.vehicle ||
         row.vehicleNumber === vehicle?.vehicleNumber ||
-        row.registrationNumber === vehicle?.registrationNumber
+        (row.registrationNumber || row.registrationNo) === vehicle?.registrationNumber
       );
     };
     const matchesReportStatus = (row) => reportFilters.status === "All" || row.status === reportFilters.status;

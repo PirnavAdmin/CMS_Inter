@@ -348,6 +348,7 @@ const buildExamConfigs = (effectiveExam, schedules, sectionId, catalog = []) => 
             subjectName,
             subjectCode,
             mode: "OBJECTIVE",
+            examDate: s?.date || s?.examDate || effectiveExam?.startDate || effectiveExam?.examDate || null,
             maxMarks: Number(s.maxMarks || effectiveExam?.totalMarks || subMeta?.maxMarks || 100),
             passPercentage: Number(
               s.passingMarks && s.maxMarks
@@ -388,6 +389,7 @@ const buildExamConfigs = (effectiveExam, schedules, sectionId, catalog = []) => 
           subjectName,
           subjectCode,
           mode: "REGULAR",
+          examDate: s?.date || s?.examDate || effectiveExam?.startDate || effectiveExam?.examDate || null,
           maxMarks: maxM,
           passPercentage: Number(s.passingMarks ? (s.passingMarks / maxM) * 100 : 35),
           internalMax: intM,
@@ -687,10 +689,10 @@ const reconcileRosterWithMarks = (
 
   const isObjective = config?.mode === "OBJECTIVE";
 
-  // Check if evaluation is frozen (Submitted, Approved, or Published)
+  // Check if evaluation is frozen (Submitted, Approved, Verified, or Published)
   const statusNorm = String(evaluationStatus ?? config?.status ?? config?.evaluationStatus ?? "").trim().toUpperCase();
-  const isFrozen = ["SUBMITTED", "APPROVED", "PUBLISHED"].includes(statusNorm) ||
-    (marks && marks.length > 0 && marks.some((m) => m.isSubmitted || m.status === 1 || m.status === 3 || ["SUBMITTED", "APPROVED", "PUBLISHED"].includes(String(m.evaluationStatus || "").toUpperCase())));
+  const isFrozen = ["SUBMITTED", "APPROVED", "VERIFIED", "PUBLISHED"].includes(statusNorm) ||
+    (marks && marks.length > 0 && marks.some((m) => m.isSubmitted || m.status === 1 || m.status === 2 || m.status === 3 || m.status === 4 || ["SUBMITTED", "APPROVED", "VERIFIED", "PUBLISHED"].includes(String(m.evaluationStatus || "").toUpperCase())));
 
   // Event Date for Joining Date eligibility
   const targetExamDate = examDate || config?.examDate || config?.startDate || config?.date;
@@ -699,27 +701,34 @@ const reconcileRosterWithMarks = (
   let effectiveRoster = [];
 
   if (isFrozen) {
-    // FROZEN EVALUATION: Strictly show ONLY students who have marks or existing records from submission time
-    effectiveRoster = (roster || []).filter((student) => {
-      const sId = normalizeId(student.studentId ?? student.id);
-      return marksMap.has(sId) || existingMap.has(sId);
-    });
+    if (marksMap.size > 0) {
+      // FROZEN EVALUATION: Strictly show ONLY students who have marks in the submitted/approved exam (no new joinees)
+      effectiveRoster = (roster || []).filter((student) => {
+        const sId = normalizeId(student.studentId ?? student.id);
+        return marksMap.has(sId);
+      });
 
-    // If there are marks for students not currently in the section roster (e.g. transferred after exam), ensure they appear
-    marksMap.forEach((mark, sId) => {
-      if (!effectiveRoster.some((s) => normalizeId(s.studentId ?? s.id) === sId)) {
-        effectiveRoster.push({
+      // If there are marks for students not currently in the section roster (e.g. transferred after exam), ensure they appear
+      marksMap.forEach((mark, sId) => {
+        if (!effectiveRoster.some((s) => normalizeId(s.studentId ?? s.id) === sId)) {
+          effectiveRoster.push({
           studentId: sId,
-          admissionNo: mark.admissionNo || "",
-          rollNo: String(mark.rollNo || ""),
-          studentName: mark.studentName || "Student",
-          isActive: true,
-        });
-      }
-    });
+            admissionNo: mark.admissionNo || "",
+            rollNo: String(mark.rollNo || ""),
+            studentName: mark.studentName || "Student",
+            isActive: true,
+          });
+        }
+      });
+    } else {
+      effectiveRoster = (roster || []).filter((student) => {
+        const sId = normalizeId(student.studentId ?? student.id);
+        return existingMap.has(sId);
+      });
+    }
   } else {
     // DRAFT / IN-PROGRESS EVALUATION:
-    // Filter out students who joined AFTER the exam date
+    // A student is eligible only for exams held on or after their joining/admission date
     effectiveRoster = (roster || []).filter((student) => {
       const sId = normalizeId(student.studentId ?? student.id);
       // If student already has a mark entered, keep them
@@ -727,8 +736,9 @@ const reconcileRosterWithMarks = (
         return true;
       }
       // Check joining / admission date vs exam date
-      if (targetExamDate && student.admissionDate) {
-        const adm = String(student.admissionDate).slice(0, 10);
+      const studentJoinDate = student.admissionDate || student.allocatedDate || student.dateOfAdmission || student.joiningDate;
+      if (targetExamDate && studentJoinDate) {
+        const adm = String(studentJoinDate).slice(0, 10);
         const exm = String(targetExamDate).slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(adm) && /^\d{4}-\d{2}-\d{2}$/.test(exm) && !adm.startsWith("0001-")) {
           if (adm > exm) {
@@ -1124,24 +1134,90 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 
   const selectedGroupRef = useRef(filters.group);
   useEffect(() => { selectedGroupRef.current = filters.group; }, [filters.group]);
-  // Use the master catalog to validate contextual IDs for both marks tabs.
+
+  // Load groups strictly according to selected board
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    const scope = { levelIndependentGroups: true, selectedGroupId: selectedGroupRef.current, boardId: filters.board || effectiveBoardId, academicYearId: filters.year || effectiveYearId, academicLevelId: filters.level, campusId: activeCampusId };
-    setGroups([]); setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
-    getCatalogGroups(scope, { signal: controller.signal }).then((rows) => {
-      if (!active) return;
-      const groups = rows.map((g) => ({ ...g, id: normalizeId(g.groupId), name: g.groupName }));
-      setGroups(groups);
-      setFilters((current) => current.group && !groups.some((group) => eq(group.id, current.group))
-        ? { ...current, group: "", program: "", section: "", exam: "" } : current);
-    }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
-      .finally(() => { if (active) setGroupsLoading(false); });
-    return () => { active = false; controller.abort(); };
-  }, [filters.board, filters.year, filters.level, effectiveBoardId, effectiveYearId, activeCampusId]);
+    const targetBoardId = filters.board || effectiveBoardId;
 
-  // Load Programs (Independent: group-specific if group is selected, otherwise all programs for campus/board)
+    if (!targetBoardId) {
+      setGroups([]);
+      setGroupsLoading(false);
+      return;
+    }
+
+    setGroupsLoading(true);
+    setGroupsError("");
+
+    const loadGroups = async () => {
+      try {
+        let rows = [];
+        // 1. Try /api/v1/groups?boardId=${targetBoardId}
+        try {
+          const res = await apiClient.get("/api/v1/groups", {
+            params: {
+              boardId: targetBoardId,
+              isActive: true,
+              ...(activeCampusId ? { campusId: activeCampusId } : {}),
+            },
+            signal: controller.signal,
+          });
+          const raw = unwrapRecords(res);
+          if (Array.isArray(raw) && raw.length > 0) rows = raw;
+        } catch {
+          // fallback
+        }
+
+        // 2. Try /api/v1/groups/board/${targetBoardId}
+        if (!rows.length) {
+          try {
+            const res = await apiClient.get(`/api/v1/groups/board/${encodeURIComponent(targetBoardId)}`, {
+              params: { isActive: true },
+              signal: controller.signal,
+            });
+            const raw = unwrapRecords(res);
+            if (Array.isArray(raw) && raw.length > 0) rows = raw;
+          } catch {
+            // fallback
+          }
+        }
+
+        if (!active) return;
+
+        const mappedGroups = rows
+          .filter((g) => g.isActive !== false && g.status !== "Inactive")
+          .map((g) => {
+            const gid = normalizeId(g.groupId ?? g.id);
+            const code = g.groupCode ?? g.code ?? "";
+            const gName = g.groupName ?? g.name ?? (code ? `Group ${code}` : `Group ${gid}`);
+            const displayName = code && code !== gName ? `${gName} (${code})` : gName;
+            return {
+              ...g,
+              id: gid,
+              groupId: gid,
+              name: displayName,
+              groupName: gName,
+              groupCode: code,
+              programs: Array.isArray(g.programs) ? g.programs : [],
+            };
+          });
+
+        setGroups(mappedGroups);
+        setFilters((current) => current.group && !mappedGroups.some((group) => eq(group.id, current.group))
+          ? { ...current, group: "", program: "", section: "", exam: "" } : current);
+      } catch (error) {
+        if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups.");
+      } finally {
+        if (active) setGroupsLoading(false);
+      }
+    };
+
+    loadGroups();
+    return () => { active = false; controller.abort(); };
+  }, [filters.board, effectiveBoardId, activeCampusId]);
+
+  // Load Programs strictly according to selected group
   useEffect(() => {
     let isMounted = true;
     const currentBoard = filters.board || effectiveBoardId;
@@ -1154,11 +1230,19 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             .map((p) => ({
               id: normalizeId(p.programId ?? p.id),
               name: p.programName ?? p.name,
+              code: p.programCode ?? p.code ?? "",
               groupId: filters.group,
               isActive: p.isActive !== false,
             }))
             .filter((p) => p.isActive);
-          if (isMounted) setPrograms(list);
+          if (isMounted) {
+            setPrograms(list);
+            setFilters((current) =>
+              current.program && !list.some((p) => eq(p.id, current.program))
+                ? { ...current, program: "", section: "", exam: "" }
+                : current
+            );
+          }
           return;
         }
 
@@ -1182,46 +1266,30 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             .map((p) => ({
               id: normalizeId(p.programId ?? p.id),
               name: p.programName ?? p.name,
+              code: p.programCode ?? p.code ?? "",
               groupId: filters.group,
               isActive: p.isActive !== false,
             }))
             .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
 
-          if (isMounted) setPrograms(list);
+          if (isMounted) {
+            setPrograms(list);
+            setFilters((current) =>
+              current.program && !list.some((p) => eq(p.id, current.program))
+                ? { ...current, program: "", section: "", exam: "" }
+                : current
+            );
+          }
           return;
         } catch (err) {
           console.error("Error fetching group programs:", err);
         }
       }
 
-      // If no group selected or fallback: load all active programs
-      try {
-        const res = await apiClient
-          .get("/api/v1/programs", {
-            params: {
-              campusId: activeCampusId || undefined,
-              boardId: currentBoard || undefined,
-            },
-            headers: {
-              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
-            },
-          })
-          .catch(() => null);
-
-        const raw = unwrapRecords(res);
-        const list = raw
-          .map((p) => ({
-            id: normalizeId(p.programId ?? p.id),
-            name: p.programName ?? p.name,
-            groupId: p.groupId,
-            isActive: p.isActive !== false,
-          }))
-          .filter((p) => p.isActive);
-
-        if (isMounted) setPrograms(list);
-      } catch (err) {
-        console.error("Error fetching programs:", err);
-        if (isMounted) setPrograms([]);
+      // If no group selected, programs should be empty so user selects group first
+      if (isMounted) {
+        setPrograms([]);
+        setFilters((current) => current.program ? { ...current, program: "", section: "", exam: "" } : current);
       }
     };
 
@@ -1473,7 +1541,11 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     guard(() => {
       onReset();
       const next = { ...filters, [key]: value };
-        if (key === "group" || key === "program") {
+        if (key === "group") {
+          next.program = "";
+          next.section = "";
+          next.exam = "";
+        } else if (key === "program") {
           next.section = "";
           next.exam = "";
         } else if (key === "section") {
@@ -1575,7 +1647,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     if (!isAdminNavigation) { setLegacyTab(nextTab); return; }
     updateMarksRoute((next) => {
       next.set("tab", nextTab === "evaluation" ? "evaluation" : "entry");
-      ["subtab", "workflow", "action", "subjectId", "studentId", "evaluationId"].forEach((key) => next.delete(key));
+      ["levelId", "groupId", "programId", "sectionId", "examId", "subjectId", "studentId", "evaluationId", "workflow", "subtab", "action"].forEach((key) => next.delete(key));
     });
   };
 
@@ -1942,7 +2014,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     // Search existing evaluations & marks in parallel
     try {
       const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
-      const [evalSearchRes, marksRes] = await Promise.all([
+      const [evalSearchRes, marksRes, facultyEvalsRes] = await Promise.all([
         apiClient
           .post(
             evalSearchUrl,
@@ -1961,15 +2033,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               },
             }
           )
-          .catch(() =>
-            apiClient
-              .get("/api/v1/faculty/evaluations", {
-                headers: {
-                  ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-                },
-              })
-              .catch(() => null)
-          ),
+          .catch(() => null),
         apiClient
           .get(`/api/v1/marks/exam/${examId}`, {
             headers: {
@@ -1985,21 +2049,66 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               })
               .catch(() => null)
           ),
+        apiClient
+          .get("/api/v1/faculty/evaluations", {
+            params: {
+              campusId: effectiveCampusId,
+              examinationId: examId,
+            },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+          .catch(() =>
+            apiClient
+              .get("/api/v1/faculty/evaluations", {
+                headers: {
+                  ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+                },
+              })
+              .catch(() => null)
+          ),
       ]);
 
-      const existingEvals = unwrapRecords(evalSearchRes) || [];
-      const allExamMarks = unwrapRecords(marksRes) || [];
+      const rawSearch = unwrapRecords(evalSearchRes) || [];
+      const rawMarks = unwrapRecords(marksRes) || [];
+      const rawFaculty = unwrapRecords(facultyEvalsRes) || [];
+
+      const isEvaluationObject = (item) => Boolean(
+        item && (
+          item.evaluationId ||
+          item.statusCode ||
+          item.averageMarks !== undefined ||
+          item.highestMarks !== undefined ||
+          (item.status && typeof item.status === "string" && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(item.status.toUpperCase()))
+        )
+      );
+
+      const evalRecordsFromMarks = rawMarks.filter(isEvaluationObject);
+      const studentMarksFromMarks = rawMarks.filter((item) => item && (item.studentId || item.marks !== undefined));
+
+      const existingEvals = [...rawSearch, ...evalRecordsFromMarks, ...rawFaculty];
+      const allExamMarks = studentMarksFromMarks;
 
       setWorkspaces((prev) => {
         const next = { ...prev };
 
         finalConfigs.forEach((config) => {
           const key = evaluationKey({ examinationId: examId, sectionId, subjectId: config.subjectId });
+          const targetEvalId = `${config.subjectId}_${sectionId}_${examId}`;
           const ev = existingEvals.find((e) => {
+            if (e.evaluationId && String(e.evaluationId).trim() === targetEvalId) return true;
             const parts = String(e.evaluationId || "").split("_");
-            const evSubId = normalizeId(e.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
-            const evSecId = normalizeId(e.sectionId ?? (parts.length >= 3 ? parts[1] : sectionId));
-            const evExamId = normalizeId(e.examinationId ?? e.examId ?? (parts.length >= 3 ? parts[2] : examId));
+            const parsedSubId = parts.length >= 3 ? parts[0] : "";
+            const parsedSecId = parts.length >= 3 ? parts[1] : "";
+            const parsedExamId = parts.length >= 3 ? parts[2] : "";
+
+            const evSubId = (e.subjectId && Number(e.subjectId) > 0) ? String(e.subjectId) : parsedSubId;
+            const evSecId = (e.sectionId && Number(e.sectionId) > 0) ? String(e.sectionId) : (parsedSecId || sectionId);
+            const evExamId = (e.examinationId && Number(e.examinationId) > 0)
+              ? String(e.examinationId)
+              : ((e.examId && Number(e.examId) > 0) ? String(e.examId) : (parsedExamId || examId));
+
             return eq(evSubId, config.subjectId) && eq(evSecId, sectionId) && eq(evExamId, examId);
           });
 
@@ -2011,9 +2120,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           );
 
           const evalStatusCandidate =
-            ev?.status ||
+            (ev?.status && String(ev.status).trim()) ||
+            (ev?.statusCode && String(ev.statusCode).trim()) ||
             subjMarks[0]?.evaluationStatus ||
-            (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
+            (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 2 ? "VERIFIED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
           const examDateCandidate = config?.examDate || effectiveExam?.startDate;
 
           const reconciledRows = reconcileRosterWithMarks(
@@ -2035,14 +2145,12 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           );
 
           let evalStatus = "NOT STARTED";
-          if (hasRecordedMarks) {
-            evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "DRAFT";
-            if (subjMarks.length > 0) {
-              evalStatus =
-                ev?.status ||
-                subjMarks[0].evaluationStatus ||
-                (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
-            }
+          if (ev && (ev.status || ev.statusCode)) {
+            evalStatus = String(ev.status || ev.statusCode).trim().toUpperCase();
+          } else if (hasRecordedMarks || subjMarks.length > 0) {
+            evalStatus =
+              subjMarks[0]?.evaluationStatus ||
+              (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 2 ? "VERIFIED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : "DRAFT");
           }
 
           next[key] = {
@@ -2333,10 +2441,17 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           );
           if (subjMarks.length) {
             rawMarks = subjMarks;
-            evalStatus =
+            const markStatus =
               subjMarks[0].evaluationStatus ||
-              currentWs?.status ||
-              (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+              (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 2 ? "VERIFIED" : subjMarks[0].status === 1 ? "SUBMITTED" : null);
+
+            if (currentWs?.status && currentWs.status !== "NOT STARTED") {
+              evalStatus = currentWs.status;
+            } else if (markStatus) {
+              evalStatus = markStatus;
+            } else {
+              evalStatus = currentWs?.status || "DRAFT";
+            }
           }
         } catch (err) {
           console.warn("Could not query exam marks:", err);
@@ -3169,10 +3284,11 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
       await apiClient.put(adminSaveUrl, adminPayload);
 
       setWorkspaces((all) => {
+        const currentStatus = all[workspaceKey]?.status || "SUBMITTED";
         const next = {
           ...all[workspaceKey],
           evaluationId: evalId,
-          status: "SUBMITTED",
+          status: currentStatus,
           dirty: false,
           updatedAt: new Date().toISOString(),
         };
@@ -3247,11 +3363,15 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const handleTabChange = (nextTab) => {
     if (nextTab === tab) return;
     guard(() => {
+      updateMarksRoute((next) => {
+        next.set("tab", nextTab === "evaluation" ? "evaluation" : "entry");
+        ["levelId", "groupId", "programId", "sectionId", "examId", "subjectId", "studentId", "evaluationId", "workflow", "subtab", "action"].forEach((key) => next.delete(key));
+      });
       setTab(nextTab);
       if (nextTab === "entry") {
         entry.setFilters((prev) => ({
-          board: prev.board,
-          year: prev.year,
+          board: prev.board || effectiveBoardId,
+          year: prev.year || effectiveYearId,
           level: "",
           group: "",
           program: "",
@@ -3266,8 +3386,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
         setEntryPage(1);
       } else {
         evalState.setFilters((prev) => ({
-          board: prev.board,
-          year: prev.year,
+          board: prev.board || effectiveBoardId,
+          year: prev.year || effectiveYearId,
           level: "",
           group: "",
           program: "",
@@ -3359,9 +3479,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 
       setEvalConfigs(configs);
 
-      // 3. Search evaluations & fetch marks
+      // 3. Search evaluations & fetch marks from all backend endpoints
       const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
-      const [evalSearchRes, marksRes] = await Promise.all([
+      const [evalSearchRes, marksRes, facultyEvalsRes] = await Promise.all([
         apiClient
           .post(
             evalSearchUrl,
@@ -3380,13 +3500,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               },
             }
           )
-          .catch(() =>
-            apiClient.get("/api/v1/faculty/evaluations", {
-              headers: {
-                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
-              },
-            }).catch(() => null)
-          ),
+          .catch(() => null),
         apiClient
           .get(`/api/v1/marks/exam/${evalState.filters.exam}`, {
             params: { campusId: effectiveCampusId },
@@ -3395,11 +3509,67 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             },
           })
           .catch(() => null),
+        apiClient
+          .get("/api/v1/faculty/evaluations", {
+            params: {
+              campusId: effectiveCampusId,
+              examinationId: evalState.filters.exam,
+            },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+          .catch(() =>
+            apiClient.get("/api/v1/faculty/evaluations", {
+              headers: {
+                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+              },
+            }).catch(() => null)
+          ),
       ]);
 
-      const existingEvals = unwrapRecords(evalSearchRes) || [];
-      const allExamMarks = unwrapRecords(marksRes) || [];
+      const rawSearch = unwrapRecords(evalSearchRes) || [];
+      const rawMarks = unwrapRecords(marksRes) || [];
+      const rawFaculty = unwrapRecords(facultyEvalsRes) || [];
+
+      // Extract evaluations from all sources
+      const isEvaluationObject = (item) => Boolean(
+        item && (
+          item.evaluationId ||
+          item.statusCode ||
+          item.averageMarks !== undefined ||
+          item.highestMarks !== undefined ||
+          (item.status && typeof item.status === "string" && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(item.status.toUpperCase()))
+        )
+      );
+
+      const evalRecordsFromMarks = rawMarks.filter(isEvaluationObject);
+      const studentMarksFromMarks = rawMarks.filter((item) => item && (item.studentId || item.marks !== undefined));
+
+      const existingEvals = [...rawSearch, ...evalRecordsFromMarks, ...rawFaculty];
+      const allExamMarks = studentMarksFromMarks;
       const evalMap = {};
+
+      const isEvalMatch = (e, subjectId, sectionId, examId) => {
+        if (!e) return false;
+        const targetEvalId = `${subjectId}_${sectionId}_${examId}`;
+        if (e.evaluationId && String(e.evaluationId).trim() === targetEvalId) return true;
+
+        const parts = String(e.evaluationId || "").split("_");
+        const parsedSubId = parts.length >= 3 ? parts[0] : "";
+        const parsedSecId = parts.length >= 3 ? parts[1] : "";
+        const parsedExamId = parts.length >= 3 ? parts[2] : "";
+
+        const evSubId = (e.subjectId && Number(e.subjectId) > 0) ? String(e.subjectId) : parsedSubId;
+        const evSecId = (e.sectionId && Number(e.sectionId) > 0) ? String(e.sectionId) : (parsedSecId || sectionId);
+        const evExamId = (e.examinationId && Number(e.examinationId) > 0)
+          ? String(e.examinationId)
+          : ((e.examId && Number(e.examId) > 0) ? String(e.examId) : (parsedExamId || examId));
+
+        if (eq(evSubId, subjectId) && eq(evSecId, sectionId) && eq(evExamId, examId)) return true;
+        if (e.evaluationId && String(e.evaluationId).endsWith(`_${sectionId}_${examId}`) && eq(evSubId, subjectId)) return true;
+        return false;
+      };
 
       configs.forEach((config) => {
         const key = evaluationKey({
@@ -3408,13 +3578,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           subjectId: config.subjectId,
         });
 
-        const ev = existingEvals.find((e) => {
-          const parts = String(e.evaluationId || "").split("_");
-          const evSubId = normalizeId(e.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
-          const evSecId = normalizeId(e.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
-          const evExamId = normalizeId(e.examinationId ?? e.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
-          return eq(evSubId, config.subjectId) && eq(evSecId, evalState.filters.section) && eq(evExamId, evalState.filters.exam);
-        });
+        const ev = existingEvals.find((e) => isEvalMatch(e, config.subjectId, evalState.filters.section, evalState.filters.exam));
 
         const subjMarks = allExamMarks.filter(
           (m) =>
@@ -3424,9 +3588,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
         );
 
         const evalStatusCandidate =
-          ev?.status ||
+          (ev?.status && String(ev.status).trim()) ||
+          (ev?.statusCode && String(ev.statusCode).trim()) ||
           subjMarks[0]?.evaluationStatus ||
-          (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
+          (subjMarks[0]?.status === 3 ? "APPROVED" : subjMarks[0]?.status === 2 ? "VERIFIED" : subjMarks[0]?.status === 1 ? "SUBMITTED" : (ev ? "DRAFT" : null));
         const examDateCandidate = config?.examDate || effectiveExam?.startDate;
 
         const reconciledRows = reconcileRosterWithMarks(
@@ -3448,13 +3613,14 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
         );
 
         let evalStatus = "NOT STARTED";
-        if (hasRecordedMarks) {
-          evalStatus = ev ? String(ev.status || "DRAFT").trim().toUpperCase() : "DRAFT";
-          if (subjMarks.length > 0 && evalStatus === "NOT STARTED") {
-            evalStatus =
-              subjMarks[0].evaluationStatus ||
-              (subjMarks[0].status === 3 ? "APPROVED" : subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
-          }
+        if (ev && (ev.status || ev.statusCode)) {
+          evalStatus = String(ev.status || ev.statusCode).trim().toUpperCase();
+        } else if (hasRecordedMarks || subjMarks.length > 0) {
+          const mStatus = subjMarks[0]?.evaluationStatus || subjMarks[0]?.status;
+          if (mStatus === 3 || mStatus === "3" || mStatus === "APPROVED") evalStatus = "APPROVED";
+          else if (mStatus === 2 || mStatus === "2" || mStatus === "VERIFIED") evalStatus = "VERIFIED";
+          else if (mStatus === 1 || mStatus === "1" || mStatus === "SUBMITTED") evalStatus = "SUBMITTED";
+          else evalStatus = "DRAFT";
         }
         const presentCount = subjMarks.filter(
           (m) => !m.isAbsent && !m.absent && (m.obtainedMarks !== "" || m.totalMarks !== "" || m.total !== "")
@@ -3480,20 +3646,78 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           adminReviewMessage: ev?.adminReviewMessage || "",
           remarks: ev?.remarks || "",
           averageMarks: ev?.averageMarks,
-          average: ev?.averageMarks !== undefined && ev?.averageMarks !== null ? String(ev.averageMarks) : "—",
+          average: ev?.averageMarks !== undefined && ev?.averageMarks !== null ? String(ev.averageMarks) : (ev?.average ?? "—"),
           highestMarks: ev?.highestMarks,
-          highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : "—",
+          highest: ev?.highestMarks !== undefined && ev?.highestMarks !== null ? String(ev.highestMarks) : (ev?.highest ?? "—"),
           lowestMarks: ev?.lowestMarks,
-          lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : "—",
-          totalStudents: reconciledRows.length,
-          presentStudents: presentCount,
-          absentStudents: absentCount,
-          studentsCount: reconciledRows.length,
+          lowest: ev?.lowestMarks !== undefined && ev?.lowestMarks !== null ? String(ev.lowestMarks) : (ev?.lowest ?? "—"),
+          totalStudents: Number(ev?.totalStudents || reconciledRows.length),
+          presentStudents: ev?.presentStudents !== undefined ? Number(ev.presentStudents) : presentCount,
+          absentStudents: ev?.absentStudents !== undefined ? Number(ev.absentStudents) : absentCount,
+          studentsCount: Number(ev?.totalStudents || reconciledRows.length),
           rows: reconciledRows,
           dirty: false,
           validationErrors: {},
           updatedAt: ev?.lastSubmittedAt || ev?.updatedAt || new Date().toISOString(),
         };
+      });
+
+      // Also ensure any matching evaluation from existingEvals is present in evalMap
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const parsedSubId = parts.length >= 3 ? parts[0] : "";
+        const parsedSecId = parts.length >= 3 ? parts[1] : "";
+        const parsedExamId = parts.length >= 3 ? parts[2] : "";
+
+        const evSubId = (ev.subjectId && Number(ev.subjectId) > 0) ? String(ev.subjectId) : parsedSubId;
+        const evSecId = (ev.sectionId && Number(ev.sectionId) > 0) ? String(ev.sectionId) : (parsedSecId || evalState.filters.section);
+        const evExamId = (ev.examinationId && Number(ev.examinationId) > 0)
+          ? String(ev.examinationId)
+          : ((ev.examId && Number(ev.examId) > 0) ? String(ev.examId) : (parsedExamId || evalState.filters.exam));
+
+        if (!eq(evExamId, evalState.filters.exam) || !eq(evSecId, evalState.filters.section) || !evSubId) return;
+
+        const key = evaluationKey({
+          examinationId: evalState.filters.exam,
+          sectionId: evalState.filters.section,
+          subjectId: evSubId,
+        });
+
+        const statusStr = String(ev.status || ev.statusCode || "").trim().toUpperCase() || "APPROVED";
+
+        if (!evalMap[key] || evalMap[key].status === "NOT STARTED") {
+          evalMap[key] = {
+            ...(evalMap[key] || {}),
+            evaluationId: ev.evaluationId || `${evSubId}_${evalState.filters.section}_${evalState.filters.exam}`,
+            examinationId: evalState.filters.exam,
+            sectionId: evalState.filters.section,
+            subjectId: evSubId,
+            facultyId: ev.facultyId || "1",
+            faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+            subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
+            status: statusStr,
+            mode: ev.mode || "REGULAR",
+            maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || 100),
+            passPercentage: Number(ev.examPassPercentage || 35),
+            rejectionReason: ev.rejectionReason || "",
+            adminReviewMessage: ev.adminReviewMessage || "",
+            remarks: ev.remarks || "",
+            averageMarks: ev.averageMarks,
+            average: ev.averageMarks !== undefined && ev.averageMarks !== null ? String(ev.averageMarks) : (ev.average ?? "—"),
+            highestMarks: ev.highestMarks,
+            highest: ev.highestMarks !== undefined && ev.highestMarks !== null ? String(ev.highestMarks) : (ev.highest ?? "—"),
+            lowestMarks: ev.lowestMarks,
+            lowest: ev.lowestMarks !== undefined && ev.lowestMarks !== null ? String(ev.lowestMarks) : (ev.lowest ?? "—"),
+            totalStudents: Number(ev.totalStudents || studentList.length || 0),
+            presentStudents: Number(ev.presentStudents ?? 0),
+            absentStudents: Number(ev.absentStudents ?? 0),
+            studentsCount: Number(ev.totalStudents || studentList.length || 0),
+            rows: evalMap[key]?.rows || [],
+            dirty: false,
+            validationErrors: {},
+            updatedAt: ev.lastSubmittedAt || ev.updatedAt || new Date().toISOString(),
+          };
+        }
       });
 
       setWorkspaces((prev) => ({ ...prev, ...evalMap }));
@@ -3555,6 +3779,23 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
       const ws = workspaces[key];
       if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
         items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
+      }
+    });
+
+    // Also include any workspaces matching this exam & section that have submitted/approved status
+    Object.values(workspaces || {}).forEach((ws) => {
+      if (
+        ws &&
+        eq(ws.examinationId, evalState.filters.exam) &&
+        eq(ws.sectionId, evalState.filters.section)
+      ) {
+        const sId = normalizeId(ws.subjectId || ws.subject?.id);
+        if (sId && !seenSubjects.has(sId)) {
+          seenSubjects.add(sId);
+          if (["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
+            items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
+          }
+        }
       }
     });
 
@@ -3760,9 +4001,13 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             const next = { ...all };
             freshEvals.forEach((fe) => {
               const parts = String(fe.evaluationId || "").split("_");
-              const sId = normalizeId(fe.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
-              const secId = normalizeId(fe.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
-              const exId = normalizeId(fe.examinationId ?? fe.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
+              const parsedSubId = parts.length >= 3 ? parts[0] : "";
+              const parsedSecId = parts.length >= 3 ? parts[1] : "";
+              const parsedExamId = parts.length >= 3 ? parts[2] : "";
+
+              const sId = normalizeId((fe.subjectId && Number(fe.subjectId) > 0) ? fe.subjectId : parsedSubId);
+              const secId = normalizeId((fe.sectionId && Number(fe.sectionId) > 0) ? fe.sectionId : (parsedSecId || evalState.filters.section));
+              const exId = normalizeId((fe.examinationId && Number(fe.examinationId) > 0) ? fe.examinationId : ((fe.examId && Number(fe.examId) > 0) ? fe.examId : (parsedExamId || evalState.filters.exam)));
               const k = evaluationKey({ examinationId: exId, sectionId: secId, subjectId: sId });
               if (next[k]) {
                 next[k] = {
@@ -3988,7 +4233,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
     if (!isAdminNavigation) return;
     const action = searchParams.get("action");
     setShowBulkModalState(action === "import" && entryApplied && !processing);
-    if (tab === "entry" && entryApplied) setEditingKeyState(action === "edit" ? workspaceKey : "");
+    if (tab === "entry" && entryApplied) setEditingKeyState(action === "edit" && workspace?.status === "SUBMITTED" ? workspaceKey : "");
     setModalState(evalApplied && !processing && ["VERIFY", "REJECT", "VERIFY_ALL", "APPROVE_ALL"].includes(action) ? action : null);
     if (tab === "evaluation" && evalApplied && !processing) {
       const subjectId = searchParams.get("subjectId");
@@ -4688,21 +4933,31 @@ function Entry({
                 {workspace.maxMarks} · Pass {workspace.passPercentage}%
               </span>
             </div>
-            {workspace.status === "SUBMITTED" && !editing && !blocked && !loadingWorkspace && (
-              <div className="cms-entry-edit-action">
-                {workspace.dirty ? (
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    disabled={Boolean(processing)}
-                    onClick={onSaveChanges}
-                  >
-                    {processing === "SAVE_EDIT" ? "Saving..." : "Save Submitted Marks"}
-                  </button>
+            {workspace.status === "SUBMITTED" && !blocked && !loadingWorkspace && (
+              <div className="cms-entry-edit-action" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {editing ? (
+                  <>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={Boolean(processing)}
+                      onClick={onCancelEdit}
+                    >
+                      Cancel Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      disabled={Boolean(processing) || !workspace.dirty}
+                      onClick={onSaveChanges}
+                    >
+                      {processing === "SAVE_EDIT" ? "Saving..." : "Save Marks"}
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
-                    className="cms-btn cms-btn-secondary"
+                    className="cms-btn cms-btn-secondary cms-btn-edit-submitted"
                     disabled={Boolean(processing)}
                     onClick={onEdit}
                   >

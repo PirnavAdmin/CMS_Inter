@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Award, CheckCircle2, Download, Eye, Percent, Sigma, X } from "lucide-react";
+import { Award, CheckCircle2, Percent, Sigma } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -48,7 +49,7 @@ function StudentResultModal({ children, onClose }) {
     };
   }, []);
   return <dialog ref={dialogRef} className="sp-result-dialog" aria-label="Examination results" onCancel={(event) => { event.preventDefault(); onClose(); }}>
-    <div className="sp-result-dialog-head"><strong>Examination Results</strong><button type="button" className="sp-btn" aria-label="Close examination results" onClick={onClose}><X size={18}/></button></div>
+    <div className="sp-result-dialog-head"><strong>Examination Results</strong><button type="button" className="sp-btn" aria-label="Close examination results" onClick={onClose}><ThreeDIcon name="close" size={18}/></button></div>
     <div className="sp-result-dialog-body">{children}</div>
   </dialog>;
 }
@@ -107,7 +108,7 @@ function StudentResultDetails({ examination }) {
 
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
-    <StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn" type="button" onClick={downloadMemo} disabled={!published || downloading}><Download size={16}/>{downloading ? " Downloading..." : " Download Marks Memo"}</button>}/>
+    <StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn" type="button" onClick={downloadMemo} disabled={!published || downloading}><ThreeDIcon name="download" size={16}/>{downloading ? " Downloading..." : " Download Marks Memo"}</button>}/>
     {profileError || error || downloadError ? <div className="sp-api-state is-error" role="alert">{profileError || error || downloadError}</div> : null}
     {!error && !published ? <StudentEmptyState icon={Award} title={resultState(examination, memo)} text="Published marks are available only after the college releases your result."/> : null}
     {published ? <>
@@ -187,7 +188,7 @@ function StudentResultsList({ renderDetails }) {
         student.groupName || "—", student.programName || "—", student.sectionName || "—", student.academicYearName || "—",
         `${listDateLabel(resultRead(exam, "startDate", "examDate"))} – ${listDateLabel(resultRead(exam, "endDate", "startDate", "examDate"))}`,
         <span className={`sp-result-status ${state === "Published" ? "is-published" : state === "Not Appeared for Exam" ? "is-absent" : "is-pending"}`}>{state}</span>,
-        state === "Published" ? <button type="button" className="sp-btn" aria-expanded={selectedId === examKey(exam)} onClick={() => setSelectedId(examKey(exam))}><Eye size={16}/> View Results</button>
+        state === "Published" ? <button type="button" className="sp-btn" aria-expanded={selectedId === examKey(exam)} onClick={() => setSelectedId(examKey(exam))}><ThreeDIcon name="view" size={16}/> View Results</button>
           : rowError ? <span className="sp-results-note">{rowError}</span>
             : /unavailable/.test(state) ? <span className="sp-results-note">The existing data does not confirm a published student result.</span> : "—",
       ])} empty="No examinations match your search."/>

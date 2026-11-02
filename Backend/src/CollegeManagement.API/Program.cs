@@ -933,6 +933,48 @@ try
                 {
                     await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` ADD COLUMN `IncludedSubjectIds` TEXT NULL;");
                 }
+
+                // Align table collations to utf8mb4_unicode_ci
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Examinations` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                try
+                {
+                    await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `InvigilatorAssignments` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                // Auto-deploy ExaminationModule stored procedures
+                var examScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "ExaminationModule", "01_Unified_Examination_Stored_Procedures.sql");
+                if (File.Exists(examScriptPath))
+                {
+                    var examSql = await File.ReadAllTextAsync(examScriptPath);
+                    var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    var matches = spRegex.Matches(examSql);
+                    foreach (System.Text.RegularExpressions.Match match in matches)
+                    {
+                        string createBody = match.Groups[1].Value.Trim();
+                        string spName = match.Groups[2].Value;
+                        try
+                        {
+                            await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
+                            await dbContext.Database.ExecuteSqlRawAsync(createBody);
+                        }
+                        catch (Exception batchEx)
+                        {
+                            app.Logger.LogDebug(batchEx, "Notice executing Examination SP {SpName}.", spName);
+                        }
+                    }
+                }
             }
             catch (Exception exExamCols)
             {

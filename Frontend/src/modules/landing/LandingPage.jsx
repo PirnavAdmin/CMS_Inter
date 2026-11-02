@@ -1,73 +1,39 @@
-import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
-import { Link } from "react-router-dom";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
-import HeroSlider from "@/shared/components/HeroSlider.jsx";
-import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
-import logo from "@/assets/pirnav-colleges-logo.png";
-import { useCampusImages } from "../admin/AdminSettings/campusImages.js";
-import { getCampusContent } from "../admin/AdminSettings/campusContent.js";
-import "./LandingPage.css";
+import { useEffect, useState } from "react";
+import PIRNAVLoader from "./PIRNAVLoader.jsx";
+import { PublicWebsitePage } from "./PublicWebsitePages.jsx";
 
-const quickLinks = [
-  { label: "Home", to: "/" },
-  { label: "Login", to: "/login" },
-];
+const LANDING_INTRO_KEY = "pirnav-landing-intro-document";
+const DOCUMENT_KEY = String(Math.round(window.performance?.timeOrigin || Date.now()));
+let landingIntroStartedInThisDocument = false;
 
-const modules = ["Admissions", "Attendance", "Exams", "Fees", "Reports"];
+function shouldShowLandingIntro() {
+  if (landingIntroStartedInThisDocument) return false;
+  try {
+    return window.sessionStorage.getItem(LANDING_INTRO_KEY) !== DOCUMENT_KEY;
+  } catch {
+    return true;
+  }
+}
 
 export default function LandingPage() {
-  const content = getCampusContent(useCampusImages());
-  return (
-    <div className="cms-landing">
-      <header className="cms-landing-nav">
-        <div className="cms-landing-brand">
-          <span className="landing-brand-logo"><CampusBrandImage slot="headerLogo" src={logo} alt={`${content.collegeName} logo`} /></span>
-        </div>
-        <div className="landing-header-actions"><ThemeToggle /><Link to="/login" className="landing-login-btn">{content.landingLoginButton}</Link></div>
-      </header>
+  const [showIntro, setShowIntro] = useState(shouldShowLandingIntro);
+  const [introExiting, setIntroExiting] = useState(false);
 
-      <section className="landing-hero-banner">
-        <HeroSlider variant="hero-bg" />
-        <div className="landing-hero-content cms-anim-up">
-          <span className="cms-eyebrow"><CheckCircle2 size={14} /> {content.landingBadge}</span>
-          <h1>{content.landingHeadline}</h1>
-          <p>{content.landingDescription}</p>
-          <div className="landing-trust-points" aria-label="Platform benefits">
-            <span><CheckCircle2 size={15} /> {content.landingBenefit1}</span>
-            <span><CheckCircle2 size={15} /> {content.landingBenefit2}</span>
-            <span><CheckCircle2 size={15} /> {content.landingBenefit3}</span>
-          </div>
-          <div className="cms-hero-actions landing-hero-actions">
-            <Link to="/login" className="cms-btn landing-start-btn">{content.landingButton} <ArrowRight size={16} /></Link>
-          </div>
-        </div>
-      </section>
+  useEffect(() => {
+    if (!showIntro) return undefined;
+    landingIntroStartedInThisDocument = true;
+    try {
+      window.sessionStorage.setItem(LANDING_INTRO_KEY, DOCUMENT_KEY);
+    } catch {
+      // The loader still completes normally when session storage is unavailable.
+    }
+    const exitTimer = window.setTimeout(() => setIntroExiting(true), 2000);
+    const removeTimer = window.setTimeout(() => setShowIntro(false), 2350);
+    return () => {
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(removeTimer);
+    };
+  }, [showIntro]);
 
-      <footer className="landing-footer">
-        <div className="landing-footer-inner">
-          <div className="landing-footer-brand">
-            <span className="landing-footer-logo"><CampusBrandImage slot="footerLogo" src={logo} alt={`${content.collegeName} logo`} /></span>
-            <div>
-              <p>{content.footerDescription}</p>
-            </div>
-          </div>
-          <div className="landing-footer-col">
-            <h2>Quick Links</h2>
-            {quickLinks.map((link) => <Link key={link.to} to={link.to}>{link.label}</Link>)}
-          </div>
-          <div className="landing-footer-col">
-            <h2>Modules</h2>
-            {modules.map((item) => <span key={item}>{item}</span>)}
-          </div>
-          <div className="landing-footer-col">
-            <h2>Contact</h2>
-            <span>{content.contactAddress}</span>
-            <a href={`mailto:${content.contactEmail}`}>{content.contactEmail}</a>
-            <a href={`tel:${content.contactPhone.replace(/[^+\d]/g, "")}`}>{content.contactPhone}</a>
-          </div>
-        </div>
-        <div className="landing-footer-bottom">&copy; {new Date().getFullYear()} {content.collegeName}. All rights reserved.</div>
-      </footer>
-    </div>
-  );
+  return <><PublicWebsitePage page="home" disabled={showIntro} />{showIntro ? <PIRNAVLoader exiting={introExiting} /> : null}</>;
 }

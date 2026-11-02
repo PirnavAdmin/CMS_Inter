@@ -14,6 +14,8 @@ import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { usePermissions } from "@/features/rolesPermissions/permissionUtils.jsx";
 
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
   ["OVERVIEW", [["Dashboard", "", dashboardIcon, "dashboard"]]],
@@ -65,7 +67,7 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
                   title={collapsed && !mobile ? label : undefined}
                   className={({ isActive }) => isActive ? "is-active" : ""}
                 >
-                  <img className="sp-nav-3d-icon" src={icon} alt="" aria-hidden="true" />
+                  <ThreeDIcon icon={icon} size={20} className="sp-nav-3d-icon" />
                   <span>{label}</span>
                 </NavLink>
               ))}

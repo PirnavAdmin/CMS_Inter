@@ -508,7 +508,7 @@ BEGIN
           WHERE es.IsActive = 1
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND DATE(es.ExamDate) = p_ExamDate
-            AND (es.RoomId = r.RoomId OR LOWER(TRIM(es.Hall)) = LOWER(TRIM(r.RoomNumber)) OR (r.RoomName IS NOT NULL AND LOWER(TRIM(es.Hall)) = LOWER(TRIM(r.RoomName))))
+            AND (es.RoomId = r.RoomId OR LOWER(TRIM(es.Hall)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(r.RoomNumber)) COLLATE utf8mb4_unicode_ci OR (r.RoomName IS NOT NULL AND LOWER(TRIM(es.Hall)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(r.RoomName)) COLLATE utf8mb4_unicode_ci))
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)
       )
     ORDER BY r.RoomNumber ASC;
@@ -562,7 +562,7 @@ BEGIN
           WHERE es.IsActive = 1
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND DATE(es.ExamDate) = p_ExamDate
-            AND (es.InvigilatorId = s.Id OR LOWER(TRIM(es.Invigilator)) = LOWER(TRIM(CONCAT(s.FirstName, ' ', s.LastName))))
+            AND (es.InvigilatorId = s.Id OR LOWER(TRIM(es.Invigilator)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(CONCAT(s.FirstName, ' ', s.LastName))) COLLATE utf8mb4_unicode_ci)
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)
       )
       AND NOT EXISTS (

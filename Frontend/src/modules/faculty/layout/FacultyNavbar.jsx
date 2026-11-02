@@ -803,15 +803,6 @@ export default function FacultyNavbar() {
 
         {/* Theme Toggle */}
         <ThemeToggle variant="dashboard" />
-        <button
-          type="button"
-          className="cms-icon-btn"
-          onClick={() => setThemePaletteOpen(true)}
-          title="Theme Appearance"
-          aria-label="Theme Appearance"
-        >
-          <Palette size={18} />
-        </button>
 
         {/* Notifications Button */}
         <button className="cms-icon-btn" onClick={() => notify("No new notifications")} title="Notifications">

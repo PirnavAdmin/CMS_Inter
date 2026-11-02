@@ -12,7 +12,7 @@ export function scopeTransportRecords(records, context) {
     return !context[key] || actual == null || id(actual) === id(context[key]);
   });
   const routes = records.routes.filter(exactCampus);
-  const vehicles = records.vehicles.filter(exactCampus);
+  const vehicles = records.vehicles.filter((row) => compatible(row, ['campusId']));
   const staff = records.staff.filter(exactCampus);
   const routeIds = ids(routes, 'routeId', 'id'), vehicleIds = ids(vehicles, 'vehicleId', 'id');
   const staffIds = ids(staff, 'staffId', 'id', 'facultyId'), employees = ids(staff, 'employeeId');

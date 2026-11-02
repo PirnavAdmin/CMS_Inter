@@ -1,0 +1,63 @@
+/* ThreeDIcon: Screenshot-Matching Colorful Realistic 3D Icon System */
+
+.three-d-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  flex-shrink: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  line-height: 1;
+  user-select: none;
+  position: relative;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.18s ease;
+}
+
+.three-d-icon:hover {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.three-d-icon:active {
+  transform: translateY(0.5px) scale(0.97);
+}
+
+/* 3D PNG/SVG Asset Image Styling */
+.three-d-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: transparent !important;
+  filter: drop-shadow(0 2.5px 4px rgba(25, 38, 15, 0.16));
+}
+
+/* 3D Sprite Icon Styling (matching screenshot sprite items) */
+.three-d-sprite {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-repeat: no-repeat;
+  background-size: 300% 300%;
+  background-color: transparent !important;
+  filter: drop-shadow(0 2.5px 4px rgba(25, 38, 15, 0.16));
+}
+
+/* 3D Action Vector Styling */
+.three-d-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 2px 4px rgba(25, 38, 15, 0.16));
+}
+
+/* Responsive Component Sizing Helpers */
+.three-d-xs { width: 16px; height: 16px; }
+.three-d-sm { width: 20px; height: 20px; }
+.three-d-md { width: 24px; height: 24px; }
+.three-d-lg { width: 28px; height: 28px; }
+.three-d-xl { width: 34px; height: 34px; }
+.three-d-xxl { width: 40px; height: 40px; }

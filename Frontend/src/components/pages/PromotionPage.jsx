@@ -2,6 +2,7 @@ import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown, Eye } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -1003,7 +1004,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                   <p>Configure the student cohort level, group, and section for promotion.</p>
                 </div>
                 <button className="cms-btn cms-btn-ghost" onClick={loadMasters} disabled={masterLoading}>
-                  {masterLoading ? "Loading..." : <><RefreshCw size={16} aria-hidden="true" /> Refresh</>}
+                  {masterLoading ? "Loading..." : <><ThreeDIcon name="promotion" size={16} aria-hidden="true" /> Refresh</>}
                 </button>
               </div>
 
@@ -1839,7 +1840,7 @@ function CampusTransferScreen({ onSuccess }) {
             <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setRequestPage(1); }}><option>All</option><option>Pending</option><option>Approved</option><option>Rejected</option></select>
           </div>
           <div className="cms-table-wrap"><table className="cms-table campus-transfer-request-table"><thead><tr><th>#</th><th>Student Name</th><th>Admission No</th><th>{requestDirection === "sent" ? "To Campus" : "From Campus"}</th><th>{requestDirection === "sent" ? "Requested To" : "Requested By"}</th><th>Request Date</th><th>Effective Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-            {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" className="cms-action-btn campus-transfer-view-action" title="View Details" aria-label="View Details" onClick={() => setDetailRequest(request)}><Eye size={16} aria-hidden="true" /></button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
+            {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" className="cms-action-btn campus-transfer-view-action" title="View Details" aria-label="View Details" onClick={() => setDetailRequest(request)}><ThreeDIcon name="view" size={16} aria-hidden="true" /></button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
           </tbody></table></div>
           <AdminPagination currentPage={currentPage} totalRecords={filteredRequests.length} onPageChange={setRequestPage} />
         </div>
@@ -2707,7 +2708,7 @@ function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }
       <section className="promotion-summary promotion-report-summary" aria-label="Promotion report summary">
         {summaryCards.map(({ label, value, tone, Icon }) => (
           <article className={`promotion-report-summary-card is-${tone}`} key={label}>
-            <span className="promotion-report-summary-icon" aria-hidden="true"><Icon size={18} /></span>
+            <span className="promotion-report-summary-icon" aria-hidden="true"><ThreeDIcon name={Icon} size={28} /></span>
             <div>
               <span>{label}</span>
               <strong>{value}</strong>
@@ -2724,7 +2725,7 @@ function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button className="cms-btn cms-btn-ghost" onClick={onExportCsv} disabled={!rows.length}>
-              <Download size={15} style={{ marginRight: "6px" }} /> Export CSV
+              <ThreeDIcon name="download" size={15} style={{ marginRight: "6px" }} /> Export CSV
             </button>
             <button className="cms-btn cms-btn-primary" onClick={onLoad} disabled={loading}>
               {loading ? "Loading..." : "Refresh Report"}
