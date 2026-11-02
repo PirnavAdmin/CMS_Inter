@@ -5242,9 +5242,15 @@ BEGIN
                                      AND lr.Status = 2  -- Approved
                                      AND v_TargetDate >= DATE(lr.StartDate) 
                                      AND v_TargetDate <= DATE(lr.EndDate)
-    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
-                                         AND (tc.StaffType IS NULL OR tc.StaffType = p_StaffType)
-                                         AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
+        SELECT tc2.Id 
+        FROM `AttendanceTimingConfigs` tc2 
+        WHERE tc2.IsActive = 1 
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 ELSE 1 END)
+          AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
+        ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
+        LIMIT 1
+    )
     WHERE s.IsDeleted = 0
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR s.BoardId = p_BoardId OR s.BoardId IS NULL OR s.BoardId = 0)
@@ -5585,6 +5591,80 @@ END$$
 
 
 -- -------------------------------------------------------------------------------------
+
+-- -------------------------------------------------------------------------------------
+-- 15. sp_GetStaffAttendanceHistory
+-- -------------------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS sp_GetStaffAttendanceHistory$
+CREATE PROCEDURE sp_GetStaffAttendanceHistory(
+    IN p_FacultyId INT,
+    IN p_StartDate DATE,
+    IN p_EndDate DATE
+)
+BEGIN
+    -- Result Set 1: Shift Timing
+    SELECT 
+        COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+        COALESCE(tc.WorkEndTime, '16:30:00') AS WorkEndTime,
+        COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
+        COALESCE(tc.EarlyCheckoutThreshold, '16:30:00') AS EarlyCheckoutThreshold,
+        COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+    FROM `Staffs` s
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
+                                         AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
+                                         AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+    WHERE s.Id = p_FacultyId AND s.IsDeleted = 0
+    ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+    LIMIT 1;
+
+    -- Result Set 2: Attendances
+    SELECT 
+        DATE(sas.AttendanceDate) AS AttendanceDate,
+        sa.StaffAttendanceId,
+        sa.Status,
+        sa.InTime,
+        sa.OutTime,
+        sa.DeviceId,
+        sa.VerificationMethod,
+        sa.Remarks
+    FROM `StaffAttendances` sa
+    JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+    WHERE sa.FacultyId = p_FacultyId
+      AND sas.AttendanceDate >= p_StartDate 
+      AND sas.AttendanceDate <= p_EndDate
+      AND sa.IsActive = 1;
+
+    -- Result Set 3: Official Holidays
+    SELECT 
+        HolidayName,
+        DATE(StartDate) AS StartDate,
+        DATE(EndDate) AS EndDate
+    FROM `Holidays`
+    WHERE IsDeleted = 0 AND Status = 'Active'
+      AND StartDate <= p_EndDate AND EndDate >= p_StartDate
+      AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
+
+    -- Result Set 4: Approved Leaves
+    SELECT 
+        DATE(StartDate) AS StartDate,
+        DATE(EndDate) AS EndDate,
+        Reason AS LeaveReason
+    FROM `StaffLeaveRequests`
+    WHERE StaffId = p_FacultyId AND IsActive = 1 AND Status = 2
+      AND StartDate <= p_EndDate AND EndDate >= p_StartDate;
+
+    -- Result Set 5: Regularization Requests
+    SELECT 
+        RegularizationId,
+        DATE(AttendanceDate) AS AttendanceDate,
+        Status,
+        RequestedInTime,
+        RequestedOutTime
+    FROM `StaffAttendanceRegularizations`
+    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
+      AND AttendanceDate >= p_StartDate AND AttendanceDate <= p_EndDate;
+END$
+
 -- 7. sp_GetStaffTodayAttendance
 -- -------------------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS sp_GetStaffTodayAttendance$$
@@ -8181,14 +8261,18 @@ BEGIN
         sa.*,
         b.BoardName,
         ay.AcademicYearName,
+        al.LevelName AS AcademicLevelName,
         g.GroupName,
+        p.ProgramName,
         c.CampusName,
         sc.CampusName AS SourceCampusName,
         CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
     FROM `StudentAdmissions` sa
     LEFT JOIN `Boards` b ON sa.BoardId = b.BoardId
     LEFT JOIN `AcademicYears` ay ON sa.AcademicYearId = ay.AcademicYearId
+    LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
     LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+    LEFT JOIN `Programs` p ON sa.ProgramId = p.ProgramId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
@@ -8208,14 +8292,18 @@ BEGIN
         sa.*,
         b.BoardName,
         ay.AcademicYearName,
+        al.LevelName AS AcademicLevelName,
         g.GroupName,
+        p.ProgramName,
         c.CampusName,
         sc.CampusName AS SourceCampusName,
         CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
     FROM `StudentAdmissions` sa
     LEFT JOIN `Boards` b ON sa.BoardId = b.BoardId
     LEFT JOIN `AcademicYears` ay ON sa.AcademicYearId = ay.AcademicYearId
+    LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
     LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+    LEFT JOIN `Programs` p ON sa.ProgramId = p.ProgramId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId

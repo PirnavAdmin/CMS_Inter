@@ -98,14 +98,59 @@ public class DashboardController : ControllerBase
         [FromQuery] DateTime? date = null,
         CancellationToken ct = default)
     {
-        int resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, campusId);
-        if (resolvedCampusId <= 0)
-        {
-            resolvedCampusId = 1;
-        }
+        var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
+        if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 1;
 
         var result = await _dashboardService.GetPrincipalOverviewAsync(resolvedCampusId, academicYearId, boardId, ct);
         return Ok(result);
+    }
+
+        // =========================================================================
+    // 1C. CAMPUS NOTICES & CIRCULARS
+    // =========================================================================
+    /// <summary>
+    /// 1C. GET /api/v1/dashboard/notices
+    /// Retrieves circulars and notices published for a specific campus or audience.
+    /// </summary>
+    [HttpGet("notices")]
+    [ProducesResponseType(typeof(IReadOnlyList<PrincipalNoticeDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetNotices(
+        [FromQuery] int? campusId = null,
+        [FromQuery] string? audience = null,
+        [FromQuery] int limit = 10,
+        CancellationToken ct = default)
+    {
+        var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
+        if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 1;
+
+        var result = await _dashboardService.GetNoticesAsync(resolvedCampusId, audience, limit, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 1D. POST /api/v1/dashboard/notices
+    /// Creates a campus notice or circular.
+    /// </summary>
+    [HttpPost("notices")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateNotice(
+        [FromBody] CreateCampusNoticeRequest request,
+        CancellationToken ct = default)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Title))
+        {
+            return BadRequest(new { success = false, message = "Notice title is required." });
+        }
+
+        var campusCheck = await ValidateAndResolveCampusAsync(request.CampusId, ct);
+        if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        request.CampusId = campusCheck.EffectiveCampusId ?? 1;
+
+        string role = User.IsInRole("Principal") ? "Principal" : "Admin";
+        int noticeId = await _dashboardService.CreateNoticeAsync(request, role, ct);
+        return Ok(new { success = true, noticeId, message = "Notice published successfully." });
     }
 
     // =========================================================================

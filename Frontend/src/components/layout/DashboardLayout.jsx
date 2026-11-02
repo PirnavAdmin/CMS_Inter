@@ -17,7 +17,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStorage.js";
 import { env } from "@/config/env.js";
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
@@ -25,6 +25,7 @@ import { ACTIONS } from "@/features/rolesPermissions/rolesPermissions.constants.
 import { reimbursementApi } from "@/api/staffApi";
 import { getCurrentUserPermissions } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
+import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
@@ -48,12 +49,14 @@ import settingsBoardAcademicYearIcon from "@/assets/settings-3d/board-academic-y
 import settingsNumberSeriesIcon from "@/assets/settings-3d/number-series.png";
 import settingsTemplatesIcon from "@/assets/settings-3d/templates.png";
 import settingsAuditLogsIcon from "@/assets/settings-3d/audit-logs.png";
+import settingsRolesPermissionsIcon from "@/assets/settings-3d/roles-permissions.png";
 import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
 import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./DashboardLayout.css";
 
 export const generatedSidebarIcons = {
@@ -87,7 +90,7 @@ const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
   "audit logs": settingsAuditLogsIcon,
   "faculty reimbursement": reimbursementIcon,
   reimbursement: reimbursementIcon,
-  "inventory management": Boxes,
+  "inventory management": sectionsIcon,
 });
 
 const PAGE_ICON_ROUTE_ALIASES = [
@@ -95,15 +98,18 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/number-series", icon: settingsNumberSeriesIcon },
   { path: "/dashboard/settings/templates", icon: settingsTemplatesIcon },
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
-  { path: "/dashboard/settings/roles-permissions", icon: ShieldCheck },
+  { path: "/dashboard/settings/roles-permissions", icon: settingsRolesPermissionsIcon },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/reimbursement", icon: reimbursementIcon },
   { path: "/dashboard/finance/reimbursement", icon: reimbursementIcon },
-  { path: "/dashboard/inventory-management", icon: Boxes },
-  { path: "/dashboard/inventory", icon: Boxes },
+  { path: "/dashboard/inventory-management", icon: sectionsIcon },
+  { path: "/dashboard/inventory", icon: sectionsIcon },
+  { path: "/warden-dashboard/blocks", icon: hostelManagementIcon },
+  { path: "/warden-dashboard/transfers", icon: promotionIcon },
+  { path: "/warden-dashboard/wardens", icon: staffIcon },
   { path: "/warden-dashboard/students", icon: studentsIcon },
   { path: "/warden-dashboard/rooms", icon: sectionsIcon },
   { path: "/warden-dashboard/beds", icon: sectionsIcon },
@@ -135,46 +141,16 @@ const PAGE_ICON_ROUTE_ALIASES = [
 
 function SidebarIcon({ icon, sub = false }) {
   if (!icon) return null;
-  if (typeof icon === "string") {
-    return <img className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} src={icon} alt="" aria-hidden="true" />;
-  }
-
-  if (icon.src) {
-    return (
-      <span
-        className={`cms-nav-3d-icon cms-nav-generated-icon${sub ? " cms-nav-3d-icon-sub" : ""}`}
-        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-        aria-hidden="true"
-      />
-    );
-  }
-
-  const IconComponent = icon;
-  return <IconComponent className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} size={sub ? 15 : 18} aria-hidden="true" />;
+  return <ThreeDIcon icon={icon} size={sub ? 17 : 20} className={sub ? "cms-nav-3d-icon-sub" : ""} />;
 }
 
 function PageTitleIcon({ icon }) {
   if (!icon) return null;
-  if (typeof icon === "string") {
-    return <img className="cms-page-title-icon" src={icon} alt="" aria-hidden="true" />;
-  }
-
-  if (icon.src) {
-    return (
-      <span
-        className="cms-page-title-icon cms-nav-generated-icon"
-        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-        aria-hidden="true"
-      />
-    );
-  }
-
-  const IconComponent = icon;
-  return <IconComponent className="cms-page-title-icon" size={24} aria-hidden="true" />;
+  return <ThreeDIcon icon={icon} size={26} className="cms-page-title-icon" />;
 }
 
-function NavbarIcon({ src }) {
-  return <img className="cms-navbar-3d-icon" src={src} alt="" aria-hidden="true" />;
+function NavbarIcon({ src, name, size = 20 }) {
+  return <ThreeDIcon icon={src || name} size={size} className="cms-navbar-3d-icon" />;
 }
 
 export const menu = [
@@ -193,7 +169,7 @@ export const menu = [
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
       { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
-      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
+      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: sectionsIcon, moduleKey: "inventory-management" },
     ],
   },
   {
@@ -292,16 +268,19 @@ export const wardenMenu = [
   {
     section: "Hostel Operations",
     items: [
+      { to: "/warden-dashboard/blocks", label: "Hostel Blocks", icon: hostelManagementIcon },
       { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
       { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
       { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
       { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
+      { to: "/warden-dashboard/transfers", label: "Transfers & Vacate", icon: promotionIcon },
     ],
   },
   {
-    section: "Residents & Analytics",
+    section: "Residents & Reports",
     items: [
       { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
+      { to: "/warden-dashboard/wardens", label: "Resident Wardens", icon: staffIcon },
       { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
     ],
   },
@@ -691,9 +670,20 @@ export default function DashboardLayout({
     };
   }, []);
   const isWarden = isWardenRole(user?.role, user) || pathname.startsWith("/warden");
+  const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
+  const isWardenDashboard = pathname.startsWith("/warden") || (isWarden && !isAdmin);
   const isParent = !isWarden && (String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard"));
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
+  const isPrincipalDashboard = pathname.startsWith("/principal-dashboard") || (isPrincipal && !isAdmin && !isWardenDashboard);
   const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
+
+  useEffect(() => {
+    document.documentElement.removeAttribute("data-theme-role");
+    try {
+      localStorage.removeItem("cms-accent-theme");
+    } catch {}
+  }, []);
+
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
@@ -738,6 +728,7 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
+  const fetchLiveNotifsRef = useRef(null);
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
@@ -809,41 +800,10 @@ export default function DashboardLayout({
         }
       };
 
+      fetchLiveNotifsRef.current = fetchLiveNotifications;
       fetchLiveNotifications();
 
-      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
-      let hubConnection = null;
-      try {
-        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-        if (token) {
-          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-          hubConnection = new HubConnectionBuilder()
-            .withUrl(`${base}/hubs/notifications`, {
-              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-              headers: { "ngrok-skip-browser-warning": "true" },
-            })
-            .withAutomaticReconnect()
-            .configureLogging(LogLevel.None)
-            .build();
-
-          hubConnection.on("NotificationReceived", () => {
-            if (!disposed) {
-              setHasViewedNotifications(false);
-              fetchLiveNotifications(true);
-            }
-          });
-
-          hubConnection.start()
-            .then(() => {
-              if (reimbursementCampusId && hubConnection) {
-                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
-      } catch {
-        // Fallback
-      }
+      
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -875,15 +835,32 @@ export default function DashboardLayout({
       return () => {
         disposed = true;
         if (channel) channel.close();
-        if (hubConnection) {
-          hubConnection.stop().catch(() => {});
-        }
+        
         window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
         window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
+
+  // SignalR Push Connection: Subscribed via singleton notificationHubService
+  useEffect(() => {
+    if (!canReviewReimbursements && !canReviewCertificates) return;
+
+    const unsubscribe = notificationHubService.subscribe(() => {
+      setHasViewedNotifications(false);
+      fetchLiveNotifsRef.current?.(true);
+    });
+
+    return unsubscribe;
+  }, [canReviewReimbursements, canReviewCertificates]);
+
+  // Synchronize Campus Join dynamically without tearing down SignalR socket
+  useEffect(() => {
+    if (reimbursementCampusId) {
+      notificationHubService.joinCampus(reimbursementCampusId);
+    }
+  }, [reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
@@ -1021,75 +998,105 @@ export default function DashboardLayout({
   };
 
   const logout = () => {
+    notificationHubService.disconnect();
     clearAuthSession();
     setProfileOpen(false);
     navigate("/login", { replace: true });
   };
 
+  const bestActiveTo = useMemo(() => {
+    let best = null;
+    let highestScore = -1;
+
+    const DASHBOARD_ROOTS = [
+      "/dashboard",
+      "/warden-dashboard",
+      "/principal-dashboard",
+      "/accountant-dashboard",
+      "/parent-dashboard",
+      "/exam-cell-dashboard",
+      "/non-teaching-dashboard",
+      "/driver-dashboard",
+      "/driver",
+      "/student-dashboard",
+      "/inventory-dashboard",
+      "/transport-manager",
+    ];
+
+    const evaluate = (targetTo) => {
+      if (!targetTo) return;
+      const [base, searchStr] = targetTo.split("?");
+      let score = -1;
+
+      if (searchStr && !location.search.includes(searchStr)) {
+        return;
+      }
+
+      const isDashboardRoot = DASHBOARD_ROOTS.includes(base);
+
+      if (isDashboardRoot) {
+        if (pathname === base || pathname === `${base}/` || pathname === `${base}/overview`) {
+          score = 600 + base.length;
+        } else {
+          score = -1;
+        }
+      } else if (pathname === base) {
+        score = searchStr ? 1200 + targetTo.length : 1000 + base.length;
+      } else if (
+        (base === "/warden-dashboard/rooms" && (pathname === "/warden-dashboard/beds" || pathname.startsWith("/warden-dashboard/beds/") || pathname === "/warden/rooms" || pathname === "/warden/beds")) ||
+        (base === "/warden-dashboard/leave-requests" && (pathname === "/warden-dashboard/complaints" || pathname.startsWith("/warden-dashboard/complaints/") || pathname === "/warden/leave-requests")) ||
+        (base === "/warden-dashboard/transfers" && (pathname.startsWith("/warden-dashboard/transfers/") || pathname.includes("vacat") || pathname === "/warden/transfers")) ||
+        (base === "/warden-dashboard/blocks" && pathname === "/warden/blocks") ||
+        (base === "/warden-dashboard/allocations" && pathname === "/warden/allocations") ||
+        (base === "/warden-dashboard/attendance" && pathname === "/warden/attendance") ||
+        (base === "/warden-dashboard/students" && pathname === "/warden/students") ||
+        (base === "/warden-dashboard/wardens" && pathname === "/warden/wardens") ||
+        (base === "/dashboard/settings" && (pathname === "/dashboard/settings/general" || pathname === "/settings")) ||
+        (base === "/dashboard/courses" && pathname.startsWith("/dashboard/courses")) ||
+        (targetTo === "/exam-cell-dashboard/exams" && (pathname === "/exam-cell-dashboard/exam-timetable" || pathname.startsWith("/exam-cell-dashboard/exams/"))) ||
+        (targetTo === "/exam-cell-dashboard/marks-entry" && (pathname === "/exam-cell-dashboard/marks-verification" || pathname.startsWith("/exam-cell-dashboard/marks-entry/"))) ||
+        (targetTo === "/exam-cell-dashboard/results" && (pathname === "/exam-cell-dashboard/publish-results" || pathname.startsWith("/exam-cell-dashboard/results/"))) ||
+        (targetTo === "/exam-cell-dashboard/attendance" && pathname.startsWith("/exam-cell-dashboard/attendance/")) ||
+        (targetTo === "/exam-cell-dashboard/check-in-out" && pathname === "/exam-cell-dashboard/my-attendance")
+      ) {
+        score = 800 + base.length;
+      } else if (pathname.startsWith(`${base}/`)) {
+        if (base === "/dashboard/attendance/student" && pathname.startsWith("/dashboard/attendance/staff")) {
+          score = -1;
+        } else {
+          score = base.length;
+        }
+      }
+
+      if (score > highestScore) {
+        highestScore = score;
+        best = targetTo;
+      }
+    };
+
+    activeMenu.forEach((group) => {
+      (group.items || []).forEach((item) => {
+        evaluate(item.to);
+        (item.children || []).forEach((child) => {
+          evaluate(child.to);
+        });
+      });
+    });
+
+    return best;
+  }, [pathname, location.search, activeMenu]);
+
   const isActive = (to) => {
-    const [basePath, searchStr] = to.split("?");
-    if (basePath === "/dashboard") return pathname === "/dashboard";
-    if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
-    if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
-    if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
-    if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";
-    if (basePath === "/dashboard/settings") {
-      return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
+    if (!to) return false;
+    if (bestActiveTo) {
+      if (to === bestActiveTo) return true;
+      const [targetBase] = to.split("?");
+      const [bestBase] = bestActiveTo.split("?");
+      if (targetBase === bestBase && !to.includes("?")) return true;
+      return false;
     }
-    if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
-      return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
-    }
-    if (to === "/exam-cell-dashboard/exams") {
-      return (
-        pathname === "/exam-cell-dashboard/exams" ||
-        pathname.startsWith("/exam-cell-dashboard/exams/") ||
-        pathname === "/exam-cell-dashboard/exam-timetable"
-      );
-    }
-    if (to === "/exam-cell-dashboard/marks-entry") {
-      return (
-        pathname === "/exam-cell-dashboard/marks-entry" ||
-        pathname.startsWith("/exam-cell-dashboard/marks-entry/") ||
-        pathname === "/exam-cell-dashboard/marks-verification"
-      );
-    }
-    if (to === "/exam-cell-dashboard/results") {
-      return (
-        pathname === "/exam-cell-dashboard/results" ||
-        pathname.startsWith("/exam-cell-dashboard/results/") ||
-        pathname === "/exam-cell-dashboard/publish-results"
-      );
-    }
-    if (to === "/exam-cell-dashboard/attendance") {
-      return (
-        pathname === "/exam-cell-dashboard/attendance" ||
-        pathname.startsWith("/exam-cell-dashboard/attendance/")
-      );
-    }
-    if (to === "/exam-cell-dashboard/check-in-out") {
-      return pathname === "/exam-cell-dashboard/check-in-out" || pathname === "/exam-cell-dashboard/my-attendance";
-    }
-    if (searchStr && !location.search.includes(searchStr)) return false;
-
-    if (basePath === "/dashboard/attendance" || basePath === "/dashboard/attendance/student") {
-      if (pathname.startsWith("/dashboard/attendance/staff")) return false;
-      return (
-        pathname === "/dashboard/attendance" ||
-        pathname === "/dashboard/attendance/student" ||
-        pathname.startsWith("/dashboard/attendance/student/")
-      );
-    }
-
-    if (basePath === "/dashboard/attendance/staff") {
-      return (
-        pathname === "/dashboard/attendance/staff" ||
-        pathname.startsWith("/dashboard/attendance/staff/")
-      );
-    }
-
-    const pathMatch = pathname === basePath || pathname.startsWith(`${basePath}/`);
-    if (!pathMatch) return false;
-    return true;
+    const [basePath] = to.split("?");
+    return pathname === basePath;
   };
 
   return (
@@ -1247,7 +1254,7 @@ export default function DashboardLayout({
                   aria-expanded={campusOpen}
                 >
                   <div className="cms-academic-btn-icon">
-                    <Building2 size={16} color="var(--cms-primary)" />
+                    <ThreeDIcon name="building" size={18} />
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
@@ -1299,7 +1306,7 @@ export default function DashboardLayout({
                           navigate("/dashboard/settings/campus-configuration");
                         }}
                       >
-                        <Settings size={14} /> Manage Campuses
+                        <ThreeDIcon name="settings" size={16} /> Manage Campuses
                       </button>
                     </div> : null}
                   </div>
@@ -1386,7 +1393,7 @@ export default function DashboardLayout({
                           navigate("/dashboard/board-academic-year?tab=boards");
                         }}
                       >
-                        <Settings size={14} /> Manage Boards
+                        <ThreeDIcon name="settings" size={16} /> Manage Boards
                       </button>
                     </div> : null}
                   </div>
@@ -1454,7 +1461,7 @@ export default function DashboardLayout({
                             navigate("/dashboard/board-academic-year?tab=academic-years");
                           }}
                         >
-                          <Settings size={14} /> Manage Academic Years
+                          <ThreeDIcon name="settings" size={16} /> Manage Academic Years
                         </button>
                       </div>
                     )}

@@ -248,6 +248,8 @@ public class GroupDistributionItemDto
     public int StudentCount => TotalStudents;
     public int Count => TotalStudents;
     public int Value => TotalStudents;
+    public int Boys { get; set; }
+    public int Girls { get; set; }
     public decimal Percentage { get; set; }
     public string Color { get; set; } = string.Empty;
 }
@@ -255,6 +257,8 @@ public class GroupDistributionItemDto
 public class GroupDistributionResponseDto
 {
     public int TotalStudents { get; set; }
+    public int Boys { get; set; }
+    public int Girls { get; set; }
     public IReadOnlyList<GroupDistributionItemDto> Groups { get; set; } = new List<GroupDistributionItemDto>();
     public IReadOnlyList<GroupDistributionItemDto> Items => Groups;
 }

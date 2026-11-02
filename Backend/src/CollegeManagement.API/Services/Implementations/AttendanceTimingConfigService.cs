@@ -29,7 +29,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var entities = await _repository.GetAllAsync(ct);
                 return entities.Select(MapToResponse).ToList();
-            });
+            }, TimeSpan.FromMinutes(5));
         }
 
         public async Task<TimingConfigResponse?> GetConfigByIdAsync(int id, CancellationToken ct = default)
@@ -45,7 +45,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var entity = await _repository.GetEffectiveConfigAsync(staffType, departmentId, ct);
                 return entity == null ? null : MapToResponse(entity);
-            });
+            }, TimeSpan.FromMinutes(5));
         }
 
         public async Task<TimingConfigResponse> CreateConfigAsync(CreateTimingConfigRequest request, CancellationToken ct = default)
@@ -95,7 +95,8 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<bool> DeleteConfigAsync(int id, CancellationToken ct = default)
         {
             var res = await _repository.DeleteAsync(id, ct);
-            if (res) _cache.RemoveByPrefix("lookup:timingconfigs");
+            // Invalidate timing config caches unconditionally so stale data is never retained
+            _cache.RemoveByPrefix("lookup:timingconfigs");
             return res;
         }
 

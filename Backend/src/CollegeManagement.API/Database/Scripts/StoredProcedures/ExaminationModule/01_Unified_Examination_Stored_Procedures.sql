@@ -84,8 +84,8 @@ CREATE PROCEDURE `sp_GetExaminations`(
     IN p_GroupId INT,
     IN p_ProgramId INT,
     IN p_AssessmentTypeId INT,
-    IN p_Status VARCHAR(50),
-    IN p_SearchTerm VARCHAR(150),
+    IN p_Status VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_SearchTerm VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_CampusId INT)
 BEGIN
     SELECT 
@@ -151,7 +151,7 @@ BEGIN
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR e.GroupId = p_GroupId)
       AND (p_ProgramId IS NULL OR p_ProgramId = 0 OR e.ProgramId = p_ProgramId)
       AND (p_AssessmentTypeId IS NULL OR p_AssessmentTypeId = 0 OR e.AssessmentTypeId = p_AssessmentTypeId)
-      AND (p_Status IS NULL OR p_Status = '' OR LOWER(e.Status) = LOWER(p_Status))
+      AND (p_Status IS NULL OR p_Status = '' OR LOWER(e.Status) COLLATE utf8mb4_unicode_ci = LOWER(p_Status) COLLATE utf8mb4_unicode_ci)
       AND (
           p_SearchTerm IS NULL OR p_SearchTerm = '' OR
           LOWER(e.ExamName) LIKE CONCAT('%', LOWER(p_SearchTerm), '%') OR
@@ -494,19 +494,19 @@ CREATE PROCEDURE `sp_CreateExamSchedule`(
     IN p_ExamDate DATETIME,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
-    IN p_SessionId VARCHAR(100),
-    IN p_ScheduleMode VARCHAR(50),
+    IN p_SessionId VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ScheduleMode VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_RoomId INT,
     IN p_InvigilatorId INT,
-    IN p_Hall VARCHAR(100),
-    IN p_Invigilator VARCHAR(150),
-    IN p_ExamMode VARCHAR(50),
+    IN p_Hall VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Invigilator VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ExamMode VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_MaxMarks DECIMAL(10,2),
     IN p_PassingMarks DECIMAL(10,2),
     IN p_CampusId INT,
-    IN p_PatternName VARCHAR(100),
+    IN p_PatternName VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_GroupId INT,
-    IN p_IncludedSubjectIds TEXT)
+    IN p_IncludedSubjectIds TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)
 BEGIN
     IF p_SubjectId IS NOT NULL AND p_SubjectId > 0 THEN
         UPDATE ExamSchedules
@@ -571,19 +571,19 @@ CREATE PROCEDURE `sp_UpdateExamSchedule`(
     IN p_ExamDate DATETIME,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
-    IN p_SessionId VARCHAR(100),
-    IN p_ScheduleMode VARCHAR(50),
+    IN p_SessionId VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ScheduleMode VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_RoomId INT,
     IN p_InvigilatorId INT,
-    IN p_Hall VARCHAR(100),
-    IN p_Invigilator VARCHAR(150),
-    IN p_ExamMode VARCHAR(50),
+    IN p_Hall VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Invigilator VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_ExamMode VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_MaxMarks DECIMAL(10,2),
     IN p_PassingMarks DECIMAL(10,2),
     IN p_CampusId INT,
-    IN p_PatternName VARCHAR(100),
+    IN p_PatternName VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_GroupId INT,
-    IN p_IncludedSubjectIds TEXT)
+    IN p_IncludedSubjectIds TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)
 BEGIN
     UPDATE ExamSchedules
     SET 
@@ -704,7 +704,7 @@ CREATE PROCEDURE `sp_CheckRoomConflict`(
     IN p_ExamDate DATE,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
-    IN p_Hall VARCHAR(100),
+    IN p_Hall VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ExcludeScheduleId INT,
     IN p_CampusId INT)
 BEGIN
@@ -713,9 +713,9 @@ BEGIN
     INNER JOIN Examinations e ON es.ExamId = e.ExamId
     WHERE es.IsActive = 1
       AND e.IsActive = 1
-      AND e.Status NOT IN ('CANCELLED', 'DELETED')
+      AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
       AND DATE(es.ExamDate) = p_ExamDate
-      AND LOWER(TRIM(es.Hall)) = LOWER(TRIM(p_Hall))
+      AND LOWER(TRIM(es.Hall)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(p_Hall)) COLLATE utf8mb4_unicode_ci
       AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
       AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime);
 END //
@@ -728,7 +728,7 @@ CREATE PROCEDURE `sp_CheckInvigilatorConflict`(
     IN p_ExamDate DATE,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
-    IN p_Invigilator VARCHAR(150),
+    IN p_Invigilator VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_ExcludeScheduleId INT,
     IN p_CampusId INT)
 BEGIN
@@ -737,9 +737,9 @@ BEGIN
     INNER JOIN Examinations e ON es.ExamId = e.ExamId
     WHERE es.IsActive = 1
       AND e.IsActive = 1
-      AND e.Status NOT IN ('CANCELLED', 'DELETED')
+      AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
       AND DATE(es.ExamDate) = p_ExamDate
-      AND LOWER(TRIM(es.Invigilator)) = LOWER(TRIM(p_Invigilator))
+      AND LOWER(TRIM(es.Invigilator)) COLLATE utf8mb4_unicode_ci = LOWER(TRIM(p_Invigilator)) COLLATE utf8mb4_unicode_ci
       AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
       AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime);
 END //
@@ -773,19 +773,19 @@ BEGIN
           INNER JOIN Examinations e ON es.ExamId = e.ExamId
           WHERE es.IsActive = 1
             AND e.IsActive = 1
-            AND e.Status NOT IN ('CANCELLED', 'DELETED')
+            AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
             AND DATE(es.ExamDate) = p_ExamDate
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)
             AND es.RoomId IS NOT NULL
       )
-      AND r.RoomNumber NOT IN (
-          SELECT TRIM(es.Hall)
+      AND r.RoomNumber COLLATE utf8mb4_unicode_ci NOT IN (
+          SELECT TRIM(es.Hall) COLLATE utf8mb4_unicode_ci
           FROM ExamSchedules es
           INNER JOIN Examinations e ON es.ExamId = e.ExamId
           WHERE es.IsActive = 1
             AND e.IsActive = 1
-            AND e.Status NOT IN ('CANCELLED', 'DELETED')
+            AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
             AND DATE(es.ExamDate) = p_ExamDate
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)
@@ -828,7 +828,7 @@ BEGIN
           INNER JOIN Examinations e ON es.ExamId = e.ExamId
           WHERE es.IsActive = 1
             AND e.IsActive = 1
-            AND e.Status NOT IN ('CANCELLED', 'DELETED')
+            AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
             AND DATE(es.ExamDate) = p_ExamDate
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)
@@ -843,7 +843,7 @@ BEGIN
           INNER JOIN Examinations e ON es.ExamId = e.ExamId
           WHERE es.IsActive = 1
             AND e.IsActive = 1
-            AND e.Status NOT IN ('CANCELLED', 'DELETED')
+            AND e.Status COLLATE utf8mb4_unicode_ci NOT IN ('CANCELLED', 'DELETED')
             AND DATE(es.ExamDate) = p_ExamDate
             AND (p_ExcludeScheduleId IS NULL OR p_ExcludeScheduleId = 0 OR es.ScheduleId != p_ExcludeScheduleId)
             AND NOT (p_EndTime <= es.StartTime OR p_StartTime >= es.EndTime)

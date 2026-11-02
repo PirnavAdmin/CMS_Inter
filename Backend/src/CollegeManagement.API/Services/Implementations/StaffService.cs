@@ -642,15 +642,16 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Uniqueness Validations
-            if (!string.IsNullOrWhiteSpace(dto.Email) && !await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
-                throw new ConflictException($"Email address '{dto.Email}' is already registered to another staff member.");
-
-            var normalizedNewEmail = dto.Email.Trim().ToUpperInvariant();
+            // Uniqueness Validations - only check if fields are actually changed to avoid false conflicts with legacy records
+            var normalizedNewEmail = dto.Email?.Trim().ToUpperInvariant() ?? string.Empty;
             var normalizedOldEmail = existingStaff.Email?.Trim().ToUpperInvariant() ?? string.Empty;
-            bool emailChanged = !string.Equals(normalizedNewEmail, normalizedOldEmail, StringComparison.OrdinalIgnoreCase);
+            bool emailChanged = !string.IsNullOrWhiteSpace(normalizedNewEmail) && !string.Equals(normalizedNewEmail, normalizedOldEmail, StringComparison.OrdinalIgnoreCase);
+
             if (emailChanged && !string.IsNullOrWhiteSpace(dto.Email))
             {
+                if (!await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
+                    throw new ConflictException($"Email address '{dto.Email}' is already registered to another staff member.");
+
                 var existingUserWithNewEmail = await _userRepository.GetByEmailAsync(normalizedNewEmail);
                 if (existingUserWithNewEmail != null && existingUserWithNewEmail.StaffId != id)
                 {
@@ -658,36 +659,42 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            if (!await _staffRepository.IsMobileUniqueAsync(dto.Mobile, id))
+            var cleanNewMobile = dto.Mobile?.Trim() ?? string.Empty;
+            var cleanOldMobile = existingStaff.Mobile?.Trim() ?? string.Empty;
+            bool mobileChanged = !string.IsNullOrWhiteSpace(cleanNewMobile) && !string.Equals(cleanNewMobile, cleanOldMobile, StringComparison.OrdinalIgnoreCase);
+
+            if (mobileChanged && !await _staffRepository.IsMobileUniqueAsync(cleanNewMobile, id))
                 throw new ConflictException($"Mobile number '{dto.Mobile}' is already registered to another staff member.");
 
-            if (!string.IsNullOrWhiteSpace(dto.Aadhaar) && !await _staffRepository.IsAadhaarUniqueAsync(dto.Aadhaar, id))
+            var cleanNewAadhaar = dto.Aadhaar?.Trim() ?? string.Empty;
+            var cleanOldAadhaar = existingStaff.Aadhaar?.Trim() ?? string.Empty;
+            bool aadhaarChanged = !string.IsNullOrWhiteSpace(cleanNewAadhaar) && !string.Equals(cleanNewAadhaar, cleanOldAadhaar, StringComparison.OrdinalIgnoreCase);
+
+            if (aadhaarChanged && !await _staffRepository.IsAadhaarUniqueAsync(cleanNewAadhaar, id))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered to another staff member.");
 
-            // Department resolution
+            // Department resolution - prioritize explicitly provided department name if changed
             int? resolvedDepartmentId = dto.DepartmentId;
             string deptName = dto.Department?.Trim() ?? string.Empty;
 
-            if (resolvedDepartmentId.HasValue && resolvedDepartmentId.Value > 0)
+            var depts = await _departmentRepository.GetDepartmentsAsync();
+            var deptByName = !string.IsNullOrWhiteSpace(deptName)
+                ? depts?.FirstOrDefault(d =>
+                    string.Equals(d.DepartmentName, deptName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(d.DepartmentCode, deptName, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            if (deptByName != null)
             {
-                var depts = await _departmentRepository.GetDepartmentsAsync();
-                var found = depts.FirstOrDefault(d => d.DepartmentId == resolvedDepartmentId.Value);
+                resolvedDepartmentId = deptByName.DepartmentId;
+                deptName = deptByName.DepartmentName;
+            }
+            else if (resolvedDepartmentId.HasValue && resolvedDepartmentId.Value > 0)
+            {
+                var found = depts?.FirstOrDefault(d => d.DepartmentId == resolvedDepartmentId.Value);
                 if (found != null)
                 {
                     deptName = found.DepartmentName;
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(deptName))
-            {
-                var depts = await _departmentRepository.GetDepartmentsAsync();
-                var dept = depts?.FirstOrDefault(d =>
-                    string.Equals(d.DepartmentName, deptName, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(d.DepartmentCode, deptName, StringComparison.OrdinalIgnoreCase));
-
-                if (dept != null)
-                {
-                    resolvedDepartmentId = dept.DepartmentId;
-                    deptName = dept.DepartmentName;
                 }
             }
             else
@@ -696,24 +703,24 @@ namespace CollegeManagement.API.Services.Implementations
                 deptName = existingStaff.Department;
             }
 
-            // Designation resolution
+            // Designation resolution - prioritize explicitly provided designation name if changed
             int? resolvedDesignationId = dto.DesignationId;
             string resolvedDesignationName = dto.Designation?.Trim() ?? string.Empty;
 
-            if (resolvedDesignationId.HasValue && resolvedDesignationId.Value > 0)
+            var desigByName = !string.IsNullOrWhiteSpace(resolvedDesignationName)
+                ? await _designationRepository.GetByNameAsync(resolvedDesignationName)
+                : null;
+
+            if (desigByName != null)
+            {
+                resolvedDesignationId = desigByName.Id;
+                resolvedDesignationName = desigByName.Name;
+            }
+            else if (resolvedDesignationId.HasValue && resolvedDesignationId.Value > 0)
             {
                 var desig = await _designationRepository.GetByIdAsync(resolvedDesignationId.Value);
                 if (desig != null)
                 {
-                    resolvedDesignationName = desig.Name;
-                }
-            }
-            else if (!string.IsNullOrWhiteSpace(resolvedDesignationName))
-            {
-                var desig = await _designationRepository.GetByNameAsync(resolvedDesignationName);
-                if (desig != null)
-                {
-                    resolvedDesignationId = desig.Id;
                     resolvedDesignationName = desig.Name;
                 }
             }
@@ -723,7 +730,12 @@ namespace CollegeManagement.API.Services.Implementations
                 resolvedDesignationName = existingStaff.Designation;
             }
 
-            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId ?? existingStaff.BoardId, dto.BoardName ?? dto.Board ?? existingStaff.BoardName, dto.BoardCode);
+            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId, dto.BoardName ?? dto.Board, dto.BoardCode);
+            if (!resolvedBoardId.HasValue || resolvedBoardId.Value <= 0)
+            {
+                resolvedBoardId = existingStaff.BoardId;
+                resolvedBoardName = existingStaff.BoardName;
+            }
 
             _mapper.Map(dto, existingStaff);
             existingStaff.StaffType = staffType;
@@ -2017,13 +2029,83 @@ namespace CollegeManagement.API.Services.Implementations
             var staff = await _staffRepository.GetByIdAsync(dto.StaffId);
             if (staff == null) throw new NotFoundException($"Staff with ID {dto.StaffId} not found.");
 
+            if (dto.SubjectId <= 0 && !string.IsNullOrWhiteSpace(dto.SubjectName))
+            {
+                var allSubjects = await _subjectRepository.GetAllAsync();
+                var cleanName = dto.SubjectName.Trim();
+                var matched = allSubjects.FirstOrDefault(s =>
+                    string.Equals(s.SubjectName.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.SubjectCode.Trim(), cleanName, StringComparison.OrdinalIgnoreCase) ||
+                    cleanName.StartsWith(s.SubjectName.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                    s.SubjectName.Trim().StartsWith(cleanName, StringComparison.OrdinalIgnoreCase));
+
+                if (matched != null)
+                {
+                    dto.SubjectId = matched.SubjectId;
+                }
+                else
+                {
+                    var validGroup = await _context.Groups.AsNoTracking().FirstOrDefaultAsync();
+                    var validLevel = await _context.AcademicLevels.AsNoTracking().FirstOrDefaultAsync();
+                    var validBoard = await _context.Boards.AsNoTracking().FirstOrDefaultAsync();
+                    var validYear = await _context.AcademicYears.AsNoTracking().FirstOrDefaultAsync();
+
+                    var cleanCode = "SUB-" + (cleanName.Length > 4 ? cleanName.Substring(0, 4).ToUpper() : cleanName.ToUpper()) + "-" + new Random().Next(100, 999);
+                    var newSub = new Subject
+                    {
+                        SubjectName = cleanName,
+                        SubjectCode = cleanCode,
+                        BoardId = staff.BoardId ?? (validBoard?.BoardId ?? 1),
+                        GroupId = validGroup?.GroupId ?? 37,
+                        AcademicLevelId = validLevel?.AcademicLevelId ?? 1,
+                        AcademicYearId = validYear?.AcademicYearId,
+                        SubjectType = "Theory",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Subjects.Add(newSub);
+                    await _context.SaveChangesAsync();
+                    dto.SubjectId = newSub.SubjectId;
+                }
+            }
+
             var subject = await _subjectRepository.GetByIdAsync(dto.SubjectId);
             if (subject == null) throw new NotFoundException($"Subject with ID {dto.SubjectId} not found.");
 
+            var existingAllocs = await _allocationRepository.GetByStaffIdAsync(dto.StaffId);
+            var alreadyAllocated = existingAllocs.FirstOrDefault(a => a.SubjectId == dto.SubjectId);
+            if (alreadyAllocated != null)
+            {
+                alreadyAllocated.Staff = staff;
+                alreadyAllocated.Subject = subject;
+                return _mapper.Map<StaffSubjectAllocationResponseDto>(alreadyAllocated);
+            }
+
             var allocation = _mapper.Map<StaffSubjectAllocation>(dto);
+            allocation.IsActive = true;
+            allocation.CreatedAt = DateTime.UtcNow;
             var created = await _allocationRepository.AddAsync(allocation);
             created.Staff = staff;
             created.Subject = subject;
+
+            try
+            {
+                var deptDict = DeserializeObject<Dictionary<string, object>>(staff.DepartmentSpecificJson) ?? new Dictionary<string, object>();
+                var currentSubs = new List<string>();
+                if (deptDict.TryGetValue("allocatedSubjects", out var sObj) && sObj is IEnumerable<object> sEnum)
+                {
+                    currentSubs = sEnum.Select(x => x.ToString() ?? "").Where(x => !string.IsNullOrWhiteSpace(x)).ToList();
+                }
+                if (!currentSubs.Contains(subject.SubjectName))
+                {
+                    currentSubs.Add(subject.SubjectName);
+                    deptDict["allocatedSubjects"] = currentSubs;
+                    deptDict["subjects"] = currentSubs;
+                    staff.DepartmentSpecificJson = JsonSerializer.Serialize(deptDict);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            catch { }
 
             return _mapper.Map<StaffSubjectAllocationResponseDto>(created);
         }

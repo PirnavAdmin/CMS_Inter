@@ -1125,9 +1125,10 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
+      apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
-      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult] = results;
+      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
       if (campusesResult?.status === "fulfilled") {
         const loadedCampuses = unwrapList(campusesResult.value).map(normalizeCampus).filter((item) => item.id && item.isActive);
         setCampusesList(loadedCampuses);
@@ -1205,7 +1206,7 @@ export default function SectionManagementPage() {
       }
       const rejected = results.find((result) => result.status === "rejected");
       if (rejected) say(getApiErrorMessage(rejected.reason) || "Some Section Management data could not be loaded.");
-    }).catch((error) => { if (active) say(getApiErrorMessage(error)); }).finally(() => { if (active) setInitialLoading(false); });
+    }).catch((error) => { if (active) say(getApiErrorMessage(error), "error"); }).finally(() => { if (active) setInitialLoading(false); });
     return () => { active = false; ++boardRequests.current; ++groupRequests.current; ++programRequests.current; if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, [say]);
 

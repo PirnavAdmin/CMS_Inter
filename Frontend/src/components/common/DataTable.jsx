@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronDown, Download } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import Search3DIcon from "./Search3DIcon.jsx";
+import ThreeDIcon from "./ThreeDIcon.jsx";
 import { StatusBadge, SkeletonRow, Pagination } from "./Ui.jsx";
 
 const DEFAULT_PAGE_SIZE = 5;
@@ -173,21 +174,21 @@ export default function DataTable({
                 aria-expanded={exportOpen}
                 onClick={() => setExportOpen((open) => !open)}
               >
-                <Download size={15} /> Export <ChevronDown size={14} />
+                <ThreeDIcon name="download" size={16} /> Export <ChevronDown size={14} />
               </button>
               {exportOpen ? (
                 <div className="cms-export-menu" role="menu">
                   <button type="button" role="menuitem" onClick={exportExcel}>
-                    <FileSpreadsheet size={15} /> Export Excel
+                    <ThreeDIcon name="excel" size={16} /> Export Excel
                   </button>
                   {enablePdfExport ? (
                     <button type="button" role="menuitem" onClick={exportPdf}>
-                      <FileText size={15} /> Export PDF
+                      <ThreeDIcon name="pdf" size={16} /> Export PDF
                     </button>
                   ) : null}
                   {enableTablePrint ? (
                     <button type="button" role="menuitem" onClick={printRows}>
-                      <Printer size={15} /> Print table
+                      <ThreeDIcon name="print" size={16} /> Print table
                     </button>
                   ) : null}
                 </div>
@@ -196,7 +197,7 @@ export default function DataTable({
           ) : null}
           {onAdd ? (
             <button className="cms-btn cms-btn-primary" onClick={onAdd}>
-              <Plus size={16} /> {addLabel}
+              <ThreeDIcon name="add" size={16} /> {addLabel}
             </button>
           ) : null}
         </div>
@@ -247,22 +248,22 @@ export default function DataTable({
                       <div className="cms-actions">
                         {onView ? (
                           <button className="cms-action-btn view" title="View" aria-label="View record" onClick={() => onView(row)}>
-                            <Eye size={15} />
+                            <ThreeDIcon name="view" size={16} />
                           </button>
                         ) : null}
                         {onPrint ? (
                           <button className="cms-action-btn print" title="Print" aria-label="Print record" onClick={() => onPrint(row)}>
-                            <Printer size={15} />
+                            <ThreeDIcon name="print" size={16} />
                           </button>
                         ) : null}
                         {onEdit ? (
                           <button className="cms-action-btn edit" title="Edit" aria-label="Edit record" onClick={() => onEdit(row)}>
-                            <Pencil size={15} />
+                            <ThreeDIcon name="edit" size={16} />
                           </button>
                         ) : null}
                         {onDelete ? (
                           <button className="cms-action-btn danger" title="Delete" aria-label="Delete record" onClick={() => onDelete(row)}>
-                            <Trash2 size={15} />
+                            <ThreeDIcon name="delete" size={16} />
                           </button>
                         ) : null}
                       </div>
@@ -275,7 +276,7 @@ export default function DataTable({
         </table>
       </div>
 
-      <Pagination currentPage={current} totalRecords={filtered.length} pageSize={effectivePageSize} onPageChange={setPage} currentOnly={paginationCurrentOnly} />
+<Pagination currentPage={current} totalRecords={filtered.length} pageSize={effectivePageSize} onPageChange={setPage} currentOnly={paginationCurrentOnly} />
     </div>
   );
 }

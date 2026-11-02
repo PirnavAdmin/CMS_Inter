@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpenCheck, CalendarDays, CalendarX, Clock3, Cloud, FileText, Sun, UserCheck, UserX } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -184,18 +185,18 @@ export default function StudentAttendance() {
       >
         {view === "daily" ? <>
           <div className="sp-selected-attendance-heading">
-            <h3><CalendarDays size={22}/>{selectedDateLabel}</h3>
+            <h3><ThreeDIcon name="calendar" size={22}/>{selectedDateLabel}</h3>
             {selectedDay && selectedStatuses.length ? <div className="sp-attendance-overall"><span>Overall Status:</span><AttendancePill value={selectedStatuses.join(" / ")}/></div> : null}
           </div>
           {selectedDay ? <div className="sp-attendance-sessions">
             {[{ key: "morning", title: "Morning Session", Icon: Sun }, { key: "afternoon", title: "Afternoon Session", Icon: Cloud }].map(({ key, title, Icon }) => <article className="sp-attendance-session" key={key}>
-              <div className="sp-attendance-session-heading"><span className={"sp-attendance-session-icon is-" + key}><Icon size={30}/></span><div><h3>{title}</h3><AttendancePill value={selectedDay[key]}/></div></div>
-              <p><FileText size={16}/><span>Remarks</span><span>{sessionRemarks(key)}</span></p>
+              <div className="sp-attendance-session-heading"><span className={"sp-attendance-session-icon is-" + key}><ThreeDIcon name={Icon} size={30}/></span><div><h3>{title}</h3><AttendancePill value={selectedDay[key]}/></div></div>
+              <p><ThreeDIcon name="pdf" size={16}/><span>Remarks</span><span>{sessionRemarks(key)}</span></p>
             </article>)}
           </div> : <StudentEmptyState icon={CalendarX} title="No attendance record available for this date."/>}
         </> : <div className="sp-attendance-calendar-wrap"><div className="sp-attendance-calendar"><div className="sp-attendance-weekdays">{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <span key={day}>{day}</span>)}</div><div className="sp-attendance-calendar-grid">{calendarDays.map((cell, index) => cell ? <div className={`sp-attendance-calendar-day ${tone(cell.status)} ${cell.status === "Holiday" ? "is-holiday" : ""}`} key={`${selectedMonth}-${cell.day}`}><strong>{cell.day}</strong><span>{cell.status}</span></div> : <div className="sp-attendance-calendar-day is-empty" key={`empty-${index}`} aria-hidden="true"/>)}</div></div><div className="sp-attendance-month-summary"><div><span>Working / Attendance Days</span><strong>{totals.days}</strong></div><div><span>Present</span><strong>{totals.present}</strong></div><div><span>Absent</span><strong>{totals.absent}</strong></div><div><span>Half Day</span><strong>{halfDayTotal}</strong></div><div><span>Attendance %</span><strong>{totals.percentage}%</strong></div></div></div>}
       </StudentCard>
-      {view === "daily" ? <StudentCard className="sp-recent-attendance" title={<><Clock3 size={20}/>Recent Attendance</>} subtitle="Your last 5 attendance records.">
+      {view === "daily" ? <StudentCard className="sp-recent-attendance" title={<><ThreeDIcon name="clock" size={20}/>Recent Attendance</>} subtitle="Your last 5 attendance records.">
         {recentRows.length ? <div className="sp-table-wrap"><table className="sp-table"><thead><tr><th>Date</th><th>Morning</th><th>Afternoon</th><th>Remarks</th></tr></thead><tbody>{recentRows.map((row) => <tr key={row.date}><td>{formatDate(row.date)}</td><td><AttendancePill value={row.morning} compact/></td><td><AttendancePill value={row.afternoon} compact/></td><td>{row.remarks.join(" • ") || "—"}</td></tr>)}</tbody></table></div> : <StudentEmptyState icon={CalendarX} title="No attendance available" text="No attendance records were returned for your academic period."/>}
       </StudentCard> : null}
     </> : null}

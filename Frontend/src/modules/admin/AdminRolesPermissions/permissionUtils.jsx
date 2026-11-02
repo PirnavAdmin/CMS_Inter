@@ -158,10 +158,12 @@ export const toPermissionMap = (permissions = []) => {
 
   
   // Mirror aliases so lookups by raw backend slug or canonical ID both resolve
-  if (map["reimbursement"]) {
-    map["staff-reimbursements"] = map["reimbursement"];
-    map["staff-reimbursement"] = map["reimbursement"];
-    map["reimbursements"] = map["reimbursement"];
+  const reimbActions = map["reimbursement"] || map["staff-reimbursements"] || map["staff-reimbursement"] || map["reimbursements"];
+  if (reimbActions) {
+    map["reimbursement"] = reimbActions;
+    map["staff-reimbursements"] = reimbActions;
+    map["staff-reimbursement"] = reimbActions;
+    map["reimbursements"] = reimbActions;
   }
   if (map["reports-analytics"]) {
     map["reports"] = map["reports-analytics"];

@@ -447,7 +447,6 @@ export const CANONICAL_TEMPLATES = [
   "certificate-study",
   "certificate-conduct",
   "certificate-transfer",
-  "certificate-custom",
 ];
 
 // Helper: Cleans raw HTML markup from backend strings and normalizes token placeholders
@@ -522,7 +521,9 @@ export function normalizeApiTemplate(apiItem, fallbackPresets = DEFAULT_ALL_TEMP
   const code = apiItem.templateCode || apiItem.code || String(id);
   const name = apiItem.title || apiItem.name || code;
   const category = apiItem.category || "Student Certificate";
-  const isActive = apiItem.isActive ?? (apiItem.status === "Active" || apiItem.status === true);
+  const isActive = slot === "certificate-bonafide"
+    ? true
+    : apiItem.isActive ?? (apiItem.status === "Active" || apiItem.status === true);
   const contentBody = apiItem.contentBody || apiItem.content || "";
   const placeholders = apiItem.placeholders || apiItem.dynamicFields || [];
   const version = String(apiItem.version ?? "1.0");
@@ -988,7 +989,7 @@ export default function TemplatesPage() {
     return templates
       .filter((t) => {
         // Tab filter
-        if (activeTab === "certificates" && t.type !== "Certificate") return false;
+        if (activeTab === "certificates" && (t.type !== "Certificate" || !CANONICAL_TEMPLATES.includes(t.id))) return false;
         if (activeTab === "reports" && t.type !== "Report") return false;
         if (activeTab === "letters" && t.type !== "Letter") return false;
 
@@ -1115,20 +1116,6 @@ export default function TemplatesPage() {
           </button>
           <button
             type="button"
-            className={`templates-tab-btn ${activeTab === "reports" ? "active" : ""}`}
-            onClick={() => setActiveTab("reports")}
-          >
-            <FileSpreadsheet size={15} /> Reports
-          </button>
-          <button
-            type="button"
-            className={`templates-tab-btn ${activeTab === "letters" ? "active" : ""}`}
-            onClick={() => setActiveTab("letters")}
-          >
-            <FileText size={15} /> Official Letters
-          </button>
-          <button
-            type="button"
             className={`templates-tab-btn ${activeTab === "upload" ? "active" : ""}`}
             onClick={() => setActiveTab("upload")}
           >
@@ -1189,7 +1176,6 @@ export default function TemplatesPage() {
                     <option value="Study">Study</option>
                     <option value="Conduct">Conduct</option>
                     <option value="Transfer">Transfer</option>
-                    <option value="Others">Others</option>
                   </select>
                 )}
 
@@ -1217,13 +1203,6 @@ export default function TemplatesPage() {
                   <option value="Status">Status</option>
                 </select>
 
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-primary templates-add-btn"
-                  onClick={() => navigate("/dashboard/settings/templates/add")}
-                >
-                  <Plus size={15} /> Add New Template
-                </button>
               </div>
             </div>
 

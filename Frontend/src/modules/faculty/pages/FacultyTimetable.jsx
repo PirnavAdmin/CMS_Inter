@@ -1,7 +1,24 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { X, Calendar, Clock, MapPin, BookOpen, Users, AlertCircle, RefreshCw, CheckCircle2, ChevronRight, Info, User, FileText } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import {
+  X,
+  Calendar,
+  Clock,
+  MapPin,
+  BookOpen,
+  Users,
+  AlertCircle,
+  RefreshCw,
+  CheckCircle2,
+  ChevronRight,
+  Info,
+  User,
+  Coffee,
+  Sun,
+} from "lucide-react";
 import "../styles/FacultyTimetable.css";
+import "@/modules/admin/AdminTimetable/TimetablePage.css";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -10,83 +27,29 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
 import { getStaffSubjectAllocations } from "@/api/staffApi.js";
 
-// Standard college weekly timetable days (Monday - Saturday)
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const SHORT_DAYS = [
-  { key: "MON", full: "Monday", dayOfWeek: 1 },
-  { key: "TUE", full: "Tuesday", dayOfWeek: 2 },
-  { key: "WED", full: "Wednesday", dayOfWeek: 3 },
-  { key: "THU", full: "Thursday", dayOfWeek: 4 },
-  { key: "FRI", full: "Friday", dayOfWeek: 5 },
-  { key: "SAT", full: "Saturday", dayOfWeek: 6 },
+// Standard College Working Days (Monday through Saturday, matching Admin Timetable)
+export const COLLEGE_WORKING_DAYS = [
+  { dayOfWeek: 1, key: "MON", full: "Monday" },
+  { dayOfWeek: 2, key: "TUE", full: "Tuesday" },
+  { dayOfWeek: 3, key: "WED", full: "Wednesday" },
+  { dayOfWeek: 4, key: "THU", full: "Thursday" },
+  { dayOfWeek: 5, key: "FRI", full: "Friday" },
+  { dayOfWeek: 6, key: "SAT", full: "Saturday" },
 ];
 
-// Fixed canonical 8-period college timetable schema (permanent rows 1..8)
-export const FIXED_COLLEGE_PERIODS = [
-  {
-    key: "period-1",
-    periodNumber: 1,
-    periodName: "Period 1",
-    timeLabel: "09:00 AM – 10:00 AM",
-    startTime: "09:00:00",
-    endTime: "10:00:00",
-  },
-  {
-    key: "period-2",
-    periodNumber: 2,
-    periodName: "Period 2",
-    timeLabel: "10:00 AM – 11:00 AM",
-    startTime: "10:00:00",
-    endTime: "11:00:00",
-  },
-  {
-    key: "period-3",
-    periodNumber: 3,
-    periodName: "Period 3",
-    timeLabel: "11:15 AM – 12:15 PM",
-    startTime: "11:15:00",
-    endTime: "12:15:00",
-  },
-  {
-    key: "period-4",
-    periodNumber: 4,
-    periodName: "Period 4",
-    timeLabel: "12:40 PM – 01:20 PM",
-    startTime: "12:40:00",
-    endTime: "13:20:00",
-  },
-  {
-    key: "period-5",
-    periodNumber: 5,
-    periodName: "Period 5",
-    timeLabel: "01:20 PM – 02:00 PM",
-    startTime: "13:20:00",
-    endTime: "14:00:00",
-  },
-  {
-    key: "period-6",
-    periodNumber: 6,
-    periodName: "Period 6",
-    timeLabel: "02:00 PM – 03:00 PM",
-    startTime: "14:00:00",
-    endTime: "15:00:00",
-  },
-  {
-    key: "period-7",
-    periodNumber: 7,
-    periodName: "Period 7",
-    timeLabel: "03:00 PM – 04:00 PM",
-    startTime: "15:00:00",
-    endTime: "16:00:00",
-  },
-  {
-    key: "period-8",
-    periodNumber: 8,
-    periodName: "Period 8",
-    timeLabel: "04:00 PM – 05:00 PM",
-    startTime: "16:00:00",
-    endTime: "17:00:00",
-  },
+// Admin Portal Timetable Canonical Period Structure (Periods 1-8 + Break Slots)
+// Derived authoritatively from Admin Timetable Management (Active Structure 17: 09:00 - 15:20)
+export const ADMIN_CANONICAL_PERIODS = [
+  { id: 831, periodId: 831, periodNumber: 1, name: "Period 1", startTime: "09:00:00", endTime: "09:40:00", timeRange: "09:00 - 09:40", isBreak: false },
+  { id: 832, periodId: 832, periodNumber: 2, name: "Period 2", startTime: "09:40:00", endTime: "10:20:00", timeRange: "09:40 - 10:20", isBreak: false },
+  { id: 833, periodId: 833, periodNumber: null, name: "Tea Break", startTime: "10:20:00", endTime: "10:30:00", timeRange: "10:20 - 10:30", isBreak: true },
+  { id: 834, periodId: 834, periodNumber: 3, name: "Period 3", startTime: "10:30:00", endTime: "11:10:00", timeRange: "10:30 - 11:10", isBreak: false },
+  { id: 835, periodId: 835, periodNumber: 4, name: "Period 4", startTime: "11:10:00", endTime: "11:50:00", timeRange: "11:10 - 11:50", isBreak: false },
+  { id: 836, periodId: 836, periodNumber: null, name: "Lunch Break", startTime: "11:50:00", endTime: "12:40:00", timeRange: "11:50 - 12:40", isBreak: true },
+  { id: 837, periodId: 837, periodNumber: 5, name: "Period 5", startTime: "12:40:00", endTime: "13:20:00", timeRange: "12:40 - 13:20", isBreak: false },
+  { id: 838, periodId: 838, periodNumber: 6, name: "Period 6", startTime: "13:20:00", endTime: "14:00:00", timeRange: "13:20 - 14:00", isBreak: false },
+  { id: 839, periodId: 839, periodNumber: 7, name: "Period 7", startTime: "14:00:00", endTime: "14:40:00", timeRange: "14:00 - 14:40", isBreak: false },
+  { id: 840, periodId: 840, periodNumber: 8, name: "Period 8", startTime: "14:40:00", endTime: "15:20:00", timeRange: "14:40 - 15:20", isBreak: false },
 ];
 
 function formatTime12h(timeStr) {
@@ -104,18 +67,9 @@ function formatTime12h(timeStr) {
 
 function formatSlotTimeRange(startTime, endTime) {
   if (!startTime || !endTime) return "";
-  const parsePart = (t) => {
-    const parts = String(t).split(":");
-    let h = parseInt(parts[0], 10);
-    const m = parts[1] || "00";
-    const ampm = h >= 12 ? "PM" : "AM";
-    let h12 = h % 12;
-    if (h12 === 0) h12 = 12;
-    return { h12: String(h12).padStart(2, "0"), m, ampm };
-  };
-  const s = parsePart(startTime);
-  const e = parsePart(endTime);
-  return `${s.h12}:${s.m}–${e.h12}:${e.m} ${e.ampm}`;
+  const s = String(startTime).slice(0, 5);
+  const e = String(endTime).slice(0, 5);
+  return `${s} - ${e}`;
 }
 
 function getFacultyStaffId(profile, auth) {
@@ -138,7 +92,7 @@ function getFacultyStaffId(profile, auth) {
   const candidate = Number(profile?.staffId || auth?.staffId || profile?.facultyId || auth?.facultyId);
   if (candidate > 0) return candidate;
 
-  // 3. If role is Faculty/Staff/Teacher and id is set
+  // 3. Fallback
   const fallbackId = Number(profile?.id || auth?.id);
   if (fallbackId > 0 && (auth?.role === "Faculty" || auth?.role === "Staff" || auth?.role === "Teacher")) {
     return fallbackId;
@@ -156,12 +110,12 @@ export default function FacultyTimetable() {
 
   const [timetableSlots, setTimetableSlots] = useState([]);
   const [allocatedSubjects, setAllocatedSubjects] = useState([]);
+  const [canonicalPeriods, setCanonicalPeriods] = useState(ADMIN_CANONICAL_PERIODS);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const { params, setParam } = useFacultyViewParams();
-  const slotId = params.get("slotId");
-  const selectedSlot = slotId == null ? null : timetableSlots.find((slot) => String(slot.id) === slotId);
-  const setSelectedSlot = (slot) => setParam("slotId", slot?.id ?? null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const navigate = useNavigate();
 
   const isFetchingRef = useRef(false);
 
@@ -177,22 +131,32 @@ export default function FacultyTimetable() {
     authUser?.facultyId,
   ]);
 
-  // Determine current day of week (1 = Monday, ..., 6 = Saturday, 0 = Sunday)
-  const currentDayOfWeek = useMemo(() => {
-    const day = new Date().getDay();
-    return day === 0 ? 7 : day;
-  }, []);
+  // Current calendar day state: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const currentCalendarDay = useMemo(() => new Date().getDay(), []);
+  const isSundayToday = currentCalendarDay === 0;
 
-  const fetchTimetable = useCallback(async () => {
+  const currentDayName = useMemo(() => {
+    const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return names[currentCalendarDay];
+  }, [currentCalendarDay]);
+
+  const fetchTimetable = useCallback(async (isManualRefresh = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    setLoading(true);
+
+    // Structure preservation: keep grid mounted on subsequent refreshes
+    if (isManualRefresh || timetableSlots.length > 0) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       if (!staffId) {
         setTimetableSlots([]);
         setAllocatedSubjects([]);
         setLoading(false);
+        setIsRefreshing(false);
         return;
       }
 
@@ -204,7 +168,7 @@ export default function FacultyTimetable() {
       if (selectedCampusId) params.campusId = selectedCampusId;
       if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
 
-      // Query primary endpoint strictly with StaffId alongside profile subject allocations
+      // Query primary endpoint with StaffId alongside profile subject allocations
       const [res, allocRes] = await Promise.allSettled([
         apiClient.get(endpoint, { params }),
         getStaffSubjectAllocations(staffId),
@@ -240,106 +204,166 @@ export default function FacultyTimetable() {
         const rawAllocs = allocRes.value?.data?.data || allocRes.value?.data || [];
         setAllocatedSubjects(Array.isArray(rawAllocs) ? rawAllocs : []);
       }
+
+      // Context parameters for period structure derived from slot items or active context
+      const contextParams = { ...params };
+      if (items.length > 0) {
+        const first = items[0];
+        if (first.boardId) contextParams.boardId = first.boardId;
+        if (first.academicLevelId) contextParams.academicLevelId = first.academicLevelId;
+        if (first.academicYearId) contextParams.academicYearId = first.academicYearId;
+        if (first.groupId) contextParams.groupId = first.groupId;
+        if (first.campusId) contextParams.campusId = first.campusId;
+      }
+
+      // Fetch dynamic period structure from context or periods endpoint
+      let rawPeriods = [];
+      try {
+        const structRes = await apiClient.get(apiEndpoints.periodStructures.context, { params: contextParams });
+        const list = Array.isArray(structRes?.data) ? structRes.data : structRes?.data?.data;
+        if (Array.isArray(list) && list.length >= 8) {
+          rawPeriods = list;
+        }
+      } catch {
+        // Fallback
+      }
+
+      if (!rawPeriods.length) {
+        try {
+          const pRes = await apiClient.get(apiEndpoints.periods.getAll, { params: contextParams });
+          const list = Array.isArray(pRes?.data) ? pRes.data : pRes?.data?.data;
+          if (Array.isArray(list) && list.length >= 8) {
+            rawPeriods = list;
+          }
+        } catch {
+          // Fallback to ADMIN_CANONICAL_PERIODS
+        }
+      }
+
+      if (rawPeriods.length >= 8) {
+        const sorted = [...rawPeriods].sort((a, b) => {
+          const ordA = Number(a.displayOrder ?? a.DisplayOrder ?? a.periodId ?? a.PeriodId ?? 0);
+          const ordB = Number(b.displayOrder ?? b.DisplayOrder ?? b.periodId ?? b.PeriodId ?? 0);
+          return ordA - ordB;
+        });
+        const mappedPeriods = sorted.map((p, idx) => {
+          const isBrk = Boolean(p.isBreak ?? p.IsBreak);
+          const pName = p.periodName || p.PeriodName || p.name || p.Name;
+          const sTime = p.startTime || p.StartTime;
+          const eTime = p.endTime || p.EndTime;
+          const numMatch = String(pName).match(/\d+/);
+          const pId = Number(p.periodId ?? p.PeriodId ?? p.id ?? idx + 1);
+          return {
+            id: pId,
+            periodId: pId,
+            periodNumber: isBrk ? null : (numMatch ? parseInt(numMatch[0], 10) : idx + 1),
+            name: pName,
+            startTime: sTime,
+            endTime: eTime,
+            timeRange: formatSlotTimeRange(sTime, eTime),
+            isBreak: isBrk,
+          };
+        });
+        setCanonicalPeriods(mappedPeriods);
+      } else {
+        setCanonicalPeriods(ADMIN_CANONICAL_PERIODS);
+      }
     } catch (err) {
       console.warn("Failed to fetch faculty timetable:", err);
       setError("Unable to connect to timetable service. Please try refreshing.");
-      setTimetableSlots([]);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
       isFetchingRef.current = false;
     }
-  }, [staffId, selectedCampusId, selectedAcademicYearId]);
+  }, [staffId, selectedCampusId, selectedAcademicYearId, timetableSlots.length]);
 
   useEffect(() => {
-    fetchTimetable();
+    fetchTimetable(false);
   }, [fetchTimetable]);
 
-  // Permanent fixed 8-period timetable rows (Fixed schema structure; data populates dynamically)
-  const periodRows = FIXED_COLLEGE_PERIODS;
+  // Working days matching Admin Portal Timetable
+  const workingDays = COLLEGE_WORKING_DAYS;
 
-  // Pre-calculate clean 1-to-1 slot mapping: dayIndex -> periodKey -> slot
-  // Guarantees zero duplicate card renders and 100% accurate time-slot alignment
-  const timetableMatrix = useMemo(() => {
-    const matrix = {}; // { [dayIndex]: { [periodKey]: slot } }
-    const assignedSlotIds = new Set();
-
-    SHORT_DAYS.forEach((d, dayIdx) => {
-      matrix[dayIdx] = {};
-
-      // All slots for this day
-      const daySlots = (timetableSlots || []).filter((s) => {
-        const slotDay = String(s.dayName || "").trim().toLowerCase();
-        return slotDay === d.full.toLowerCase() || s.dayOfWeek === d.dayOfWeek;
-      });
-
-      // Pass 1: Exact start-time match (e.g. "09:00", "10:00", "11:15", "12:40", "13:20", "14:00", "15:00", "16:00")
-      daySlots.forEach((slot) => {
-        if (!slot.startTime || assignedSlotIds.has(slot.id)) return;
-        const slotStart = String(slot.startTime).slice(0, 5);
-
-        const matchedPeriod = periodRows.find((p) => {
-          if (matrix[dayIdx][p.key]) return false;
-          const pStart = String(p.startTime).slice(0, 5);
-          return slotStart === pStart;
-        });
-
-        if (matchedPeriod) {
-          matrix[dayIdx][matchedPeriod.key] = slot;
-          assignedSlotIds.add(slot.id);
-        }
-      });
-
-      // Pass 2: Overlapping / closest start time within 60 minutes for custom period timing
-      daySlots.forEach((slot) => {
-        if (!slot.startTime || assignedSlotIds.has(slot.id)) return;
-        const [h, m] = String(slot.startTime).split(":").map(Number);
-        const slotMins = (h || 0) * 60 + (m || 0);
-
-        let bestPeriod = null;
-        let minDiff = Infinity;
-
-        periodRows.forEach((p) => {
-          if (matrix[dayIdx][p.key]) return;
-          const [ph, pm] = String(p.startTime).split(":").map(Number);
-          const pMins = (ph || 0) * 60 + (pm || 0);
-          const diff = Math.abs(slotMins - pMins);
-          if (diff < minDiff && diff < 60) {
-            minDiff = diff;
-            bestPeriod = p;
-          }
-        });
-
-        if (bestPeriod) {
-          matrix[dayIdx][bestPeriod.key] = slot;
-          assignedSlotIds.add(slot.id);
-        }
-      });
-
-      // Pass 3: Fallback match by periodNumber if slot has not yet been placed
-      daySlots.forEach((slot) => {
-        if (assignedSlotIds.has(slot.id)) return;
-        const matchedPeriod = periodRows.find((p) => {
-          if (matrix[dayIdx][p.key]) return false;
-          return p.periodNumber === slot.periodNumber;
-        });
-
-        if (matchedPeriod) {
-          matrix[dayIdx][matchedPeriod.key] = slot;
-          assignedSlotIds.add(slot.id);
-        }
-      });
+  // Count lectures scheduled for today
+  const todayLectures = useMemo(() => {
+    if (!timetableSlots || !timetableSlots.length) return [];
+    return timetableSlots.filter((slot) => {
+      const slotDayName = String(slot.dayName || "").trim().toLowerCase();
+      const slotDayNum = Number(slot.dayOfWeek);
+      return (
+        slotDayName === currentDayName.toLowerCase() ||
+        slotDayNum === currentCalendarDay ||
+        (currentCalendarDay === 0 && (slotDayNum === 7 || slotDayName === "sunday"))
+      );
     });
+  }, [timetableSlots, currentCalendarDay, currentDayName]);
 
-    return matrix;
-  }, [timetableSlots, periodRows]);
+  // Matrix lookup: Day + Period -> Slot (aligned by PeriodId, PeriodName, and StartTime)
+  const findSlotForDayAndPeriod = useCallback(
+    (day, period) => {
+      if (period.isBreak || !timetableSlots || !timetableSlots.length) return null;
 
-  // Lookup class slot for a given day and fixed period row (1-to-1 unique mapping)
-  const getSlotForDayAndPeriod = useCallback(
-    (dayName, period, dayIndex) => {
-      return timetableMatrix[dayIndex]?.[period.key] || null;
+      // 1. Filter day slots by dayOfWeek or dayName
+      const daySlots = timetableSlots.filter((s) => {
+        const slotDay = String(s.dayName || "").trim().toLowerCase();
+        const slotNum = Number(s.dayOfWeek);
+        return slotDay === day.full.toLowerCase() || slotNum === day.dayOfWeek;
+      });
+
+      if (!daySlots.length) return null;
+
+      // Priority 1: Match by exact PeriodId (period.periodId or period.id)
+      const targetPeriodId = Number(period.periodId || period.id);
+      if (targetPeriodId > 0) {
+        const matchById = daySlots.find((s) => Number(s.periodId) === targetPeriodId);
+        if (matchById) return matchById;
+      }
+
+      // Priority 2: Match by exact Period Name (e.g. "Period 6" === "Period 6")
+      if (period.name) {
+        const targetName = String(period.name).trim().toLowerCase();
+        const matchByName = daySlots.find(
+          (s) => s.periodName && String(s.periodName).trim().toLowerCase() === targetName
+        );
+        if (matchByName) return matchByName;
+      }
+
+      // Priority 3: Match by Start Time (e.g. "13:30")
+      if (period.startTime) {
+        const pStartPrefix = String(period.startTime).slice(0, 5);
+        const matchByStart = daySlots.find(
+          (s) => s.startTime && String(s.startTime).slice(0, 5) === pStartPrefix
+        );
+        if (matchByStart) return matchByStart;
+      }
+
+      // Priority 4: Match by period number extracted from Period Name (e.g. "Period 6" -> 6)
+      if (period.periodNumber) {
+        const matchByExtractedNum = daySlots.find((s) => {
+          if (s.periodName) {
+            const numMatch = String(s.periodName).match(/\d+/);
+            if (numMatch && parseInt(numMatch[0], 10) === period.periodNumber) return true;
+          }
+          return false;
+        });
+        if (matchByExtractedNum) return matchByExtractedNum;
+      }
+
+      return null;
     },
-    [timetableMatrix]
+    [timetableSlots]
   );
+
+  // Close slot details modal on escape key
+  useEffect(() => {
+    if (!selectedSlot) return undefined;
+    const handleEscape = (e) => {
+      if (e.key === "Escape") setSelectedSlot(null);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [selectedSlot]);
 
   // Statistics & aggregation
   const stats = useMemo(() => {
@@ -377,16 +401,9 @@ export default function FacultyTimetable() {
     authUser?.name ||
     "Faculty Member";
 
-  const effectiveEmployeeId =
-    timetableSlots[0]?.facultyEmployeeId ||
-    timetableSlots[0]?.staffEmployeeId ||
-    profileData.employeeId ||
-    authUser?.employeeId ||
-    "";
-
   return (
-    <div className="faculty-tt-container">
-      {/* Page Header with Stats Chips */}
+    <div className="faculty-tt-container timetable-module">
+      {/* Header Card with Stat Chips & Subtle Refresh Action */}
       <div className="faculty-tt-head-card">
         <div className="faculty-tt-head-info">
           <div className="faculty-tt-title-row">
@@ -394,7 +411,10 @@ export default function FacultyTimetable() {
               <Calendar size={22} />
             </div>
             <div>
-              <h1 className="faculty-tt-title">My Timetable</h1>
+              <div className="faculty-tt-title-wrap">
+                <h1 className="faculty-tt-title">My Timetable</h1>
+                <span className="faculty-tt-status-pill">Published</span>
+              </div>
               <p className="faculty-tt-subtitle">
                 Weekly academic lecture schedule, assigned sections, and classroom venues.
               </p>
@@ -426,241 +446,235 @@ export default function FacultyTimetable() {
                 className="faculty-tt-stat-chip chip-subjects"
                 title={`Active in Timetable: ${stats.subjectList.join(", ") || "None"}${
                   allocatedSubjects.length
-                    ? ` | Profile Allocated: ${allocatedSubjects.map((a) => a.subjectName || a.name).join(", ")}`
+                    ? ` | Allocated: ${allocatedSubjects.map((a) => a.subjectName || a.name).join(", ")}`
                     : ""
                 }`}
               >
                 <BookOpen size={14} />
-                <span className="stat-number">
-                  {stats.totalSubjects}
-                  {allocatedSubjects.length > 0 && stats.totalSubjects !== allocatedSubjects.length
-                    ? ` / ${allocatedSubjects.length}`
-                    : ""}
-                </span>
-                <span className="stat-label">
-                  {allocatedSubjects.length > 0 && stats.totalSubjects !== allocatedSubjects.length
-                    ? "Subjects (Active / Allocated)"
-                    : "Subjects"}
-                </span>
+                <span className="stat-number">{stats.totalSubjects}</span>
+                <span className="stat-label">Subjects</span>
               </div>
             )}
           </div>
 
+          {/* Subtle, secondary Refresh action */}
           <button
             type="button"
-            className="faculty-tt-refresh-btn"
-            onClick={fetchTimetable}
-            disabled={loading}
+            className={`faculty-tt-refresh-btn ${isRefreshing ? "is-refreshing" : ""}`}
+            onClick={() => fetchTimetable(true)}
+            disabled={loading || isRefreshing}
             title="Refresh authentic timetable data from Admin Management"
           >
-            <RefreshCw size={14} className={loading ? "dashboard-spin" : ""} />
-            <span>Refresh</span>
+            <RefreshCw size={13} className={isRefreshing ? "dashboard-spin" : ""} />
+            <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
           </button>
         </div>
       </div>
 
-      {/* Allocated / Teaching Subjects Banner */}
-      {allocatedSubjects.length > 0 && (
-        <div className="faculty-tt-alloc-banner">
-          <div className="faculty-tt-alloc-banner-left">
-            <div className="faculty-tt-alloc-icon">
-              <BookOpen size={16} />
-            </div>
-            <div className="faculty-tt-alloc-title">
-              <span>Teaching Subjects ({allocatedSubjects.length})</span>
-              <span className="faculty-tt-alloc-badge">
-                {stats.totalSubjects} Active on Schedule
-              </span>
-            </div>
-          </div>
-          <div className="faculty-tt-alloc-pills">
-            {allocatedSubjects.map((alloc) => {
-              const subName = alloc.subjectName || alloc.name || `Subject #${alloc.subjectId}`;
-              const count = stats.subjectPeriodCounts[subName] || 0;
-              const isScheduled = count > 0;
-              return (
-                <div
-                  key={alloc.id || alloc.subjectId}
-                  className={`faculty-tt-alloc-pill ${isScheduled ? "pill-scheduled" : "pill-pending"}`}
-                  title={
-                    isScheduled
-                      ? `${count} periods scheduled weekly across sections (${stats.sectionList.join(", ")})`
-                      : `Allocated to ${effectiveFacultyName}; 0 class periods scheduled yet by Admin in Timetable Management.`
-                  }
-                >
-                  <span className="alloc-pill-dot" />
-                  <span className="alloc-pill-name">{subName}</span>
-                  {alloc.subjectCode && <span className="alloc-pill-code">({alloc.subjectCode})</span>}
-                  <span className="alloc-pill-meta">
-                    {isScheduled ? `${count} periods/wk` : "0 scheduled"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Main Timetable Card */}
+      <div className={`faculty-tt-main-card ${isRefreshing ? "is-refreshing-grid" : ""}`}>
+        {isRefreshing && <div className="faculty-tt-refresh-progress-bar" />}
 
-      {/* Main Timetable Content */}
-      <div className="faculty-tt-main-card">
-        {!loading && error && timetableSlots.length === 0 ? (
+        {/* State 1: Network / API Failure */}
+        {!loading && !isRefreshing && error && timetableSlots.length === 0 ? (
           <div className="faculty-tt-empty-state state-error">
             <div className="faculty-tt-empty-icon icon-error">
               <AlertCircle size={32} />
             </div>
             <h3>Unable to Load Timetable</h3>
             <p>{error}</p>
-            <button className="faculty-tt-action-btn btn-primary" onClick={fetchTimetable}>
+            <button className="faculty-tt-action-btn btn-primary" onClick={() => fetchTimetable(true)}>
               <RefreshCw size={14} /> Try Again
             </button>
           </div>
-        ) : !loading && timetableSlots.length === 0 ? (
+        ) : !loading && !isRefreshing && timetableSlots.length === 0 ? (
+          /* State 2: No Timetable Assigned / Generated Yet */
           <div className="faculty-tt-empty-state">
             <div className="faculty-tt-empty-icon">
               <Calendar size={36} />
             </div>
-            <h3>No Timetable Allocated Yet</h3>
+            <h3>Your Timetable Has Not Been Assigned Yet</h3>
             <p className="empty-desc">
-              There are currently no scheduled lecture periods or class sessions assigned to your faculty profile
-              for this academic session.
+              The academic timetable for your faculty profile has not been assigned or published yet by the administration.
+              Once generated and published in Timetable Management, your assigned classes will automatically appear here.
             </p>
             <div className="faculty-tt-empty-note">
               <Info size={16} />
               <span>
-                Timetables are managed centrally in the <strong>Admin Timetable Management</strong> module.
-                Once your department administrator allocates your subjects, periods, and classrooms, your schedule
-                will automatically synchronize here.
+                Timetables are centrally authored in <strong>Admin Timetable Management</strong>. Contact your department administrator if your schedule is pending.
               </span>
             </div>
-            <button className="faculty-tt-action-btn btn-outline" onClick={fetchTimetable}>
-              <RefreshCw size={14} /> Refresh Schedule
+            <button className="faculty-tt-action-btn btn-subtle" onClick={() => fetchTimetable(true)}>
+              <RefreshCw size={13} /> Check Again
             </button>
           </div>
-        ) : (
-          <div className="faculty-tt-table-wrap">
-            <table className="faculty-tt-grid-table">
+        ) : loading && timetableSlots.length === 0 ? (
+          /* State 3: Structure-Preserving Initial Skeleton Table */
+          <div className="ttm-grid-wrap faculty-tt-skeleton-table-wrap">
+            <table className="ttm-grid">
               <thead>
                 <tr>
-                  <th className="th-time-col">
-                    <div className="th-time-header">
-                      <Clock size={13} />
-                      <span>TIME SLOT</span>
-                    </div>
-                  </th>
-                  {SHORT_DAYS.map((d) => {
-                    const isToday = currentDayOfWeek === d.dayOfWeek;
-                    return (
-                      <th key={d.key} className={`th-day-col ${isToday ? "is-today" : ""}`}>
-                        <div className="th-day-box">
-                          <span className="th-day-code">{d.key}</span>
-                          <span className="th-day-name">{d.full}</span>
-                          {isToday && <span className="today-badge">TODAY</span>}
-                        </div>
-                      </th>
-                    );
-                  })}
+                  <th>Day</th>
+                  {canonicalPeriods.map((period) => (
+                    <th key={period.id}>
+                      {period.name}
+                      {period.timeRange ? <small>{period.timeRange}</small> : null}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {periodRows.map((period) => (
-                  <tr key={period.key || period.timeLabel}>
-                    <td className="td-time-col">
-                      <div className="period-time-cell">
-                        <span className="period-badge-name">
-                          {period.periodName || `Period ${period.periodNumber || ""}`}
-                        </span>
-                        <span className="period-badge-time">{period.timeLabel}</span>
-                      </div>
-                    </td>
-                    {DAYS_OF_WEEK.map((day, dayIdx) => {
-                      const isToday = currentDayOfWeek === dayIdx + 1;
-
-                      // Skeleton shimmer state matching Admin Dashboard aesthetics during loading or refresh
-                      if (loading) {
-                        return (
-                          <td key={day} className={`td-day-cell ${isToday ? "is-today-col" : ""}`}>
-                            <div className="faculty-slot-skeleton">
-                              <div className="cms-skeleton skeleton-sub" />
-                              <div className="faculty-slot-skeleton-meta">
-                                <div className="cms-skeleton skeleton-badge" />
-                                <div className="cms-skeleton skeleton-badge" />
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      }
-
-                      const item = getSlotForDayAndPeriod(day, period, dayIdx);
-                      return (
-                        <td key={day} className={`td-day-cell ${isToday ? "is-today-col" : ""}`}>
-                          {item ? (
-                            <div
-                              className="faculty-slot-card"
-                              onClick={() => setSelectedSlot(item)}
-                              title={`${item.subjectName} · Section: ${item.sectionName} · Room: ${item.roomName || item.roomCode || ""}`}
-                            >
-                              <div className="slot-card-header">
-                                <span className="slot-subject-title">{item.subjectName || item.subjectCode}</span>
-                              </div>
-
-                              <div className="slot-card-meta">
-                                <span className="slot-chip chip-section">
-                                  <Users size={10} />
-                                  <span>
-                                    {item.groupName && !item.sectionName?.includes(item.groupName)
-                                      ? `${item.groupName} - `
-                                      : ""}
-                                    {item.sectionName}
-                                  </span>
-                                </span>
-
-                                <span className="slot-chip chip-room">
-                                  <MapPin size={10} />
-                                  <span>
-                                    {String(item.roomName || item.roomCode || "").startsWith("Room")
-                                      ? item.roomName || item.roomCode
-                                      : `Room ${item.roomName || item.roomCode || "—"}`}
-                                  </span>
-                                </span>
-                              </div>
-
-                              {item.remarks && (
-                                <div className="slot-card-remarks">
-                                  <span className="slot-tag-remark">{item.remarks}</span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="faculty-free-slot" title="No class scheduled for this period">
-                              <span className="free-dot">·</span>
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
+                {COLLEGE_WORKING_DAYS.map((day) => (
+                  <tr key={day.key}>
+                    <th>{day.full}</th>
+                    {canonicalPeriods.map((period) => (
+                      <td key={period.id} className={period.isBreak ? "break" : "slot"}>
+                        {period.isBreak ? (
+                          String(period.name).toLowerCase().includes("lunch") ? "Lunch Break" : "Tea Break"
+                        ) : (
+                          <div className="faculty-tt-cell-skeleton" />
+                        )}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        ) : (
+          /* State 4 & 5: Timetable Available - Grid STAYS INTACT DURING REFRESH! */
+          <>
+            {/* Sunday / Scheduled Non-Working Day Banner */}
+            {isSundayToday && (
+              <div className="faculty-tt-sunday-banner">
+                <div className="faculty-tt-sunday-icon">
+                  <Calendar size={22} />
+                </div>
+                <div className="faculty-tt-sunday-content">
+                  <h3 className="faculty-tt-sunday-title">No Classes Scheduled Today</h3>
+                  <p className="faculty-tt-sunday-desc">
+                    Enjoy your day off! Your weekly timetable is available below for the upcoming working days.
+                  </p>
+                </div>
+                <div className="faculty-tt-sunday-badge">
+                  <span>Weekly Off (Sunday)</span>
+                </div>
+              </div>
+            )}
+
+            {/* Regular Working Day with 0 lectures today */}
+            {!isSundayToday && todayLectures.length === 0 && (
+              <div className="faculty-tt-weekday-off-banner">
+                <div className="faculty-tt-weekday-off-icon">
+                  <Sun size={20} />
+                </div>
+                <div className="faculty-tt-weekday-off-content">
+                  <h3 className="faculty-tt-weekday-off-title">No Lectures Scheduled Today</h3>
+                  <p className="faculty-tt-weekday-off-desc">
+                    No lectures are scheduled for you today ({currentDayName}). Review your complete weekly schedule below.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Admin Portal Exact Structure Timetable Grid */}
+            <div className={`ttm-grid-wrap ${isRefreshing ? "is-refreshing-opacity" : ""}`}>
+              <table className="ttm-grid">
+                <thead>
+                  <tr>
+                    <th>Day</th>
+                    {canonicalPeriods.map((period) => (
+                      <th key={period.id}>
+                        {period.name}
+                        {period.timeRange ? <small>{period.timeRange}</small> : null}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {workingDays.map((day) => {
+                    const isToday = currentCalendarDay === day.dayOfWeek;
+                    return (
+                      <tr key={day.key} className={isToday ? "is-today-row" : ""}>
+                        <th>{day.full}</th>
+
+                        {canonicalPeriods.map((period) => {
+                          if (period.isBreak) {
+                            const breakTitle = String(period.name).toLowerCase().includes("lunch")
+                              ? "Lunch Break"
+                              : "Tea Break";
+                            return (
+                              <td className="break" key={period.id}>
+                                {breakTitle}
+                              </td>
+                            );
+                          }
+
+                          const slot = findSlotForDayAndPeriod(day, period);
+                          return (
+                            <td className="slot" key={period.id}>
+                              {slot ? (
+                                <button
+                                  type="button"
+                                  className="ttm-slot-btn"
+                                  onClick={() => setSelectedSlot({ ...slot, dayName: day.full, periodName: period.name })}
+                                  title={`${slot.subjectName || slot.subjectCode} · ${slot.sectionName} · Room: ${slot.roomName || slot.roomCode || "—"}`}
+                                >
+                                  <b>{slot.subjectName || slot.subjectCode}</b>
+                                  <span>
+                                    {slot.groupName ? `${slot.groupName} - ` : ""}
+                                    {slot.sectionName || "Section"}
+                                  </span>
+                                  <small>
+                                    {slot.roomName || slot.roomCode
+                                      ? (String(slot.roomName || slot.roomCode).startsWith("Room")
+                                          ? slot.roomName || slot.roomCode
+                                          : `Room ${slot.roomName || slot.roomCode}`)
+                                      : "Room —"}
+                                  </small>
+                                </button>
+                              ) : (
+                                <span className="ttm-empty-slot" aria-label="No class assigned">
+                                  —
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
-      {slotId != null && !selectedSlot && <div className="faculty-tt-modal-backdrop"><div className="faculty-tt-modal-card" role="dialog" aria-label="Class Details"><p role="status">{loading ? "Loading class details..." : error || "This class is unavailable in your timetable."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setSelectedSlot(null)}>Close</button></div></div>}
-      {/* Class Details Centered Modal Dialog */}
-      {selectedSlot && (
-        <div className="faculty-tt-modal-backdrop" onClick={() => setSelectedSlot(null)}>
-          <div className="faculty-tt-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="faculty-tt-modal-head">
-              <div className="modal-head-title">
-                <div className="modal-head-icon">
-                  <BookOpen size={18} />
+      {/* Authentic Lecture Details Modal Dialog (Project Structure & Aligned CSS) */}
+      {selectedSlot && createPortal(
+        <div
+          className="faculty-tt-modal-backdrop"
+          onClick={() => setSelectedSlot(null)}
+          role="presentation"
+        >
+          <div
+            className="faculty-tt-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Lecture Details"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="faculty-tt-modal-header">
+              <div className="modal-header-info">
+                <div className="modal-header-icon">
+                  <BookOpen size={20} />
                 </div>
                 <div>
-                  <h3>Class Details</h3>
-                  <span className="modal-head-subtitle">
-                    {selectedSlot.dayName} · {selectedSlot.periodName || "Period"} (
-                    {formatTime12h(selectedSlot.startTime)} – {formatTime12h(selectedSlot.endTime)})
+                  <h3 className="modal-title">Lecture Details</h3>
+                  <span className="modal-subtitle">
+                    {selectedSlot.dayName} · {selectedSlot.periodName || `Period ${selectedSlot.periodNumber || ""}`} ({formatSlotTimeRange(selectedSlot.startTime, selectedSlot.endTime) || `${formatTime12h(selectedSlot.startTime)} – ${formatTime12h(selectedSlot.endTime)}`})
                   </span>
                 </div>
               </div>
@@ -668,13 +682,15 @@ export default function FacultyTimetable() {
                 type="button"
                 className="modal-close-btn"
                 onClick={() => setSelectedSlot(null)}
-                aria-label="Close"
+                aria-label="Close dialog"
               >
                 <X size={18} />
               </button>
             </div>
 
+            {/* Modal Body */}
             <div className="faculty-tt-modal-body">
+              {/* Subject Banner */}
               <div className="modal-subject-banner">
                 <div className="modal-badges-row">
                   {selectedSlot.subjectCode && (
@@ -687,85 +703,113 @@ export default function FacultyTimetable() {
                     </span>
                   )}
                   <span className="modal-badge badge-status">
-                    <CheckCircle2 size={11} /> Scheduled Lecture
+                    <CheckCircle2 size={12} /> Scheduled Lecture
                   </span>
                 </div>
-                <h4 className="modal-subject-name">{selectedSlot.subjectName}</h4>
+                <h4 className="modal-subject-name">{selectedSlot.subjectName || "Subject"}</h4>
                 {(selectedSlot.academicLevelName || selectedSlot.programName || selectedSlot.boardName) && (
                   <div className="modal-academic-path">
                     {selectedSlot.academicLevelName && <span>{selectedSlot.academicLevelName}</span>}
-                    {selectedSlot.academicLevelName && selectedSlot.programName && <ChevronRight size={12} />}
-                    {selectedSlot.programName && <span>{selectedSlot.programName}</span>}
-                    {(selectedSlot.academicLevelName || selectedSlot.programName) && selectedSlot.boardName && (
+                    {selectedSlot.academicLevelName && (selectedSlot.programName || selectedSlot.groupName) && (
                       <ChevronRight size={12} />
                     )}
+                    {(selectedSlot.groupName || selectedSlot.programName) && (
+                      <span>{selectedSlot.groupName || selectedSlot.programName}</span>
+                    )}
+                    {selectedSlot.boardName && <ChevronRight size={12} />}
                     {selectedSlot.boardName && <span>{selectedSlot.boardName}</span>}
                   </div>
                 )}
               </div>
 
+              {/* 2-Column Details Grid with Clean Alignments */}
               <div className="modal-details-grid">
                 <div className="modal-detail-item">
                   <span className="detail-label">Classroom / Venue</span>
                   <strong className="detail-value">
-                    📍{" "}
-                    {String(selectedSlot.roomName || selectedSlot.roomCode || "").startsWith("Room")
-                      ? selectedSlot.roomName || selectedSlot.roomCode
-                      : `Room ${selectedSlot.roomName || selectedSlot.roomCode || "—"}`}
+                    <span className="detail-icon">📍</span>
+                    <span>
+                      {String(selectedSlot.roomName || selectedSlot.roomCode || "").startsWith("Room")
+                        ? selectedSlot.roomName || selectedSlot.roomCode
+                        : `Room ${selectedSlot.roomName || selectedSlot.roomCode || "—"}`}
+                    </span>
                   </strong>
                 </div>
 
                 <div className="modal-detail-item">
                   <span className="detail-label">Period Timing</span>
                   <strong className="detail-value">
-                    ⏱️ {selectedSlot.periodName || `Period ${selectedSlot.periodNumber || ""}`} (
-                    {formatTime12h(selectedSlot.startTime)} – {formatTime12h(selectedSlot.endTime)})
+                    <span className="detail-icon">⏱️</span>
+                    <span>
+                      {selectedSlot.periodName || `Period ${selectedSlot.periodNumber || ""}`} (
+                      {formatTime12h(selectedSlot.startTime)} – {formatTime12h(selectedSlot.endTime)})
+                    </span>
                   </strong>
                 </div>
 
                 <div className="modal-detail-item">
                   <span className="detail-label">Group & Section</span>
                   <strong className="detail-value">
-                    📚 {selectedSlot.groupName ? `${selectedSlot.groupName} — ` : ""}
-                    {selectedSlot.sectionName}
+                    <span className="detail-icon">📚</span>
+                    <span>
+                      {selectedSlot.groupName ? `${selectedSlot.groupName} — ` : ""}
+                      {selectedSlot.sectionName || "Section"}
+                    </span>
                   </strong>
                 </div>
 
                 <div className="modal-detail-item">
                   <span className="detail-label">Academic Year</span>
                   <strong className="detail-value">
-                    🗓️ {selectedSlot.academicYearName || "2026-2027"}
+                    <span className="detail-icon">🗓️</span>
+                    <span>{selectedSlot.academicYearName || "2026-2027"}</span>
                   </strong>
                 </div>
 
                 <div className="modal-detail-item">
                   <span className="detail-label">Faculty Member</span>
                   <strong className="detail-value">
-                    👤 {selectedSlot.facultyName || effectiveFacultyName}
-                    {effectiveEmployeeId ? ` (${effectiveEmployeeId})` : ""}
+                    <span className="detail-icon">👤</span>
+                    <span>
+                      {selectedSlot.facultyName || effectiveFacultyName}
+                      {profileData.employeeId ? ` (${profileData.employeeId})` : ""}
+                    </span>
                   </strong>
                 </div>
 
                 <div className="modal-detail-item">
                   <span className="detail-label">Lecture Type / Remarks</span>
                   <strong className="detail-value">
-                    📝 {selectedSlot.remarks || "Theory Lecture"}
+                    <span className="detail-icon">📝</span>
+                    <span>{selectedSlot.remarks || "Theory Lecture"}</span>
                   </strong>
                 </div>
               </div>
             </div>
 
+            {/* Modal Footer */}
             <div className="faculty-tt-modal-footer">
               <button
                 type="button"
-                className="faculty-tt-action-btn btn-outline"
+                className="faculty-tt-modal-btn btn-primary"
+                onClick={() => {
+                  setSelectedSlot(null);
+                  navigate("/faculty-dashboard/classes");
+                }}
+              >
+                Go to Class →
+              </button>
+              <button
+                type="button"
+                className="faculty-tt-modal-btn btn-secondary"
                 onClick={() => setSelectedSlot(null)}
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

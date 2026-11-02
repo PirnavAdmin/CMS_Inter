@@ -1,45 +1,30 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import {
-  Boxes,
-  LayoutDashboard,
-  List,
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Truck,
-  Tags,
-  ShoppingCart,
-  RotateCcw,
-  BarChart3,
-  Bell,
-  User,
-  Settings,
-  LogOut,
-  Menu,
-  X,
-  FileText,
-  Wallet,
-} from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
+import logo from "@/assets/pirnav-colleges-logo.png";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { inventoryLogout } from "../data/inventorySession.js";
 import { useInventory } from "../InventoryDataContext.jsx";
+
 const menu = [
-  ["", "Dashboard", LayoutDashboard],
-  ["items", "Items", List],
-  ["stock-in", "Stock In", ArrowDownToLine],
-  ["stock-out", "Stock Out", ArrowUpFromLine],
-  ["suppliers", "Suppliers", Truck],
-  ["categories", "Categories", Tags],
-  ["orders", "Purchase Orders", ShoppingCart],
-  ["returns", "Returns", RotateCcw],
-  ["reports", "Reports", BarChart3],
-  ["leave", "Leave Management", FileText],
-  ["payslips", "My Payslips", Wallet],
-  ["notifications", "Notifications", Bell],
-  ["profile", "Profile", User],
-  ["settings", "Settings", Settings],
+  ["", "Dashboard", "dashboard"],
+  ["items", "Items", "inventory"],
+  ["stock-in", "Stock In", "stock-in"],
+  ["stock-out", "Stock Out", "stock-out"],
+  ["suppliers", "Suppliers", "suppliers"],
+  ["categories", "Categories", "categories"],
+  ["orders", "Purchase Orders", "orders"],
+  ["returns", "Returns", "returns"],
+  ["reports", "Reports", "reports-analytics"],
+  ["leave", "Leave Management", "staff-leave"],
+  ["payslips", "My Payslips", "payroll"],
+  ["notifications", "Notifications", "notifications"],
+  ["profile", "Profile", "staff"],
+  ["settings", "Settings", "settings"],
 ];
+
 export default function InventoryLayout({ children }) {
   const [open, setOpen] = useState(false);
   const { state, message, dismiss, errors, loading } = useInventory();
@@ -58,6 +43,7 @@ export default function InventoryLayout({ children }) {
           (o) => o.status === "Pending" && !state.readNotifications.includes(o.id),
         ).length
       : 0);
+
   return (
     <div className="ip-shell">
       {open && (
@@ -75,14 +61,14 @@ export default function InventoryLayout({ children }) {
           </button>
         </div>
         <div className="ip-portal">
-          <Boxes size={19} />
+          <ThreeDIcon name="inventory" size={24} />
           <div>
             <strong>INVENTORY PORTAL</strong>
             <small>Stores & Asset Management</small>
           </div>
         </div>
         <nav aria-label="Inventory navigation">
-          {menu.map(([path, label, Icon]) => (
+          {menu.map(([path, label, iconName]) => (
             <NavLink
               key={label}
               end
@@ -90,8 +76,8 @@ export default function InventoryLayout({ children }) {
               onClick={() => setOpen(false)}
               className={({ isActive }) => (isActive ? "active" : "")}
             >
-              <Icon size={18} />
-              {label}
+              <ThreeDIcon name={iconName} size={20} className="ip-nav-3d-icon" />
+              <span>{label}</span>
             </NavLink>
           ))}
         </nav>

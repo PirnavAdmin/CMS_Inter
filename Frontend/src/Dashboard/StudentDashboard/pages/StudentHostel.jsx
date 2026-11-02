@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bus, Hotel, House, Info, ArrowRight, Receipt, IndianRupee, WalletCards } from "lucide-react";
+import { Hotel, ArrowRight, IndianRupee, WalletCards, Receipt } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
@@ -113,7 +114,7 @@ export default function StudentHostel() {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="form" rows={5}/></div>;
   const transportOnly = Boolean(transport) && !allocation && !error && !profileError;
   const bothActive = Boolean(transport && allocation);
-  const badge = <span className="sp-hostel-na"><Info size={17}/> Not Applicable</span>;
+  const badge = <span className="sp-hostel-na"><ThreeDIcon name="info" size={17}/> Not Applicable</span>;
   const details = [
     ["Hostel Name", read(allocation, "hostelName", "HostelName")],
     ["Hostel Block", read(allocation, "hostelBlockName", "HostelBlockName", "blockName", "BlockName", "hostelBlock", "HostelBlock")],
@@ -128,15 +129,15 @@ export default function StudentHostel() {
     <StudentPageHeader title="Hostel" subtitle="View your hostel allocation information."/>
     {profileError || error ? <div className="sp-api-state is-error" role="alert">{profileError || error}</div> : null}
     <StudentCard title="Hostel Allocation" action={transportOnly ? badge : allocation ? <span className="sp-transport-hostel-badge">Hostel Active</span> : null}>
-      {bothActive ? <div className="sp-transport-conflict" role="status"><span className="sp-hostel-transport-badge"><Bus size={17}/> Transport Active</span><p>Both hostel and transport allocations are currently active. Please contact the college administration for clarification.</p><Link className="sp-text-link" to="/student-dashboard/transport">View Transport Details</Link></div> : null}
-      {allocation ? <div className="sp-detail-grid">{details.map(([label, value]) => <div key={label}><Hotel size={17}/><span>{label}</span><strong>{typeof value === "object" ? read(value, "name", "Name", "roomTypeName", "RoomTypeName") || "—" : value ?? "—"}</strong></div>)}</div> : transportOnly ? <>
-        <div className="sp-hostel-transport-state"><div className="sp-hostel-bus-illustration" aria-hidden="true">🚌</div><h2>Hostel Not Required</h2><p>You are currently using college transport. Hostel accommodation is not required for your current allocation.</p><div className="sp-hostel-badges"><span className="sp-hostel-transport-badge"><Bus size={18}/> Transport Active</span><span className="sp-hostel-unassigned-badge"><House size={18}/> Hostel Not Assigned</span></div></div>
-        <div className="sp-hostel-transport-info"><span aria-hidden="true">🚌</span><div><strong>Your Transport Details</strong><p>You can view your route, vehicle and pickup details in the Transport section.</p></div><Link className="sp-btn" to="/student-dashboard/transport">View Transport Details <ArrowRight size={17}/></Link></div>
+      {bothActive ? <div className="sp-transport-conflict" role="status"><span className="sp-hostel-transport-badge"><ThreeDIcon name="bus" size={17}/> Transport Active</span><p>Both hostel and transport allocations are currently active. Please contact the college administration for clarification.</p><Link className="sp-text-link" to="/student-dashboard/transport">View Transport Details</Link></div> : null}
+      {allocation ? <div className="sp-detail-grid">{details.map(([label, value]) => <div key={label}><ThreeDIcon name="hostel" size={17}/><span>{label}</span><strong>{typeof value === "object" ? read(value, "name", "Name", "roomTypeName", "RoomTypeName") || "—" : value ?? "—"}</strong></div>)}</div> : transportOnly ? <>
+        <div className="sp-hostel-transport-state"><div className="sp-hostel-bus-illustration" aria-hidden="true"><ThreeDIcon name="bus" size={48}/></div><h2>Hostel Not Required</h2><p>You are currently using college transport. Hostel accommodation is not required for your current allocation.</p><div className="sp-hostel-badges"><span className="sp-hostel-transport-badge"><ThreeDIcon name="bus" size={18}/> Transport Active</span><span className="sp-hostel-unassigned-badge"><ThreeDIcon name="hostel" size={18}/> Hostel Not Assigned</span></div></div>
+        <div className="sp-hostel-transport-info"><ThreeDIcon name="bus" size={32}/><div><strong>Your Transport Details</strong><p>You can view your route, vehicle and pickup details in the Transport section.</p></div><Link className="sp-btn" to="/student-dashboard/transport">View Transport Details <ArrowRight size={17}/></Link></div>
       </> : <StudentEmptyState icon={Hotel} title={error || profileError ? "Hostel Allocation Unavailable" : "Hostel Not Assigned"} text={error || profileError ? "Your current allocation could not be verified. Please refresh or contact the college office." : "You currently do not have an active hostel allocation."}/>}
     </StudentCard>
     <StudentCard title="Hostel Fee Summary" action={fees?.noFee ? badge : <Link className="sp-text-link" to="/student-dashboard/fees">Fee details &amp; receipts</Link>}>
       {feeError ? <div className="sp-api-state is-error" role="alert">{feeError}</div> : null}
-      {fees?.noFee ? <div className="sp-hostel-no-fee"><span><Receipt size={46}/></span><div><h3>No Hostel Fee Applicable</h3><p>{transportOnly ? "You are currently using college transport. No hostel fee has been assigned to your student fee account." : "No hostel fee has been assigned to your student fee account."}</p></div></div> : fees?.records?.length ? <>
+      {fees?.noFee ? <div className="sp-hostel-no-fee"><span><ThreeDIcon name="receipt" size={46}/></span><div><h3>No Hostel Fee Applicable</h3><p>{transportOnly ? "You are currently using college transport. No hostel fee has been assigned to your student fee account." : "No hostel fee has been assigned to your student fee account."}</p></div></div> : fees?.records?.length ? <>
         {!allocation ? <p className="sp-muted">Recorded hostel fees remain payable according to the fee account, independently of your current allocation.</p> : null}
         <div className="sp-summary-grid three"><StudentSummaryCard icon={IndianRupee} label="Hostel Fee" value={money(fees.amount)}/><StudentSummaryCard icon={WalletCards} label="Paid" value={money(fees.paid)} tone="blue"/><StudentSummaryCard icon={Receipt} label="Outstanding" value={money(fees.due)} tone="red"/></div>
         <div className="sp-table-wrap"><table className="sp-table"><thead><tr><th>Fee</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Status</th></tr></thead><tbody>{fees.records.map((row, index) => <tr key={index}><td>{read(row, "feeTypeName", "FeeTypeName", "name", "Name") || "Hostel Fee"}</td><td>{money(read(row, "payableAmount", "PayableAmount", "amount", "Amount"))}</td><td>{money(read(row, "paidAmount", "PaidAmount"))}</td><td>{money(read(row, "balanceAmount", "BalanceAmount", "dueAmount", "DueAmount"))}</td><td>{read(row, "status", "Status", "paymentStatus", "PaymentStatus") ?? "—"}</td></tr>)}</tbody></table></div>

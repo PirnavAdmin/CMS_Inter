@@ -25,6 +25,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonCard, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
@@ -1260,7 +1261,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`View ${item.name}`}
                                 onClick={() => navigate(`/dashboard/departments/${item.id}/view`, { state: { department: item } })}
                               >
-                                <Eye size={12} />
+                                <ThreeDIcon name="view" size={13} />
                               </button>
                               <button
                                 type="button"
@@ -1269,7 +1270,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`Edit ${item.name}`}
                                 onClick={() => navigate(`/dashboard/departments/${item.id}/edit`)}
                               >
-                                <Pencil size={12} />
+                                <ThreeDIcon name="edit" size={13} />
                               </button>
                               <button
                                 type="button"
@@ -1278,7 +1279,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`Delete ${item.name}`}
                                 onClick={() => setPendingDeleteDept(item)}
                               >
-                                <Trash2 size={12} />
+                                <ThreeDIcon name="delete" size={13} />
                               </button>
                             </div>
                           </td>
@@ -1399,7 +1400,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`View ${item.name}`}
                                 onClick={() => navigate(`/dashboard/designations/${item.id}/view`, { state: { designation: item } })}
                               >
-                                <Eye size={12} />
+                                <ThreeDIcon name="view" size={13} />
                               </button>
                               <button
                                 type="button"
@@ -1408,7 +1409,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`Edit ${item.name}`}
                                 onClick={() => navigate(`/dashboard/designations/${item.id}/edit`)}
                               >
-                                <Pencil size={12} />
+                                <ThreeDIcon name="edit" size={13} />
                               </button>
                               <button
                                 type="button"
@@ -1417,7 +1418,7 @@ export default function DepartmentManagementPage() {
                                 aria-label={`Delete ${item.name}`}
                                 onClick={() => setPendingDeleteDesig(item)}
                               >
-                                <Trash2 size={12} />
+                                <ThreeDIcon name="delete" size={13} />
                               </button>
                             </div>
                           </td>
@@ -1624,7 +1625,7 @@ export function DepartmentDetailsPage() {
             className="cms-btn cms-btn-primary"
             onClick={() => navigate(`/dashboard/departments/${department.id}/edit`)}
           >
-            <Pencil /> Edit Department
+            <ThreeDIcon name="edit" size={14} /> Edit Department
           </button>
         ) : null
       }
@@ -1780,7 +1781,7 @@ export function DesignationDetailsPage() {
             className="cms-btn cms-btn-primary"
             onClick={() => navigate(`/dashboard/designations/${id}/edit`)}
           >
-            <Pencil /> Edit Designation
+            <ThreeDIcon name="edit" size={14} /> Edit Designation
           </button>
         ) : null
       }
@@ -2432,7 +2433,7 @@ export function MasterImportPage({ kind = "department" }) {
               <p>Upload unified or sheet-specific Excel workbook (.xlsx / .xls) to review and import in bulk.</p>
             </div>
             <button type="button" className="cms-btn secondary" onClick={download}>
-              <Download /> Download Template Excel
+              <ThreeDIcon name="download" size={15} /> Download Template Excel
             </button>
           </header>
 
@@ -2481,7 +2482,7 @@ export function MasterImportPage({ kind = "department" }) {
           )}
 
           <label className="master-drop">
-            <Upload />
+            <ThreeDIcon name="upload" size={32} />
             <strong>
               {parsing ? "Parsing spreadsheet..." : fileName || "Choose Excel File (.xlsx, .xls)"}
             </strong>

@@ -89,7 +89,6 @@ export default function ThemePalettePicker({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [currentHex, setCurrentHex] = useState(customColor || "#00b4d8");
   const [sliderHue, setSliderHue] = useState(() => hexToHue(customColor || "#00b4d8"));
-  const nativeColorInputRef = useRef(null);
 
   // Keep internal custom color state in sync with hook
   useEffect(() => {
@@ -105,7 +104,6 @@ export default function ThemePalettePicker({
     setSliderHue(hue);
     const newHex = hslToHex(hue, 95, 45);
     setCurrentHex(newHex);
-    setCustomColor(newHex);
   };
 
   const handleHexInput = (e) => {
@@ -114,7 +112,6 @@ export default function ThemePalettePicker({
     setCurrentHex(val);
     if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
       setSliderHue(hexToHue(val));
-      setCustomColor(val);
     }
   };
 
@@ -123,26 +120,21 @@ export default function ThemePalettePicker({
     const val = e.target.value;
     setCurrentHex(val);
     setSliderHue(hexToHue(val));
-    setCustomColor(val);
   };
 
-  const handleEyeDropper = async () => {
+  const handleApplyCustomColor = () => {
     if (isThemeLocked) return;
-    if (typeof window !== "undefined" && "EyeDropper" in window) {
-      try {
-        const eyeDropper = new window.EyeDropper();
-        const result = await eyeDropper.open();
-        if (result?.sRGBHex) {
-          const hex = result.sRGBHex.toLowerCase();
-          setCurrentHex(hex);
-          setSliderHue(hexToHue(hex));
-          setCustomColor(hex);
-        }
-      } catch {
-        // User dismissed the eyedropper
-      }
-    } else if (nativeColorInputRef.current) {
-      nativeColorInputRef.current.click();
+    let formattedHex = currentHex;
+    if (!formattedHex.startsWith("#")) {
+      formattedHex = `#${formattedHex}`;
+    }
+    if (/^#[0-9A-Fa-f]{6}$/.test(formattedHex)) {
+      setCustomColor(formattedHex);
+      setShowColorPicker(false);
+    } else if (/^#[0-9A-Fa-f]{3}$/.test(formattedHex)) {
+      const expanded = `#${formattedHex[1]}${formattedHex[1]}${formattedHex[2]}${formattedHex[2]}${formattedHex[3]}${formattedHex[3]}`;
+      setCustomColor(expanded);
+      setShowColorPicker(false);
     }
   };
 
@@ -299,7 +291,6 @@ export default function ThemePalettePicker({
                 style={{ "--cms-custom-preview-color": currentHex }}
                 onClick={() => {
                   if (isThemeLocked) return;
-                  setCustomColor(currentHex);
                   setShowColorPicker((prev) => !prev);
                 }}
                 disabled={isThemeLocked}
@@ -347,7 +338,7 @@ export default function ThemePalettePicker({
 
                 {/* Controls Row */}
                 <div className="cms-colour-picker-controls">
-                  <label className="cms-colour-preview-wrap" title="Click to pick colour">
+                  <label className="cms-colour-preview-wrap" title="Click to pick colour or use eyedropper">
                     <span
                       className="cms-colour-preview-badge"
                       style={{ backgroundColor: currentHex }}
@@ -377,28 +368,10 @@ export default function ThemePalettePicker({
                     />
                   </div>
 
-                  <label className="cms-colour-native-wrap" title="Open Color Picker & Eye Dropper">
-                    <input
-                      type="color"
-                      value={currentHex}
-                      onChange={handleNativeColorPick}
-                      className="cms-colour-native-input"
-                      disabled={isThemeLocked}
-                      aria-label="Open Color Picker and Eye Dropper"
-                    />
-                    <span className="cms-colour-native-btn">
-                      <Pipette size={14} />
-                      <span>Eye Dropper</span>
-                    </span>
-                  </label>
-
                   <button
                     type="button"
                     className="cms-colour-apply-btn"
-                    onClick={() => {
-                      setCustomColor(currentHex);
-                      setShowColorPicker(false);
-                    }}
+                    onClick={handleApplyCustomColor}
                   >
                     Apply
                   </button>

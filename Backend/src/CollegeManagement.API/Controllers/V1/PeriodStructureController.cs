@@ -27,6 +27,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<PeriodStructureListItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll([FromQuery] int? campusId = null)
         {
@@ -35,6 +36,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(PeriodStructureResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetById(int id)
@@ -92,6 +94,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("context")]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<PeriodResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetByContext(
             [FromQuery] int? boardId,

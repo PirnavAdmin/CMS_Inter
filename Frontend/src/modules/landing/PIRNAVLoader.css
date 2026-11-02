@@ -1,0 +1,180 @@
+.pirnav-loader {
+  position: fixed;
+  z-index: 20000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 24px;
+  background: radial-gradient(ellipse at center, #ffffff 0%, #ffffff 68%, #f8fbf4 100%);
+  color: #1d3021;
+  opacity: 1;
+  transition: opacity .35s ease, visibility .35s ease;
+}
+
+.pirnav-loader-content {
+  display: flex;
+  width: min(460px, 100%);
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.pirnav-loader-crest-wrap {
+  position: relative;
+  display: grid;
+  width: clamp(260px, 31vw, 360px);
+  aspect-ratio: 1;
+  place-items: center;
+  margin-bottom: 42px;
+  animation: pirnav-logo-arrive .65s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+.pirnav-loader-crest-frame {
+  display: flex;
+  width: 86%;
+  height: 86%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .94);
+}
+
+.pirnav-loader-crest {
+  display: block;
+  width: 37%;
+  height: 45%;
+  object-fit: contain;
+}
+
+.pirnav-loader-wordmark {
+  display: grid;
+  justify-items: center;
+  margin-top: -2%;
+  line-height: 1;
+}
+
+.pirnav-loader-wordmark span {
+  color: #142e20;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(30px, 4vw, 47px);
+  font-weight: 700;
+  letter-spacing: .035em;
+}
+
+.pirnav-loader-wordmark strong {
+  margin-top: 2px;
+  color: #6f8e47;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(18px, 2.4vw, 27px);
+  font-weight: 700;
+  letter-spacing: .07em;
+}
+
+.pirnav-loader-tagline {
+  margin: 4px 0 0;
+  color: #1d3021;
+  font-size: clamp(12px, 1.5vw, 16px);
+  font-weight: 650;
+  letter-spacing: .015em;
+}
+
+.pirnav-loader-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+  animation: pirnav-ring-spin 1.55s linear infinite;
+}
+
+.pirnav-loader-ring circle {
+  fill: none;
+  stroke-width: 2.2;
+}
+
+.pirnav-loader-ring-track { stroke: #e2ebcb; }
+
+.pirnav-loader-ring-progress {
+  stroke: #6f963e;
+  stroke-linecap: round;
+  stroke-dasharray: 72 217;
+  stroke-dashoffset: 0;
+}
+
+.pirnav-loader-ring-progress.is-secondary {
+  stroke: #92b45f;
+  stroke-dasharray: 43 246;
+}
+
+.pirnav-loader-progress {
+  width: min(390px, 72vw);
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e3ebcb;
+}
+
+.pirnav-loader-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #486b31 0%, #78a844 74%, #93b95e 100%);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: pirnav-progress-fill 2.35s cubic-bezier(.25, .7, .35, 1) both;
+}
+
+.pirnav-loader-dots {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-top: 28px;
+}
+
+.pirnav-loader-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6f963e;
+  animation: pirnav-dot-pulse .9s ease-in-out infinite;
+}
+
+.pirnav-loader-dots i:nth-child(2) { background: #8caf55; animation-delay: .15s; }
+.pirnav-loader-dots i:nth-child(3) { background: #c5d99c; animation-delay: .3s; }
+
+.pirnav-loader.is-exiting {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@keyframes pirnav-logo-arrive {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pirnav-ring-spin { to { transform: rotate(270deg); } }
+@keyframes pirnav-progress-fill { to { transform: scaleX(1); } }
+@keyframes pirnav-dot-pulse { 0%, 100% { opacity: .38; transform: scale(.82); } 50% { opacity: 1; transform: scale(1); } }
+
+@media (max-width: 600px) {
+  .pirnav-loader-content { width: min(390px, 100%); }
+  .pirnav-loader-crest-wrap { width: clamp(240px, 68vw, 310px); margin-bottom: 34px; }
+  .pirnav-loader-progress { width: min(330px, 76vw); }
+  .pirnav-loader-wordmark span { font-size: clamp(28px, 8vw, 38px); }
+  .pirnav-loader-wordmark strong { font-size: clamp(17px, 4.8vw, 23px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pirnav-loader, .pirnav-loader-crest-wrap, .pirnav-loader-ring, .pirnav-loader-ring-progress,
+  .pirnav-loader-progress span, .pirnav-loader-dots i {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .2s !important;
+  }
+  .pirnav-loader-progress span { transform: scaleX(1); }
+}

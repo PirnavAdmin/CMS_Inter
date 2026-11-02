@@ -182,25 +182,79 @@ export const requiredInvigilatorCount = (candidateCount) =>
  */
 export const isCombinedExamination = (examOrForm) => {
   if (!examOrForm) return false;
-  const catTrimEarly = String(examOrForm.examCategory || examOrForm.category || "").trim().toLowerCase();
-  if (catTrimEarly === "regular") return false;
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
-  if (mode === "SUBJECT_WISE" || mode === "REGULAR") return false;
-  const cat =
+
+  const examMode = normalizeStatus(examOrForm.examMode || examOrForm.mode);
+  if (examMode === "OBJECTIVE") return true;
+
+  const cat = String(
     examOrForm.examCategory ||
     examOrForm.category ||
     examOrForm.examinationCategory ||
     examOrForm.exam_category ||
     examOrForm.categoryName ||
     examOrForm.rawCategory ||
-    "";
-  const catTrim = String(cat).trim().toLowerCase();
-  if (catTrim === "objective" || catTrim === "combined" || catTrim.includes("objective")) return true;
-  if (catTrim === "others" && examOrForm.customCategoryName) {
+    ""
+  ).trim().toLowerCase();
+  if (cat === "objective" || cat === "combined" || cat.includes("objective") || cat.includes("combined")) return true;
+  if (cat === "others" && examOrForm.customCategoryName) {
     const customLower = String(examOrForm.customCategoryName).trim().toLowerCase();
     if (customLower.includes("objective") || customLower.includes("pattern")) return true;
   }
+
+  // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
+  const isRegularPat = (p) => {
+    const s = String(p || "").trim().toLowerCase();
+    return !s || ["regular", "regular pattern", "regular academic", "regular academic pattern", "regular_academic", "none", "standard", "default"].includes(s);
+  };
+  const pat = String(examOrForm.examPattern || examOrForm.pattern || examOrForm.patternName || "").trim().toLowerCase();
+  if (pat && !isRegularPat(pat)) {
+    return true;
+  }
+
+  // Check group patterns
+  if (examOrForm.selectedGroupPatterns && typeof examOrForm.selectedGroupPatterns === "object") {
+    const grpPats = Object.values(examOrForm.selectedGroupPatterns)
+      .flat()
+      .map((p) => String(p).trim().toLowerCase());
+    if (grpPats.some((p) => p && !isRegularPat(p))) {
+      return true;
+    }
+  }
+
+  // Check if start date and end date are the same (single-day objective exam) with non-regular pattern or objective signals
+  const sDate = canonicalDate(examOrForm.startDate);
+  const eDate = canonicalDate(examOrForm.endDate);
+  if (sDate && eDate && sDate === eDate) {
+    if (pat && !isRegularPat(pat)) return true;
+    const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
+    if (name.includes("mains") || name.includes("jee") || name.includes("neet") || name.includes("objective")) {
+      return true;
+    }
+  }
+
+  // Check exam name or code indicators
+  const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
+  if (name.includes("objective") || name.includes("combined") || name.includes("mains") || name.includes("neet") || name.includes("jee")) {
+    if (pat && !isRegularPat(pat)) return true;
+  }
+
+  // Check schedules
+  if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
+    if (examOrForm.schedules.some((s) =>
+      s && (
+        normalizeStatus(s.scheduleMode) === "PATTERN_WISE" ||
+        normalizeStatus(s.mode) === "OBJECTIVE" ||
+        normalizeStatus(s.examMode) === "OBJECTIVE" ||
+        (s.patternName && !isRegularPat(s.patternName)) ||
+        (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1)
+      )
+    )) {
+      return true;
+    }
+  }
+
   return false;
 };
 

@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Search } from "lucide-react";
 import { SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
@@ -69,10 +68,9 @@ export default function FacultyHolidays() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext?.() || {};
   const { selectedCampusId } = useCampusContext?.() || {};
 
-  const { params, setParam } = useFacultyViewParams();
   const [holidays, setHolidays] = useState(holidayRecords);
   const [apiSummary, setApiSummary] = useState(null);
-  const [loading, setLoading] = useState(params.has("holidayId"));
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [month, setMonth] = useState("All");
   const [customRange, setCustomRange] = useState({ from: "", to: "" });
@@ -80,9 +78,7 @@ export default function FacultyHolidays() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
-  const holidayId = params.get("holidayId");
-  const viewHoliday = holidayId == null || loading ? null : holidays.find((holiday) => String(holiday.id) === holidayId);
-  const setViewHoliday = (holiday) => setParam("holidayId", holiday?.id ?? null);
+  const [viewHoliday, setViewHoliday] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const months = useMemo(
@@ -466,7 +462,6 @@ export default function FacultyHolidays() {
         </div>
       </section>
 
-      {holidayId != null && !viewHoliday && <Modal title="Holiday Details" onClose={() => setViewHoliday(null)} size="sm"><p role="status">{loading ? "Loading holiday details..." : "This holiday is unavailable."}</p></Modal>}
       {/* View Details Modal */}
       {viewHoliday ? (
         <Modal

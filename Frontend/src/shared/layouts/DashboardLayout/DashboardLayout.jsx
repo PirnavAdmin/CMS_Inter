@@ -19,7 +19,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
 import { env } from "@/config/env.js";
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
@@ -828,8 +828,7 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
-  const hubConnectionRef = useRef(null);
-  const fetchLiveNotifsRef = useRef(null);
+    const fetchLiveNotifsRef = useRef(null);
 
   // Fetch live notifications count for badges
   useEffect(() => {
@@ -943,63 +942,22 @@ export default function DashboardLayout({
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
 
-  // SignalR Push Connection: Persistent across campus changes with safe reconnect backoff
+  // SignalR Push Connection: Subscribed via singleton notificationHubService
   useEffect(() => {
-    let disposed = false;
-    if (!canReviewReimbursements && !canReviewCertificates) {
-      if (hubConnectionRef.current) {
-        hubConnectionRef.current.stop().catch(() => { });
-        hubConnectionRef.current = null;
-      }
-      return;
-    }
+    if (!canReviewReimbursements && !canReviewCertificates) return;
 
-    const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-    if (!token) return;
-
-    const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-    const connection = new HubConnectionBuilder()
-      .withUrl(`${base}/hubs/notifications`, {
-        accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-        headers: { "ngrok-skip-browser-warning": "true" },
-      })
-      .withAutomaticReconnect([2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.None)
-      .build();
-
-    hubConnectionRef.current = connection;
-
-    connection.on("NotificationReceived", () => {
-      if (!disposed) {
-        setHasViewedNotifications(false);
-        fetchLiveNotifsRef.current?.(true);
-      }
+    const unsubscribe = notificationHubService.subscribe(() => {
+      setHasViewedNotifications(false);
+      fetchLiveNotifsRef.current?.(true);
     });
 
-    connection.start()
-      .then(() => {
-        if (!disposed && reimbursementCampusId && connection.state === "Connected") {
-          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
-        }
-      })
-      .catch(() => {
-        // Graceful catch: withAutomaticReconnect will retry with backoff if server is restarting
-      });
-
-    return () => {
-      disposed = true;
-      if (hubConnectionRef.current) {
-        const conn = hubConnectionRef.current;
-        hubConnectionRef.current = null;
-        conn.stop().catch(() => { });
-      }
-    };
+    return unsubscribe;
   }, [canReviewReimbursements, canReviewCertificates]);
 
-  // Synchronize Campus Join/Leave dynamically without tearing down SignalR socket
+  // Synchronize Campus Join dynamically without tearing down SignalR socket
   useEffect(() => {
-    if (reimbursementCampusId && hubConnectionRef.current?.state === "Connected") {
-      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
+    if (reimbursementCampusId) {
+      notificationHubService.joinCampus(reimbursementCampusId);
     }
   }, [reimbursementCampusId]);
 
@@ -1140,6 +1098,7 @@ export default function DashboardLayout({
   };
 
   const logout = () => {
+    notificationHubService.disconnect();
     clearAuthSession();
     setProfileOpen(false);
     navigate("/login", { replace: true });
@@ -1212,7 +1171,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
+    <div className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />

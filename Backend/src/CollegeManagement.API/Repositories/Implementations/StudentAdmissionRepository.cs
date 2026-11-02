@@ -469,10 +469,47 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            var connection = await GetOpenConnectionAsync();
-            return await connection.QuerySingleAsync<string>(
-                "sp_GenerateAdmissionNumber",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var connection = await GetOpenConnectionAsync();
+                var config = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
+                    SELECT Prefix, FormatPattern, NumberLength, CurrentSequence, StartNumber 
+                    FROM NumberSeriesConfigurations 
+                    WHERE SeriesCode = 'ADMISSION_NO' AND (CampusId = @CampusId OR CampusId IS NULL)
+                    ORDER BY (CampusId = @CampusId) DESC 
+                    LIMIT 1;",
+                    new { CampusId = campusId });
+
+                if (config != null)
+                {
+                    string prefix = (string)(config.Prefix ?? "ADM");
+                    string formatPattern = (string)(config.FormatPattern ?? "{PREFIX}-{SEQ}");
+                    int numberLength = (int)(config.NumberLength ?? 4);
+                    int curSeq = (int)(config.CurrentSequence ?? 0);
+                    int startNum = (int)(config.StartNumber ?? 1);
+                    int nextSeq = curSeq < startNum ? startNum : curSeq + 1;
+
+                    string paddedSeq = nextSeq.ToString().PadLeft(Math.Max(1, numberLength), '0');
+                    return formatPattern
+                        .Replace("{PREFIX}", prefix, StringComparison.OrdinalIgnoreCase)
+                        .Replace("{SEQ}", paddedSeq, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var connection = await GetOpenConnectionAsync();
+                return await connection.QuerySingleAsync<string>(
+                    "sp_GenerateAdmissionNumber",
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                return $"ADM-{DateTime.Now.Year}-0001";
+            }
         }
 
         public async Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId)

@@ -10,6 +10,7 @@ import {
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { formatINR, calculateNetSalary } from "@/data/payrollData.js";
@@ -1133,7 +1134,7 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
                     title="View Assignment"
                     onClick={() => navigate(`/dashboard/payroll/assignments/${r.id}`)}
                   >
-                    <Eye size={12} /> View
+                    <ThreeDIcon name="view" size={13} /> View
                   </button>
                   <button
                     type="button"
@@ -1236,7 +1237,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
               style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
               onClick={() => setToast("The supplied Payroll APIs do not include a salary structure export endpoint.")}
             >
-              <Download size={14} /> Export CSV
+              <ThreeDIcon name="export" size={14} /> Export CSV
             </button>
           </>
         }
@@ -1285,7 +1286,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
                   style={{ padding: "3px 7px", fontSize: "11px" }}
                   onClick={() => navigate(`/dashboard/payroll/structures/${r.id}`)}
                 >
-                  <Eye size={12} />
+                  <ThreeDIcon name="view" size={13} />
                 </button>
                 <button
                   type="button"
@@ -1293,7 +1294,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
                   style={{ padding: "3px 7px", fontSize: "11px" }}
                   onClick={() => navigate(`/dashboard/payroll/structures/${r.id}/edit`)}
                 >
-                  <Edit3 size={12} />
+                  <ThreeDIcon name="edit" size={13} />
                 </button>
                 <button
                   type="button"
@@ -1301,7 +1302,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
                   style={{ padding: "3px 7px", fontSize: "11px", color: "var(--cms-danger)" }}
                   onClick={() => handleDeleteStructure(r.id)}
                 >
-                  <Trash2 size={12} />
+                  <ThreeDIcon name="delete" size={13} />
                 </button>
               </div>
             ),
@@ -1746,7 +1747,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
                     style={{ padding: "2px 6px", fontSize: "11px" }}
                     onClick={() => onPreviewPayslip(r)}
                   >
-                    <Eye size={12} /> View
+                    <ThreeDIcon name="view" size={13} /> View
                   </button>
                   <button
                     type="button"
@@ -1754,7 +1755,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
                     style={{ padding: "2px 6px", fontSize: "11px" }}
                     onClick={() => onPreviewPayslip(r)}
                   >
-                    <Printer size={12} />
+                    <ThreeDIcon name="print" size={13} />
                   </button>
                   <button
                     type="button"
@@ -1991,7 +1992,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
                   title="View Payslip"
                   onClick={() => onPreviewPayslip(r)}
                 >
-                  <Eye size={12} /> View
+                  <ThreeDIcon name="view" size={13} /> View
                 </button>
                 <button
                   type="button"
@@ -2000,7 +2001,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
                   title="Download / Print"
                   onClick={() => onPreviewPayslip(r)}
                 >
-                  <Download size={12} />
+                  <ThreeDIcon name="download" size={13} />
                 </button>
                 <button
                   type="button"
@@ -2134,7 +2135,7 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
             <Mail size={14} /> Email Payslip
           </button>
           <button type="button" className="cms-btn cms-btn-primary" onClick={handlePrint}>
-            <Printer size={14} /> Print / Save PDF
+            <ThreeDIcon name="print" size={14} /> Print / Save PDF
           </button>
         </div>
       </div>
@@ -2154,7 +2155,7 @@ function SalaryStructureListScreen({ store, navigate, setModal, setToast }) {
       actions={
         <div style={{ display: "flex", gap: "8px" }}>
           <button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate("/dashboard/payroll/structures/add")}>
-            <Plus size={14} /> Add Salary Structure
+            <ThreeDIcon name="add" size={14} /> Add Salary Structure
           </button>
         </div>
       }
@@ -3404,15 +3405,15 @@ function PayrollReportsScreen({ store, navigate, setToast }) {
         <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-kpi-grid">
           <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a salary register export endpoint.")}>
-            <div className="salary-kpi-icon"><FileSpreadsheet size={20} /></div>
+            <div className="salary-kpi-icon"><ThreeDIcon name="excel" size={24} /></div>
             <div className="salary-kpi-data"><span>Monthly Register</span><strong>Download</strong></div>
           </div>
           <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a PF ECR export endpoint.")}>
-            <div className="salary-kpi-icon"><ShieldAlert size={20} /></div>
+            <div className="salary-kpi-icon"><ThreeDIcon name="shield" size={24} /></div>
             <div className="salary-kpi-data"><span>PF ECR File</span><strong>Generate</strong></div>
           </div>
           <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a TDS report export endpoint.")}>
-            <div className="salary-kpi-icon"><DollarSign size={20} /></div>
+            <div className="salary-kpi-icon"><ThreeDIcon name="receipt" size={24} /></div>
             <div className="salary-kpi-data"><span>TDS Form 24Q</span><strong>Export</strong></div>
           </div>
         </div>
