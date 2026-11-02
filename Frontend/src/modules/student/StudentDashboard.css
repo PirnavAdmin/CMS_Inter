@@ -228,18 +228,18 @@
 
 .sp-shell {
   --sp-sidebar-width: 218px;
-  --sp-primary: var(--cms-primary, #6f8700);
-  --sp-primary-dark: var(--cms-primary-dark, #536600);
-  --sp-primary-hover: var(--cms-primary-hover, #819b08);
-  --sp-primary-soft: var(--cms-primary-soft, rgba(0, 0, 0, 0.04));
-  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(0, 0, 0, 0.035)));
+  --sp-primary: var(--cms-primary, #4338CA);
+  --sp-primary-dark: var(--cms-primary-dark, #312E81);
+  --sp-primary-hover: var(--cms-primary-hover, #60A5FA);
+  --sp-primary-soft: var(--cms-primary-soft, #E0E7FF);
+  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, #EFF6FF));
   --sp-bg: transparent;
-  --sp-sidebar: var(--cms-sidebar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
-  --sp-header: var(--cms-topbar-surface-bg, linear-gradient(180deg, #c5dbfa 0%, #a8cbfa 100%));
-  --sp-surface: var(--cms-surface, #ffffff);
-  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, var(--cms-border, rgba(0, 0, 0, 0.12))));
-  --sp-text: var(--cms-text, #1e293b);
-  --sp-muted: var(--cms-muted, #64748b);
+  --sp-sidebar: var(--cms-sidebar-surface-bg, #312E81);
+  --sp-header: var(--cms-topbar-surface-bg, #EFF6FF);
+  --sp-surface: var(--cms-surface, #FFFFFF);
+  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, var(--cms-border, #DBEAFE)));
+  --sp-text: var(--cms-text, #172554);
+  --sp-muted: var(--cms-muted, #64748B);
   position: fixed;
   inset: 0;
   display: flex;
@@ -255,14 +255,14 @@
 :root[data-theme="dark"] .sp-shell,
 [data-theme="dark"] .sp-shell {
   --sp-bg: transparent;
-  --sp-sidebar: var(--cms-sidebar-surface-bg, #0f1c36);
-  --sp-header: var(--cms-topbar-surface-bg, #0f1c36);
-  --sp-surface: var(--cms-surface, #151b28);
-  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, rgba(255, 255, 255, 0.12)));
-  --sp-text: var(--cms-text, #f8fafc);
-  --sp-muted: var(--cms-muted, #94a3b8);
-  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, rgba(255, 255, 255, 0.06)));
-  --sp-primary-soft: var(--cms-primary-soft, rgba(255, 255, 255, 0.06));
+  --sp-sidebar: var(--cms-sidebar-surface-bg, #1E1B4B);
+  --sp-header: var(--cms-topbar-surface-bg, #312E81);
+  --sp-surface: var(--cms-surface, #25215C);
+  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, #4338CA));
+  --sp-text: var(--cms-text, #EEF2FF);
+  --sp-muted: var(--cms-muted, #C7D2FE);
+  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, #312E81));
+  --sp-primary-soft: var(--cms-primary-soft, #312E81);
 }
 
 .sp-shell * {
@@ -282,8 +282,6 @@
   border-right: 1px solid var(--sp-border);
   background: var(--sp-sidebar);
 }
-
-
 
 .sp-brand {
   display: flex;
@@ -349,6 +347,9 @@
   text-transform: uppercase;
 }
 
+.sp-sidebar nav h2,
+.sp-sidebar-note { color: #DBEAFE; }
+
 .sp-sidebar nav a {
   display: flex;
   align-items: center;
@@ -358,7 +359,7 @@
   margin-left: 4px;
   padding: 8px 7px;
   border-radius: 10px;
-  color: var(--cms-sidebar-link-color, var(--sp-text));
+  color: var(--cms-sidebar-link-color, #FFFFFF);
   font-size: 11.75px;
   font-weight: 600;
   text-decoration: none;
@@ -464,7 +465,7 @@
 }
 
 .sp-icon-btn:hover {
-  border-color: var(--cms-primary-border, var(--sp-primary));
+  border-color: var(--cms-primary-border, #60A5FA);
   background: var(--sp-primary-soft)
 }
 
@@ -678,7 +679,7 @@
 }
 
 .sp-btn:hover {
-  border-color: #b8c889;
+  border-color: #60A5FA;
   background: var(--sp-primary-soft);
   color: var(--sp-primary-dark)
 }
@@ -5472,16 +5473,16 @@
 .sp-change-password-modal .sp-password-input-wrap { position: relative; }
 .sp-change-password-modal .sp-password-input-wrap input { height: 44px; padding-right: 46px; background: var(--sp-surface); color: var(--sp-text); box-sizing: border-box; }
 .sp-change-password-modal .sp-password-input-wrap input[aria-invalid="true"] { border-color: #dc2626; }
-.sp-change-password-modal .sp-password-input-wrap input:focus-visible { outline: 2px solid var(--cms-primary, #819900); outline-offset: 1px; }
+.sp-change-password-modal .sp-password-input-wrap input:focus-visible { outline: 2px solid var(--cms-primary, #4338CA); outline-offset: 1px; }
 .sp-change-password-modal .sp-password-eye { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border: 0; border-radius: 6px; display: grid; place-items: center; background: transparent; color: var(--sp-muted); cursor: pointer; }
-.sp-change-password-modal .sp-password-eye:focus-visible { outline: 2px solid var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-eye:focus-visible { outline: 2px solid var(--cms-primary, #4338CA); }
 .sp-change-password-modal .sp-password-field-error { color: #dc2626; font-size: 12px; line-height: 1.4; margin-top: 5px; }
 .sp-change-password-modal .sp-password-field-error:empty { display: none; }
 .sp-change-password-modal .sp-password-requirements { margin-top: 9px; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: 8px; color: var(--sp-muted); font-size: 12px; }
 .sp-change-password-modal .sp-password-requirements ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
 .sp-change-password-modal .sp-password-requirements li.is-met { color: #20833b; }
 .sp-change-password-modal .sp-password-strength { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
-.sp-change-password-modal .sp-password-strength meter { flex: 1; min-width: 40px; accent-color: var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-strength meter { flex: 1; min-width: 40px; accent-color: var(--cms-primary, #4338CA); }
 .sp-change-password-modal .sp-password-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 16px; margin-top: 4px; border-top: 1px solid var(--sp-border); }
 .sp-change-password-modal .sp-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 480px) { .sp-change-password-modal .sp-password-requirements ul { grid-template-columns: 1fr; } }
@@ -5772,11 +5773,11 @@
 @media (hover: hover) and (pointer: fine) {
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: var(--cms-hover, var(--cms-primary-soft, rgba(0, 0, 0, 0.035)));
+    background-color: var(--cms-hover, var(--cms-primary-soft, #EFF6FF));
   }
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: var(--cms-hover, var(--cms-primary-soft, rgba(255, 255, 255, 0.06)));
+    background-color: var(--cms-hover, var(--cms-primary-soft, color-mix(in srgb, var(--sp-surface, #25215C) 75%, #4338CA)));
   }
 }
 @media (prefers-reduced-motion: reduce) {

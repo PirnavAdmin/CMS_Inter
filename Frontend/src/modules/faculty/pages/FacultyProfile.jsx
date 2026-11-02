@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Check,
@@ -249,15 +248,13 @@ export default function FacultyProfile() {
     profileData,
     setProfileData,
     persistStaffProfile,
+    isEditingProfile,
+    setIsEditingProfile,
+    profileStep,
+    setProfileStep,
     initials,
     notify,
   } = useFaculty();
-
-  const { params, setParam } = useFacultyViewParams();
-  const profileStep = /^[1-6]$/.test(params.get("step") || "") ? Number(params.get("step")) : 1;
-  const isEditingProfile = params.get("mode") === "edit";
-  const setProfileStep = (value) => setParam("step", typeof value === "function" ? value(profileStep) : value);
-  const setIsEditingProfile = (value) => setParam("mode", (typeof value === "function" ? value(isEditingProfile) : value) ? "edit" : null);
 
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
@@ -265,8 +262,7 @@ export default function FacultyProfile() {
 
   // Profile Photo Action Modal, Camera & Cropper state
   const [isPhotoActionModalOpen, setIsPhotoActionModalOpen] = useState(false);
-  const isViewPhotoOpen = params.get("photo") === "view";
-  const setIsViewPhotoOpen = (open) => setParam("photo", open ? "view" : null);
+  const [isViewPhotoOpen, setIsViewPhotoOpen] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
@@ -532,7 +528,7 @@ export default function FacultyProfile() {
 
       // Guide border
       ctx.save();
-      ctx.strokeStyle = "var(--cms-primary)";
+      ctx.strokeStyle = "#6F8400";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(left + r, top);

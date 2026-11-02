@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { useEffect, useState } from "react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
@@ -92,7 +92,7 @@ export default function StudentFees() {
           if (index === 2) return money(row.amount);
           if (index === 3) return row.mode;
           if (index === 4) return <span className="sp-badge">{row.status}</span>;
-          if (index === 5) return <button className="sp-icon-action" title="Download receipt" aria-label="Download receipt" disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row.receiptNo)}><Download size={16}/></button>;
+          if (index === 5) return <button className="sp-icon-action" title="Download receipt" aria-label="Download receipt" disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row.receiptNo)}><ThreeDIcon name="download" size={16}/></button>;
           return row.paymentFor;
         }}/ >}
     </StudentCard>

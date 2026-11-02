@@ -11,8 +11,11 @@ import examinationIcon from "@/assets/dashboard-3d/create-exam.png";
 import feeManagementIcon from "@/assets/sidebar-3d/fee-management.png";
 import managementIconsSprite from "@/assets/sidebar-3d/management-icons-sprite.png";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
+import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { useFaculty } from "../FacultyContext.jsx";
 import { useFacultyPermissions } from "../PermissionContext.jsx";
+
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 
 export const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
@@ -22,20 +25,7 @@ export const generatedSidebarIcons = {
 
 export function SidebarIcon({ icon, sub = false }) {
   if (!icon) return null;
-  if (typeof icon === "string") {
-    return <img className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} src={icon} alt="" aria-hidden="true" />;
-  }
-  if (icon.src) {
-    return (
-      <span
-        className={`cms-nav-3d-icon cms-nav-generated-icon${sub ? " cms-nav-3d-icon-sub" : ""}`}
-        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-        aria-hidden="true"
-      />
-    );
-  }
-  const IconComponent = icon;
-  return <IconComponent className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} size={sub ? 15 : 18} aria-hidden="true" />;
+  return <ThreeDIcon icon={icon} size={sub ? 17 : 20} className={sub ? "cms-nav-3d-icon-sub" : ""} />;
 }
 
 export const NAV_ITEMS = [
@@ -49,6 +39,7 @@ export const NAV_ITEMS = [
   { id: "myattendance", label: "My Attendance", icon: generatedSidebarIcons.staffAttendance, group: "HR & FINANCE" },
   { id: "leave", label: "Staff Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
+  { id: "reimbursements", label: "Reimbursements", icon: reimbursementIcon, group: "HR & FINANCE" },
   { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },
   { id: "settings", label: "Settings", icon: generalSettingsIcon, group: "ADMINISTRATION" },
 ];

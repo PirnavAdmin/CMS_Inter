@@ -1,4 +1,3 @@
-import { useLocation, useSearchParams } from "react-router-dom";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
@@ -124,16 +123,7 @@ const normalizeTodayData = (raw, timing) => {
   };
 };
 
-export default function FacultyMyAttendance({ adminRouting = false } = {}) {
-  const [routeParams, setRouteParams] = useSearchParams();
-  const { pathname } = useLocation();
-  const urlRouting = adminRouting || pathname.startsWith("/faculty-dashboard/my-attendance");
-  const regularizeDate = urlRouting ? routeParams.get("regularize") || "" : "";
-  const rangeParam = routeParams.get("range");
-  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : "week";
-  const restoredRegularization = useRef("");
-  const historyRequest = useRef(0);
-  const [historyRange, setHistoryRange] = useState("");
+export default function FacultyMyAttendance() {
   const context = useFacultySafe();
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
@@ -185,15 +175,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   }, []);
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
-  const [localFilter, setLocalFilter] = useState("week");
-  const activeFilter = urlRouting ? routedRange : localFilter;
-  const setActiveFilter = (range) => {
-    if (!urlRouting) return setLocalFilter(range);
-    const next = new URLSearchParams(routeParams);
-    if (adminRouting) next.set("tab", "my-attendance");
-    next.set("range", range);
-    setRouteParams(next);
-  };
+  const [activeFilter, setActiveFilter] = useState("week");
 
   // Loading States
   const [loadingToday, setLoadingToday] = useState(true);
@@ -232,15 +214,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   });
 
   // Regularization Modal State
-  const [localRegModalOpen, setLocalRegModalOpen] = useState(false);
-  const regModalOpen = urlRouting ? Boolean(regularizeDate && restoredRegularization.current === regularizeDate && localRegModalOpen) : localRegModalOpen;
-  const setRegModalOpen = (open) => {
-    setLocalRegModalOpen(open);
-    if (urlRouting && !open) {
-      const next = new URLSearchParams(routeParams); next.delete("regularize");
-      setRouteParams(next);
-    }
-  };
+  const [regModalOpen, setRegModalOpen] = useState(false);
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regForm, setRegForm] = useState({
     rawDate: "",
@@ -313,14 +287,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
   // Fetch Attendance History for selected filter
   const fetchHistory = useCallback(async (period) => {
-    const request = ++historyRequest.current;
-    if (urlRouting) setHistoryRange("");
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
-      if (urlRouting && request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (!payload && urlRouting) setHistoryRange("error");
       if (payload) {
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
@@ -416,8 +386,6 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           };
         });
 
-        if (urlRouting) setHistoryRange(period);
-
         // Compute late punch count dynamically
         const lateCount = processedLogs.filter((l) => l.status === "Late").length;
         const presentDaysCount = processedLogs.filter((l) => l.status === "Present" || l.status === "Late" || l.status === "Missed Checkout").length;
@@ -438,11 +406,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       }
     } catch (err) {
       console.warn("Could not load attendance history from backend", err);
-      if (urlRouting && request === historyRequest.current) setHistoryRange("error");
     } finally {
-      if (!urlRouting || request === historyRequest.current) setLoadingHistory(false);
+      setLoadingHistory(false);
     }
-  }, [timingConfig, urlRouting]);
+  }, [timingConfig]);
 
   // Initial load once on mount
   useEffect(() => {
@@ -538,48 +505,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     }
   };
 
-  useEffect(() => {
-    if (!urlRouting) return;
-    if (!regularizeDate) {
-      restoredRegularization.current = "";
-      setLocalRegModalOpen(false);
-      return;
-    }
-    if (restoredRegularization.current === regularizeDate) return;
-    setLocalRegModalOpen(false);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(regularizeDate) || Number.isNaN(Date.parse(regularizeDate)) || new Date(regularizeDate).toISOString().slice(0, 10) !== regularizeDate) {
-      restoredRegularization.current = regularizeDate;
-      notify("Invalid attendance regularization date.", "error");
-      return;
-    }
-    if (loadingHistory || (historyRange !== activeFilter && historyRange !== "error")) return;
-    if (historyRange === "error") {
-      notify("Attendance history could not be loaded. Please retry.", "error");
-      return;
-    }
-    const log = historyData.logs.find((row) => String(row.rawDate || "").slice(0, 10) === regularizeDate);
-    if (!log || !log.canRegularize || ["pending", "approved", "rejected"].includes(String(log.regularizationState || "").toLowerCase())) {
-      restoredRegularization.current = regularizeDate;
-      notify("Attendance record is unavailable or cannot be regularized in this history range.", "error");
-      return;
-    }
-    setRegForm({ rawDate: regularizeDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: "09:00", requestedOutTime: "16:30", reason: "" });
-    restoredRegularization.current = regularizeDate;
-    setLocalRegModalOpen(true);
-  }, [urlRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, notify]);
-
   // Open Regularization Modal for a specific date
   const openRegularizeModal = (log) => {
-    if (urlRouting) {
-      const date = String(log.rawDate || log.RawDate || "").slice(0, 10);
-      if (!date) return notify("Attendance record has no valid date.", "error");
-      const next = new URLSearchParams(routeParams);
-      if (adminRouting) next.set("tab", "my-attendance");
-      next.set("range", historyData.logs.some((row) => String(row.rawDate || "").slice(0, 10) === date) ? activeFilter : "week");
-      next.set("regularize", date);
-      setRouteParams(next);
-      return;
-    }
     setRegForm({
       rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
       displayDate: log.date || log.Date || log.day || "Selected Date",
@@ -625,16 +552,33 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     }
   };
 
-  // Real-time dynamic shift duration display
-  const clockShiftDuration = useMemo(() => {
+  // Real-time dynamic working hours display (reflects actual recorded duration, --:-- when not checked in)
+  // Formatted check-out cutoff time based on shift end + grace period
+  const formattedCutoffTime = useMemo(() => {
+    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "16:30");
+    if (shiftEndMins === null) return "04:45 PM";
+    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
+    const cutoffMins = shiftEndMins + grace;
+    let h = Math.floor(cutoffMins / 60);
+    const m = cutoffMins % 60;
+    const ampm = h >= 12 ? "PM" : "AM";
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+  }, [todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes]);
+
+  const clockWorkingHours = useMemo(() => {
     if (todayData.status === "punched_out" && todayData.inTime && todayData.outTime) {
       return calculateDurationStr(todayData.inTime, todayData.outTime, false);
     }
     if (todayData.status === "punched_in" && todayData.inTime) {
       return calculateDurationStr(todayData.inTime, null, true);
     }
-    return todayData.shiftDuration && todayData.shiftDuration !== "--" ? todayData.shiftDuration : "--:--";
-  }, [todayData, shiftUpdateTick]);
+    if (todayData.inTime && isMissedCheckout) {
+      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "04:30 PM", false);
+    }
+    return "--:--";
+  }, [todayData, shiftUpdateTick, isMissedCheckout]);
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -666,12 +610,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     <div className="sp-faculty-attendance-page">
       {/* Top Punch & Shift Grid */}
       <div className="sp-attendance-top-grid">
-        {/* Left Card: Attendance & Shift Summary */}
+        {/* Left Card: Today's Attendance Summary */}
         <div className="cms-card sp-shift-summary-card">
           <div className="sp-card-header">
-            <h3 className="sp-card-title">Attendance & Shift Summary</h3>
+            <h3 className="sp-card-title">Today's Attendance Summary</h3>
             <p className="sp-card-desc">
-              Campus shift schedule, check-in status & calculated shift duration.
+              Campus shift schedule, check-in status & calculated working hours.
             </p>
           </div>
 
@@ -701,7 +645,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </span>
             </div>
 
-            {/* 3 Metric Columns: CHECK IN, CHECK OUT, SHIFT DURATION */}
+            {/* 3 Metric Columns: CHECK IN, CHECK OUT, WORKING HOURS */}
             <div className="sp-summary-metric-cols">
               <div className="sp-summary-col">
                 <span className="sp-metric-col-label">CHECK IN</span>
@@ -716,9 +660,9 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                 </span>
               </div>
               <div className="sp-summary-col">
-                <span className="sp-metric-col-label">SHIFT DURATION</span>
+                <span className="sp-metric-col-label">WORKING HOURS</span>
                 <span className={`sp-metric-col-val ${todayData.status === "punched_in" && !isMissedCheckout ? "highlight" : ""}`}>
-                  {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
+                  {clockWorkingHours}
                 </span>
               </div>
             </div>
@@ -738,10 +682,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           </div>
         </div>
 
-        {/* Right Card: Check-In / Check-Out Actions */}
+        {/* Right Card: Attendance Check-In & Check-Out Actions */}
         <div className="cms-card sp-punch-action-card">
           <div className="sp-card-header">
-            <h3 className="sp-card-title">Check-In / Check-Out</h3>
+            <h3 className="sp-card-title">Attendance Check-In & Check-Out</h3>
             <p className="sp-card-desc">
               Click below to record your campus entry or exit timestamp.
             </p>
@@ -750,23 +694,6 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           <div className="sp-punch-twin-grid">
             {/* Check In Panel */}
             <div className="sp-twin-panel checkin-panel">
-              {/* Check In Header: Icon beside Title */}
-              <div className="sp-twin-header">
-                <div className="sp-twin-icon-box checkin">
-                  <LogIn size={15} />
-                </div>
-                <div className="sp-twin-title checkin">CHECK IN</div>
-              </div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="sp-digital-display checkin">
-                <span className="sp-digital-time">{todayData.inTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${todayData.inTime ? (todayData.isLate ? "late" : "checked") : "pending"}`}>
-                  <span className="sp-status-dot">•</span>
-                  {todayData.inTime ? (todayData.isLate ? "Checked In (Late)" : "Checked In") : "Not Checked In"}
-                </span>
-              </div>
-
               {/* Check In Button */}
               <button
                 type="button"
@@ -781,7 +708,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                 ) : (
                   <LogIn size={15} />
                 )}
-                <span>Check In</span>
+                <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
               </button>
 
               <div className="sp-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
@@ -789,33 +716,6 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
             {/* Check Out Panel */}
             <div className="sp-twin-panel checkout-panel">
-              {/* Check Out Header: Icon beside Title */}
-              <div className="sp-twin-header">
-                <div className="sp-twin-icon-box checkout">
-                  <LogOut size={15} />
-                </div>
-                <div className="sp-twin-title checkout">CHECK OUT</div>
-              </div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="sp-digital-display checkout">
-                <span className="sp-digital-time">{todayData.outTime || "--:-- --"}</span>
-                <span className={`sp-digital-status-pill ${
-                  todayData.outTime 
-                    ? "checked" 
-                    : isMissedCheckout 
-                    ? "missed" 
-                    : "pending"
-                }`}>
-                  <span className="sp-status-dot">•</span>
-                  {todayData.outTime 
-                    ? "Checked Out" 
-                    : isMissedCheckout 
-                    ? "Missed Checkout" 
-                    : "Not Checked Out"}
-                </span>
-              </div>
-
               {/* Check Out Button */}
               {isMissedCheckout ? (
                 <>
@@ -859,10 +759,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                     ) : (
                       <LogOut size={15} />
                     )}
-                    <span>Check Out</span>
+                    <span>{todayData.status === "punched_out" ? "Checked Out" : "Check Out"}</span>
                   </button>
 
-                  <div className="sp-punch-foot-hint">15m checkout window after shift end</div>
+                  <div className="sp-punch-foot-hint">
+                    Allowed: 15-minute window after shift end ({todayData.shiftEndTime} – {formattedCutoffTime})
+                  </div>
                 </>
               )}
             </div>
@@ -1136,7 +1038,6 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       </div>
 
       {/* Attendance Regularization Modal */}
-      {!adminRouting && regularizeDate && !regModalOpen && <div className="sp-reg-modal-backdrop"><div className="sp-reg-modal" role="dialog" aria-label="Attendance Regularization"><p role="status">{loadingHistory || !historyRange ? "Loading attendance record..." : "This attendance record is unavailable or cannot be regularized in this history range."}</p><button type="button" className="cms-btn cms-btn-secondary" onClick={() => setRegModalOpen(false)}>Close</button></div></div>}
       {regModalOpen && (
         <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && setRegModalOpen(false)}>
           <div className="sp-reg-modal" onClick={(e) => e.stopPropagation()}>

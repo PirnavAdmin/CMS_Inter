@@ -598,6 +598,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var parameters = new DynamicParameters();
                 parameters.Add("p_SeriesCode", seriesCode, DbType.String);
                 parameters.Add("p_CampusId", campusId, DbType.Int32);
+                parameters.Add("p_BaseSeriesCode", seriesCode, DbType.String);
 
                 nextId = await conn.QueryFirstOrDefaultAsync<string>(
                     "sp_GenerateNextNumberSeries",
@@ -857,6 +858,16 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task UpdateAsync(Staff staff)
         {
             staff.UpdatedAt = DateTime.UtcNow;
+            if (string.IsNullOrWhiteSpace(staff.ProfileStatus)) staff.ProfileStatus = "PendingLink";
+            if (string.IsNullOrWhiteSpace(staff.Qualification)) staff.Qualification = "Not Specified";
+            if (string.IsNullOrWhiteSpace(staff.Designation)) staff.Designation = "Lecturer";
+            if (string.IsNullOrWhiteSpace(staff.Status)) staff.Status = "Active";
+            if (string.IsNullOrWhiteSpace(staff.StaffType)) staff.StaffType = "Teaching";
+            if (string.IsNullOrWhiteSpace(staff.Nationality)) staff.Nationality = "Indian";
+            if (string.IsNullOrWhiteSpace(staff.ProfileStatus))
+            {
+                staff.ProfileStatus = "PendingLink";
+            }
 
             try
             {

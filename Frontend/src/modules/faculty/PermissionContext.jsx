@@ -96,6 +96,9 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
     const includes = (permString) => {
       if (!permString) return true;
       if (permString === "VIEW_PROFILE") return true;
+      if (permString === "VIEW_REIMBURSEMENTS") {
+        return canAccess("reimbursement", "view") || canAccess("staff-reimbursements", "view");
+      }
       const mapped = LEGACY_PERMISSION_MAP[permString];
       if (mapped) {
         return canAccess(mapped.module, mapped.action, mapped.screen);

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -427,24 +428,49 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
       {/* KPI Overview Strip */}
       <div className="detailed-att-kpi-strip">
         <div className="kpi-strip-card">
-          <span>Total Students</span>
-          <strong>{stats.total}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ThreeDIcon name="students" size={26} />
+            <div>
+              <span>Total Students</span>
+              <strong>{stats.total}</strong>
+            </div>
+          </div>
         </div>
         <div className="kpi-strip-card text-present">
-          <span>Present</span>
-          <strong>{stats.present}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ThreeDIcon name="check" size={26} />
+            <div>
+              <span>Present</span>
+              <strong>{stats.present}</strong>
+            </div>
+          </div>
         </div>
         <div className="kpi-strip-card text-absent">
-          <span>Absent</span>
-          <strong>{stats.absent}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ThreeDIcon name="cross" size={26} />
+            <div>
+              <span>Absent</span>
+              <strong>{stats.absent}</strong>
+            </div>
+          </div>
         </div>
         <div className="kpi-strip-card text-late">
-          <span>Late</span>
-          <strong>{stats.late}</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ThreeDIcon name="attendance-timing" size={26} />
+            <div>
+              <span>Late</span>
+              <strong>{stats.late}</strong>
+            </div>
+          </div>
         </div>
         <div className="kpi-strip-card text-primary">
-          <span>Overall Attendance</span>
-          <strong>{stats.pct}%</strong>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <ThreeDIcon name="attendance" size={26} />
+            <div>
+              <span>Overall Attendance</span>
+              <strong>{stats.pct}%</strong>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -494,7 +520,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
         <div className="detailed-att-loading"><SkeletonPage variant="table" columns={6} rows={8} /></div>
       ) : error ? (
         <div className="detailed-att-error">
-          <AlertTriangle size={24} className="error-icon" />
+          <ThreeDIcon name="warning" size={24} className="error-icon" />
           <p>{error}</p>
           <button type="button" className="cms-btn cms-btn-primary" onClick={() => setError("")}>
             <RefreshCw size={14} /> Retry Loading
@@ -600,7 +626,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
             <div className="detailed-att-table-wrap">
               {filteredStudents.length === 0 ? (
                 <div className="detailed-att-empty">
-                  <Users size={36} className="empty-icon" />
+                  <ThreeDIcon name="students" size={48} className="empty-icon" />
                   <h3>No student records found</h3>
                   <p>Try adjusting your search query or filters above to view student attendance.</p>
                   <Link to="/dashboard/attendance/student" className="cms-btn cms-btn-primary empty-action-btn">
@@ -652,7 +678,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                         <td>
                           <div className="att-table-actions">
                             <Link to={`/dashboard/students/${st.id}`} className="att-action-icon-btn" title="View Profile">
-                              <Eye size={14} />
+                              <ThreeDIcon name="view" size={16} />
                             </Link>
                             <button
                               type="button"
@@ -660,7 +686,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                               title="View Attendance History"
                               onClick={() => setSelectedStudentHistory(st)}
                             >
-                              <History size={14} />
+                              <ThreeDIcon name="attendance" size={16} />
                             </button>
                           </div>
                         </td>

@@ -20,6 +20,7 @@ import {
 import { nonTeachingService } from "../services/nonTeachingService.js";
 import { attendanceService } from "@/api/attendanceService.js";
 import { announcementService } from "@/services/announcementService.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 
 function LiveClockDisplay() {
   const [time, setTime] = useState(() =>
@@ -167,6 +168,29 @@ export default function NonTeachingDashboardHome() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
+  // Personalized Greeting: resolve logged-in user's personal name
+  const authUser = useMemo(() => {
+    try {
+      return getAuthUser() || {};
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const rawGreetingName =
+    authUser.name ||
+    authUser.fullName ||
+    profile.displayName ||
+    profile.name ||
+    profile.fullName ||
+    "";
+
+  const cleanedGreetingName = rawGreetingName
+    .replace(/\b(Demo|Non-Teaching Staff|Non Teaching Staff)\b/gi, "")
+    .trim();
+
+  const userGreetingName = cleanedGreetingName || (authUser.firstName || profile.firstName || "Harish");
+
   // Formatted date string
   const todayFormatted = new Date().toLocaleDateString("en-IN", {
     weekday: "long",
@@ -194,7 +218,7 @@ export default function NonTeachingDashboardHome() {
         <div>
           <h2 className="nts-greeting-title">
             <Sparkles size={20} style={{ color: "var(--nts-primary)" }} />
-            {greeting}, {(profile.displayName || profile.name || "Non-Teaching Staff").replace(/\bDemo\s*/gi, "").trim()}
+            {greeting}, {userGreetingName}
           </h2>
           <div className="nts-greeting-sub">
             <span className="nts-badge-pill active">

@@ -1395,20 +1395,8 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
           <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
         </div>
-        {staff ? monthlyLegend : null}
+        {monthlyLegend}
       </header>
-      <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
-        <div className="att-student-search-box">
-          <Search3DIcon size={18} />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => { onSearchChange(e.target.value); onPageChange(1); }}
-            placeholder={staff ? "Search by staff name or employee ID..." : "Search by student name, roll no. or admission no..."}
-          />
-        </div>
-        {!staff ? monthlyLegend : null}
-      </div>
       <div className="att-month-scroll">
         <table className="cms-table att-month-table">
           <thead>

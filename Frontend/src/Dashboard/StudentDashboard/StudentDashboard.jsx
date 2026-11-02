@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {  Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X , Sun, Clock3, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import studentApiEndpoints from "./api/studentApiEndpoints.js";
@@ -233,7 +234,7 @@ export default function StudentDashboard() {
       {activeAlerts?.length > 0 && (
         <div className={`sp-cert-alert-card is-${String(activeAlerts[0].status).toLowerCase()}`} role="alert">
           <div className="sp-cert-alert-icon">
-            <Award size={22} />
+            <ThreeDIcon name="certificates" size={26} />
           </div>
           <div className="sp-cert-alert-body">
             <div className="sp-cert-alert-title">
@@ -266,10 +267,10 @@ export default function StudentDashboard() {
         <span className="sp-avatar is-large">{initials}</span>
         <div className="sp-student-name"><strong>{studentName}</strong><small>Admission No: <b>{profile?.admissionNo || "Not Assigned"}</b></small></div>
         {[
-          ["Roll No", profile?.rollNo || "Not Assigned", FileText],
-          ["Academic Level", profile?.academicLevelName || "Not Assigned", GraduationCap],
-          ["Group / Section", `${profile?.groupName || "Not Assigned"} • ${profile?.sectionName || "Not Assigned"}`, Users],
-        ].map(([label, value, Icon]) => <div className="sp-student-detail" key={label}><span className="sp-dashboard-detail-icon"><Icon size={22} aria-hidden="true" /></span><div><small>{label}</small><strong>{value}</strong></div></div>)}
+          ["Roll No", profile?.rollNo || "Not Assigned", "timetable"],
+          ["Academic Level", profile?.academicLevelName || "Not Assigned", "students"],
+          ["Group / Section", `${profile?.groupName || "Not Assigned"} • ${profile?.sectionName || "Not Assigned"}`, "groups"],
+        ].map(([label, value, iconName]) => <div className="sp-student-detail" key={label}><span className="sp-dashboard-detail-icon"><ThreeDIcon name={iconName} size={24} /></span><div><small>{label}</small><strong>{value}</strong></div></div>)}
       </section>
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
@@ -390,10 +391,10 @@ function StudentDashboardHighlights({ student, upcomingExams, examsError, format
       </>}
     </StudentCard>
     <StudentCard className="sp-upcoming-card" title={`Upcoming Holidays${!loading && !holidayError ? ` (${upcomingHolidays.length})` : ""}`} action={<Link className="sp-text-link" to="holidays">View All →</Link>}>
-      <div className="sp-highlight-list">{loading || holidayError ? <p className="sp-highlight-empty">{loading ? "Loading holidays…" : holidayError}</p> : upcomingHolidays.length ? upcomingHolidays.map((row, index) => <article data-tone={holidayTone(row.type)} key={`${row.date}-${row.name}-${index}`}><CalendarDays className="sp-highlight-holiday-icon" size={20} /><div><div className="sp-highlight-title"><strong>{row.name}</strong>{row.type && <span className="sp-highlight-tag">{row.type}</span>}</div><p className="sp-highlight-meta"><span>{row.date} · {holidayWeekday(row.date)}</span>{holidayDuration(row) ? <span className="sp-highlight-duration">{holidayDuration(row)}</span> : null}</p></div><small>{daysUntil(row.date) ? `In ${daysUntil(row.date)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming holidays.</p>}</div>
+      <div className="sp-highlight-list">{loading || holidayError ? <p className="sp-highlight-empty">{loading ? "Loading holidays…" : holidayError}</p> : upcomingHolidays.length ? upcomingHolidays.map((row, index) => <article data-tone={holidayTone(row.type)} key={`${row.date}-${row.name}-${index}`}><ThreeDIcon name="holiday" size={20} className="sp-highlight-holiday-icon" /><div><div className="sp-highlight-title"><strong>{row.name}</strong>{row.type && <span className="sp-highlight-tag">{row.type}</span>}</div><p className="sp-highlight-meta"><span>{row.date} · {holidayWeekday(row.date)}</span>{holidayDuration(row) ? <span className="sp-highlight-duration">{holidayDuration(row)}</span> : null}</p></div><small>{daysUntil(row.date) ? `In ${daysUntil(row.date)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming holidays.</p>}</div>
     </StudentCard>
     <StudentCard className="sp-upcoming-card" title={`Upcoming Examinations${!examsError ? ` (${upcomingExams.length})` : ""}`} action={<Link className="sp-text-link" to="examinations">View All →</Link>}>
-      <div className="sp-highlight-list">{examsError ? <p className="sp-highlight-empty">{examsError}</p> : upcomingExams.length ? upcomingExams.map(({ exam, nextDate, firstDate, lastDate }, index) => <article data-tone={examTone(exam)} key={exam.examinationId || exam.examId || exam.id || exam.examCode || index}><CalendarDays size={20} /><div><div className="sp-highlight-title"><strong>{exam.examName || exam.examinationName}</strong>{(exam.examCode || exam.code) ? <span className="sp-highlight-tag">{exam.examCode || exam.code}</span> : null}</div><p>{student?.groupName ? `${student.groupName} · ` : ""}{formatExamDate(exam.startDate || firstDate)} - {formatExamDate(exam.endDate || lastDate)}</p></div><small>{daysUntil(nextDate) ? `In ${daysUntil(nextDate)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming examinations.</p>}</div>
+      <div className="sp-highlight-list">{examsError ? <p className="sp-highlight-empty">{examsError}</p> : upcomingExams.length ? upcomingExams.map(({ exam, nextDate, firstDate, lastDate }, index) => <article data-tone={examTone(exam)} key={exam.examinationId || exam.examId || exam.id || exam.examCode || index}><ThreeDIcon name="examination" size={20} /><div><div className="sp-highlight-title"><strong>{exam.examName || exam.examinationName}</strong>{(exam.examCode || exam.code) ? <span className="sp-highlight-tag">{exam.examCode || exam.code}</span> : null}</div><p>{student?.groupName ? `${student.groupName} · ` : ""}{formatExamDate(exam.startDate || firstDate)} - {formatExamDate(exam.endDate || lastDate)}</p></div><small>{daysUntil(nextDate) ? `In ${daysUntil(nextDate)} Days` : "Today"}</small></article>) : <p className="sp-highlight-empty">No upcoming examinations.</p>}</div>
     </StudentCard>
   </div>;
 }

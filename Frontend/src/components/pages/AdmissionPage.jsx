@@ -49,6 +49,8 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import AdmissionRequests from "@/components/pages/AdmissionRequests.jsx";
 import { appendReferralFields, mapAdmissionReferral } from "./admissionReferral.js";
 import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
@@ -5684,10 +5686,10 @@ export default function AdmissionPage() {
         actions={(
           <div className="cms-admission-form-actions">
             <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
-              <ClipboardList size={15} /> Admission Requests
+              <ThreeDIcon name="certificates" size={15} /> Admission Requests
             </button>
             <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
-              <Plus size={15} /> Add New Admission
+              <ThreeDIcon name="add" size={15} /> Add New Admission
             </button>
           </div>
         )}
@@ -5695,7 +5697,7 @@ export default function AdmissionPage() {
         <div className="cms-card cms-admission-list-card">
           <div className="cms-admission-toolbar">
             <div className="cms-search cms-admission-search">
-              <Search size={16} />
+              <Search3DIcon size={16} />
               <input
                 value={search}
                 placeholder="Search by student name or admission number"
@@ -5723,15 +5725,15 @@ export default function AdmissionPage() {
                 aria-expanded={exportOpen}
                 onClick={() => setExportOpen((open) => !open)}
               >
-                <Download size={15} /> Export <ChevronDown size={14} />
+                <ThreeDIcon name="export" size={15} /> Export <ChevronDown size={14} />
               </button>
               {exportOpen ? (
                 <div className="cms-admission-export-menu" role="menu" aria-label="Admission export options">
                   <button type="button" role="menuitem" onClick={exportAdmissionsExcel}>
-                    <FileSpreadsheet size={15} /> Export Excel
+                    <ThreeDIcon name="excel" size={15} /> Export Excel
                   </button>
                   <button type="button" role="menuitem" onClick={exportAdmissionsPdf}>
-                    <FileText size={15} /> Export PDF
+                    <ThreeDIcon name="pdf" size={15} /> Export PDF
                   </button>
                 </div>
               ) : null}
@@ -5782,21 +5784,21 @@ export default function AdmissionPage() {
                     <td>
                       <div className="cms-actions cms-admission-actions">
                         <button type="button" className="cms-action-btn view" title={isApprovedAdmission ? "View admission" : "View / edit admission"} aria-label={isApprovedAdmission ? "View admission" : "View or edit admission"} disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
-                          <Eye size={15} />
+                          <ThreeDIcon name="view" size={15} />
                         </button>
                         {!isApprovedAdmission && row.status === "Pending" ? (
                           <button type="button" className="cms-action-btn edit" title="Verify admission" aria-label="Verify admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row, allSteps.length - 1)}>
-                            <BadgeCheck size={15} />
+                            <ThreeDIcon name="check" size={15} />
                           </button>
                         ) : null}
                         {!isApprovedAdmission && row.status === "Verified" ? (
                           <button type="button" className="cms-action-btn edit" title="Approve admission" aria-label="Approve admission" disabled={actionBusy === `Approved-${row.id}`} onClick={() => setApproveTarget(row)}>
-                            <Check size={15} />
+                            <ThreeDIcon name="check" size={15} />
                           </button>
                         ) : null}
                         {!isApprovedAdmission && (row.status === "Pending" || row.status === "Verified") ? (
                           <button type="button" className="cms-action-btn danger" title="Reject admission" aria-label="Reject admission" disabled={actionBusy === `Rejected-${row.id}`} onClick={() => setRejectTarget(row)}>
-                            <X size={15} />
+                            <ThreeDIcon name="cross" size={15} />
                           </button>
                         ) : null}
                       </div>
@@ -5810,7 +5812,7 @@ export default function AdmissionPage() {
             </table>
           </div>
 
-          <AdminPagination currentPage={currentPage} totalRecords={displayedAdmissions.length} pageSize={5} onPageChange={setPage} />
+<AdminPagination currentPage={currentPage} totalRecords={displayedAdmissions.length} pageSize={5} onPageChange={setPage} />
         </div>
 
         {approveTarget ? (
@@ -5871,7 +5873,7 @@ export default function AdmissionPage() {
       actions={(
         <div className="cms-admission-form-actions">
           <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
-            <ClipboardList size={15} /> Admission Requests
+            <ThreeDIcon name="certificates" size={15} /> Admission Requests
           </button>
           <div className="cms-admission-main-tabs" role="tablist" aria-label="Admission form steps">
             {admissionMainTabs.map((tab) => {
@@ -5885,7 +5887,7 @@ export default function AdmissionPage() {
                   className={`cms-admission-main-tab ${activeMainStep === tab.step ? "is-active" : ""} ${tab.step < activeMainStep ? "is-done" : ""}`}
                   onClick={() => goToStep(tab.step)}
                 >
-                  <TabIcon size={14} />
+                  <ThreeDIcon icon={TabIcon} size={15} />
                   <span>{tab.title}</span>
                 </button>
               );
@@ -6009,7 +6011,7 @@ export default function AdmissionPage() {
           </button>
           {isPreview ? (
             <button type="button" className="cms-btn cms-btn-ghost" onClick={downloadAdmissionPreview}>
-              <Download size={14} /> Download
+              <ThreeDIcon name="download" size={14} /> Download
             </button>
           ) : null}
           {!readOnlyAdmission && !isPreview ? (

@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
 import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
@@ -1223,7 +1224,7 @@ export default function TemplatesPage() {
                   className="cms-btn cms-btn-primary templates-add-btn"
                   onClick={() => navigate("/dashboard/settings/templates/add")}
                 >
-                  <Plus size={15} /> Add New Template
+                  <ThreeDIcon name="add" size={15} /> Add New Template
                 </button>
               </div>
             </div>
@@ -1247,7 +1248,7 @@ export default function TemplatesPage() {
                   onClick={() => navigate("/dashboard/settings/templates/add")}
                 >
                   <div className="add-dashed-content">
-                    <span className="add-dashed-icon"><Plus size={24} /></span>
+                    <span className="add-dashed-icon"><ThreeDIcon name="add" size={24} /></span>
                     <h3>Add New Template</h3>
                     <p>Create a custom certificate, report or document template.</p>
                   </div>
@@ -1395,13 +1396,13 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
 
       <div className="templates-card-actions">
         <button type="button" className="cms-btn cms-btn-ghost action-btn" onClick={onEdit} title="Edit Template">
-          <Edit size={11.5} /> Edit
+          <ThreeDIcon name="edit" size={13} /> Edit
         </button>
         <button type="button" className="cms-btn cms-btn-ghost action-btn" onClick={onPreview} title="Preview Template">
-          <Eye size={11.5} /> Preview
+          <ThreeDIcon name="view" size={13} /> Preview
         </button>
         <button type="button" className="cms-btn cms-btn-primary action-btn" onClick={onDownload} title="Download Template Demo">
-          <Download size={11.5} /> Download
+          <ThreeDIcon name="download" size={13} /> Download
         </button>
         <div className="more-menu-wrap">
           <button type="button" className="more-menu-trigger" onClick={() => setShowMenu(!showMenu)} title="More options">
@@ -1428,7 +1429,7 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
                 </>
               ) : (
                 <button type="button" onClick={() => { setShowMenu(false); onDelete(); }} className="danger-text">
-                  <Trash2 size={13} /> Delete
+                  <ThreeDIcon name="delete" size={13} /> Delete
                 </button>
               )}
             </div>
@@ -1465,20 +1466,20 @@ function ReportsTableView({ templates, onEdit, onPreview, onDownload, onDuplicat
               <td className="text-right">
                 <div className="table-actions-row">
                   <button type="button" className="cms-btn cms-btn-ghost sm-btn" onClick={() => onPreview(item)}>
-                    <Eye size={13} /> Preview
+                    <ThreeDIcon name="view" size={13} /> Preview
                   </button>
                   <button type="button" className="cms-btn cms-btn-ghost sm-btn" onClick={() => onEdit(item)}>
-                    <Edit size={13} /> Edit
+                    <ThreeDIcon name="edit" size={13} /> Edit
                   </button>
                   <button type="button" className="cms-btn cms-btn-primary sm-btn" onClick={() => onDownload(item)}>
-                    <Download size={13} /> Download
+                    <ThreeDIcon name="download" size={13} /> Download
                   </button>
                   <button type="button" className="cms-btn cms-btn-ghost sm-icon-btn" onClick={() => onDuplicate(item)} title="Duplicate">
                     <Copy size={13} />
                   </button>
                   {!item.builtIn && (
                     <button type="button" className="cms-btn cms-btn-ghost sm-icon-btn danger-btn" onClick={() => onDelete(item)} title="Delete">
-                      <Trash2 size={13} />
+                      <ThreeDIcon name="delete" size={13} />
                     </button>
                   )}
                 </div>

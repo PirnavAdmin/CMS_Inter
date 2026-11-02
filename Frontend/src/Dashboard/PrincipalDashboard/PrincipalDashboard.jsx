@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Activity, ArrowUpRight, Award, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, ClipboardCheck, FileBarChart, GraduationCap, Sparkles, UserCheck, UserPlus, Users, WalletCards, X, Plus, Megaphone } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
@@ -32,8 +33,28 @@ function attendancePercent(attendance) {
   return total ? `${((Number(attendance.present || 0) / total) * 100).toFixed(1)}%` : "-";
 }
 
-function Icon({ name, size = 18 }) { const Component = ICONS[name] || Activity; return <Component size={size} strokeWidth={2.1} aria-hidden="true" />; }
-function SectionHeader({ title, subtitle, action, icon: HeaderIcon = Activity }) { return <div className="principal-section-head"><div className="principal-section-title"><span className="principal-section-icon"><HeaderIcon size={17} /></span><div><h2>{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div></div>{action}</div>; }
+function Icon({ name, size = 18 }) {
+  const Component = ICONS[name] || Activity;
+  return <ThreeDIcon name={name} size={size} fallback={<Component size={size} strokeWidth={2.1} aria-hidden="true" />} />;
+}
+
+function SectionHeader({ title, subtitle, action, icon: HeaderIcon = Activity }) {
+  return (
+    <div className="principal-section-head">
+      <div className="principal-section-title">
+        <span className="principal-section-icon">
+          <ThreeDIcon icon={HeaderIcon} size={18} />
+        </span>
+        <div>
+          <h2>{title}</h2>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
 function Empty({ children }) { return <p className="principal-empty-row">{children}</p>; }
 function Donut({ present = 0, absent = 0, late = 0, leave = 0, percentage, label }) {
   const total = present + absent + late + leave;

@@ -3,6 +3,7 @@ import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -463,10 +464,10 @@ export default function HolidayManagementPage() {
       actions={
         <div style={{ display: "flex", gap: "12px" }}>
           <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setImportModal(true)}>
-            <FileUp size={16} /> Import Holidays
+            <ThreeDIcon name="upload" size={16} /> Import Holidays
           </button>
           <button type="button" className="cms-btn cms-btn-primary" onClick={() => setFormHoliday(null)}>
-            <Plus size={16} /> Add Holiday
+            <ThreeDIcon name="add" size={16} /> Add Holiday
           </button>
         </div>
       }
@@ -484,7 +485,7 @@ export default function HolidayManagementPage() {
           <div className="cms-card-head"><div><h2>Holiday List</h2><p>Review and maintain academic holidays.</p></div></div>
           <div className="holiday-filters">
             <label className="holiday-search">
-              <Search size={16} />
+              <ThreeDIcon name="search" size={16} />
               <input value={query} onChange={(event) => updateFilter(setQuery)(event.target.value)} placeholder="Search holidays..." />
             </label>
             <HolidayFilter value={month} onChange={changeMonth} label="Filter by month" options={[{ value: "All", label: "All Months" }, ...months, { value: "Custom Range", label: "Custom Range" }]} />
@@ -541,13 +542,13 @@ export default function HolidayManagementPage() {
                       <td>
                         <div className="holiday-actions">
                           <button type="button" className="cms-action-btn" title="View holiday" aria-label="View holiday" onClick={() => setViewHoliday(holiday)}>
-                            <Eye size={15} />
+                            <ThreeDIcon name="view" size={15} />
                           </button>
                           <button type="button" className="cms-action-btn" title="Edit holiday" aria-label="Edit holiday" onClick={() => setFormHoliday(holiday)}>
-                            <Edit3 size={15} />
+                            <ThreeDIcon name="edit" size={15} />
                           </button>
                           <button type="button" className="cms-action-btn danger" title="Delete holiday" aria-label="Delete holiday" onClick={() => setDeleteHoliday(holiday)}>
-                            <Trash2 size={15} />
+                            <ThreeDIcon name="delete" size={15} />
                           </button>
                         </div>
                       </td>
