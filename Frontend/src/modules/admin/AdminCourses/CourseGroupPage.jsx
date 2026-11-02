@@ -92,8 +92,6 @@ const normalizeGroup = (item) => {
     name: item.groupName || "-",
     code: item.groupCode || "-",
     description: item.description ?? "",
-    availableLevels: normalizeLevels(item.eligibleAcademicLevels ?? item.eligibleLevels ?? []),
-    levels: item.eligibleAcademicLevels ?? item.eligibleLevels ?? [],
     status: item.isActive ? "Active" : "Inactive",
   };
 };
@@ -104,8 +102,8 @@ const groupFormFields = [
   { name: "status", label: "Status", type: "select", options: STATUS_OPTIONS, required: true },
   { name: "description", label: "Description", type: "textarea" },
 ];
-const toPayload = (values, programIds, masterGroupId) => ({
-  ...(!masterGroupId ? { boardId: Number(values.board) } : {}),
+const toPayload = (values, programIds) => ({
+  boardId: Number(values.board),
   groupName: values.name.trim(),
   groupCode: values.code.trim(),
   description: values.description?.trim() || null,
@@ -123,6 +121,16 @@ const loadProgramMaster = async () =>
   getCollection(requireSuccess(await apiClient.get(apiEndpoints.programs.list)).data).map(
     normalizeProgram,
   );
+const loadBoardLevels = async (boardId) => {
+  if (!validId(boardId)) throw new Error("Select a valid board to load academic levels.");
+  const response = requireSuccess(await apiClient.get(apiEndpoints.boards.getAcademicLevels, {
+    params: { boardId: Number(boardId) },
+  }));
+  const levels = getCollection(response.data);
+  if (levels.some((level) => !read(level, "academicLevelName", "AcademicLevelName", "levelName", "LevelName")))
+    throw new Error("The API returned academic levels without names.");
+  return normalizeLevels(levels);
+};
 const groupApi = {
   fetchRows: async ({ search = "", boardId = "" } = {}) => {
     if (!validId(boardId)) return [];
@@ -134,7 +142,7 @@ const groupApi = {
     return getCollection(response.data).map(normalizeGroup);
   },
   fetchRow: async (id) => {
-    if (!validId(id)) throw new Error("Invalid MasterGroupId.");
+    if (!validId(id)) throw new Error("Invalid GroupId.");
     const item = responseData(
       requireSuccess(await apiClient.get(apiEndpoints.masterGroups.getById(id))),
     );
@@ -146,15 +154,16 @@ const groupApi = {
     return { group, programs: item.programs.map(normalizeProgram) };
   },
   saveRow: async (values, id, programIds) => {
-    const payload = toPayload(values, programIds, id);
+    const payload = toPayload(values, programIds);
     const response = requireSuccess(
       id
         ? await apiClient.put(apiEndpoints.masterGroups.update(id), payload)
         : await apiClient.post(apiEndpoints.masterGroups.create, payload),
     );
-    if (!validId(responseData(response)?.masterGroupId))
+    const savedId = responseData(response)?.groupId;
+    if (!validId(savedId) || (id && Number(savedId) !== Number(id)))
       throw new Error(
-        "The save response did not confirm a MasterGroupId. Reload the list before retrying.",
+        "The save response did not confirm the GroupId. Reload the list before retrying.",
       );
     return response;
   },
@@ -185,8 +194,8 @@ export const pageConfig = {
       render: (row) => (
         <>
           {row.board}
-          <small className="group-available-levels">
-            Available Levels: {row.availableLevels || "None configured"}
+          <small className="group-available-levels" title={row.levelsError || undefined}>
+            Available Levels: {row.levelsLoading ? "Loading..." : row.levelsError ? "Unable to load levels" : row.availableLevels || "None configured for this board"}
           </small>
         </>
       ),
@@ -376,19 +385,7 @@ function CourseGroupFormPage() {
           id ? groupApi.fetchRow(id) : null,
         ]);
         const boardId = detail ? detail.group.boardId : selectedBoardId;
-        const levels = detail
-          ? detail.group.availableLevels
-          : validId(boardId)
-            ? normalizeLevels(
-                getCollection(
-                  requireSuccess(
-                    await apiClient.get(apiEndpoints.boards.getAcademicLevels, {
-                      params: { boardId: Number(boardId) },
-                    }),
-                  ).data,
-                ),
-              )
-            : "";
+        const levels = validId(boardId) ? await loadBoardLevels(boardId) : "";
         if (ignore) return;
         setBoards(
           uniqueByValue([
@@ -511,7 +508,7 @@ function CourseGroupFormPage() {
                   ))}
                 </div>
                 <p>
-                  Available Levels: {availableLevels || "None configured"}. Reusable across current
+                  Available Levels: {availableLevels || "None configured for this board"}. Reusable across current
                   and future academic years.
                 </p>
                 <ProgramsPanel
@@ -556,6 +553,8 @@ function CourseGroupListPage() {
   const location = useLocation();
   const { selectedBoardId } = useAcademicContext();
   const [rows, setRows] = useState([]);
+  const [boardLevels, setBoardLevels] = useState({ boardId: "", text: "", loading: true, error: "" });
+  const [levelsRetry, setLevelsRetry] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(location.state?.groupMessage || "");
@@ -565,6 +564,29 @@ function CourseGroupListPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingId, setDeletingId] = useState("");
   const [deleteError, setDeleteError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const boardId = String(selectedBoardId);
+    setBoardLevels({ boardId, text: "", loading: true, error: "" });
+    if (validId(boardId)) {
+      loadBoardLevels(boardId).then(
+        (text) => { if (active) setBoardLevels({ boardId, text, loading: false, error: "" }); },
+        (failure) => { if (active) setBoardLevels({ boardId, text: "", loading: false, error: getApiErrorMessage(failure) }); },
+      );
+    }
+    return () => { active = false; };
+  }, [selectedBoardId, levelsRetry]);
+
+  const displayedRows = useMemo(() => rows.map((row) => ({
+    ...row,
+    availableLevels: row.boardId === boardLevels.boardId ? boardLevels.text : "",
+    levelsLoading: row.boardId === String(selectedBoardId)
+      && (boardLevels.boardId !== row.boardId || boardLevels.loading),
+    levelsError: row.boardId !== String(selectedBoardId)
+      ? "This group's board does not match the selected board."
+      : boardLevels.boardId === row.boardId ? boardLevels.error : "",
+  })), [rows, selectedBoardId, boardLevels]);
 
   useEffect(() => {
     if (location.state?.groupMessage) navigate(location.pathname, { replace: true, state: null });
@@ -680,6 +702,12 @@ function CourseGroupListPage() {
         {!validId(selectedBoardId) ? (
           <p>Select a Board in the top navbar to view groups.</p>
         ) : null}
+        {boardLevels.boardId === String(selectedBoardId) && boardLevels.error ? (
+          <p role="alert">
+            Unable to load available academic levels: {boardLevels.error}{" "}
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setLevelsRetry((value) => value + 1)}>Retry levels</button>
+          </p>
+        ) : null}
         {error ? (
           <div className="cms-card" style={{ marginBottom: 16 }}>
             <div className="cms-card-body">
@@ -693,7 +721,7 @@ function CourseGroupListPage() {
         <DataTable
           title={pageConfig.title}
           columns={columns}
-          rows={rows}
+          rows={displayedRows}
           loading={loading}
           addLabel={pageConfig.addLabel}
           searchPlaceholder="Search by group name or code..."
