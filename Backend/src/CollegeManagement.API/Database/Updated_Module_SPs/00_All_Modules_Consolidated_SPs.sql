@@ -8261,14 +8261,18 @@ BEGIN
         sa.*,
         b.BoardName,
         ay.AcademicYearName,
+        al.LevelName AS AcademicLevelName,
         g.GroupName,
+        p.ProgramName,
         c.CampusName,
         sc.CampusName AS SourceCampusName,
         CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
     FROM `StudentAdmissions` sa
     LEFT JOIN `Boards` b ON sa.BoardId = b.BoardId
     LEFT JOIN `AcademicYears` ay ON sa.AcademicYearId = ay.AcademicYearId
+    LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
     LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+    LEFT JOIN `Programs` p ON sa.ProgramId = p.ProgramId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
@@ -8288,14 +8292,18 @@ BEGIN
         sa.*,
         b.BoardName,
         ay.AcademicYearName,
+        al.LevelName AS AcademicLevelName,
         g.GroupName,
+        p.ProgramName,
         c.CampusName,
         sc.CampusName AS SourceCampusName,
         CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
     FROM `StudentAdmissions` sa
     LEFT JOIN `Boards` b ON sa.BoardId = b.BoardId
     LEFT JOIN `AcademicYears` ay ON sa.AcademicYearId = ay.AcademicYearId
+    LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
     LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+    LEFT JOIN `Programs` p ON sa.ProgramId = p.ProgramId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
