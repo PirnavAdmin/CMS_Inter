@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bus, Clock3, MapPin, UserRound, IndianRupee, WalletCards, Receipt, House, CheckCircle2, ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -134,29 +135,29 @@ export default function StudentTransport() {
   const showTransportDetails = Boolean(allocation);
   const status = read(allocation, "status", "Status", "assignmentStatus", "AssignmentStatus") || "Active";
   const details = [
-    ["Bus Type", read(allocation, "busType", "BusType", "vehicleType", "VehicleType") || read(profile, "busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC") || "—", Bus],
-    ["Route", read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber") || "—", MapPin],
-    ["Pickup Point", read(allocation, "pickupPointName", "PickupPointName", "pickupName", "PickupName") || read(profile, "pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint") || "—", MapPin],
-    ["Pickup Time", pickupTime, Clock3],
-    ["Drop Time", dropTime, Clock3],
-    ["Vehicle", read(allocation, "vehicleNumber", "VehicleNumber", "busNumber", "BusNumber") || "—", Bus],
-    ["Driver", read(allocation, "driverName", "DriverName") || "—", UserRound],
-    ["Bus Attendant", read(allocation, "attendantName", "AttendantName", "busAttendant", "BusAttendant") || "—", UserRound],
+    ["Bus Type", read(allocation, "busType", "BusType", "vehicleType", "VehicleType") || read(profile, "busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC") || "—", "bus"],
+    ["Route", read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber") || "—", "location"],
+    ["Pickup Point", read(allocation, "pickupPointName", "PickupPointName", "pickupName", "PickupName") || read(profile, "pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint") || "—", "location"],
+    ["Pickup Time", pickupTime, "clock"],
+    ["Drop Time", dropTime, "clock"],
+    ["Vehicle", read(allocation, "vehicleNumber", "VehicleNumber", "busNumber", "BusNumber") || "—", "bus"],
+    ["Driver", read(allocation, "driverName", "DriverName") || "—", "students"],
+    ["Bus Attendant", read(allocation, "attendantName", "AttendantName", "busAttendant", "BusAttendant") || "—", "students"],
   ];
   return <div className="sp-page"><StudentPageHeader title="Transport" subtitle="Your current college transport allocation."/>
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
         <StudentCard title="Transport Allocation" action={hostelOnly ? <span className="sp-transport-na">Not Applicable</span> : allocation ? <StudentStatusBadge value={status}/> : null}>
-      {bothActive ? <div className="sp-transport-conflict" role="status"><span className="sp-transport-hostel-badge"><CheckCircle2 size={16}/> Hostel Active</span><p>Both hostel and transport allocations are currently active. Please contact the college administration for clarification.</p><Link className="sp-text-link" to="/student-dashboard/hostel">View Hostel Details</Link></div> : null}
+      {bothActive ? <div className="sp-transport-conflict" role="status"><span className="sp-transport-hostel-badge"><ThreeDIcon name="check" size={16}/> Hostel Active</span><p>Both hostel and transport allocations are currently active. Please contact the college administration for clarification.</p><Link className="sp-text-link" to="/student-dashboard/hostel">View Hostel Details</Link></div> : null}
       {hostelOnly ? <div className="sp-transport-hostel-state">
-        <div className="sp-transport-hostel-icon" aria-hidden="true">🏠</div>
+        <div className="sp-transport-hostel-icon" aria-hidden="true"><ThreeDIcon name="hostel" size={48}/></div>
         <h2>Hostel Resident – Transport Not Required</h2>
         <p>You currently have an active hostel allocation. College transport is not required for students residing in the hostel.</p>
-        <div className="sp-transport-hostel-badges"><span className="sp-transport-hostel-badge"><CheckCircle2 size={18}/> Hostel Active</span><span className="sp-transport-unassigned-badge"><Bus size={18}/> Transport Not Assigned</span></div>
-        <div className="sp-transport-hostel-info"><span className="sp-transport-hostel-info-icon"><House size={28}/></span><div><strong>Your Hostel Details</strong><p>You can view your hostel, room and bed allocation details in the Hostel section.</p></div><Link className="sp-btn" to="/student-dashboard/hostel">View Hostel Details <ChevronRight size={18}/></Link></div>
-      </div> : showTransportDetails ? <><div className="sp-service-hero"><span><Bus size={30}/></span><div><h2>{read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name") || "Assigned Route"}</h2><p>{read(allocation, "routeCode", "RouteCode") || read(profileRoute, "routeCode", "RouteCode") || ""}{read(allocation, "vehicleNumber", "VehicleNumber") ? ` · ${read(allocation, "vehicleNumber", "VehicleNumber")}` : ""}</p></div></div><div className="sp-detail-grid">{details.map(([label, value, Icon]) => <div key={label}><Icon size={17}/><span>{label}</span><strong>{value}</strong></div>)}</div></> : error ? <StudentEmptyState icon={Bus} title="Transport allocation unavailable" text="Your current transport assignment could not be verified. Please refresh or contact the college office."/> : <StudentEmptyState icon={Bus} title="Transport Not Assigned" text="You currently do not have an active college transport allocation."/>}
+        <div className="sp-transport-hostel-badges"><span className="sp-transport-hostel-badge"><ThreeDIcon name="check" size={18}/> Hostel Active</span><span className="sp-transport-unassigned-badge"><ThreeDIcon name="bus" size={18}/> Transport Not Assigned</span></div>
+        <div className="sp-transport-hostel-info"><span className="sp-transport-hostel-info-icon"><ThreeDIcon name="hostel" size={28}/></span><div><strong>Your Hostel Details</strong><p>You can view your hostel, room and bed allocation details in the Hostel section.</p></div><Link className="sp-btn" to="/student-dashboard/hostel">View Hostel Details <ChevronRight size={18}/></Link></div>
+      </div> : showTransportDetails ? <><div className="sp-service-hero"><span><ThreeDIcon name="bus" size={30}/></span><div><h2>{read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name") || "Assigned Route"}</h2><p>{read(allocation, "routeCode", "RouteCode") || read(profileRoute, "routeCode", "RouteCode") || ""}{read(allocation, "vehicleNumber", "VehicleNumber") ? ` · ${read(allocation, "vehicleNumber", "VehicleNumber")}` : ""}</p></div></div><div className="sp-detail-grid">{details.map(([label, value, iconName]) => <div key={label}><ThreeDIcon name={iconName} size={17}/><span>{label}</span><strong>{value}</strong></div>)}</div></> : error ? <StudentEmptyState icon={Bus} title="Transport allocation unavailable" text="Your current transport assignment could not be verified. Please refresh or contact the college office."/> : <StudentEmptyState icon={Bus} title="Transport Not Assigned" text="You currently do not have an active college transport allocation."/>}
     </StudentCard>
     <StudentCard title="Transport Fee Summary" action={hostelOnly && noTransportFeeConfirmed ? <span className="sp-transport-na">Not Applicable</span> : <Link className="sp-text-link" to="/student-dashboard/fees">Fee details &amp; receipts</Link>}>
-      {hostelOnly && noTransportFeeConfirmed ? <div className="sp-transport-no-fee"><span><Receipt size={38}/></span><div><h3>No Transport Fee Applicable</h3><p>You are currently allocated to the hostel. No transport fee has been assigned to your student fee account.</p></div></div> : <> 
+      {hostelOnly && noTransportFeeConfirmed ? <div className="sp-transport-no-fee"><span><ThreeDIcon name="receipt" size={38}/></span><div><h3>No Transport Fee Applicable</h3><p>You are currently allocated to the hostel. No transport fee has been assigned to your student fee account.</p></div></div> : <> 
       {hostelOnly && (transportFee?.assigned || paymentHistory.length > 0) ? <p className="sp-muted">Previous transport fees and payments are shown below. These do not indicate a current transport allocation.</p> : null}
       {transportFee?.configured ? <p className="sp-muted">{transportFee.detail} · {transportFee.plan} rate: ₹{transportFee.monthlyFee.toLocaleString("en-IN")}</p> : null}
       {feeError ? <p className="sp-transport-fee-error" role="alert">{feeError}</p> : null}

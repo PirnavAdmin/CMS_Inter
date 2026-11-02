@@ -3534,7 +3534,14 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
 
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
-  const [yearFeeMode, setYearFeeMode] = useState("same");
+  const [selectedYearFeeMode, setYearFeeMode] = useState(null);
+  const savedYearFeeMode = useMemo(() => {
+    const modes = new Set(structures.map((row) => String(row.yearFeeMode || "").trim().toLowerCase())
+      .filter((mode) => mode === "same" || mode === "different"));
+    // Conflicting per-structure modes do not define a single saved selection.
+    return modes.size === 1 ? [...modes][0] : "";
+  }, [structures]);
+  const yearFeeMode = selectedYearFeeMode ?? savedYearFeeMode;
   const [yearIncrementType, setYearIncrementType] = useState("percentage");
   const [yearIncrementValue, setYearIncrementValue] = useState("");
   const [yearIncrementError, setYearIncrementError] = useState("");
@@ -3621,8 +3628,10 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const openAddStructure = () => {
-    if (!yearFeeMode) {
-      setYearFeeMode("same");
+    if (loading) return;
+    if (yearFeeMode !== "same" && yearFeeMode !== "different") {
+      onToast("Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.");
+      return;
     }
     setFirstYearTotal(0);
     setIsAdding(true);
@@ -3633,9 +3642,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
     <>
       <section className="cms-fee-year-config cms-fee-year-page" aria-labelledby="fs-year-config-title">
         <h4 id="fs-year-config-title">Fee Configuration by Year</h4>
-        {!yearFeeMode ? (
-          <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
-        ) : null}
+        <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
         <fieldset className="cms-fee-year-options">
           <legend className="cms-sr-only">Year fee configuration</legend>
           {[ ["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"] ].map(([mode, label]) => (

@@ -4,7 +4,7 @@ const THEME_POLICY_STORAGE_KEY = "pirnav-theme-policy";
 
 export const DEFAULT_THEME_POLICY = {
   themeMode: "independent", // "independent" | "admin"
-  adminPalette: "olive",
+  adminPalette: "purple",
   adminCustomColor: "",
   adminDarkMode: "light",
 };
@@ -48,7 +48,7 @@ export async function fetchThemePolicy() {
     const data = res?.data?.data || res?.data;
     if (data && typeof data === "object") {
       const mode = (data.themeMode || data.ThemeMode || "independent").toLowerCase();
-      const palette = data.adminPalette || data.AdminPalette || "olive";
+      const palette = data.adminPalette || data.AdminPalette || "purple";
       const customColor = data.adminCustomColor || data.AdminCustomColor || "";
       const darkMode = data.adminDarkMode || data.AdminDarkMode || "light";
 

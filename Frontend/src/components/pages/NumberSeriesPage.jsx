@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, Toast, Skeleton } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -604,7 +605,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                             }
                           }}
                         >
-                          <Trash2 size={16} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       )}
                     </div>
@@ -642,7 +643,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                     onClick={() => navigate(`/dashboard/settings/number-series/${series.id}`)}
                     title="View details and generated history"
                   >
-                    <Eye size={15} />
+                    <ThreeDIcon name="view" size={15} />
                     <span>Details</span>
                   </button>
                 </div>
@@ -758,7 +759,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
               className="cms-btn cms-btn-primary"
               onClick={() => navigate(`/dashboard/settings/number-series/${currentSeries.id}/edit`)}
             >
-              <Edit3 size={16} />
+              <ThreeDIcon name="edit" size={16} />
               <span>Edit Series</span>
             </button>
           </div>

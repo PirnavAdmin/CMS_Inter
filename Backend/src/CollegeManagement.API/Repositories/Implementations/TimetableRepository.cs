@@ -168,7 +168,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<string?> CheckSlotConflictAsync(int academicYearId, int sectionId, int staffId, int roomId, int dayOfWeek, int periodId, int? excludeId = null)
+        public async Task<string?> CheckSlotConflictAsync(int academicYearId, int sectionId, int? staffId, int? roomId, int dayOfWeek, int periodId, int? excludeId = null)
         {
             var conn = await GetOpenConnectionAsync();
             var conflicts = (await conn.QueryAsync<dynamic>(
@@ -178,9 +178,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = academicYearId,
                     p_DayOfWeek = dayOfWeek,
                     p_PeriodId = periodId,
-                    p_StaffId = staffId,
+                    p_StaffId = staffId.HasValue && staffId.Value > 0 ? staffId.Value : (int?)null,
                     p_SectionId = sectionId,
-                    p_RoomId = roomId,
+                    p_RoomId = roomId.HasValue && roomId.Value > 0 ? roomId.Value : (int?)null,
                     p_ExcludeTimetableId = excludeId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
@@ -206,10 +206,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_SectionId = dto.SectionId,
                     p_DayOfWeek = dto.DayOfWeek,
                     p_PeriodId = dto.PeriodId,
-                    p_SubjectId = dto.SubjectId,
-                    p_FacultyId = dto.StaffId,
-                    p_StaffId = dto.StaffId,
-                    p_RoomId = dto.RoomId,
+                    p_SubjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null,
+                    p_FacultyId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_StaffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_RoomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null,
                     p_IsPublished = dto.IsPublished ? 1 : 0,
                     p_ApprovalStatus = dto.IsPublished ? (int)TimetableApprovalStatus.Published : (int)TimetableApprovalStatus.Draft,
                     p_Remarks = dto.Remarks,
@@ -236,10 +236,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_SectionId = dto.SectionId,
                     p_DayOfWeek = dto.DayOfWeek,
                     p_PeriodId = dto.PeriodId,
-                    p_SubjectId = dto.SubjectId,
-                    p_FacultyId = dto.StaffId,
-                    p_StaffId = dto.StaffId,
-                    p_RoomId = dto.RoomId,
+                    p_SubjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null,
+                    p_FacultyId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_StaffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_RoomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null,
                     p_IsPublished = dto.IsPublished ? 1 : 0,
                     p_ApprovalStatus = dto.IsPublished ? (int)TimetableApprovalStatus.Published : (int)TimetableApprovalStatus.Draft,
                     p_Remarks = dto.Remarks,
@@ -291,19 +291,19 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> HasSectionSlotConflictAsync(int academicYearId, int sectionId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, sectionId, 0, 0, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, sectionId, null, null, dayOfWeek, periodId, excludeId);
             return result == "SECTION";
         }
 
         public async Task<bool> HasFacultySlotConflictAsync(int academicYearId, int facultyId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, 0, facultyId, 0, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, 0, facultyId, null, dayOfWeek, periodId, excludeId);
             return result == "STAFF";
         }
 
         public async Task<bool> HasRoomSlotConflictAsync(int academicYearId, int roomId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, 0, 0, roomId, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, 0, null, roomId, dayOfWeek, periodId, excludeId);
             return result == "ROOM";
         }
 

@@ -1,35 +1,25 @@
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import React from "react";
-import {
-  LayoutDashboard,
-  MapPin,
-  Route as RouteIcon,
-  Users,
-  Navigation,
-  FileBarChart2,
-  User,
-  LogOut,
-  X,
-  Bus,
-} from "lucide-react";
+import { X, LogOut } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
 
 export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, onClose }) {
   const { driverProfile } = useDriverData();
   const menuItems = [
-    { id: "home", label: "Dashboard", icon: LayoutDashboard },
-    { id: "route", label: "My Route", icon: RouteIcon },
-    { id: "trips", label: "Trips", icon: Bus },
-    { id: "students", label: "Students", icon: Users },
-    { id: "gps", label: "GPS Tracking", icon: Navigation },
-    { id: "reports", label: "Reports", icon: FileBarChart2 },
-    { id: "profile", label: "Profile", icon: User },
-    { id: "attendance", label: "My Attendance", icon: FileBarChart2 },
-    { id: "leave", label: "Leave Management", icon: FileBarChart2 },
-    { id: "payslips", label: "My Payslips", icon: FileBarChart2 },
-    { id: "holidays", label: "Holidays", icon: FileBarChart2 },
-    { id: "settings", label: "Settings", icon: User },
+    { id: "home", label: "Dashboard", icon: "dashboard" },
+    { id: "route", label: "My Route", icon: "transport" },
+    { id: "trips", label: "Trips", icon: "transport" },
+    { id: "students", label: "Students", icon: "students" },
+    { id: "gps", label: "GPS Tracking", icon: "campus" },
+    { id: "reports", label: "Reports", icon: "reports-analytics" },
+    { id: "profile", label: "Profile", icon: "staff" },
+    { id: "attendance", label: "My Attendance", icon: "staff-attendance" },
+    { id: "leave", label: "Leave Management", icon: "staff-leave" },
+    { id: "payslips", label: "My Payslips", icon: "payroll" },
+    { id: "holidays", label: "Holidays", icon: "holidays" },
+    { id: "settings", label: "Settings", icon: "settings" },
   ];
 
   return (
@@ -51,7 +41,6 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
       <nav className="dp-sidebar-nav">
         <div className="dp-nav-section-title">MENU</div>
         {menuItems.map((item) => {
-          const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
             <button
@@ -63,7 +52,7 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
                 if (onClose) onClose();
               }}
             >
-              <Icon size={18} className="dp-nav-icon" />
+              <ThreeDIcon name={item.icon} size={20} className="dp-nav-icon" />
               <span>{item.label}</span>
               {isActive && <span className="dp-active-indicator" />}
             </button>

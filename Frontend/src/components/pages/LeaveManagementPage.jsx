@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2, Plus, Calendar, AlertCircle, RefreshCw, X, ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -48,8 +49,8 @@ const manage = (request) => {
 
 function LeaveStatus({ status }) {
   const normalized = String(status || "").toLowerCase();
-  const Icon = normalized === "approved" ? CheckCircle2 : normalized === "rejected" ? XCircle : Clock3;
-  return <span className={`leave-detail-status ${normalized}`}><Icon size={15} />{status}</span>;
+  const iconName = normalized === "approved" ? "check" : normalized === "rejected" ? "cross" : "clock";
+  return <span className={`leave-detail-status ${normalized}`}><ThreeDIcon name={iconName} size={15} />{status}</span>;
 }
 
 function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected, reviewing = false }) {
@@ -1785,7 +1786,12 @@ export default function LeaveManagementPage() {
             <>
               {/* Stat Summary Cards */}
               <section className="att-summary att-leave-summary">
-                {["Total Requests", "Pending Review", "Approved", "Rejected"].map(label => {
+                {[
+                  { label: "Total Requests", icon: "leaves" },
+                  { label: "Pending Review", icon: "clock" },
+                  { label: "Approved", icon: "check" },
+                  { label: "Rejected", icon: "cross" },
+                ].map(({ label, icon }) => {
                   let count = 0;
                   if (label === "Total Requests") count = currentTabRequests.length;
                   else if (label === "Pending Review") count = currentTabRequests.filter(r => r.status === "Pending").length;
@@ -1793,9 +1799,12 @@ export default function LeaveManagementPage() {
                   else if (label === "Rejected") count = currentTabRequests.filter(r => r.status === "Rejected").length;
 
                   return (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <b>{count}</b>
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <ThreeDIcon name={icon} size={28} />
+                      <div>
+                        <span>{label}</span>
+                        <b>{count}</b>
+                      </div>
                     </div>
                   );
                 })}
@@ -1804,7 +1813,7 @@ export default function LeaveManagementPage() {
               {/* Filter Bar */}
               <div className="leave-filter-bar">
                 <div className="leave-search-box">
-                  <Search size={16} />
+                  <ThreeDIcon name="search" size={16} />
                   <input
                     type="text"
                     placeholder="Search faculty name, ID, department..."
@@ -1892,7 +1901,7 @@ export default function LeaveManagementPage() {
                                   {openingRequestId === rid ? (
                                     <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite" }} />
                                   ) : (
-                                    <Eye size={16} />
+                                    <ThreeDIcon name="view" size={16} />
                                   )}
                                 </button>
                               </td>

@@ -33,19 +33,17 @@ namespace CollegeManagement.API.DTOs.Timetable
         [Required]
         public int PeriodId { get; set; }
 
-        [Required]
-        public int SubjectId { get; set; }
+        public int? SubjectId { get; set; }
 
-        public int StaffId { get; set; }
+        public int? StaffId { get; set; }
 
-        public int FacultyId
+        public int? FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
 
-        [Required]
-        public int RoomId { get; set; }
+        public int? RoomId { get; set; }
 
         public bool IsPublished { get; set; } = false;
 
@@ -64,14 +62,14 @@ namespace CollegeManagement.API.DTOs.Timetable
         public int? CampusId { get; set; }
         public int DayOfWeek { get; set; }
         public int PeriodId { get; set; }
-        public int SubjectId { get; set; }
-        public int StaffId { get; set; }
-        public int FacultyId
+        public int? SubjectId { get; set; }
+        public int? StaffId { get; set; }
+        public int? FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
-        public int RoomId { get; set; }
+        public int? RoomId { get; set; }
         public bool IsPublished { get; set; } = false;
         public string? Remarks { get; set; }
         public string? SlotType { get; set; } = "Teaching";
@@ -152,34 +150,36 @@ namespace CollegeManagement.API.DTOs.Timetable
         public TimeSpan EndTime { get; set; }
         public bool IsBreak { get; set; }
 
-        public int SubjectId { get; set; }
-        public string SubjectCode { get; set; } = string.Empty;
-        public string SubjectName { get; set; } = string.Empty;
+        public int? SubjectId { get; set; }
+        public string? SubjectCode { get; set; }
+        public string? SubjectName { get; set; }
 
-        public int StaffId { get; set; }
-        public int FacultyId
+        public int? StaffId { get; set; }
+        public int? FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
 
-        public string StaffEmployeeId { get; set; } = string.Empty;
-        public string FacultyEmployeeId
+        public string? StaffEmployeeId { get; set; }
+        public string? FacultyEmployeeId
         {
             get => StaffEmployeeId;
             set => StaffEmployeeId = value;
         }
 
-        public string StaffName { get; set; } = string.Empty;
-        public string FacultyName
+        public string? StaffName { get; set; }
+        public string? FacultyName
         {
             get => StaffName;
             set => StaffName = value;
         }
 
-        public int RoomId { get; set; }
-        public string RoomCode { get; set; } = string.Empty;
-        public string RoomName { get; set; } = string.Empty;
+        public int? RoomId { get; set; }
+        public string? RoomCode { get; set; }
+        public string? RoomName { get; set; }
+
+        public string SlotType { get; set; } = "Teaching";
 
         public bool IsPublished { get; set; }
         public int ApprovalStatus { get; set; } = 0; // 0=Draft, 1=Approved, 2=Published
@@ -277,22 +277,23 @@ namespace CollegeManagement.API.DTOs.Timetable
         public string DayName { get; set; } = string.Empty;
         public int PeriodId { get; set; }
         public string PeriodName { get; set; } = string.Empty;
-        public int SubjectId { get; set; }
-        public string SubjectName { get; set; } = string.Empty;
-        public int StaffId { get; set; }
-        public int FacultyId
+        public int? SubjectId { get; set; }
+        public string? SubjectName { get; set; }
+        public int? StaffId { get; set; }
+        public int? FacultyId
         {
             get => StaffId;
             set => StaffId = value;
         }
-        public string StaffName { get; set; } = string.Empty;
-        public string FacultyName
+        public string? StaffName { get; set; }
+        public string? FacultyName
         {
             get => StaffName;
             set => StaffName = value;
         }
-        public int RoomId { get; set; }
-        public string RoomName { get; set; } = string.Empty;
+        public int? RoomId { get; set; }
+        public string? RoomName { get; set; }
+        public string? SlotType { get; set; }
         public string Message { get; set; } = string.Empty;
         public string Code { get; set; } = string.Empty;
     }

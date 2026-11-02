@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Bus, ClipboardList, GraduationCap, Mail, MapPin, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -711,7 +712,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
 }
 
 const profileSectionIcons = { "Admission Details": ClipboardList, "Personal Information": User, "Contact Information": Mail, "Academic Placement": GraduationCap, "Student Type & Residential Allocation": Bus, "Previous Education": School, Address: MapPin, "Parent Details": Users };
-function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section data-profile-section={({ "Admission Details": "academic", "Personal Information": "personal", "Contact Information": "contact", "Academic Placement": "academic", "Student Type & Residential Allocation": "transport", "Previous Education": "academic", Address: "contact", "Parent Details": "parent" })[title]} className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
+function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section data-profile-section={({ "Admission Details": "academic", "Personal Information": "personal", "Contact Information": "contact", "Academic Placement": "academic", "Student Type & Residential Allocation": "transport", "Previous Education": "academic", Address: "contact", "Parent Details": "parent" })[title]} className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><ThreeDIcon icon={Icon} size={20} /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, required = false, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur, loading = false }) {
   const selected = String(value ?? "");

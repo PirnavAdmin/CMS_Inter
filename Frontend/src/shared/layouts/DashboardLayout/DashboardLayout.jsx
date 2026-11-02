@@ -1212,7 +1212,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
+    <div className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />

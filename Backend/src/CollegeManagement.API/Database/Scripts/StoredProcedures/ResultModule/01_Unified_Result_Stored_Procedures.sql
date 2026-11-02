@@ -977,8 +977,8 @@ BEGIN
     SELECT 
         sec.SectionId,
         COALESCE(sec.SectionName, CONCAT('Section-', p_SectionId)) AS SectionName,
-        e.ExamId,
-        COALESCE(e.ExamName, '') AS ExamName,
+        COALESCE(e.ExamId, p_ExamId) AS ExamId,
+        COALESCE(e.ExamName, CONCAT('Exam #', p_ExamId)) AS ExamName,
         COALESCE(g.GroupName, 'MPC') AS GroupName,
         COALESCE(p.ProgramName, 'Regular Academic') AS ProgramName,
         COALESCE(CONCAT(st.FirstName, ' ', st.LastName), CONCAT(fc.FirstName, ' ', fc.LastName), '—') AS InChargeName,
@@ -999,7 +999,7 @@ BEGIN
     GROUP BY sec.SectionId, sec.SectionName, e.ExamId, e.ExamName, g.GroupName, p.ProgramName, st.FirstName, st.LastName, fc.FirstName, fc.LastName;
 
     -- Result Set 2: Subject Definitions
-    SELECT DISTINCT
+    SELECT 
         sub.SubjectId,
         COALESCE(sub.SubjectName, CONCAT('Subject-', sub.SubjectId)) AS SubjectName,
         COALESCE(sub.SubjectCode, CONCAT('SUB', LPAD(sub.SubjectId, 3, '0'))) AS SubjectCode,
@@ -1012,7 +1012,8 @@ BEGIN
       AND m.ExaminationId = p_ExamId
       AND m.IsActive = 1
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR m.CampusId = p_CampusId)
-    ORDER BY sub.SubjectName ASC;
+    GROUP BY sub.SubjectId, sub.SubjectName, sub.SubjectCode, sub.Practical, sub.SubjectType, sub.TotalMarks
+    ORDER BY SubjectName ASC;
 
     -- Result Set 3: Student Marks
     SELECT 

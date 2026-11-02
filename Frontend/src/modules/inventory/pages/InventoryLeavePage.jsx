@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FileText, Plus } from "lucide-react";
+import { FileText } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { today } from "@/modules/admin/AdminInventory/inventoryModel.js";
 import { useDialogFocus } from "@/modules/admin/AdminInventory/components/InventoryUi.jsx";
@@ -151,13 +152,13 @@ export default function InventoryLeavePage() {
     <>
       <div className="ip-page-head">
         <div>
-          <h1>
-            <FileText size={26} /> Leave Management
+          <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ThreeDIcon name="leaves" size={26} /> Leave Management
           </h1>
           <p>View your applications, check balances, and request time off.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={handleOpenApply}>
-          <Plus size={16} /> Apply for Leave
+<button className="cms-btn cms-btn-primary" onClick={handleOpenApply}>
+          <ThreeDIcon name="add" size={16} /> Apply for Leave
         </button>
       </div>
       <div className="ip-staff-metrics">

@@ -1416,11 +1416,24 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
                 entity.Property(x => x.ProgramId).IsRequired(false);
-                entity.Property(x => x.StaffId).HasColumnName("StaffId");
+                entity.Property(x => x.StaffId).HasColumnName("StaffId").IsRequired(false);
                 entity.HasOne(x => x.Period).WithMany().HasForeignKey(x => x.PeriodId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(x => x.SlotType).HasMaxLength(20).HasDefaultValue("Teaching");
+                entity.Property(x => x.SubjectId).IsRequired(false);
+                entity.Property(x => x.RoomId).IsRequired(false);
+            });
+            #endregion
+
+            #region Timetable
+            modelBuilder.Entity<Timetable>(entity =>
+            {
+                entity.Property(x => x.SlotType).HasMaxLength(20).HasDefaultValue("Teaching");
+                entity.Property(x => x.SubjectId).IsRequired(false);
+                entity.Property(x => x.StaffId).IsRequired(false);
+                entity.Property(x => x.RoomId).IsRequired(false);
             });
             #endregion
 

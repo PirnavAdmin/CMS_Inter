@@ -13,6 +13,8 @@ import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { Route as RouteIcon } from "lucide-react";
 import { useTransportManager } from "../TransportManagerContext.jsx";
 
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+
 export const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
   staffLeave: { src: managementIconsSprite, position: "100% 0%" },
@@ -22,20 +24,7 @@ export const generatedSidebarIcons = {
 
 export function SidebarIcon({ icon, sub = false }) {
   if (!icon) return null;
-  if (typeof icon === "string") {
-    return <img className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} src={icon} alt="" aria-hidden="true" />;
-  }
-  if (icon.src) {
-    return (
-      <span
-        className={`cms-nav-3d-icon cms-nav-generated-icon${sub ? " cms-nav-3d-icon-sub" : ""}`}
-        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-        aria-hidden="true"
-      />
-    );
-  }
-  const IconComponent = icon;
-  return <IconComponent className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} size={sub ? 15 : 18} aria-hidden="true" />;
+  return <ThreeDIcon icon={icon} size={sub ? 17 : 20} className={sub ? "cms-nav-3d-icon-sub" : ""} />;
 }
 
 export const NAV_GROUPS = [
@@ -60,7 +49,7 @@ export const NAV_GROUPS = [
       {
         to: "/transport-manager/setup",
         label: "Setup",
-        icon: RouteIcon,
+        icon: transportBusIcon,
       },
       {
         to: "/transport-manager/operations",

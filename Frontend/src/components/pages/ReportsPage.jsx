@@ -53,6 +53,7 @@ import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Field, Modal, Toast } from "@/shared/components/Ui.jsx";
 import admissionsImage from "@/assets/reports-3d/admissions.png";
 import attendanceImage from "@/assets/reports-3d/attendance.png";
@@ -641,7 +642,7 @@ function DetailDataTable({
 
         <div className="reports-detail-search-bar">
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-            <Search size={14} style={{ position: "absolute", left: "10px", color: "var(--cms-muted)", pointerEvents: "none" }} />
+            <ThreeDIcon name="search" size={14} style={{ position: "absolute", left: "10px", pointerEvents: "none" }} />
             <input
               type="text"
               className="reports-search-input"
@@ -662,7 +663,7 @@ function DetailDataTable({
             disabled={exportingPdf}
             title="Export filtered records to PDF"
           >
-            <Download size={13} /> {exportingPdf ? "Exporting..." : "PDF"}
+            <ThreeDIcon name="download" size={13} /> {exportingPdf ? "Exporting..." : "PDF"}
           </button>
           <button
             className="cms-btn cms-btn-ghost"
@@ -671,7 +672,7 @@ function DetailDataTable({
             disabled={exportingExcel}
             title="Export filtered records to Excel"
           >
-            <FileSpreadsheet size={13} /> {exportingExcel ? "Exporting..." : "Excel"}
+            <ThreeDIcon name="excel" size={13} /> {exportingExcel ? "Exporting..." : "Excel"}
           </button>
           <button
             className="cms-btn cms-btn-ghost"
@@ -687,7 +688,7 @@ function DetailDataTable({
             disabled={filteredItems.length === 0}
             title="Export filtered records to CSV"
           >
-            <FileText size={13} /> CSV
+            <ThreeDIcon name="pdf" size={13} /> CSV
           </button>
         </div>
       </div>
@@ -1530,7 +1531,7 @@ export default function ReportsPage() {
             </div>
             <div className="reports-detail-search-bar">
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Search size={14} style={{ position: "absolute", left: "10px", color: "var(--cms-muted)", pointerEvents: "none" }} />
+                <ThreeDIcon name="search" size={14} style={{ position: "absolute", left: "10px", pointerEvents: "none" }} />
                 <input
                   type="text"
                   className="reports-search-input"
@@ -1554,7 +1555,7 @@ export default function ReportsPage() {
                 disabled={filteredAuditLogs.length === 0}
                 title="Export audit logs to CSV"
               >
-                <FileText size={13} /> CSV
+                <ThreeDIcon name="pdf" size={13} /> CSV
               </button>
             </div>
           </div>
@@ -1651,19 +1652,19 @@ export default function ReportsPage() {
                 <Eye size={14} /> {previewing === "pdf" ? "Loading PDF..." : "Review PDF"}
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => previewReport("excel")} disabled={previewing === "excel"}>
-                <Eye size={14} /> {previewing === "excel" ? "Loading Excel..." : "Review Excel"}
+                <ThreeDIcon name="view" size={14} /> {previewing === "excel" ? "Loading Excel..." : "Review Excel"}
               </button>
               <button className="cms-btn cms-btn-primary" type="button" onClick={() => exportOverview("pdf")} disabled={Boolean(exportingOverview)}>
-                <Download size={14} /> {exportingOverview === "pdf" ? "Exporting..." : "Export PDF"}
+                <ThreeDIcon name="download" size={14} /> {exportingOverview === "pdf" ? "Exporting..." : "Export PDF"}
               </button>
               <button className="cms-btn cms-btn-primary" type="button" onClick={() => exportOverview("excel")} disabled={Boolean(exportingOverview)}>
-                <FileSpreadsheet size={14} /> {exportingOverview === "excel" ? "Exporting..." : "Export Excel"}
+                <ThreeDIcon name="excel" size={14} /> {exportingOverview === "excel" ? "Exporting..." : "Export Excel"}
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => exportOverview("csv")} disabled={Boolean(exportingOverview)}>
-                <FileText size={14} /> CSV
+                <ThreeDIcon name="pdf" size={14} /> CSV
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={printBackendReport}>
-                <Printer size={14} /> Print
+                <ThreeDIcon name="print" size={14} /> Print
               </button>
             </div>
           </div>
@@ -1712,7 +1713,7 @@ export default function ReportsPage() {
                       }}
                       disabled={Boolean(exportingCards[`${key}-pdf`])}
                     >
-                      <Download size={12} /> PDF
+                      <ThreeDIcon name="download" size={12} /> PDF
                     </button>
                     <button
                       className="cms-btn cms-btn-ghost"
@@ -1724,7 +1725,7 @@ export default function ReportsPage() {
                       }}
                       disabled={Boolean(exportingCards[`${key}-excel`])}
                     >
-                      <FileSpreadsheet size={12} /> Excel
+                      <ThreeDIcon name="excel" size={12} /> Excel
                     </button>
                   </div>
                 </article>
@@ -1764,12 +1765,12 @@ export default function ReportsPage() {
             <>
               {pdfPreviewLoaded ? (
                 <button className="cms-btn cms-btn-ghost" type="button" onClick={printBackendReport}>
-                  <Printer size={15} /> Print PDF
+                  <ThreeDIcon name="print" size={15} /> Print PDF
                 </button>
               ) : null}
               {pdfPreviewLoaded ? (
                 <button className="cms-btn cms-btn-primary" type="button" onClick={() => downloadBlob(previewFile.blob, previewFile.filename)}>
-                  <Download size={15} /> Download PDF
+                  <ThreeDIcon name="download" size={15} /> Download PDF
                 </button>
               ) : null}
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => setPreviewFile(null)}>

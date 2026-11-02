@@ -197,12 +197,17 @@
 .student-col-actions { width: 7%; }
 .student-management-table td:last-child { overflow: visible; }
 .student-management-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 5px 14px; border-top: 1px solid var(--cms-border); background: var(--cms-subtle); color: var(--cms-muted); font-size: 14px; font-weight: 600; }
-.student-management-pagination-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.student-management-pagination-actions { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: nowrap !important; }
 .student-management-pagination-actions > span { color: var(--cms-text); white-space: nowrap; }
 .student-management-pagination button { min-width: 36px; height: 36px; padding: 0 9px; border: 1px solid var(--cms-border); border-radius: 9px; background: var(--cms-surface); color: var(--cms-text); font: inherit; font-weight: 700; cursor: pointer; }
 .student-management-pagination button:hover:not(:disabled) { border-color: var(--cms-primary); background: var(--cms-primary-soft); color: var(--cms-primary); }
 .student-management-pagination button:disabled { cursor: not-allowed; opacity: .45; }
-@media (max-width: 640px) { .student-management-pagination { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 640px) {
+  .student-management-pagination { align-items: center; flex-direction: column; gap: 8px; text-align: center; }
+  .student-management-pagination > span { width: 100%; text-align: center; font-size: 12px; }
+  .student-management-pagination-actions { width: auto; margin: 0 auto; flex-wrap: nowrap !important; }
+  .student-management-pagination button { min-width: 32px; height: 32px; padding: 0 8px; font-size: 12px; }
+}
 
 /* Profile editing deliberately excludes academic allocation controls. */
 .student-profile-edit { display: grid; gap: 14px; overflow: visible; border: 0; background: transparent; box-shadow: none; }
