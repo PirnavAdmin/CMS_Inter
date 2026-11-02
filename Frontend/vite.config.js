@@ -7,6 +7,10 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function examCellShieldPlugin(apiBaseUrl) {
+  const logFallback = (context, error) => {
+    console.warn(`[exam-cell-response-normalizer] ${context}; using the fallback response.`, error);
+  };
+
   return {
     name: "exam-cell-response-normalizer",
     configureServer(server) {
@@ -142,7 +146,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                   pageSize: 1000,
                 }));
               }
-            } catch { }
+            } catch (error) {
+              logFallback("Promotions eligible lookup failed", error);
+            }
             return res.end(JSON.stringify({
               success: true,
               data: [],
@@ -267,7 +273,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                 const sJson = await subjectsRes.json();
                 return res.end(JSON.stringify(sJson));
               }
-            } catch { }
+            } catch (error) {
+              logFallback("Subjects context lookup failed", error);
+            }
             return res.end(JSON.stringify([]));
           }
 
@@ -295,7 +303,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                 const rawItems = sJson.items || sJson.data || (Array.isArray(sJson) ? sJson : []);
                 return res.end(JSON.stringify(rawItems));
               }
-            } catch { }
+            } catch (error) {
+              logFallback("Certificate student lookup failed", error);
+            }
             return res.end(JSON.stringify([]));
           }
 
@@ -346,7 +356,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                 const text = await retryRes.text();
                 return res.end(text);
               }
-            } catch { }
+            } catch (error) {
+              logFallback("Staff attendance punch-out retry failed", error);
+            }
             return res.end(JSON.stringify({
               success: true,
               message: "Shift completed successfully via Exam Cell Portal.",
@@ -377,7 +389,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                       students = sList;
                     }
                   }
-                } catch { }
+                } catch (error) {
+                  logFallback("Evaluation student lookup failed", error);
+                }
               }
 
               let subjectName = `Subject #${subjectId}`;
@@ -390,7 +404,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                     subjectName = subObj.subjectName || subObj.name || subjectName;
                     subjectCode = subObj.subjectCode || subObj.code || subjectCode;
                   }
-                } catch { }
+                } catch (error) {
+                  logFallback("Evaluation subject lookup failed", error);
+                }
               }
 
               return res.end(JSON.stringify({
@@ -440,7 +456,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                   remarks: null,
                 })),
               }));
-            } catch { }
+            } catch (error) {
+              logFallback("Evaluation response construction failed", error);
+            }
             return res.end(JSON.stringify({
               evaluationId: "",
               totalStudents: 0,
@@ -464,7 +482,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                   if (sRes.ok) {
                     studentObj = await sRes.json();
                   }
-                } catch { }
+                } catch (error) {
+                  logFallback("Student analysis detail lookup failed", error);
+                }
               }
 
               return res.end(JSON.stringify({
@@ -491,7 +511,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                 result: "N/A",
                 status: "NOT STARTED",
               }));
-            } catch { }
+            } catch (error) {
+              logFallback("Student analysis response construction failed", error);
+            }
             return res.end(JSON.stringify({
               studentId: 0,
               subjects: [],
@@ -514,7 +536,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || " https://heroics-ambush-baton.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -559,12 +581,6 @@ export default defineConfig(({ mode }) => {
               }
             });
           },
-        },
-        "/uploads": {
-          target: apiBaseUrl,
-          changeOrigin: true,
-          secure: !isHttpsApi ? true : false,
-          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
         },
         "/hubs": {
           target: apiBaseUrl,

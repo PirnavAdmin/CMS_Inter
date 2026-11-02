@@ -23,10 +23,12 @@ const studentApiEndpoints = {
   },
   attendance: {
     search: "/api/v1/attendance/search",
+    dailyLogs: (studentId) => `/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`,
     dailySessions: "/api/v1/attendance/admin/students",
   },
   results: {
     published: "/api/v1/students/me/results",
+    publishedMemo: (examinationId) => `/api/v1/students/me/results/${encodeURIComponent(examinationId)}/memo`,
     studentResult: "/api/v1/results/student-result",
     studentMemo: (studentId) => `/api/v1/results/student/${encodeURIComponent(studentId)}/memo`,
     studentMemoPdf: "/api/v1/results/students/memo",
