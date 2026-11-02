@@ -593,9 +593,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             const string historySql = @"
 SELECT 
     COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
-    COALESCE(tc.WorkEndTime, '16:30:00') AS WorkEndTime,
+    COALESCE(tc.WorkEndTime, '15:20:00') AS WorkEndTime,
     COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
-    COALESCE(tc.EarlyCheckoutThreshold, '16:30:00') AS EarlyCheckoutThreshold,
+    COALESCE(tc.EarlyCheckoutThreshold, '15:20:00') AS EarlyCheckoutThreshold,
     COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
 FROM `Staffs` s
 LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 

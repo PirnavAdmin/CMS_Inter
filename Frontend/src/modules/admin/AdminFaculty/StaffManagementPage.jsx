@@ -6749,7 +6749,7 @@ function Details({ record, records, setRecords, id }) {
     };
 
     const dateOfBirth = sanitizeDate(updatedRecord.dateOfBirth) || sanitizeDate(activeRecord.dateOfBirth) || "1990-01-01";
-    const dateOfJoining = sanitizeDate(updatedRecord.dateOfJoining) || sanitizeDate(activeRecord.dateOfJoining);
+    const dateOfJoining = sanitizeDate(updatedRecord.dateOfJoining) || sanitizeDate(updatedRecord.joiningDate) || sanitizeDate(activeRecord.dateOfJoining) || sanitizeDate(activeRecord.joiningDate) || "2024-01-01";
     const experienceFrom = sanitizeDate(updatedRecord.experienceFrom) || sanitizeDate(activeRecord.experienceFrom);
     const experienceTo = sanitizeDate(updatedRecord.experienceTo) || sanitizeDate(activeRecord.experienceTo);
 
@@ -6761,6 +6761,24 @@ function Details({ record, records, setRecords, id }) {
         ? rawSubs.split(",").map((s) => s.trim()).filter(Boolean)
         : [];
 
+    // Clear legacy ID mismatches if user changed Department / Designation / Board by name in preview
+    let departmentId = updatedRecord.departmentId;
+    if (updatedRecord.department && updatedRecord.department !== activeRecord.department) {
+      departmentId = null;
+    }
+
+    let designationId = updatedRecord.designationId;
+    if (updatedRecord.designation && updatedRecord.designation !== activeRecord.designation) {
+      designationId = null;
+    }
+
+    let boardId = updatedRecord.boardId;
+    if (updatedRecord.board && updatedRecord.board !== activeRecord.board) {
+      boardId = null;
+    }
+
+    const qualification = updatedRecord.highestQualification || updatedRecord.qualification || activeRecord.highestQualification || activeRecord.qualification || "Graduate";
+
     const payload = {
       ...activeRecord,
       ...updatedRecord,
@@ -6771,6 +6789,8 @@ function Details({ record, records, setRecords, id }) {
       gender: updatedRecord.gender || activeRecord.gender || "Other",
       mobile: updatedRecord.mobile || activeRecord.mobile || "",
       dateOfBirth,
+      qualification,
+      highestQualification: qualification,
       allocatedSubjects,
       subjects: allocatedSubjects,
       departmentSpecific: {
@@ -6779,7 +6799,11 @@ function Details({ record, records, setRecords, id }) {
         allocatedSubjects,
         subjects: allocatedSubjects,
       },
-      ...(dateOfJoining ? { dateOfJoining, joiningDate: dateOfJoining } : {}),
+      dateOfJoining,
+      joiningDate: dateOfJoining,
+      ...(departmentId !== undefined ? { departmentId } : {}),
+      ...(designationId !== undefined ? { designationId } : {}),
+      ...(boardId !== undefined ? { boardId } : {}),
       ...(experienceFrom ? { experienceFrom } : {}),
       ...(experienceTo ? { experienceTo } : {}),
       ...(updatedRecord.totalExperience !== undefined ? { totalExperience: updatedRecord.totalExperience } : {}),
@@ -6824,23 +6848,16 @@ function Details({ record, records, setRecords, id }) {
     <DashboardLayout
       title="Staff Details"
       subtitle="View complete staff record and profile activity."
-      breadcrumb={["People", "Staff Management"]} actions={
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+      breadcrumb={["People", "Staff Management"]}
+      actions={
+        activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
           <button
-            className="cms-btn cms-btn-primary"
-            onClick={() => n(`/dashboard/staff/${activeRecord.id}/edit`)}
+            className="cms-btn cms-btn-secondary"
+            onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
           >
-            <Pencil size={14} style={{ marginRight: 6 }} /> Edit Staff
+            Review Submission
           </button>
-          {activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
-            <button
-              className="cms-btn cms-btn-secondary"
-              onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
-            >
-              Review Submission
-            </button>
-          ) : null}
-        </div>
+        ) : null
       }
     >
       <main className="staff-mock-page">

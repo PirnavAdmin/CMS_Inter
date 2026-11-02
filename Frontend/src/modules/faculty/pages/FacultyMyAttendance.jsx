@@ -70,7 +70,7 @@ const normalizeTodayData = (raw, timing) => {
   const lateThreshMins = parseTimeToMinutes(lateThresholdStr) || (9 * 60 + 15);
   const isLate = Boolean(raw.isLate ?? raw.IsLate) || (inMins !== null && inMins > lateThreshMins);
 
-  const shiftEndStr = raw.shiftEndTime || raw.ShiftEndTime || timing?.workEndTime || "04:30 PM";
+  const shiftEndStr = raw.shiftEndTime || raw.ShiftEndTime || timing?.workEndTime || "03:20 PM";
   const shiftEndMins = parseTimeToMinutes(shiftEndStr) || (16 * 60 + 30);
   const graceMins = Number(timing?.gracePeriodMinutes ?? 15);
   const checkoutCutoffMins = shiftEndMins + graceMins; // 04:45 PM
@@ -112,7 +112,7 @@ const normalizeTodayData = (raw, timing) => {
     inTime,
     outTime,
     shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
-    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 04:30 PM)",
+    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 03:20 PM)",
     shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
     shiftEndTime: shiftEndStr,
     isLate,
@@ -135,14 +135,14 @@ export default function FacultyMyAttendance() {
     return () => clearInterval(timer);
   }, []);
 
-  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 - 16:30, Late after 09:15, Cutoff 16:45)
+  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 - 15:20, Late after 09:15, Cutoff 15:35)
   const [timingConfig, setTimingConfig] = useState({
     workStartTime: "09:00",
-    workEndTime: "16:30",
+    workEndTime: "15:20",
     lateThreshold: "09:15",
-    earlyCheckoutThreshold: "16:30",
+    earlyCheckoutThreshold: "15:20",
     gracePeriodMinutes: 15,
-    minWorkingHours: 6.5,
+    minWorkingHours: 6.33,
   });
 
   // Load timing configuration from admin settings
@@ -156,9 +156,9 @@ export default function FacultyMyAttendance() {
           if (cfg && isMounted) {
             setTimingConfig({
               workStartTime: cfg.workStartTime || "09:00",
-              workEndTime: cfg.workEndTime || "16:30",
+              workEndTime: cfg.workEndTime || "15:20",
               lateThreshold: cfg.lateThreshold || "09:15",
-              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "16:30",
+              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "15:20",
               gracePeriodMinutes: cfg.gracePeriodMinutes ?? 15,
               minWorkingHours: cfg.minWorkingHours ?? 6.5,
             });
@@ -188,9 +188,9 @@ export default function FacultyMyAttendance() {
     inTime: null,
     outTime: null,
     shiftDuration: "--",
-    shiftName: "Morning (09:00 AM – 04:30 PM)",
+    shiftName: "Morning (09:00 AM – 03:20 PM)",
     shiftStartTime: "09:00 AM",
-    shiftEndTime: "04:30 PM",
+    shiftEndTime: "03:20 PM",
     isLate: false,
     todayStatus: "Absent",
     canRegularize: false,
@@ -220,7 +220,7 @@ export default function FacultyMyAttendance() {
     rawDate: "",
     displayDate: "",
     requestedInTime: "09:00",
-    requestedOutTime: "16:30",
+    requestedOutTime: "15:20",
     reason: "",
   });
 
@@ -296,7 +296,7 @@ export default function FacultyMyAttendance() {
         const rawMetrics = payload.metrics || payload.Metrics || {};
 
         const lateThreshMins = parseTimeToMinutes(timingConfig.lateThreshold || "09:15") || (9 * 60 + 15);
-        const shiftEndMins = parseTimeToMinutes(timingConfig.workEndTime || "16:30") || (16 * 60 + 30);
+        const shiftEndMins = parseTimeToMinutes(timingConfig.workEndTime || "15:20") || (15 * 60 + 20);
         const checkoutCutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
 
         const now = new Date();
@@ -352,10 +352,10 @@ export default function FacultyMyAttendance() {
                     const m = totalMins % 60;
                     hours = `${h}h ${m}m`;
                   } else {
-                    hours = calculateDurationStr(inTime, "04:30 PM", false);
+                    hours = calculateDurationStr(inTime, "03:20 PM", false);
                   }
                 } else {
-                  hours = calculateDurationStr(inTime, "04:30 PM", false);
+                  hours = calculateDurationStr(inTime, "03:20 PM", false);
                 }
               }
             }
@@ -511,7 +511,7 @@ export default function FacultyMyAttendance() {
       rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
       displayDate: log.date || log.Date || log.day || "Selected Date",
       requestedInTime: "09:00",
-      requestedOutTime: "16:30",
+      requestedOutTime: "15:20",
       reason: "",
     });
     setRegModalOpen(true);
@@ -555,7 +555,7 @@ export default function FacultyMyAttendance() {
   // Real-time dynamic working hours display (reflects actual recorded duration, --:-- when not checked in)
   // Formatted check-out cutoff time based on shift end + grace period
   const formattedCutoffTime = useMemo(() => {
-    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "16:30");
+    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "15:20");
     if (shiftEndMins === null) return "04:45 PM";
     const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
     const cutoffMins = shiftEndMins + grace;
@@ -575,7 +575,7 @@ export default function FacultyMyAttendance() {
       return calculateDurationStr(todayData.inTime, null, true);
     }
     if (todayData.inTime && isMissedCheckout) {
-      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "04:30 PM", false);
+      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "03:20 PM", false);
     }
     return "--:--";
   }, [todayData, shiftUpdateTick, isMissedCheckout]);

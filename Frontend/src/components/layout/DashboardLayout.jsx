@@ -17,7 +17,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser, getAuthToken } from "@/features/authStorage.js";
 import { env } from "@/config/env.js";
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { can, hasRole } from "@/features/rolesPermissions/permissionUtils.jsx";
@@ -738,6 +738,7 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
+  const fetchLiveNotifsRef = useRef(null);
   useEffect(() => {
     let disposed = false;
     if (canReviewReimbursements || canReviewCertificates) {
@@ -809,41 +810,10 @@ export default function DashboardLayout({
         }
       };
 
+      fetchLiveNotifsRef.current = fetchLiveNotifications;
       fetchLiveNotifications();
 
-      // SignalR Push Connection: ONLY fetch when server pushes a real notification event
-      let hubConnection = null;
-      try {
-        const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-        if (token) {
-          const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-          hubConnection = new HubConnectionBuilder()
-            .withUrl(`${base}/hubs/notifications`, {
-              accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-              headers: { "ngrok-skip-browser-warning": "true" },
-            })
-            .withAutomaticReconnect()
-            .configureLogging(LogLevel.None)
-            .build();
-
-          hubConnection.on("NotificationReceived", () => {
-            if (!disposed) {
-              setHasViewedNotifications(false);
-              fetchLiveNotifications(true);
-            }
-          });
-
-          hubConnection.start()
-            .then(() => {
-              if (reimbursementCampusId && hubConnection) {
-                hubConnection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
-      } catch {
-        // Fallback
-      }
+      
 
       // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
       let channel = null;
@@ -875,15 +845,32 @@ export default function DashboardLayout({
       return () => {
         disposed = true;
         if (channel) channel.close();
-        if (hubConnection) {
-          hubConnection.stop().catch(() => {});
-        }
+        
         window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
         window.removeEventListener("cms-certificates-updated", handleLocalAction);
       };
     }
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
+
+  // SignalR Push Connection: Subscribed via singleton notificationHubService
+  useEffect(() => {
+    if (!canReviewReimbursements && !canReviewCertificates) return;
+
+    const unsubscribe = notificationHubService.subscribe(() => {
+      setHasViewedNotifications(false);
+      fetchLiveNotifsRef.current?.(true);
+    });
+
+    return unsubscribe;
+  }, [canReviewReimbursements, canReviewCertificates]);
+
+  // Synchronize Campus Join dynamically without tearing down SignalR socket
+  useEffect(() => {
+    if (reimbursementCampusId) {
+      notificationHubService.joinCampus(reimbursementCampusId);
+    }
+  }, [reimbursementCampusId]);
 
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
 
@@ -1021,6 +1008,7 @@ export default function DashboardLayout({
   };
 
   const logout = () => {
+    notificationHubService.disconnect();
     clearAuthSession();
     setProfileOpen(false);
     navigate("/login", { replace: true });

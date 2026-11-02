@@ -422,32 +422,39 @@ namespace CollegeManagement.API.Controllers.V1
 
             return Ok(bloodGroups);
         }
-        //generatenumber//
+        //generatenumber & previewnumber//
         [HttpPost("generate-number")]
-        public async Task<IActionResult> GenerateAdmissionNumber([FromBody] GenerateAdmissionNumberRequestDto? request = null, [FromQuery] int? campusId = null)
+        [HttpGet("generate-number")]
+        [HttpPost("preview-number")]
+        [HttpGet("preview-number")]
+        public async Task<IActionResult> GenerateAdmissionNumber(
+            [FromBody] GenerateAdmissionNumberRequestDto? request = null, 
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
         {
-            if (!campusId.HasValue || campusId <= 0)
+            var effectiveCampusId = (campusId.HasValue && campusId > 0) ? campusId : request?.CampusId;
+            if (!effectiveCampusId.HasValue || effectiveCampusId <= 0)
             {
-                if (request?.CampusId.HasValue == true && request.CampusId > 0)
-                {
-                    campusId = request.CampusId.Value;
-                }
-                else if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
                     int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
-                    campusId = cId;
+                    effectiveCampusId = cId;
                 }
                 else
                 {
                     var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
                     if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
                     {
-                        campusId = claimCampusId;
+                        effectiveCampusId = claimCampusId;
                     }
                 }
             }
 
-            var admissionNumber = await _service.GetAdmissionNumberPreviewAsync(campusId, request?.BoardId, request?.AcademicYearId);
+            var effectiveBoardId = (boardId.HasValue && boardId > 0) ? boardId : request?.BoardId;
+            var effectiveAcademicYearId = (academicYearId.HasValue && academicYearId > 0) ? academicYearId : request?.AcademicYearId;
+
+            var admissionNumber = await _service.GetAdmissionNumberPreviewAsync(effectiveCampusId, effectiveBoardId, effectiveAcademicYearId);
 
             return Ok(new
             {

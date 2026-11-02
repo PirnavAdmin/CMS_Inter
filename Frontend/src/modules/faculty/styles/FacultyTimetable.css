@@ -1786,204 +1786,21 @@
 }
 
 /* ==========================================================================
-   Admin Timetable Exact Structure Replication (.ttm-grid-wrap & .ttm-grid)
+   Admin Timetable Exact Parity - Inherits directly from TimetablePage.css
    ========================================================================== */
 
-.timetable-module .ttm-grid-wrap,
-.ttm-grid-wrap {
+.faculty-tt-container.timetable-module {
   width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  background: var(--cms-surface, #ffffff);
 }
 
-.timetable-module .ttm-grid,
-.ttm-grid {
-  width: 100%;
-  min-width: 1040px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  background: var(--cms-surface, #ffffff);
-  border: 1px solid var(--cms-border, #e5e9dc);
-}
-
-.timetable-module .ttm-grid th,
-.timetable-module .ttm-grid td,
-.ttm-grid th,
-.ttm-grid td {
-  border-right: 1px solid var(--cms-border, #e5e9dc);
-  border-bottom: 1px solid var(--cms-border, #e5e9dc);
-  vertical-align: middle;
-}
-
-.timetable-module .ttm-grid tr > :last-child,
-.ttm-grid tr > :last-child {
-  border-right: 0;
-}
-
-/* Column Headers */
-.timetable-module .ttm-grid thead th,
-.ttm-grid thead th {
-  height: 64px;
-  padding: 8px 6px;
-  background: var(--cms-subtle, #f5f7f0);
-  color: var(--cms-text, #171d15);
-  font-size: 11.5px;
-  font-weight: 700;
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  line-height: 1.25;
-}
-
-.timetable-module .ttm-grid thead th:first-child,
-.ttm-grid thead th:first-child {
-  width: 110px;
-  text-align: left;
-  padding-left: 14px;
-}
-
-.timetable-module .ttm-grid thead small,
-.ttm-grid thead small {
-  display: block;
-  margin-top: 4px;
-  color: var(--cms-muted, #7b8275);
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-/* Day Column (Row Headers) */
-.timetable-module .ttm-grid tbody > tr > th,
-.ttm-grid tbody > tr > th {
-  width: 110px;
-  padding: 12px 14px;
-  background: var(--cms-subtle, #f5f7f0);
-  color: var(--cms-primary, #607718);
-  font-size: 12px;
-  font-weight: 750;
-  text-align: left;
-}
-
-.timetable-module .ttm-grid tbody > tr.is-today-row > th,
-.ttm-grid tbody > tr.is-today-row > th {
+.timetable-module .ttm-grid tbody > tr.is-today-row > th {
   color: var(--cms-primary, #607718);
   background: color-mix(in srgb, var(--cms-primary-soft, #f4f6e6) 60%, var(--cms-subtle, #f5f7f0));
 }
 
-/* Data Cells */
-.timetable-module .ttm-grid td,
-.ttm-grid td {
-  height: 98px;
-  padding: 8px;
-  background: var(--cms-surface, #ffffff);
-}
-
-/* Break Cells (Tea Break, Lunch Break) */
-.timetable-module .ttm-grid td.break,
-.ttm-grid td.break {
-  background: color-mix(in srgb, var(--cms-amber-soft, #fef9c3) 70%, var(--cms-surface, #ffffff)) !important;
-  color: var(--cms-amber, #b45309) !important;
-  font-size: 12px !important;
-  font-weight: 700 !important;
-  text-align: center !important;
-  letter-spacing: 0.2px;
-}
-
-/* Slot Cell & Slot Button */
-.timetable-module .ttm-grid td.slot,
-.ttm-grid td.slot {
-  padding: 7px;
-  position: relative;
-}
-
-.timetable-module .ttm-grid td.slot > button,
-.ttm-grid td.slot > button,
-.ttm-slot-btn {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 100%;
-  min-height: 82px;
-  overflow: hidden;
-  padding: 8px 10px;
-  border: 1px solid var(--cms-primary-border, #d3e4b7);
-  border-left: 3.5px solid var(--cms-primary, #607718);
-  border-radius: 9px;
-  background: var(--cms-primary-soft, #f4f6e6);
-  color: var(--cms-text, #171d15);
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
-  box-shadow: 0 2px 5px rgba(34, 51, 20, 0.04);
-  box-sizing: border-box;
-}
-
-.timetable-module .ttm-grid td.slot > button:hover,
-.ttm-grid td.slot > button:hover,
-.ttm-slot-btn:hover {
-  border-color: var(--cms-primary, #607718);
-  border-left-color: #4a5c10;
+.timetable-module .ttm-grid td.slot > button:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(96, 119, 24, 0.12);
-}
-
-.timetable-module .ttm-grid td.slot b,
-.ttm-grid td.slot b,
-.ttm-slot-btn b {
-  display: block;
-  font-size: 12px;
-  font-weight: 750;
-  color: var(--cms-text, #171d15);
-  line-height: 1.25;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.timetable-module .ttm-grid td.slot span,
-.ttm-grid td.slot span,
-.ttm-slot-btn span {
-  display: block;
-  margin-top: 3px;
-  color: var(--cms-muted, #7b8275);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.timetable-module .ttm-grid td.slot small,
-.ttm-grid td.slot small,
-.ttm-slot-btn small {
-  display: block;
-  margin-top: 3px;
-  color: var(--cms-muted, #7b8275);
-  font-size: 10.5px;
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Empty Slot */
-.timetable-module .ttm-grid td.slot .ttm-empty-slot,
-.ttm-grid td.slot .ttm-empty-slot,
-.ttm-empty-slot {
-  display: grid;
-  min-height: 58px;
-  place-items: center;
-  color: var(--cms-muted, #7b8275);
-  font-size: 20px;
-  line-height: 1;
-  opacity: 0.45;
-  user-select: none;
 }
 
 /* ==========================================================================
