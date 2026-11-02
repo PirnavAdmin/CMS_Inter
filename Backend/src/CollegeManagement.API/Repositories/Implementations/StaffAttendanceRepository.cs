@@ -597,7 +597,7 @@ SELECT
     COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
     COALESCE(tc.EarlyCheckoutThreshold, '15:20:00') AS EarlyCheckoutThreshold,
     COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
-FROM `Staffs` s
+FROM `Staff` s
 LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
                                      AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
                                      AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
