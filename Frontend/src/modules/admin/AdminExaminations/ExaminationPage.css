@@ -2495,3 +2495,35 @@
   color: #ffffff !important;
   transform: translateY(-1px);
 }
+.exam-group-tab-btn.has-selections {
+  font-weight: 700;
+  border-color: var(--cms-primary-border, var(--cms-border));
+  background: var(--cms-primary-soft, rgba(37, 99, 235, 0.08));
+  color: var(--cms-text);
+}
+
+.exam-group-tab-btn.current {
+  background: var(--cms-primary) !important;
+  color: #ffffff !important;
+  border-color: var(--cms-primary) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.exam-group-tab-btn.current .exam-group-code,
+.exam-group-tab-btn.current .exam-group-name {
+  color: #ffffff !important;
+}
+
+.exam-group-tab-btn.current .exam-group-badge {
+  background: #ffffff !important;
+  color: var(--cms-primary) !important;
+}
+/* Schedule Form Pass Percentage & Number Inputs */
+.cms-field input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cms-field input:not([readonly]):not(:disabled) {
+  cursor: text;
+}

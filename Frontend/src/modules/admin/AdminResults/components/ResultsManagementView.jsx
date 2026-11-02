@@ -26,8 +26,10 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "../ResultProcessingPage.css";
 
-// PAGE_SIZE moved to component props
-// ANALYTICS_MODAL_PAGE_SIZE moved to component props
+export const DEFAULT_PAGE_SIZE = 10;
+export const DEFAULT_ANALYTICS_PAGE_SIZE = 10;
+const PAGE_SIZE = DEFAULT_PAGE_SIZE;
+const ANALYTICS_MODAL_PAGE_SIZE = DEFAULT_ANALYTICS_PAGE_SIZE;
 
 /* ============================================================
    PAYLOAD UNWRAPPING & FILE UTILITIES
@@ -97,8 +99,8 @@ export default function ResultsManagementView({
   pageTitle = "Results Management",
   pageSubtitle = "Generate, publish, inspect and analyze examination results."
 }) {
-  const PAGE_SIZE = defaultPageSize;
-  const ANALYTICS_MODAL_PAGE_SIZE = defaultAnalyticsPageSize;
+  const PAGE_SIZE = defaultPageSize || DEFAULT_PAGE_SIZE;
+  const ANALYTICS_MODAL_PAGE_SIZE = defaultAnalyticsPageSize || DEFAULT_ANALYTICS_PAGE_SIZE;
   const Layout = LayoutComponent || React.Fragment;
   const {
     campuses: contextCampuses = [],
@@ -184,6 +186,7 @@ export default function ResultsManagementView({
   const [apiFailedStudents, setApiFailedStudents] = useState([]);
   const [selectedAnalyticsExamKey, setSelectedAnalyticsExamKey] = useState("");
   const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState("all");
+  const [sectionStudentsCache, setSectionStudentsCache] = useState({});
   const [selectedExamAnalyticsApiData, setSelectedExamAnalyticsApiData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
@@ -785,6 +788,7 @@ export default function ResultsManagementView({
         const approvedExamMap = new Map();
 
         // 1. Process evaluations from faculty evaluations endpoint
+        // Record approved evaluation examination IDs to verify real examinations, but DO NOT synthesize standalone exam entries
         if (facultyEvalsResult.status === "fulfilled" && facultyEvalsResult.value) {
           const facultyEvals = unwrap(facultyEvalsResult.value);
           const evList = Array.isArray(facultyEvals) ? facultyEvals : (facultyEvalsResult.value.data?.items || []);
@@ -793,26 +797,6 @@ export default function ResultsManagementView({
               const eId = String(ev.examinationId ?? ev.examId ?? "");
               if (eId) {
                 approvedExamIdSet.add(eId);
-                if (!approvedExamMap.has(eId)) {
-                  const eName = String(ev.examinationName || ev.examName || `Exam ${eId}`).trim();
-                  approvedExamMap.set(eId, {
-                    id: Number(eId) || eId,
-                    examinationId: Number(eId) || eId,
-                    examId: Number(eId) || eId,
-                    examName: eName,
-                    examinationName: eName,
-                    name: eName,
-                    code: ev.examCode || ev.subjectCode || "",
-                    examCode: ev.examCode || ev.subjectCode || "",
-                    status: "APPROVED",
-                    isApproved: true,
-                    boardId: filters.board,
-                    academicYearId: filters.year,
-                    academicLevelId: filters.level,
-                    groupId: filters.group,
-                    programId: filters.program,
-                  });
-                }
               }
             }
           });
@@ -827,26 +811,6 @@ export default function ResultsManagementView({
               const eId = String(ev.examinationId ?? ev.examId ?? "");
               if (eId) {
                 approvedExamIdSet.add(eId);
-                if (!approvedExamMap.has(eId)) {
-                  const eName = String(ev.examinationName || ev.examName || `Exam ${eId}`).trim();
-                  approvedExamMap.set(eId, {
-                    id: Number(eId) || eId,
-                    examinationId: Number(eId) || eId,
-                    examId: Number(eId) || eId,
-                    examName: eName,
-                    examinationName: eName,
-                    name: eName,
-                    code: ev.examCode || ev.subjectCode || "",
-                    examCode: ev.examCode || ev.subjectCode || "",
-                    status: "APPROVED",
-                    isApproved: true,
-                    boardId: filters.board,
-                    academicYearId: filters.year,
-                    academicLevelId: filters.level,
-                    groupId: filters.group,
-                    programId: filters.program,
-                  });
-                }
               }
             }
           });
@@ -973,7 +937,7 @@ export default function ResultsManagementView({
     return () => {
       isCancelled = true;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, publishedGroups]);
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId]);
 
   // 5. Readiness & Evaluation Verification
   useEffect(() => {
@@ -1142,8 +1106,8 @@ export default function ResultsManagementView({
       const resolvedProgramId = filters.program
         ? String(filters.program)
         : (activeProgramObj?.programId !== undefined && activeProgramObj?.programId !== null
-            ? String(activeProgramObj.programId)
-            : (progIdVal ? String(progIdVal) : "1"));
+          ? String(activeProgramObj.programId)
+          : (progIdVal ? String(progIdVal) : "1"));
 
       const payload = {
         campusId: Number(effectiveCampusId) || 1,
@@ -1970,12 +1934,6 @@ export default function ResultsManagementView({
     fetchPublishedGroups();
   }, [fetchPublishedGroups]);
 
-  useEffect(() => {
-    if (viewMode === "published" || viewMode === "analytics") {
-      fetchPublishedGroups();
-    }
-  }, [viewMode, fetchPublishedGroups]);
-
   const handleViewSection = async (sec, isPublished = false) => {
     const targetExamId = Number(
       sec.examId ||
@@ -2431,6 +2389,9 @@ export default function ResultsManagementView({
 
   const currentExamObj = useMemo(() => {
     const targetExamId = filters.exam || applied.exam;
+    if (!targetExamId) {
+      return { id: "", name: "" };
+    }
     const found = examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(targetExamId));
     if (found) {
       return {
@@ -2440,24 +2401,21 @@ export default function ResultsManagementView({
         code: found.examCode || found.code || ""
       };
     }
-    const first = examinations[0];
-    if (first && !targetExamId) {
-      return {
-        ...first,
-        id: first.examinationId ?? first.id ?? first.examId,
-        name: first.examName || first.examinationName || first.name || first.title || first.examCode || "Examination",
-        code: first.examCode || first.code || ""
-      };
-    }
-    return { id: targetExamId || "", name: "Examination" };
+    return { id: targetExamId, name: "Examination" };
   }, [filters.exam, applied.exam, examinations]);
 
-  // Analytics options: published results examinations details only
+  // Analytics options: published results examinations details only, sorted by most recently published first
   const analyticsExamOptions = useMemo(() => {
     const opts = [];
     const seenExamIds = new Set();
 
-    (publishedGroups || []).forEach((pg) => {
+    const sorted = [...(publishedGroups || [])].sort((a, b) => {
+      const da = new Date(a.publishedDate || a.rawPublishedDate || a.createdAt || 0).getTime();
+      const db = new Date(b.publishedDate || b.rawPublishedDate || b.createdAt || 0).getTime();
+      return db - da;
+    });
+
+    sorted.forEach((pg) => {
       const pId = String(pg.examId ?? pg.publishedId ?? "");
       if (!pId || seenExamIds.has(pId)) return;
       seenExamIds.add(pId);
@@ -2473,6 +2431,7 @@ export default function ResultsManagementView({
         publishedId: pg.publishedId ?? pId,
         type: "published",
         academicYear: pg.academicYear,
+        publishedDate: pg.publishedDate,
         groupData: pg,
       });
     });
@@ -2480,15 +2439,15 @@ export default function ResultsManagementView({
     return opts;
   }, [publishedGroups]);
 
-  // Default to first published examination if current key is invalid or unset
+  // Default to first published examination if current key is invalid or unset (only on analytics view)
   useEffect(() => {
-    if (analyticsExamOptions.length > 0) {
+    if (viewMode === "analytics" && analyticsExamOptions.length > 0) {
       const exists = analyticsExamOptions.some((o) => o.id === selectedAnalyticsExamKey);
       if (!exists) {
         setSelectedAnalyticsExamKey(analyticsExamOptions[0].id);
       }
     }
-  }, [analyticsExamOptions, selectedAnalyticsExamKey]);
+  }, [viewMode, analyticsExamOptions, selectedAnalyticsExamKey]);
 
   const handleSelectAnalyticsExam = (key) => {
     setSelectedAnalyticsExamKey(key);
@@ -2498,9 +2457,9 @@ export default function ResultsManagementView({
   };
 
   const activeAnalyticsOption = useMemo(() => {
+    if (!selectedAnalyticsExamKey) return null;
     return (
       analyticsExamOptions.find((o) => o.id === selectedAnalyticsExamKey) ||
-      analyticsExamOptions[0] ||
       null
     );
   }, [analyticsExamOptions, selectedAnalyticsExamKey]);
@@ -2525,9 +2484,9 @@ export default function ResultsManagementView({
     return [{ id: "all", name: "All Groups" }, ...items];
   }, [activeAnalyticsOption, publishedGroups]);
 
-  // Fetch API analytics and section student records when activeAnalyticsOption changes
+  // Fetch API analytics only when on analytics view and an examination option is selected
   useEffect(() => {
-    if (!activeAnalyticsOption) {
+    if (viewMode !== "analytics" || !selectedAnalyticsExamKey || !activeAnalyticsOption) {
       setAnalyticsLoading(false);
       return;
     }
@@ -2546,7 +2505,7 @@ export default function ResultsManagementView({
     }
 
     const firstPg = matching[0];
-    const analyticsPromise = apiClient
+    apiClient
       .get("/api/v1/results/analytics", {
         params: {
           campusId: effectiveCampusId,
@@ -2569,66 +2528,17 @@ export default function ResultsManagementView({
           console.warn("Analytics API fetch notice:", err);
           setSelectedExamAnalyticsApiData(null);
         }
-      });
-
-    // Fetch student rows for all sections of matching groups if not yet loaded
-    const sectionsToFetch = [];
-    matching.forEach((pg) => {
-      (pg.sections || []).forEach((sec) => {
-        if (!sec.studentRows || sec.studentRows.length === 0) {
-          sectionsToFetch.push({ pg, sec });
-        }
-      });
-    });
-
-    const sectionsPromise = sectionsToFetch.length > 0
-      ? Promise.all(
-        sectionsToFetch.map(({ pg, sec }) =>
-          apiClient
-            .get(`/api/v1/results/sections/${sec.sectionId}`, {
-              params: {
-                campusId: effectiveCampusId,
-                examId: pg.examId,
-              },
-              headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-            })
-            .then((res) => {
-              const payload = unwrapPayload(res) || {};
-              const sList = Array.isArray(payload) ? payload : (payload.students || []);
-              return { examId: pg.examId, groupId: pg.groupId, sectionId: sec.sectionId, studentRows: sList };
-            })
-            .catch(() => ({ examId: pg.examId, groupId: pg.groupId, sectionId: sec.sectionId, studentRows: [] }))
-        )
-      ).then((sectionResults) => {
-        if (!isCancelled && sectionResults.length > 0) {
-          setPublishedGroups((prev) =>
-            prev.map((g) => {
-              const matchesPg = sectionResults.some((sr) => String(sr.examId) === String(g.examId) && String(sr.groupId) === String(g.groupId));
-              if (!matchesPg) return g;
-              const updatedSections = (g.sections || []).map((s) => {
-                const match = sectionResults.find((sr) => sr.sectionId === s.sectionId);
-                if (match && match.studentRows && match.studentRows.length > 0) {
-                  return { ...s, studentRows: match.studentRows };
-                }
-                return s;
-              });
-              return { ...g, sections: updatedSections };
-            })
-          );
-        }
       })
-      : Promise.resolve();
-
-    Promise.allSettled([analyticsPromise, sectionsPromise]).finally(() => {
-      if (!isCancelled) {
-        setAnalyticsLoading(false);
-      }
-    });
+      .finally(() => {
+        if (!isCancelled) {
+          setAnalyticsLoading(false);
+        }
+      });
 
     return () => {
       isCancelled = true;
     };
-  }, [activeAnalyticsOption, effectiveCampusId]);
+  }, [viewMode, selectedAnalyticsExamKey, activeAnalyticsOption, effectiveCampusId, publishedGroups]);
 
   // Dynamically computed analytics data for the selected examination and group filter
   const currentAnalyticsData = useMemo(() => {
@@ -2746,7 +2656,13 @@ export default function ResultsManagementView({
         );
       }
 
-      const pubStudents = matchingGroups.flatMap((pg) => (pg.sections || []).flatMap((s) => s.studentRows || []));
+      const pubStudents = matchingGroups.flatMap((pg) =>
+        (pg.sections || []).flatMap((s) => {
+          const sId = s.sectionId || s.id;
+          if (s.studentRows && s.studentRows.length > 0) return s.studentRows;
+          return sectionStudentsCache[sId] || [];
+        })
+      );
 
       let totalStudents = 0;
       let passedCount = 0;
@@ -2781,7 +2697,9 @@ export default function ResultsManagementView({
         averageScore = totalWeight > 0 ? (totalWeighted / totalWeight).toFixed(2) : (matchingGroups[0]?.average ? Number(matchingGroups[0].average).toFixed(2) : "0.00");
       }
 
-      let passPercentage = totalStudents > 0 ? ((passedCount / totalStudents) * 100).toFixed(2) : "0.00";
+      let passPercentage = totalStudents > 0
+        ? ((passedCount / totalStudents) * 100).toFixed(2)
+        : (matchingGroups[0]?.passRate != null ? Number(matchingGroups[0].passRate).toFixed(2) : (matchingGroups[0]?.passPercentage != null ? Number(matchingGroups[0].passPercentage).toFixed(2) : "0.00"));
 
       // If backend API returned analytics data for this exam, prioritize its authoritative metrics!
       if (selectedExamAnalyticsApiData) {
@@ -2904,7 +2822,7 @@ export default function ResultsManagementView({
       failedList: [],
       subjectPerformance: selectedExamAnalyticsApiData?.subjectPerformance ?? [],
     };
-  }, [activeAnalyticsOption, analyticsGroupFilter, allCurrentStudents, currentGroupObj, sectionSummaries, publishedGroups, selectedExamAnalyticsApiData]);
+  }, [activeAnalyticsOption, analyticsGroupFilter, allCurrentStudents, currentGroupObj, sectionSummaries, publishedGroups, selectedExamAnalyticsApiData, sectionStudentsCache]);
 
   /* ============================================================
      TAB 6: REPORTS & FILE EXPORTS (EXCEL WITH EXAM NAME ON TOP)
@@ -3274,6 +3192,7 @@ export default function ResultsManagementView({
               )
             ) : (
               <SectionStudentsView
+                pageSize={PAGE_SIZE}
                 section={selectedSectionDetails}
                 exam={currentExamObj}
                 onBack={() => setSelectedSectionDetails(null)}
@@ -3316,6 +3235,7 @@ export default function ResultsManagementView({
 
             {selectedPublishedSection && (
               <SectionStudentsView
+                pageSize={PAGE_SIZE}
                 section={selectedPublishedSection}
                 exam={{ name: selectedPublishedGroup.examName }}
                 isPublishedView
@@ -3671,7 +3591,7 @@ function Select({
             {label}
           </label>
         )}
-        <div className="cms-custom-select is-disabled" title={fullText}>
+        <div className="cms-custom-select is-disabled">
           <button
             type="button"
             className="cms-custom-select-trigger"
@@ -3679,7 +3599,6 @@ function Select({
             aria-label={label}
             aria-labelledby={!hideLabel ? `${selectId}-label` : undefined}
             disabled={true}
-            title={fullText}
           >
             <span className="cms-select-trigger-text">{fullText}</span>
             <span className="cms-select-arrow">⌄</span>
@@ -3706,7 +3625,6 @@ function Select({
       >
         <div
           className={`cms-custom-select-combobox ${open ? "is-focused" : ""} ${disabled ? "is-disabled" : ""}`}
-          title={open ? "" : fullText}
           onClick={() => {
             if (disabled) return;
             if (!open) {
@@ -3719,16 +3637,24 @@ function Select({
           <input
             ref={inputRef}
             id={selectId}
+            name={`search_filter_${selectId}`}
             type="text"
             role="combobox"
             aria-label={label}
             aria-expanded={open}
             aria-controls={listId}
+            aria-autocomplete="none"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-1p-ignore="true"
+            data-form-type="other"
             disabled={disabled}
             className="cms-custom-combobox-input"
             value={open ? query : (selected?.name || "")}
             placeholder={searchPlaceholder}
-            title={open ? "" : fullText}
             onFocus={() => {
               if (disabled) return;
               setQuery("");
@@ -3777,7 +3703,6 @@ function Select({
                     className={`cms-custom-select-option ${isItemSel ? "selected" : ""} ${highlight === index ? "highlighted" : ""
                       }`}
                     key={item.id}
-                    title={item.name}
                     onMouseEnter={() => setHighlight(index)}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -4150,10 +4075,12 @@ function SectionStudentsView({
   onBack,
   onViewStudent,
   onExcel,
+  pageSize = PAGE_SIZE,
 }) {
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const effectivePageSize = pageSize || PAGE_SIZE || 10;
 
   const students = section?.studentRows || [];
 
@@ -4199,8 +4126,8 @@ function SectionStudentsView({
     });
   }, [students, query, resultFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pagedRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize));
+  const pagedRows = filtered.slice((page - 1) * effectivePageSize, page * effectivePageSize);
 
   return (
     <div className="cms-card results-section-detail">

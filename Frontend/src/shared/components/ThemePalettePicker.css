@@ -38,12 +38,15 @@
 .cms-colour-native-input {
   position: absolute !important;
   opacity: 0 !important;
-  width: 0 !important;
-  height: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
   pointer-events: none !important;
   border: none !important;
   padding: 0 !important;
-  visibility: hidden !important;
+  margin: 0 !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
 }
 
 .cms-hex-input-wrap {
