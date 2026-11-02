@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Bus, ClipboardList, GraduationCap, Eye, IndianRupee, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -27,7 +28,7 @@ const sectionKey = (title) => ({ "Personal Information": "personal", "Contact In
 const profileTabs = [["overview", "Overview", User], ["personal", "Personal Details", User], ["academic", "Academic Details", GraduationCap], ["contact", "Contact & Address", Mail], ["parent", "Parent / Guardian", Users], ["transport", "Transport Details", Bus], ["fee", "Fee", IndianRupee]];
 const ViewSection = ({ title, children, className = "" }) => {
   const Icon = sectionIcons[title];
-  return <section data-profile-section={sectionKey(title)} className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
+  return <section data-profile-section={sectionKey(title)} className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><ThreeDIcon icon={Icon} size={20} /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
 };
 const read = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value != null && value !== "");
 const formatDisplayDate = (value) => {
@@ -207,13 +208,13 @@ export default function StudentProfilePage({ id }) {
     breadcrumb={["People", "Students"]}
     backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
     actions={<div className="cms-admission-main-tabs" role="group" aria-label="Student profile mode">
-      <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><Eye size={15} />View</button>
-      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => { if (activeTab === "fee") setActiveTab("overview"); setEditMode(true); }}><Pencil size={15} />Edit</button>
+      <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><ThreeDIcon name="view" size={15} />View</button>
+      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => { if (activeTab === "fee") setActiveTab("overview"); setEditMode(true); }}><ThreeDIcon name="edit" size={15} />Edit</button>
     </div>}
   >
     <div className="student-management-profile-page student-profile-compact" data-active-section={activeTab}>
       <div className="cms-admission-main-tabs student-profile-section-tabs" role="tablist" aria-label="Student sections">
-        {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><Icon size={17} />{label}</button>)}
+        {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><ThreeDIcon icon={Icon} size={17} />{label}</button>)}
       </div>
     {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <><StudentFeeTab key={`fees-${student.studentId}-${refreshKey}`} student={student} compactContext /></> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
       <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>

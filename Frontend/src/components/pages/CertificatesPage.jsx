@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -3888,7 +3889,7 @@ export default function CertificatesPage() {
                   onClick={() => setExportMenuOpen((prev) => !prev)}
                   aria-expanded={exportMenuOpen}
                 >
-                  <FaDownload size={13} aria-hidden="true" /> Export <FaChevronDown size={11} aria-hidden="true" />
+                  <ThreeDIcon name="export" size={14} /> Export <FaChevronDown size={11} aria-hidden="true" />
                 </button>
                 {exportMenuOpen ? (
                   <div
@@ -3936,7 +3937,7 @@ export default function CertificatesPage() {
                       }}
                       onClick={() => exportCertificateRecords("excel")}
                     >
-                      <FaDownload size={12} /> Export Excel (.xlsx)
+                      <ThreeDIcon name="excel" size={14} /> Export Excel (.xlsx)
                     </button>
                     <button
                       type="button"
@@ -3965,13 +3966,13 @@ export default function CertificatesPage() {
                       }}
                       onClick={() => exportCertificateRecords("pdf")}
                     >
-                      <FaPrint size={12} /> Export PDF (.pdf)
+                      <ThreeDIcon name="pdf" size={14} /> Export PDF (.pdf)
                     </button>
                   </div>
                 ) : null}
               </div>
               <button type="button" className="cms-btn cms-btn-primary" onClick={() => setActiveTab("generate")}>
-                <FaPlus size={13} aria-hidden="true" /> New Request
+                <ThreeDIcon name="add" size={14} /> New Request
               </button>
             </div>
           </div>
@@ -4045,11 +4046,11 @@ export default function CertificatesPage() {
                         title="View certificate"
                         aria-label="View certificate"
                       >
-                        <FaEye size={12} aria-hidden="true" />
+                        <ThreeDIcon name="view" size={13} />
                       </button>
-                      <button type="button" onClick={() => verifyCertificate(row)} disabled={isRowBusy(row.id)} title="Verify certificate" aria-label="Verify certificate"><FaCheck size={12} aria-hidden="true" /></button>
-                      <button type="button" onClick={() => downloadCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)} title="Download certificate" aria-label="Download certificate"><FaDownload size={12} aria-hidden="true" /></button>
-                      <button type="button" className="danger" onClick={() => deleteCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)} title="Delete certificate" aria-label="Delete certificate"><FaTrash size={12} aria-hidden="true" /></button>
+                      <button type="button" onClick={() => verifyCertificate(row)} disabled={isRowBusy(row.id)} title="Verify certificate" aria-label="Verify certificate"><ThreeDIcon name="check" size={13} /></button>
+                      <button type="button" onClick={() => downloadCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)} title="Download certificate" aria-label="Download certificate"><ThreeDIcon name="download" size={13} /></button>
+                      <button type="button" className="danger" onClick={() => deleteCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)} title="Delete certificate" aria-label="Delete certificate"><ThreeDIcon name="delete" size={13} /></button>
                     </div>
                   </td>
                 </tr>
@@ -4280,10 +4281,10 @@ export default function CertificatesPage() {
                             onClick={() => printCertificate(row)}
                             disabled={row.status !== "Issued" || printingId === row.id || isRowBusy(row.id)}
                           >
-                            <FaPrint size={13} aria-hidden="true" />
+                            <ThreeDIcon name="print" size={14} />
                           </button>
                           {row.status !== "Cancelled" ? (
-                            <button className="cms-action-btn danger" title="Cancel" onClick={() => cancelCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)}><FaBan size={15} aria-hidden="true" /></button>
+                            <button className="cms-action-btn danger" title="Cancel" onClick={() => cancelCertificate(row)} disabled={isRowBusy(row.id) || !hasServerCertificateId(row)}><ThreeDIcon name="cross" size={14} /></button>
                           ) : (
                             <button
                               className="cms-action-btn"

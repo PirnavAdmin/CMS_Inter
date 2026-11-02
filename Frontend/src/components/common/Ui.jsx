@@ -404,7 +404,7 @@ export function Pagination({
           ? `Showing ${start}–${end} of ${resolvedTotal} ${unit} · Page ${activePage} of ${totalPages}`
           : `Page ${activePage} of ${totalPages}`}
       </span>
-      <div className="cms-pagination-controls">
+<div className="cms-pagination-actions cms-pagination-controls">
         <button
           type="button"
           className="cms-page-btn"

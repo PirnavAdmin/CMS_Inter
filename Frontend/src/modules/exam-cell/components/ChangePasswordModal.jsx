@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { KeyRound, Eye, EyeOff, AlertCircle, CheckCircle2, X } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
@@ -172,7 +172,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
     <Modal
       title={
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <KeyRound size={18} color="var(--cms-primary)" />
+          <ThreeDIcon name="lock" size={20} />
           <span>Change Password</span>
         </div>
       }
@@ -214,14 +214,14 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
         {apiError && (
           <div className="change-password-alert error" role="alert">
-            <AlertCircle size={16} />
+            <ThreeDIcon name="warning" size={17} />
             <span>{apiError}</span>
           </div>
         )}
 
         {apiSuccess && (
           <div className="change-password-alert success" role="status">
-            <CheckCircle2 size={16} />
+            <ThreeDIcon name="check" size={17} />
             <span>{apiSuccess}</span>
           </div>
         )}
@@ -254,7 +254,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 aria-label={showCurrent ? "Hide current password" : "Show current password"}
                 tabIndex={-1}
               >
-                {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+                <ThreeDIcon name={showCurrent ? "eye" : "eye-off"} size={17} />
               </button>
             </div>
             {currentError && <span className="cms-error" role="alert">{currentError}</span>}
@@ -287,7 +287,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 aria-label={showNew ? "Hide new password" : "Show new password"}
                 tabIndex={-1}
               >
-                {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+                <ThreeDIcon name={showNew ? "eye" : "eye-off"} size={17} />
               </button>
             </div>
             {newError && <span className="cms-error" role="alert">{newError}</span>}
@@ -345,7 +345,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
                 aria-label={showConfirm ? "Hide re-entered password" : "Show re-entered password"}
                 tabIndex={-1}
               >
-                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                <ThreeDIcon name={showConfirm ? "eye" : "eye-off"} size={17} />
               </button>
             </div>
             {confirmError && <span className="cms-error" role="alert">{confirmError}</span>}

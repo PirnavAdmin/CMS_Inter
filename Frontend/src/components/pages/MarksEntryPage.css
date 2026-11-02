@@ -1448,8 +1448,7 @@
   .cms-context-summary,
   .cms-entry-toolbar,
   .cms-table-toolbar,
-  .cms-eval-table-toolbar,
-  .cms-pagination {
+  .cms-eval-table-toolbar {
     align-items: stretch;
     flex-direction: column;
   }

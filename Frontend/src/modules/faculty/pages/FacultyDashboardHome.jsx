@@ -17,6 +17,7 @@ import {
   Plus,
   Wallet,
 } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   ResponsiveContainer,
   PieChart,
@@ -1609,21 +1610,21 @@ export default function FacultyDashboardHome() {
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
-                    <span className="chip-icon"><Users size={14} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={16} /></span>
                     <div>
                       <strong>{overallAttendance.total || 0}</strong>
                       <small>Total Students</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
-                    <span className="chip-icon"><Users size={14} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={16} /></span>
                     <div>
                       <strong>{totalBoys}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
-                    <span className="chip-icon"><Users size={14} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={16} /></span>
                     <div>
                       <strong>{totalGirls}</strong>
                       <small>Girls</small>
@@ -1998,7 +1999,7 @@ export default function FacultyDashboardHome() {
                 {holidaysList.map((item, index) => (
                   <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                     <span className={`dashboard-list-icon tone-${item.tone}`}>
-                      <CalendarDays size={14} />
+                      <ThreeDIcon name="holiday" size={16} />
                     </span>
                     <div className="dashboard-info-content">
                       <div className="dashboard-holiday-title-row">
@@ -2066,7 +2067,7 @@ export default function FacultyDashboardHome() {
                 {examsList.map((item, index) => (
                   <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                     <span className={`dashboard-list-icon tone-${item.tone}`}>
-                      <CalendarDays size={14} />
+                      <ThreeDIcon name="exam" size={16} />
                     </span>
                     <div className="dashboard-info-content">
                       <div className="dashboard-exam-title-row">

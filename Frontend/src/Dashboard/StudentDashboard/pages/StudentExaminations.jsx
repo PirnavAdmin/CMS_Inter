@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarX, Eye, Search, X } from "lucide-react";
+import { CalendarX } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -130,7 +131,7 @@ export default function StudentExaminations() {
     examText(exam.examCategory || exam.category), examText(exam.examType || exam.assessmentTypeName),
     examText(exam.patternNames || exam.examPatternNames || exam.patternName || exam.examPatternName),
     `${formatDate(exam.startDate)} - ${formatDate(exam.endDate)}`, exam.status,
-    <button type="button" className="sp-exam-view" aria-label={`View ${exam.examName || "examination"} schedule`} title="View schedule" onClick={() => viewSchedule(exam)}><Eye size={16}/><span>View</span></button>,
+    <button type="button" className="sp-exam-view" aria-label={`View ${exam.examName || "examination"} schedule`} title="View schedule" onClick={() => viewSchedule(exam)}><ThreeDIcon name="view" size={16}/><span>View</span></button>,
   ]);
   const selectedDetails = [...upcoming, ...completed].find((exam) => examKey(exam) === selectedExam);
   const scheduleRows = schedules.filter(({ exam }) => examKey(exam) === selectedExam).map(({ exam, schedule }) => [
@@ -159,14 +160,14 @@ export default function StudentExaminations() {
     {!loading && !error && !examinations.length ? <StudentCard><StudentEmptyState icon={CalendarX} title="No examinations available" text="There are no scheduled or published examinations for your academic context."/></StudentCard> : null}
     {!loading && !error && examinations.length ? <>
       <div className="sp-exam-panel">
-        <label className="sp-exam-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search your examinations" placeholder="Search by exam code, name or type..." value={search} onChange={(event) => { setSearch(event.target.value); setUpcomingPage(1); setCompletedPage(1); }}/></label>
+        <label className="sp-exam-search"><ThreeDIcon name="search" size={17} aria-hidden="true"/><input type="search" aria-label="Search your examinations" placeholder="Search by exam code, name or type..." value={search} onChange={(event) => { setSearch(event.target.value); setUpcomingPage(1); setCompletedPage(1); }}/></label>
         <StudentCard title="Upcoming Exams" subtitle="Scheduled and published examinations"><StudentDataTable columns={examColumns} rows={pageRows(upcomingRows, upcomingPage)} statusColumns={[6]} empty="No upcoming examinations."/><Pagination page={currentPage(upcomingRows, upcomingPage)} total={upcomingRows.length} label="examinations" onChange={setUpcomingPage}/></StudentCard>
         <StudentCard title="Completed Exams"><StudentDataTable columns={examColumns} rows={pageRows(completedRows, completedPage)} statusColumns={[6]} empty="No completed examinations."/><Pagination page={currentPage(completedRows, completedPage)} total={completedRows.length} label="examinations" onChange={setCompletedPage}/></StudentCard>
       </div>
     </> : null}
 
     {selectedDetails ? <dialog ref={detailsRef} className="sp-exam-details" aria-labelledby="sp-exam-details-title" onCancel={(event) => { event.preventDefault(); setSelectedExam(""); }} onClick={(event) => { if (event.target === event.currentTarget) setSelectedExam(""); }}>
-      <header className="sp-exam-details-header"><h2 id="sp-exam-details-title">Examination Details</h2><button type="button" className="sp-icon-btn" aria-label="Close examination details" onClick={() => setSelectedExam("")} autoFocus><X size={18}/></button></header>
+      <header className="sp-exam-details-header"><h2 id="sp-exam-details-title">Examination Details</h2><button type="button" className="sp-icon-btn" aria-label="Close examination details" onClick={() => setSelectedExam("")} autoFocus><ThreeDIcon name="close" size={18}/></button></header>
       <div className="sp-exam-details-body">
         <section className="sp-exam-details-summary">
           <h3>{selectedDetails.examName}{selectedDetails.examCode || selectedDetails.code ? ` (${selectedDetails.examCode || selectedDetails.code})` : ""}</h3>

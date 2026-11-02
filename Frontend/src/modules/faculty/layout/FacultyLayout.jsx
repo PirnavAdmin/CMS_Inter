@@ -12,7 +12,7 @@ export default function FacultyLayout({ children }) {
   const { sidebarOpen, setSidebarOpen, toast } = useFaculty();
 
   return (
-    <div className={`cms-shell ${sidebarOpen ? "" : "nav-closed"}`}>
+    <div className={`cms-shell faculty-shell ${sidebarOpen ? "" : "nav-closed"}`}>
       {/* Sidebar */}
       <FacultySidebar />
 
