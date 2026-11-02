@@ -228,18 +228,27 @@
 
 .sp-shell {
   --sp-sidebar-width: 218px;
-  --sp-primary: #6f8700;
-  --sp-primary-dark: #536600;
-  --sp-primary-hover: #819b08;
-  --sp-primary-soft: #eef3d9;
-  --sp-soft: #f3f6e8;
-  --sp-bg: #f7f9f0;
-  --sp-sidebar: #d5dfb0;
-  --sp-header: #d5dfb0;
-  --sp-surface: #fff;
-  --sp-border: #d7ddc6;
-  --sp-text: #1d2519;
-  --sp-muted: #7b8375;
+  --sp-primary: #4338CA;
+  --sp-primary-dark: #312E81;
+  --sp-primary-hover: #60A5FA;
+  --sp-primary-soft: #E0E7FF;
+  --sp-soft: #EFF6FF;
+  --sp-bg: #F8FAFF;
+  --sp-sidebar: #312E81;
+  --sp-header: #EFF6FF;
+  --sp-surface: #FFFFFF;
+  --sp-border: #DBEAFE;
+  --sp-text: #172554;
+  --sp-muted: #64748B;
+  --cms-primary: #4338CA;
+  --cms-primary-dark: #312E81;
+  --cms-primary-hover: #60A5FA;
+  --cms-primary-soft: #E0E7FF;
+  --cms-primary-border: #DBEAFE;
+  --cms-subtle: #EFF6FF;
+  --cms-border: #DBEAFE;
+  --cms-text: #172554;
+  --cms-muted: #64748B;
   position: fixed;
   inset: 0;
   display: flex;
@@ -253,15 +262,15 @@
 }
 
 :root[data-theme="dark"] .sp-shell {
-  --sp-bg: #151b13;
-  --sp-sidebar: #192116;
-  --sp-header: #202a1c;
-  --sp-surface: #1d251a;
-  --sp-border: #35422e;
-  --sp-text: #edf2e7;
-  --sp-muted: #aab5a2;
-  --sp-soft: #29351f;
-  --sp-primary-soft: #29351f;
+  --sp-bg: #1E1B4B;
+  --sp-sidebar: #1E1B4B;
+  --sp-header: #312E81;
+  --sp-surface: #25215C;
+  --sp-border: #4338CA;
+  --sp-text: #EEF2FF;
+  --sp-muted: #C7D2FE;
+  --sp-soft: #312E81;
+  --sp-primary-soft: #312E81;
 }
 
 .sp-shell * {
@@ -283,7 +292,7 @@
 }
 
 :root[data-theme="dark"] .sp-sidebar {
-  background: #192116;
+  background: #1E1B4B;
 }
 
 .sp-brand {
@@ -349,6 +358,9 @@
   text-transform: uppercase
 }
 
+.sp-sidebar nav h2,
+.sp-sidebar-note { color: #DBEAFE; }
+
 .sp-sidebar nav a {
   display: flex;
   align-items: center;
@@ -358,7 +370,7 @@
   margin-left: 4px;
   padding: 8px 7px;
   border-radius: 10px;
-  color: var(--sp-text);
+  color: #FFFFFF;
   font-size: 11.75px;
   font-weight: 600;
   text-decoration: none;
@@ -374,7 +386,7 @@
 .sp-sidebar nav a.is-active {
   background: linear-gradient(90deg, var(--sp-primary), var(--sp-primary-dark));
   color: #fff;
-  box-shadow: none
+  box-shadow: inset 3px 0 0 #60A5FA
 }
 
 .sp-nav-3d-icon {
@@ -464,7 +476,7 @@
 }
 
 .sp-icon-btn:hover {
-  border-color: #b8c889;
+  border-color: #60A5FA;
   background: var(--sp-primary-soft)
 }
 
@@ -678,7 +690,7 @@
 }
 
 .sp-btn:hover {
-  border-color: #b8c889;
+  border-color: #60A5FA;
   background: var(--sp-primary-soft);
   color: var(--sp-primary-dark)
 }
@@ -5466,16 +5478,16 @@
 .sp-change-password-modal .sp-password-input-wrap { position: relative; }
 .sp-change-password-modal .sp-password-input-wrap input { height: 44px; padding-right: 46px; background: var(--sp-surface); color: var(--sp-text); box-sizing: border-box; }
 .sp-change-password-modal .sp-password-input-wrap input[aria-invalid="true"] { border-color: #dc2626; }
-.sp-change-password-modal .sp-password-input-wrap input:focus-visible { outline: 2px solid var(--cms-primary, #819900); outline-offset: 1px; }
+.sp-change-password-modal .sp-password-input-wrap input:focus-visible { outline: 2px solid var(--cms-primary, #4338CA); outline-offset: 1px; }
 .sp-change-password-modal .sp-password-eye { position: absolute; right: 5px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border: 0; border-radius: 6px; display: grid; place-items: center; background: transparent; color: var(--sp-muted); cursor: pointer; }
-.sp-change-password-modal .sp-password-eye:focus-visible { outline: 2px solid var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-eye:focus-visible { outline: 2px solid var(--cms-primary, #4338CA); }
 .sp-change-password-modal .sp-password-field-error { color: #dc2626; font-size: 12px; line-height: 1.4; margin-top: 5px; }
 .sp-change-password-modal .sp-password-field-error:empty { display: none; }
 .sp-change-password-modal .sp-password-requirements { margin-top: 9px; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: 8px; color: var(--sp-muted); font-size: 12px; }
 .sp-change-password-modal .sp-password-requirements ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; margin: 0; padding: 0; list-style: none; }
 .sp-change-password-modal .sp-password-requirements li.is-met { color: #20833b; }
 .sp-change-password-modal .sp-password-strength { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
-.sp-change-password-modal .sp-password-strength meter { flex: 1; min-width: 40px; accent-color: var(--cms-primary, #819900); }
+.sp-change-password-modal .sp-password-strength meter { flex: 1; min-width: 40px; accent-color: var(--cms-primary, #4338CA); }
 .sp-change-password-modal .sp-password-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 16px; margin-top: 4px; border-top: 1px solid var(--sp-border); }
 .sp-change-password-modal .sp-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 480px) { .sp-change-password-modal .sp-password-requirements ul { grid-template-columns: 1fr; } }
@@ -5761,11 +5773,11 @@
 @media (hover: hover) and (pointer: fine) {
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: #edf2dc;
+    background-color: #EFF6FF;
   }
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
   [data-theme="dark"] :is(.sp-shell, .sp-result-dialog) :is(table.sp-table, table.cms-fee-table) > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
-    background-color: color-mix(in srgb, var(--sp-surface, #1d251a) 75%, #65833d);
+    background-color: color-mix(in srgb, var(--sp-surface, #25215C) 75%, #4338CA);
   }
 }
 @media (prefers-reduced-motion: reduce) {

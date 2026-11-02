@@ -1,5 +1,6 @@
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/modules/landing/LandingPage.jsx";
+import { PublicRouteFallback, PublicWebsitePage } from "@/modules/landing/PublicWebsitePages.jsx";
 import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
 import DashboardPage from "@/modules/admin/AdminDashboard/DashboardPage.jsx";
 import PrincipalDashboard from "@/modules/principal/PrincipalDashboard.jsx";
@@ -124,6 +125,15 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/about" element={<PublicWebsitePage page="about" />} />
+      <Route path="/academics" element={<PublicWebsitePage page="academics" />} />
+      <Route path="/features" element={<PublicWebsitePage page="features" />} />
+      <Route path="/admissions" element={<PublicWebsitePage page="admissions" />} />
+      <Route path="/contact" element={<PublicWebsitePage page="contact" />} />
+      <Route path="/help" element={<PublicWebsitePage page="help" />} />
+      <Route path="/privacy-policy" element={<PublicWebsitePage page="privacy-policy" />} />
+      <Route path="/terms" element={<PublicWebsitePage page="terms" />} />
+      <Route path="/404" element={<PublicRouteFallback />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Navigate to="/login" replace />} />
@@ -566,7 +576,7 @@ export default function AppRoutes() {
       <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<PublicRouteFallback />} />
     </Routes>
   );
 }
