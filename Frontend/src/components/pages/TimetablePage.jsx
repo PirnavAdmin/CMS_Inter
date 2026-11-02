@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarDays, ChevronDown, Copy, Download, Eye, FileSpreadsheet, FileText, MoreVertical, Pencil, Power, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { SkeletonPage, SkeletonTable, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -1082,7 +1083,7 @@ function StructureForm({ item, close, saved }) {
                 setForm((current) => ({ ...current, breaks: current.breaks.filter((_, entryIndex) => entryIndex !== index) }))
               }
             >
-              <Trash2 size={17} aria-hidden="true" />
+              <ThreeDIcon name="delete" size={17} aria-hidden="true" />
             </button>
           </div>
         ))}
@@ -1339,7 +1340,7 @@ function Structures({ notify, initial }) {
                 </td>
                 <td className="ttm-actions-cell">
                   <div className="ttm-actions">
-                    <button className="ttm-action-preview" aria-label="View" title="View" onClick={() => { setItem(row); setModal("preview"); }}><Eye size={16} aria-hidden="true" /></button>
+                    <button className="ttm-action-preview" aria-label="View" title="View" onClick={() => { setItem(row); setModal("preview"); }}><ThreeDIcon name="view" size={16} aria-hidden="true" /></button>
                     <button
                       className="ttm-action-edit"
                       aria-label="Edit"
@@ -1349,7 +1350,7 @@ function Structures({ notify, initial }) {
                         setModal("form");
                       }}
                     >
-                      <Pencil size={16} aria-hidden="true" />
+                      <ThreeDIcon name="edit" size={16} aria-hidden="true" />
                     </button>
                     <button
                       className="ttm-action-more"
@@ -1385,10 +1386,10 @@ function Structures({ notify, initial }) {
       </section>
       {moreMenu ? createPortal(
         <div ref={moreMenuRef} className="ttm-structure-more-menu" style={moreMenu.style} role="menu">
-          <button type="button" role="menuitem" onClick={() => { setMoreMenu(null); setItem(moreMenu.row); setModal("assign"); }}><UserPlus size={16} aria-hidden="true" /> Assign</button>
-          <button type="button" role="menuitem" onClick={() => { const row = moreMenu.row; setMoreMenu(null); toggleActive(row); }}><Power size={16} aria-hidden="true" /> {pick(moreMenu.row, "isActive") ? "Deactivate" : "Activate"}</button>
+          <button type="button" role="menuitem" onClick={() => { setMoreMenu(null); setItem(moreMenu.row); setModal("assign"); }}><ThreeDIcon name="add" size={16} aria-hidden="true" /> Assign</button>
+          <button type="button" role="menuitem" onClick={() => { const row = moreMenu.row; setMoreMenu(null); toggleActive(row); }}><ThreeDIcon name="security" size={16} aria-hidden="true" /> {pick(moreMenu.row, "isActive") ? "Deactivate" : "Activate"}</button>
           <div className="ttm-structure-more-divider" />
-          <button type="button" role="menuitem" className="is-danger" onClick={() => { setMoreMenu(null); setItem(moreMenu.row); setDeleteError(""); setModal("delete"); }}><Trash2 size={16} aria-hidden="true" /> Delete</button>
+          <button type="button" role="menuitem" className="is-danger" onClick={() => { setMoreMenu(null); setItem(moreMenu.row); setDeleteError(""); setModal("delete"); }}><ThreeDIcon name="delete" size={16} aria-hidden="true" /> Delete</button>
         </div>,
         document.body,
       ) : null}
@@ -2362,14 +2363,14 @@ function Draft({ initial, notify }) {
             <div className="ttm-grid-head">
               <div className="ttm-grid-title">
                 <div className="ttm-toolbar-heading">
-                  <i><CalendarDays size={20} aria-hidden="true" /></i>
+                  <i><ThreeDIcon name="calendar" size={20} aria-hidden="true" /></i>
                   <div>
                     <b>Section timetable</b>
                     <span>View the published timetable for the selected section.</span>
                   </div>
                 </div>
                 <Btn className="cms-btn cms-btn-ghost ttm-substitution-trigger" onClick={() => setSubstitutionPreviewOpen(true)}>
-                  <UsersRound size={17} aria-hidden="true" /> Faculty Leave / Substitutions
+                  <ThreeDIcon name="staff" size={17} aria-hidden="true" /> Faculty Leave / Substitutions
                 </Btn>
               </div>
               <div className="ttm-grid-workflow">
@@ -2384,25 +2385,25 @@ function Draft({ initial, notify }) {
                   </label>
                 <div ref={exportMenuRef} className={`ttm-export-menu${exportBusy ? " is-busy" : ""}`}>
                   <button type="button" className="cms-btn cms-btn-ghost" aria-haspopup="menu" aria-expanded={exportOpen} disabled={Boolean(exportBusy)} onClick={() => setExportOpen((open) => !open)}>
-                    <Download size={15} aria-hidden="true" /> {exportBusy ? "Exporting…" : "Export"} <ChevronDown size={14} aria-hidden="true" />
+                    <ThreeDIcon name="download" size={15} aria-hidden="true" /> {exportBusy ? "Exporting…" : "Export"} <ChevronDown size={14} aria-hidden="true" />
                   </button>
                   {exportOpen ? <div className="ttm-export-options" role="menu">
                     <button type="button" disabled={Boolean(exportBusy)} onClick={() => {
                       setExportOpen(false);
                       exportSectionPdf();
                     }}>
-                      <FileText size={16} aria-hidden="true" /> Export PDF
+                      <ThreeDIcon name="pdf" size={16} aria-hidden="true" /> Export PDF
                     </button>
                     <button type="button" disabled={Boolean(exportBusy)} onClick={() => {
                       setExportOpen(false);
                       exportGroupExcel();
                     }}>
-                      <FileSpreadsheet size={16} aria-hidden="true" /> Export Excel
+                      <ThreeDIcon name="excel" size={16} aria-hidden="true" /> Export Excel
                     </button>
                   </div> : null}
                 </div>
                 {!published && <Btn className="cms-btn cms-btn-ghost ttm-icon-action" disabled={activeAction === "copy"} onClick={() => setCopying(true)} title="Copy Timetable" aria-label="Copy Timetable">
-                  <Copy size={16} aria-hidden="true" />
+                  <ThreeDIcon name="documents" size={16} aria-hidden="true" />
                 </Btn>}
                 {!published && <Btn
                   className="cms-btn cms-btn-ghost"
@@ -2436,7 +2437,7 @@ function Draft({ initial, notify }) {
                 {published && (
                   <div className="ttm-toolbar-searches">
                     <label className="ttm-inline-filter ttm-staff-select">
-                      <Search size={18} aria-hidden="true" />
+                      <ThreeDIcon name="search" size={18} aria-hidden="true" />
                       <input
                         type="search"
                         list="ttm-staff-options"
@@ -2465,7 +2466,7 @@ function Draft({ initial, notify }) {
                       </datalist>
                     </label>
                     <label className="ttm-inline-filter ttm-person-select">
-                      <Search size={18} aria-hidden="true" />
+                      <ThreeDIcon name="search" size={18} aria-hidden="true" />
                       <input
                         type="search"
                         list="ttm-student-options"

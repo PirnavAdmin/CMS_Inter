@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Download, Plus, X } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -156,7 +156,7 @@ export default function StudentCertificates() {
   }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
   return <div className="sp-page">
-    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={openRequestCertificate}><Plus size={16}/> Request Certificate</button>}/>
+    <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={openRequestCertificate}><ThreeDIcon name="add" size={16}/> Request Certificate</button>}/>
     {success ? <Toast message={success} type="success" onClose={() => setSuccess("")}/> : null}
     {!templatesReady.length && !error ? <div className="sp-api-state">No admin-created certificate types are available for your academic context. Please contact the college administrator.</div> : null}
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
@@ -169,10 +169,10 @@ export default function StudentCertificates() {
         if (index === 4) return <StudentStatusBadge value={read(row, "status", "Status") || "Pending"}/>;
         const issued = /issued/i.test(String(read(row, "status", "Status") || ""));
         const id = String(read(row, "certificateId", "CertificateId", "id", "Id") || "");
-        return <button type="button" className="sp-icon-action" title={issued ? "Download certificate" : "Certificate is not issued yet"} aria-label="Download certificate" disabled={!issued || downloading === id} onClick={() => download(row)}><Download size={16}/></button>;
+        return <button type="button" className="sp-icon-action" title={issued ? "Download certificate" : "Certificate is not issued yet"} aria-label="Download certificate" disabled={!issued || downloading === id} onClick={() => download(row)}><ThreeDIcon name="download" size={16}/></button>;
       }}/>
       }
     </StudentCard>
-    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" disabled={saving} onClick={() => setOpen(false)}><X size={18}/></button></header>{requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}{!templatesReady.length ? <div className="sp-api-state" role="status">{error || "No admin-created certificate types are available for your academic context. Please contact the college administrator."}</div> : null}<label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving || !templatesReady.length}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
+    {open ? <div className="sp-modal-backdrop"><form className="sp-modal" onSubmit={submit}><header><div><h2>Request Certificate</h2><p>Submit a certificate request for review.</p></div><button type="button" className="sp-icon-btn" disabled={saving} onClick={() => setOpen(false)}><ThreeDIcon name="close" size={18}/></button></header>{requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}{!templatesReady.length ? <div className="sp-api-state" role="status">{error || "No admin-created certificate types are available for your academic context. Please contact the college administrator."}</div> : null}<label><span>Certificate Type</span><select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="">Select certificate type</option>{templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}</select></label><label><span>Purpose</span><input required value={form.purpose} onChange={(event) => setForm((current) => ({ ...current, purpose: event.target.value }))}/></label><label><span>Additional Notes</span><textarea rows="3" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label><footer><button type="button" className="sp-btn" disabled={saving} onClick={() => setOpen(false)}>Cancel</button><button className="sp-btn primary" disabled={saving || !templatesReady.length}>{saving ? "Submitting..." : "Submit Request"}</button></footer></form></div> : null}
   </div>;
 }

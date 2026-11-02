@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./MarksEntryPage.css";
 
 const PAGE_SIZE = 5;
@@ -5682,7 +5683,7 @@ function BulkImportModal({
               style={{ fontSize: 12, height: 28, padding: "0 8px", gap: 5 }}
               onClick={onDownloadTemplate}
             >
-              <Download size={13} />
+              <ThreeDIcon name="download" size={13} />
               Download Excel Template
             </button>
           </div>
@@ -5708,7 +5709,7 @@ function BulkImportModal({
                 }}
               />
               <div className="cms-room-dropzone-icon">
-                <Upload size={20} />
+                <ThreeDIcon name="upload" size={24} />
               </div>
               <span className="cms-room-dropzone-title">Click to upload or drag &amp; drop file</span>
               <span className="cms-room-dropzone-subtitle">Supported formats: .xlsx, .xls, .csv</span>
@@ -5716,7 +5717,7 @@ function BulkImportModal({
           ) : (
             <div className="cms-room-file-card">
               <div className="cms-room-file-card-info">
-                <FileSpreadsheet size={24} color="var(--cms-primary, #6F8400)" />
+                <ThreeDIcon name="excel" size={24} />
                 <div className="cms-room-file-card-details">
                   <span className="cms-room-file-name">{file.name}</span>
                   <span className="cms-room-file-meta">
@@ -5812,7 +5813,7 @@ function BulkImportModal({
                 <SkeletonButton width={128} />
               ) : (
                 <>
-                  <Upload size={14} />
+                  <ThreeDIcon name="upload" size={14} />
                   Import {validationResult.validPayloads.length} Marks
                 </>
               )}

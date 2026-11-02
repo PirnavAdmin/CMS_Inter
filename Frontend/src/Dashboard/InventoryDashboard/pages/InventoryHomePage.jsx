@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Boxes, IndianRupee, CircleAlert, ShoppingCart } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useInventory } from "../InventoryDataContext.jsx";
 import {
   enrichMovement,
@@ -30,7 +31,7 @@ export default function InventoryHomePage() {
       <div className="ip-kpis">
         {stats.map(([label, value, Icon]) => (
           <article key={label}>
-            <Icon size={22} />
+            <ThreeDIcon name={Icon} size={32} />
             <p>{label}</p>
             <strong>{value}</strong>
           </article>

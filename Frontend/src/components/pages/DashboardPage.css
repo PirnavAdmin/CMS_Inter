@@ -385,6 +385,15 @@
   box-sizing: border-box;
 }
 
+.dashboard-card-head-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dashboard-card-title-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+}
 .dashboard-card-head h2 {
   margin: 0;
   font-size: 12px;

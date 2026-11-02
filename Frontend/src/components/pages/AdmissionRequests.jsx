@@ -3,6 +3,8 @@ import { ArrowLeft, Check, Eye, Inbox, Info, Loader2, Search, Send, X } from "lu
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Field, Toast } from "@/components/common/Ui.jsx";
 import { formatDate } from "@/data/feeManagementData.js";
 import "./AdmissionRequests.css";
@@ -244,8 +246,8 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
               <div className="cms-card-head"><h2>Action</h2></div>
               <div className="cms-card-body">
                 {detail.status === "Pending" ? <>
-                  <button type="button" className="cms-btn cms-btn-primary" disabled={Boolean(actionBusy)} onClick={() => changeStatus("Request Approved")}><Check size={15} />{actionBusy === "Request Approved" ? "Approving..." : "Approve Request"}</button>
-                  <button type="button" className="cms-btn cms-btn-danger" disabled={Boolean(actionBusy)} onClick={() => changeStatus("Request Rejected")}><X size={15} />{actionBusy === "Request Rejected" ? "Rejecting..." : "Reject Request"}</button>
+                  <button type="button" className="cms-btn cms-btn-primary" disabled={Boolean(actionBusy)} onClick={() => changeStatus("Request Approved")}><ThreeDIcon name="check" size={15} />{actionBusy === "Request Approved" ? "Approving..." : "Approve Request"}</button>
+                  <button type="button" className="cms-btn cms-btn-danger" disabled={Boolean(actionBusy)} onClick={() => changeStatus("Request Rejected")}><ThreeDIcon name="cross" size={15} />{actionBusy === "Request Rejected" ? "Rejecting..." : "Reject Request"}</button>
                 </> : <RequestStatus status={detail.status} />}
               </div>
             </aside> : null}
@@ -253,7 +255,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
         ) : <>
           <div className="cms-admission-main-tabs cms-requests-tabs" role="tablist" aria-label="Admission requests">
             {[{ id: "outgoing", label: "My Campus Requests", count: outgoing.length, Icon: Send }, { id: "incoming", label: "Incoming Requests", count: incoming.length, Icon: Inbox }].map(({ id, label, count, Icon }) => (
-              <button key={id} type="button" id={`requests-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls="requests-panel" className={`cms-admission-main-tab ${tab === id ? "is-active" : ""}`} onClick={() => { setTab(id); setCampusFilter(""); setPage(1); }}><Icon size={14} /><span>{label}</span><span className="cms-requests-count">{count}</span></button>
+              <button key={id} type="button" id={`requests-tab-${id}`} role="tab" aria-selected={tab === id} aria-controls="requests-panel" className={`cms-admission-main-tab ${tab === id ? "is-active" : ""}`} onClick={() => { setTab(id); setCampusFilter(""); setPage(1); }}><ThreeDIcon icon={Icon} size={14} /><span>{label}</span><span className="cms-requests-count">{count}</span></button>
             ))}
           </div>
           <div id="requests-panel" role="tabpanel" aria-labelledby={`requests-tab-${tab}`}>
@@ -262,7 +264,7 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
               <div className="cms-admission-toolbar cms-requests-toolbar">
                 <div className="cms-field cms-requests-search-field">
                   <label htmlFor="admission-requests-search">Search</label>
-                  <div className="cms-search cms-admission-search"><Search size={16} /><input id="admission-requests-search" aria-label="Search admission requests" placeholder="Search by admission number or student name..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></div>
+                  <div className="cms-search cms-admission-search"><Search3DIcon size={16} /><input id="admission-requests-search" aria-label="Search admission requests" placeholder="Search by admission number or student name..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></div>
                 </div>
                 <Field field={{ name: "requestCampus", label: "Campus", type: "select", options: [{ value: "", label: "All Campuses" }, ...filterOptions] }} value={activeFilter} onChange={(_, value) => { setCampusFilter(value); setPage(1); }} />
               </div>
@@ -271,11 +273,11 @@ export default function AdmissionRequests({ campusOptions, currentCampusId, onCl
                 <tbody>
                   {loading ? <tr><td colSpan={6} className="cms-requests-empty"><Loader2 size={16} className="cms-spin" /> Loading requests...</td></tr> : visible.length ? visible.map((request) => <tr key={request.id}>
                     <td className="cms-strong">{request.admissionNumber}</td><td>{request.studentName}</td><td>{otherCampus(request).label}</td><td>{formatDate(request.submittedOn) || request.submittedOn}</td><td><RequestStatus status={request.status} /></td>
-                    <td><button type="button" className="cms-btn cms-btn-ghost" aria-label={`View request ${request.admissionNumber}`} onClick={() => setDetailId(request.id)}><Eye size={15} />View</button></td>
+                    <td><button type="button" className="cms-btn cms-btn-ghost" aria-label={`View request ${request.admissionNumber}`} onClick={() => setDetailId(request.id)}><ThreeDIcon name="view" size={15} /> View</button></td>
                   </tr>) : <tr><td colSpan={6} className="cms-requests-empty">No admission requests found.</td></tr>}
                 </tbody>
               </table></div>
-              <div className="cms-pagination"><span className="cms-page-info">Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} requests</span><button type="button" className="cms-page-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><button type="button" className="cms-page-btn is-active" aria-current="page">{currentPage}</button><button type="button" className="cms-page-btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button></div>
+              <div className="cms-pagination"><span className="cms-page-info">Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} requests</span><div className="cms-pagination-actions"><button type="button" className="cms-page-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button><button type="button" className="cms-page-btn is-active" aria-current="page">{currentPage}</button><button type="button" className="cms-page-btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button></div></div>
             </div>
           </div>
         </>}

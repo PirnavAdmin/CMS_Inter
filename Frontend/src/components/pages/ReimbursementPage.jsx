@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
 import * as reimbursementService from "@/services/reimbursementService.js";
@@ -1268,7 +1270,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                               setPreviewDocModalOpen(true);
                             }}
                           >
-                            <Eye size={14} /> Preview
+                            <ThreeDIcon name="view" size={14} /> Preview
                           </button>
                           <button
                             type="button"
@@ -1276,7 +1278,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             title="Remove file"
                             onClick={handleRemoveFile}
                           >
-                            <Trash2 size={14} /> Remove
+                            <ThreeDIcon name="delete" size={14} /> Remove
                           </button>
                         </div>
                       </div>
@@ -1333,7 +1335,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     onClick={handleOpenPreviewModal}
                     disabled={isSubmitting}
                   >
-                    <Eye size={15} /> Preview Claim
+                    <ThreeDIcon name="view" size={15} /> Preview Claim
                   </button>
                   <button
                     type="submit"
@@ -1376,7 +1378,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
             {/* Filters */}
             <div className="reimb-table-filters">
               <div className="reimb-search-wrap">
-                <Search size={14} className="reimb-search-icon" />
+                <Search3DIcon size={14} className="reimb-search-icon" />
                 <input
                   type="text"
                   placeholder="Search by ID, name, dept, purpose..."
@@ -1438,7 +1440,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 onClick={handleExportCsv}
                 title="Export filtered claims to CSV"
               >
-                <Download size={13} /> Export CSV
+                <ThreeDIcon name="csv" size={13} /> Export CSV
               </button>
             </div>
           </div>
@@ -1603,7 +1605,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             title="View Claim Details & Timeline"
                             onClick={() => handleOpenClaimDetails(claim)}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={14} />
                           </button>
 
                           {/* View Proof Document */}
@@ -1883,7 +1885,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                       style={{ padding: "4px 10px", fontSize: 12 }}
                       onClick={() => setPreviewDocModalOpen(true)}
                     >
-                      <Eye size={13} /> View Receipt
+                      <ThreeDIcon name="view" size={13} /> View Receipt
                     </button>
                   </div>
                 </div>
@@ -2338,7 +2340,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     className="reimb-btn reimb-btn-secondary"
                     style={{ textDecoration: "none" }}
                   >
-                    <Download size={14} /> Download Receipt
+                    <ThreeDIcon name="download" size={14} /> Download Receipt
                   </a>
                 )}
                 <button
@@ -2673,7 +2675,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                         style={{ padding: "4px 10px", fontSize: 12, flexShrink: 0 }}
                         onClick={() => setPreviewDraftDocModalOpen(true)}
                       >
-                        <Eye size={13} /> View Receipt
+                        <ThreeDIcon name="view" size={13} /> View Receipt
                       </button>
                     )}
                   </div>
@@ -2722,7 +2724,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     className="reimb-btn reimb-btn-secondary"
                     style={{ textDecoration: "none" }}
                   >
-                    <Download size={14} /> Download Receipt
+                    <ThreeDIcon name="download" size={14} /> Download Receipt
                   </a>
                 )}
                 <button

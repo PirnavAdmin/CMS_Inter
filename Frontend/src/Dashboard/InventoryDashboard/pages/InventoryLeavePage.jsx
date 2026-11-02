@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Plus } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal } from "@/components/common/Ui.jsx";
 import { today } from "@/components/pages/InventoryManagement/inventoryModel.js";
 import { useDialogFocus } from "@/components/pages/InventoryManagement/components/InventoryUi.jsx";
@@ -75,13 +75,13 @@ export default function InventoryLeavePage() {
     <>
       <div className="ip-page-head">
         <div>
-          <h1>
-            <FileText size={26} /> Leave Management
+          <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ThreeDIcon name="leaves" size={26} /> Leave Management
           </h1>
           <p>View your applications, check balances, and request time off.</p>
         </div>
         <button className="cms-btn cms-btn-primary" onClick={() => setOpen(true)}>
-          <Plus size={16} /> Apply for Leave
+          <ThreeDIcon name="add" size={16} /> Apply for Leave
         </button>
       </div>
       <div className="ip-staff-metrics">

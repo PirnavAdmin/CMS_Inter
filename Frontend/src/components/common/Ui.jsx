@@ -401,7 +401,8 @@ export function Pagination({
           ? `Showing ${start}–${end} of ${resolvedTotal} ${unit} · Page ${activePage} of ${totalPages}`
           : `Page ${activePage} of ${totalPages}`}
       </span>
-      <button
+      <div className="cms-pagination-actions">
+        <button
         type="button"
         className="cms-page-btn"
         disabled={activePage <= 1 || (hasExplicitCount && resolvedTotal === 0)}
@@ -436,6 +437,7 @@ export function Pagination({
       >
         Next
       </button>
+      </div>
     </div>
   );
 }

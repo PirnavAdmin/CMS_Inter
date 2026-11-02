@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
@@ -199,7 +200,7 @@ export default function AttendancePage({ area: areaProp } = {}) {
               title={!staff && studentAttendanceLocked ? "Attendance is unavailable for this date" : undefined}
               onClick={() => setImportOpen(true)}
             >
-              <Upload size={16} /> Import Attendance
+              <ThreeDIcon name="upload" size={16} /> Import Attendance
             </button>
           ) : null
         }
@@ -216,7 +217,7 @@ export default function AttendancePage({ area: areaProp } = {}) {
                 }`}
                 onClick={() => setActiveStaffTab("my-attendance")}
               >
-                <Clock size={15} /> My Attendance
+                <ThreeDIcon name="attendance-timing" size={16} /> My Attendance
               </button>
               <button
                 type="button"
@@ -227,7 +228,7 @@ export default function AttendancePage({ area: areaProp } = {}) {
                 }`}
                 onClick={() => setActiveStaffTab("staff-attendance")}
               >
-                <Users size={15} /> Staff Attendance
+                <ThreeDIcon name="staff" size={16} /> Staff Attendance
               </button>
             </div>
           )}
@@ -333,8 +334,8 @@ function AttendanceImportModal({ staff, say, onClose }) {
   const hasErrors = results && results.errors && results.errors.length > 0;
 
   return <Modal title={`${label} Attendance Import`} className="attendance-import-modal" onClose={onClose} footer={<><button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>Cancel</button><button type="button" className="cms-btn cms-btn-primary" disabled={!validated || hasErrors || busy} onClick={() => processFile(false)}>{busy && validated ? "Importing..." : "Import Attendance"}</button></>}><div className="attendance-import-flow">
-    <section><div className="attendance-import-step"><b>1</b><div><strong>Download Attendance Template</strong><p>Download the standard Excel format for bulk attendance upload.</p></div></div><button type="button" className="cms-btn cms-btn-ghost" onClick={downloadTemplate}><FileSpreadsheet size={16} /> Download Template</button></section>
-    <section><div className="attendance-import-step"><b>2</b><div><strong>Upload Attendance File</strong><p>Choose one .xlsx file containing the attendance records.</p></div></div><label className="attendance-import-file"><Upload size={16} /><span>Choose Excel File</span><input type="file" accept=".xlsx" onChange={chooseFile} disabled={busy} /></label>{file && <small className="attendance-import-file-name">{file.name}</small>}{fileError && <small className="attendance-import-error">{fileError}</small>}</section>
+    <section><div className="attendance-import-step"><b>1</b><div><strong>Download Attendance Template</strong><p>Download the standard Excel format for bulk attendance upload.</p></div></div><button type="button" className="cms-btn cms-btn-ghost" onClick={downloadTemplate}><ThreeDIcon name="excel" size={16} /> Download Template</button></section>
+    <section><div className="attendance-import-step"><b>2</b><div><strong>Upload Attendance File</strong><p>Choose one .xlsx file containing the attendance records.</p></div></div><label className="attendance-import-file"><ThreeDIcon name="upload" size={16} /><span>Choose Excel File</span><input type="file" accept=".xlsx" onChange={chooseFile} disabled={busy} /></label>{file && <small className="attendance-import-file-name">{file.name}</small>}{fileError && <small className="attendance-import-error">{fileError}</small>}</section>
     <section><div className="attendance-import-step"><b>3</b><div><strong>Validate File</strong><p>Run a dry validation preview before importing.</p></div></div><button type="button" className="cms-btn cms-btn-primary" disabled={!file || busy} onClick={() => processFile(true)}>{busy && !validated ? "Validating..." : "Validate File"}</button></section>
     <details className="attendance-import-template"><summary>Template Structure</summary><ol>{sheets.map((sheet) => <li key={sheet}>{sheet}</li>)}</ol><p>{columns.join(" · ")}</p></details>
     
@@ -831,7 +832,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                  disabled={busy || holidayLocked || rows.length === 0}
                  title="Mark all eligible records as Present"
                >
-                 <UserCheck size={16} /> Mark All Present
+                 <ThreeDIcon name="check" size={16} /> Mark All Present
                </button>
                {dirty && (
                  <button
@@ -851,10 +852,10 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                      onClick={() => navigate("/dashboard/settings/attendance-timing")}
                      title="Configure shifts, check-in thresholds and late rules"
                    >
-                     <Clock size={16} /> Timing Settings
+                     <ThreeDIcon name="attendance-timing" size={16} /> Timing Settings
                    </button>
                    <button type="button" className="cms-btn cms-btn-ghost att-staff-export" disabled={busy} onClick={() => exportReport("excel")}>
-                     <Download size={16} /> Export
+                     <ThreeDIcon name="excel" size={16} /> Export
                    </button>
                  </>
                ) : null}
@@ -928,7 +929,7 @@ function Filters({ f, update, o, staff, busy, load, exportReport, search, onSear
     .replace(" ", ", ");
   if (!staff) return <>
     <div className="att-student-date-card">
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><ThreeDIcon name="holiday" size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><input type="date" value={f.date} onChange={update("date")} /></Field>}
       <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
       {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
@@ -936,7 +937,7 @@ function Filters({ f, update, o, staff, busy, load, exportReport, search, onSear
   </>;
   return <>
     <div className="att-student-date-card att-staff-date-row">
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><ThreeDIcon name="holiday" size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
       <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
       {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
@@ -1014,7 +1015,7 @@ function StaffSummary({ rows }) {
         const tone = label.toLowerCase().replace(/\s+/g, "-");
         return (
           <article key={label} className={`att-staff-summary-card is-${tone}`}>
-            <span className="att-staff-summary-icon"><Icon size={21} strokeWidth={2.1} /></span>
+            <span className="att-staff-summary-icon"><ThreeDIcon icon={Icon} size={28} /></span>
             <span className="att-staff-summary-copy"><small>{label}</small><strong>{count}</strong></span>
           </article>
         );
@@ -1041,7 +1042,7 @@ function Summary({ data, student = false }) {
         const Icon = studentSummaryIcons[l];
         return (
           <div key={l} className={`att-summary-card att-summary-${String(l).toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "")}`}>
-            {student && Icon ? <span className="att-summary-icon"><Icon size={25} strokeWidth={2.1} /></span> : null}
+            {student && Icon ? <span className="att-summary-icon"><ThreeDIcon icon={Icon} size={28} /></span> : null}
             <div className="att-summary-copy">
               <span>{l}</span>
               <b>{v}</b>
@@ -1118,7 +1119,7 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                 )}
                 <td>
                   <button className="cms-action-btn" disabled={disabled} title={holiday ? "Holiday — attendance disabled" : "Edit Attendance"} aria-label="Edit Attendance" onClick={() => edit(r)}>
-                    <Pencil size={16} />
+                    <ThreeDIcon name="edit" size={16} />
                   </button>
                 </td>
               </tr>

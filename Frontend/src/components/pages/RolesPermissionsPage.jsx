@@ -28,6 +28,8 @@ import {
   XCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Loader, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import {
   ACTION_LABELS,
@@ -145,7 +147,7 @@ function EmptyState({ title, message, action }) {
 function SearchBox({ value, onChange, placeholder, label, inputRef }) {
   return (
     <label className="rbac-search" aria-label={label}>
-      <Search size={16} aria-hidden="true" />
+      <Search3DIcon size={16} />
       <input ref={inputRef} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </label>
   );
@@ -155,7 +157,7 @@ function RoleIcon({ role, selected = false }) {
   const Icon = role?.icon || ShieldCheck;
   return (
     <span className={`rbac-role-icon ${selected ? "is-selected" : ""}`}>
-      <Icon size={22} aria-hidden="true" />
+      <ThreeDIcon icon={Icon} size={22} />
     </span>
   );
 }
@@ -506,7 +508,7 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
             style={{ display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "12px", padding: "4px 10px", height: "30px" }}
             title="Create a new custom role"
           >
-            <Plus size={14} /> New Role
+            <ThreeDIcon name="add" size={14} /> New Role
           </button>
         </div>
         <SearchBox value={query} onChange={onQuery} placeholder="Search roles..." label="Search roles" />
@@ -884,7 +886,7 @@ function PermissionMatrix({
               onClick={onExportCsv}
               title="Export permission matrix to CSV"
             >
-              <Download size={14} aria-hidden="true" />
+              <ThreeDIcon name="csv" size={14} aria-hidden="true" />
               <span>Export CSV</span>
             </button>
             
@@ -1494,7 +1496,7 @@ function RoleDetails({
                 <RotateCcw size={15} /> Reset
               </button>
               <button type="button" className="cms-btn cms-btn-primary" onClick={onSave} disabled={!dirty || saving || selectedRole.isProtected}>
-                {saving ? <RotateCcw className="rbac-spin" size={15} /> : <Save size={15} />} Save Permissions
+                {saving ? <RotateCcw className="rbac-spin" size={15} /> : <ThreeDIcon name="save" size={15} />} Save Permissions
               </button>
             </div>
           </div>
@@ -1760,7 +1762,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
             onFocus={() => setAssignMenuOpen(true)}
             onClick={() => setAssignMenuOpen((open) => !open)}
           >
-            <UserPlus size={16} aria-hidden="true" />
+            <ThreeDIcon name="users" size={16} aria-hidden="true" />
             <span>Assign Role</span>
             <ChevronRight size={15} aria-hidden="true" />
           </button>
@@ -1773,7 +1775,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
             onFocus={() => setAssignMenuOpen(false)}
             onClick={() => requestRemoveRole(activeMenu.user)}
           >
-            <UserMinus size={16} aria-hidden="true" />
+            <ThreeDIcon name="delete" size={16} aria-hidden="true" />
             <span>Remove Role</span>
           </button>
           <button
@@ -1784,7 +1786,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
             onFocus={() => setAssignMenuOpen(false)}
             onClick={() => openUserDetails(activeMenu.user)}
           >
-            <Eye size={16} aria-hidden="true" />
+            <ThreeDIcon name="view" size={16} aria-hidden="true" />
             <span>View Details</span>
           </button>
         </div>
@@ -2295,7 +2297,7 @@ export default function RolesPermissionsPage() {
             className={activeTab === "permissions" ? "is-active" : ""}
             onClick={() => selectTab("permissions")}
           >
-            <ShieldCheck size={16} /> Permission Matrix
+            <ThreeDIcon name="roles" size={16} /> Permission Matrix
           </button>
           <button
             type="button"
@@ -2304,7 +2306,7 @@ export default function RolesPermissionsPage() {
             className={activeTab === "assignments" ? "is-active" : ""}
             onClick={() => selectTab("assignments")}
           >
-            <UserPlus size={16} /> User Role Assignment
+            <ThreeDIcon name="users" size={16} /> User Role Assignment
           </button>
           {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>

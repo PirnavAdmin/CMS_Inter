@@ -46,6 +46,22 @@ import {
   CreditCard,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import campusHeroImg from "@/assets/campus-hero.jpg";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getAuthUser } from "@/features/authStorage.js";
@@ -292,32 +308,34 @@ function HostelPagination({
           </span>
         )}
       </span>
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped <= 1}
-        onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
-      >
-        Prev
-      </button>
-      {visiblePages.map((p) => (
+      <div className="cms-pagination-actions">
         <button
-          key={p}
           type="button"
-          className={`cms-page-btn ${p === currentPageClamped ? "is-active" : ""}`}
-          onClick={() => onPageChange(p)}
+          className="cms-page-btn"
+          disabled={currentPageClamped <= 1}
+          onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
         >
-          {p}
+          Prev
         </button>
-      ))}
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped >= totalPages}
-        onClick={() => onPageChange(Math.min(totalPages, currentPageClamped + 1))}
-      >
-        Next
-      </button>
+        {visiblePages.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`cms-page-btn ${p === currentPageClamped ? "is-active" : ""}`}
+            onClick={() => onPageChange(p)}
+          >
+            {p}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="cms-page-btn"
+          disabled={currentPageClamped >= totalPages}
+          onClick={() => onPageChange(Math.min(totalPages, currentPageClamped + 1))}
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
@@ -360,6 +378,10 @@ export default function HostelPage() {
   const [dashBlockSearch, setDashBlockSearch] = useState("");
   const [dashSelectedBlockId, setDashSelectedBlockId] = useState("");
   const [dashBlockPage, setDashBlockPage] = useState(1);
+  const [isDashRefreshing, setIsDashRefreshing] = useState(false);
+  const [dashLastUpdated, setDashLastUpdated] = useState(() =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
 
   // ── API-backed State Initialization ─────────────────────────────────
   const [blocks, setBlocks] = useState([]);
@@ -3923,7 +3945,7 @@ export default function HostelPage() {
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
-              <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
+              <ThreeDIcon name="building" size={24} />
               <span>Hostel Management Dashboard</span>
             </div>
             <p className="cms-dash-header-sub">
@@ -3949,7 +3971,7 @@ export default function HostelPage() {
           {/* Card 1: TOTAL HOSTELS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Building2 size={20} />
+              <ThreeDIcon name="building" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3966,7 +3988,7 @@ export default function HostelPage() {
           {/* Card 2: TOTAL CAPACITY */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <BedDouble size={20} />
+              <ThreeDIcon name="hostel" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3983,7 +4005,7 @@ export default function HostelPage() {
           {/* Card 3: OCCUPANCY RATE */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Clock size={20} />
+              <ThreeDIcon name="timetable" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4000,7 +4022,7 @@ export default function HostelPage() {
           {/* Card 4: OCCUPIED BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <Users size={20} />
+              <ThreeDIcon name="students" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4034,7 +4056,7 @@ export default function HostelPage() {
           {/* Card 6: HOSTELLERS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <UserCheck size={20} />
+              <ThreeDIcon name="staff" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4594,7 +4616,7 @@ export default function HostelPage() {
             className="cms-btn cms-btn-primary"
             onClick={() => setModal({ isOpen: true, type: "block", mode: "add", data: null })}
           >
-            <Plus size={15} /> Add Block
+            <ThreeDIcon name="add" size={16} /> Add Block
           </button>
         </div>
         <div className="cms-card-body">
@@ -4645,7 +4667,7 @@ export default function HostelPage() {
                   ]);
                 }}
               >
-                <Download size={15} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -4736,7 +4758,7 @@ export default function HostelPage() {
                               title="View details"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "view", data: b })}
                             >
-                              <Eye size={14} />
+                              <ThreeDIcon name="view" size={16} />
                             </button>
                             <button
                               type="button"
@@ -4744,7 +4766,7 @@ export default function HostelPage() {
                               title="Edit block"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "edit", data: b })}
                             >
-                              <Edit3 size={14} />
+                              <ThreeDIcon name="edit" size={16} />
                             </button>
                             <button
                               type="button"
@@ -4752,7 +4774,7 @@ export default function HostelPage() {
                               title="Delete block"
                               onClick={() => handleDeleteBlock(b)}
                             >
-                              <Trash2 size={14} />
+                              <ThreeDIcon name="delete" size={16} />
                             </button>
                           </div>
                         </td>
@@ -4828,7 +4850,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "roomType", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <Plus size={16} /> Add Room Type
+            <ThreeDIcon name="add" size={16} /> Add Room Type
           </button>
         </div>
 
@@ -4892,7 +4914,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                   >
-                    <Eye size={13} />
+                    <ThreeDIcon name="view" size={16} />
                   </button>
                   <button
                     type="button"
@@ -4901,7 +4923,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                   >
-                    <Edit3 size={13} />
+                    <ThreeDIcon name="edit" size={16} />
                   </button>
                   <button
                     type="button"
@@ -4910,7 +4932,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => handleDeleteCategory(cat)}
                   >
-                    <Trash2 size={13} />
+                    <ThreeDIcon name="delete" size={16} />
                   </button>
                 </div>
               </div>
@@ -4981,7 +5003,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -5065,7 +5087,7 @@ export default function HostelPage() {
                           title="View category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                         >
-                          <Eye size={14} />
+                          <ThreeDIcon name="view" size={16} />
                         </button>
                         <button
                           type="button"
@@ -5073,7 +5095,7 @@ export default function HostelPage() {
                           title="Edit category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                         >
-                          <Edit3 size={14} />
+                          <ThreeDIcon name="edit" size={16} />
                         </button>
                         <button
                           type="button"
@@ -5081,7 +5103,7 @@ export default function HostelPage() {
                           title="Delete category"
                           onClick={() => handleDeleteCategory(cat)}
                         >
-                          <Trash2 size={14} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       </div>
                     </td>
@@ -5247,7 +5269,7 @@ export default function HostelPage() {
               onClick={() => setModal({ isOpen: true, type: "room", mode: "add", data: null })}
               style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 20px", boxShadow: "0 4px 12px rgba(82, 110, 52, 0.2)" }}
             >
-              <Plus size={16} /> Add New Room
+              <ThreeDIcon name="add" size={16} /> Add New Room
             </button>
           </div>
         </div>
@@ -5545,7 +5567,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -5734,7 +5756,7 @@ export default function HostelPage() {
                             title="View details"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "view", data: { ...room, roomBeds, roomAllocs } })}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={16} />
                           </button>
                           <button
                             type="button"
@@ -5742,7 +5764,7 @@ export default function HostelPage() {
                             title="Edit room"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "edit", data: room })}
                           >
-                            <Edit3 size={14} />
+                            <ThreeDIcon name="edit" size={16} />
                           </button>
                           <button
                             type="button"
@@ -5750,7 +5772,7 @@ export default function HostelPage() {
                             title="Delete room"
                             onClick={() => handleDeleteRoom(room)}
                           >
-                            <Trash2 size={14} />
+                            <ThreeDIcon name="delete" size={16} />
                           </button>
                         </div>
                       </td>
@@ -5827,7 +5849,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "warden", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <Plus size={16} /> Assign Warden
+            <ThreeDIcon name="add" size={16} /> Assign Warden
           </button>
         </div>
 
@@ -5901,7 +5923,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -6055,7 +6077,7 @@ export default function HostelPage() {
                           title="View details"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "view", data: w })}
                         >
-                          <Eye size={14} />
+                          <ThreeDIcon name="view" size={16} />
                         </button>
                         <button
                           type="button"
@@ -6063,7 +6085,7 @@ export default function HostelPage() {
                           title="Edit warden"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "edit", data: w })}
                         >
-                          <Edit3 size={14} />
+                          <ThreeDIcon name="edit" size={16} />
                         </button>
                         <button
                           type="button"
@@ -6071,7 +6093,7 @@ export default function HostelPage() {
                           title="Remove warden"
                           onClick={() => handleDeleteWarden(w)}
                         >
-                          <Trash2 size={14} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       </div>
                     </td>
@@ -6221,7 +6243,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "allocation", mode: "add", data: null })}
             style={{ borderRadius: 9999, height: 36, padding: "0 18px", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            <Plus size={16} /> Allocate Room &amp; Bed
+            <ThreeDIcon name="add" size={16} /> Allocate Room &amp; Bed
           </button>
         </div>
 
@@ -6605,7 +6627,7 @@ export default function HostelPage() {
               gap: 6,
             }}
           >
-            <Plus size={16} /> Apply Outpass / Leave
+            <ThreeDIcon name="add" size={16} /> Apply Outpass / Leave
           </button>
         </div>
 
@@ -6669,7 +6691,7 @@ export default function HostelPage() {
                 ])
               }
             >
-              <Download size={14} /> Export
+              <ThreeDIcon name="download" size={16} /> Export
             </button>
           </div>
         </div>
@@ -6787,7 +6809,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn view"
                               title="View details"
                             >
-                              <Eye size={15} />
+                              <ThreeDIcon name="view" size={16} />
                             </button>
                             <button
                               type="button"
@@ -6795,7 +6817,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn delete"
                               title="Delete Record"
                             >
-                              <Trash2 size={15} />
+                              <ThreeDIcon name="delete" size={16} />
                             </button>
                           </div>
                         </td>
@@ -6875,7 +6897,7 @@ export default function HostelPage() {
             className="cms-transfer-btn-pill"
             onClick={() => setModal({ isOpen: true, type: "transfer", mode: "add", data: null })}
           >
-            <Plus size={16} /> Request Transfer / Vacate
+            <ThreeDIcon name="add" size={16} /> Request Transfer / Vacate
           </button>
         </div>
 
@@ -7087,7 +7109,7 @@ export default function HostelPage() {
                             className="cms-outpass-action-btn view"
                             title="View details"
                           >
-                            <Eye size={15} />
+                            <ThreeDIcon name="view" size={16} />
                           </button>
                           <button
                             type="button"
@@ -7095,7 +7117,7 @@ export default function HostelPage() {
                             title="Delete Record"
                             onClick={() => handleDeleteTransfer(t)}
                           >
-                            <Trash2 size={15} />
+                            <ThreeDIcon name="delete" size={16} />
                           </button>
                         </div>
                       </td>
@@ -7794,7 +7816,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View Student Attendance Log"
                               >
-                                <Eye size={13} /> View
+                                <ThreeDIcon name="view" size={16} /> View
                               </button>
                             </td>
                           </tr>
@@ -7888,7 +7910,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View detailed logs"
                               >
-                                <Eye size={13} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
+                                <ThreeDIcon name="view" size={16} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
                               </button>
                             </td>
                           </tr>
@@ -8365,7 +8387,7 @@ export default function HostelPage() {
               className="cms-report-btn-print"
               onClick={handlePrintReport}
             >
-              <Printer size={15} /> Print
+              <ThreeDIcon name="print" size={16} /> Print
             </button>
             <button
               type="button"
@@ -8379,7 +8401,7 @@ export default function HostelPage() {
               className="cms-report-btn-download"
               onClick={handleDownloadReport}
             >
-              <Download size={15} /> Download
+              <ThreeDIcon name="download" size={16} /> Download
             </button>
           </div>
         </div>
@@ -8585,7 +8607,7 @@ export default function HostelPage() {
                 style={{ height: 32, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8 }}
                 onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "add", data: revenueStudentRecords[0] || null })}
               >
-                <Plus size={14} />
+                <ThreeDIcon name="add" size={16} />
                 Record Fee Payment
               </button>
             )}
@@ -9801,7 +9823,7 @@ function StudentAttendanceModal({
               className="cms-btn cms-btn-primary"
               style={{ borderRadius: 8, height: 34, fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              <Save size={14} /> Save Active Changes
+              <ThreeDIcon name="check" size={14} /> Save Active Changes
             </button>
           )}
           <button
@@ -10668,7 +10690,7 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                                     title="Delete category"
                                     onClick={() => handleRemoveCustomCategory(fc.floorIndex, ca.id)}
                                   >
-                                    <Trash2 size={16} />
+                                    <ThreeDIcon name="delete" size={16} />
                                   </button>
                                 </div>
                               ))}
@@ -13279,7 +13301,7 @@ function RoomModal({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Plus size={16} /> + Add Room
+                    <ThreeDIcon name="add" size={16} /> + Add Room
                   </button>
                 </div>
               </div>
@@ -13537,7 +13559,7 @@ function RoomModal({
                             boxShadow: "0 1px 4px rgba(82, 110, 52, 0.2)",
                           }}
                         >
-                          <Plus size={14} /> Add
+                          <ThreeDIcon name="add" size={16} /> Add
                         </button>
                       </div>
                     </div>
@@ -13811,7 +13833,7 @@ function RoomModal({
                                         alignItems: "center",
                                       }}
                                     >
-                                      <Trash2 size={15} />
+                                      <ThreeDIcon name="delete" size={16} />
                                     </button>
                                   </td>
                                 </tr>
@@ -16407,7 +16429,7 @@ function TransferModal({
                 color: "#fff",
               }}
             >
-              <Save size={14} />
+              <ThreeDIcon name="check" size={14} />
               {isSubmitting ? "Saving..." : "Save Payment Receipt"}
             </button>
           </div>

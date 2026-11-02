@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -79,7 +79,7 @@ export default function StudentHolidays() {
     <div className="sp-holiday-list-layout">
       <StudentCard title={period === "All Holidays" ? "Holiday List" : `${period} Holidays`} subtitle={`${filtered.length} holiday${filtered.length === 1 ? "" : "s"}`}>
         <div className="sp-holiday-list-filters">
-          <label className="sp-holiday-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search holidays" placeholder="Search holidays..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></label>
+          <label className="sp-holiday-search"><ThreeDIcon name="search" size={17} aria-hidden="true"/><input type="search" aria-label="Search holidays" placeholder="Search holidays..." value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }}/></label>
           <select aria-label="Holiday type" value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}><option>All Types</option>{types.map((label) => <option key={label}>{label}</option>)}</select>
           <select aria-label="Holiday status" value={period} onChange={(event) => { setPeriod(event.target.value); setPage(1); }}>{["All Holidays", "Upcoming", "Ongoing", "Past"].map((label) => <option key={label}>{label}</option>)}</select>
           <span className="sp-college-managed">{student?.academicYearName || "Academic calendar"}</span>

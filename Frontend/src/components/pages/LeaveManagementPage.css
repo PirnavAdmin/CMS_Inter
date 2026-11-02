@@ -2459,9 +2459,37 @@
 
 @media (max-width: 600px) {
   .leave-pagination-bar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+  .leave-pagination-left {
+    width: 100% !important;
+    text-align: center !important;
+  }
+  .leave-pagination-right {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .leave-pagination-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    width: auto !important;
+    margin: 0 auto !important;
+  }
+  .leave-page-numbers {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 4px !important;
   }
 }
 

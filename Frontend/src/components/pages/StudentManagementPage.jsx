@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -492,7 +492,7 @@ export default function StudentManagementPage() {
         <div className="student-management-search-row">
           <div className="cms-card-body student-management-toolbar">
             <label className="student-management-search">
-              <Search size={18} />
+              <ThreeDIcon name="search" size={18} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -501,9 +501,9 @@ export default function StudentManagementPage() {
             </label>
           </div>
           <div className="student-management-actions">
-            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><Download size={16} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
-            <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><FileUp size={16} /> Import Students</button>
-            <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}>Credentials</button>
+            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><ThreeDIcon name="excel" size={18} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
+            <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><ThreeDIcon name="upload" size={18} /> Import Students</button>
+            <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}><ThreeDIcon name="certificates" size={18} /> Credentials</button>
           </div>
         </div>
         <div className="cms-table-wrap student-management-table-wrap">
@@ -561,10 +561,10 @@ export default function StudentManagementPage() {
                             exportStudents("pdf", s);
                           }}
                         >
-                          <FileText size={16} />
+                          <ThreeDIcon name="pdf" size={18} />
                         </button>
                         <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
-                          <Eye size={16} />
+                          <ThreeDIcon name="view" size={18} />
                         </Link>
                         <button
                           type="button"
@@ -575,7 +575,7 @@ export default function StudentManagementPage() {
                             setFileAction({ kind: "document", student: s });
                           }}
                         >
-                          <Upload size={16} />
+                          <ThreeDIcon name="upload" size={18} />
                         </button>
                       </div>
                     </td>
@@ -663,7 +663,7 @@ export default function StudentManagementPage() {
             <section className="student-credentials-about" aria-label="About the Credential PDF">
               <h3>About the Credential PDF</h3>
               <ul>
-                {["Student Name", "Admission No / Login ID", "Academic Details", "Temporary Password", "First-login password change notice"].map((item) => <li key={item}><CheckCircle2 size={16} aria-hidden="true" />{item}</li>)}
+                {["Student Name", "Admission No / Login ID", "Academic Details", "Temporary Password", "First-login password change notice"].map((item) => <li key={item}><ThreeDIcon name="check" size={16} aria-hidden="true" />{item}</li>)}
               </ul>
             </section>
           </div>

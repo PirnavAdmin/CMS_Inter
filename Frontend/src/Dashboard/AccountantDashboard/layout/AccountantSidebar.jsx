@@ -1,20 +1,19 @@
 import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
-import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards } from "lucide-react";
 import logo from "@/assets/pirnav-colleges-logo.png";
-import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 
 const groups = [
-  ["ACCOUNTANT PORTAL", [["Dashboard", "", LayoutDashboard]]],
+  ["ACCOUNTANT PORTAL", [["Dashboard", "", "dashboard"]]],
   ["FINANCE", [
-    ["Fee Management", "fees", ReceiptText],
-    ["Payment History", "payments", History],
-    ["Payroll", "payroll", WalletCards],
-    ["Reimbursements", "reimbursement", reimbursementIcon],
-    ["Attendance Impact", "payroll/attendance-impact", CalendarCheck],
-    ["Financial Reports", "reports", BarChart3],
+    ["Fee Management", "fees", "fee-management"],
+    ["Payment History", "payments", "fee"],
+    ["Payroll", "payroll", "payroll"],
+    ["Reimbursements", "reimbursement", "reimbursement"],
+    ["Attendance Impact", "payroll/attendance-impact", "staff-attendance"],
+    ["Financial Reports", "reports", "reports-analytics"],
   ]],
-  ["ACCOUNT", [["My Profile", "profile", CircleUserRound]]],
+  ["ACCOUNT", [["My Profile", "profile", "staff"]]],
 ];
 
 export default function AccountantSidebar({ open, onClose }) {
@@ -25,7 +24,7 @@ export default function AccountantSidebar({ open, onClose }) {
         {groups.map(([heading, links]) => (
           <section key={heading}>
             <h2>{heading}</h2>
-            {links.map(([label, path, Icon]) => (
+            {links.map(([label, path, iconName]) => (
               <NavLink
                 key={label}
                 end={!path || path === "payroll"}
@@ -33,17 +32,7 @@ export default function AccountantSidebar({ open, onClose }) {
                 onClick={onClose}
                 className={({ isActive }) => isActive ? "is-active" : ""}
               >
-                {typeof Icon === "string" ? (
-                  <img
-                    className="accountant-nav-icon cms-nav-3d-icon"
-                    src={Icon}
-                    alt=""
-                    aria-hidden="true"
-                    style={{ width: 19, height: 19, objectFit: "contain", verticalAlign: "middle" }}
-                  />
-                ) : (
-                  <Icon className="accountant-nav-icon" size={19} aria-hidden="true" />
-                )}
+                <ThreeDIcon name={iconName} size={20} className="accountant-nav-icon" />
                 <span>{label}</span>
               </NavLink>
             ))}

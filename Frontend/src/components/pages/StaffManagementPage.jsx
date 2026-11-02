@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Modal, Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonPage, SkeletonRow, SkeletonText, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -1065,7 +1066,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           if (inputEl) inputEl.focus();
         }}
       >
-        <Search className="staff-search-icon" aria-hidden="true" size={13} />
+        <Search3DIcon className="staff-search-icon" size={14} />
         <input
           type="text"
           value={search}
@@ -1378,7 +1379,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
           if (input) input.focus();
         }}
       >
-        <Search className="subject-search-icon" size={13} />
+        <Search3DIcon className="subject-search-icon" size={14} />
         {selectedSubjects.map((sub, idx) => (
           <span key={`${sub}-${idx}`} className="subject-pill">
             {sub}
@@ -1663,7 +1664,7 @@ function PrincipalMultiSelectInput({
           if (inp) inp.focus();
         }}
       >
-        <Search className="staff-search-icon" size={13} aria-hidden="true" />
+        <Search3DIcon className="staff-search-icon" size={14} />
 
         {selectedValues.map((item, idx) => {
           const itemKey = typeof item === "object" ? (item.value || item.id || item.name || idx) : item;
@@ -3537,7 +3538,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
           <SkeletonButton width={105} />
         ) : (
           <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add")}>
-            <Plus /> Add Staff
+            <ThreeDIcon name="add" size={16} /> Add Staff
           </button>
         )
       }
@@ -3729,7 +3730,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
             </button>
           </div>
           <div className="staff-import-search">
-            <Search size={14} />
+            <Search3DIcon size={14} />
             <input
               type="text"
               placeholder="Search in imported rows..."
@@ -3832,7 +3833,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
               </>
             ) : (
               <>
-                <Upload size={16} /> Import {validCount} Valid Record{validCount !== 1 ? "s" : ""}
+                <ThreeDIcon name="upload" size={16} /> Import {validCount} Valid Record{validCount !== 1 ? "s" : ""}
               </>
             )}
           </button>
@@ -4574,7 +4575,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 title="Download Excel template for adding staff"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <Download size={15} /> Download Template
+                <ThreeDIcon name="download" size={15} /> Download Template
               </button>
               <button
                 type="button"
@@ -4583,7 +4584,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 title="Upload Excel and validate records before importing"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <Upload size={16} /> Import Excel
+                <ThreeDIcon name="upload" size={16} /> Import Excel
               </button>
               <div className="staff-export-menu">
                 <button
@@ -4591,7 +4592,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   className="cms-btn cms-btn-ghost"
                   onClick={() => setExportOpen((open) => !open)}
                 >
-                  <FileSpreadsheet /> Export
+                  <ThreeDIcon name="excel" size={16} /> Export
                 </button>
                 {exportOpen ? (
                   <div className="staff-export-options">
@@ -4613,7 +4614,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   )
                 }
               >
-                <Plus /> Add Staff
+                <ThreeDIcon name="add" size={16} /> Add Staff
               </button>
             </div>
           </div>
@@ -4652,7 +4653,7 @@ function StaffList({ records = [], setRecords, forced }) {
                       <td>
                         <div className="row-actions">
                           <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
-                            <Eye />
+                            <ThreeDIcon name="view" size={15} />
                           </button>
                           <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
                             try {
@@ -4664,10 +4665,10 @@ function StaffList({ records = [], setRecords, forced }) {
                               setTimeout(() => window.print(), 300);
                             }
                           }}>
-                            <Printer />
+                            <ThreeDIcon name="print" size={15} />
                           </button>
                           <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
-                            <Trash2 />
+                            <ThreeDIcon name="delete" size={15} />
                           </button>
                         </div>
                       </td>
@@ -6094,7 +6095,7 @@ function Pending({ records = [], setRecords, activity }) {
                               style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                               onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}/review`)}
                             >
-                              <UserCheck size={13} /> Review Submission
+                              <ThreeDIcon name="check" size={13} /> Review Submission
                             </button>
                           ) : (
                             <button
@@ -6114,7 +6115,7 @@ function Pending({ records = [], setRecords, activity }) {
                             title="View Details"
                             onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}`)}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={14} />
                           </button>
                         </div>
                       </td>
@@ -6912,11 +6913,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               {!isEditing ? (
                 onSave || onEdit ? (
                   <button type="button" onClick={() => startEdit(groupIndex)}>
-                    <Pencil /> Edit
+                    <ThreeDIcon name="edit" size={14} /> Edit
                   </button>
                 ) : onPrint ? (
                   <button type="button" onClick={() => onPrint(groupIndex)}>
-                    <Printer /> Print
+                    <ThreeDIcon name="print" size={14} /> Print
                   </button>
                 ) : null
               ) : null}
