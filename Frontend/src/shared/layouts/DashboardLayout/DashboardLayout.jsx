@@ -784,9 +784,6 @@ export default function DashboardLayout({
     : null;
   const isPrincipal = !isWarden && (isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard"));
   const isExamCell = !isWarden && (isExamCellRole(user?.role) || pathname.startsWith("/exam-cell-dashboard"));
-  const isAdminWorkspace = !isWarden && !isParent && !isExamCell && !isPrincipal && (
-    user?.isAdmin || hasRole("ADMIN", user) || hasRole("SUPER_ADMIN", user)
-  );
   const activeMenu = useMemo(() => {
     let base = menuOverride;
     if (!base) {
@@ -1215,7 +1212,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${isAdminWorkspace ? "is-admin-workspace" : ""} ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
+    <div className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
