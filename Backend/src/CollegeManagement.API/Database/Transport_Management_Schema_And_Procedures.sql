@@ -2047,7 +2047,7 @@ BEGIN
         FROM StudentTransportAssignments sta
         LEFT JOIN Students st ON sta.AdmissionNo = st.AdmissionNo
         LEFT JOIN Sections sec ON st.SectionId = sec.SectionId
-        LEFT JOIN StudentGroups g ON st.GroupId = g.GroupId
+        LEFT JOIN `Groups` g ON st.GroupId = g.GroupId
         LEFT JOIN TransportRoutes r ON sta.RouteId = r.RouteId
         LEFT JOIN PickupPoints pp ON sta.PickupPointId = pp.PickupPointId
         LEFT JOIN TransportVehicleAssignments tva ON sta.VehicleAssignmentId = tva.AssignmentId

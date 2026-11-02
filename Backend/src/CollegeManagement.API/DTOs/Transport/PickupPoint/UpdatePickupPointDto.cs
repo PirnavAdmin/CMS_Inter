@@ -33,6 +33,9 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("landmark")]
         public string? Landmark { get; set; }
 
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
         [JsonPropertyName("sequenceNo")]
         public int SequenceNo { get; set; } = 1;
 

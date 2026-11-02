@@ -89,7 +89,18 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+                {
+                    targetId = numId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.VehicleId;
+                }
+
+                var existing = targetId > 0 ? new Dtos.Transport.Vehicle.TransportVehicleDto { VehicleId = targetId } : null;
                 if (existing != null)
                 {
                     var updated = await _service.UpdateAsync(existing.VehicleId, dto, null);
@@ -134,7 +145,18 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+                {
+                    targetId = numId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.VehicleId;
+                }
+
+                var existing = targetId > 0 ? new Dtos.Transport.Vehicle.TransportVehicleDto { VehicleId = targetId } : null;
                 if (existing != null)
                 {
                     await _service.DeleteAsync(existing.VehicleId, null);
