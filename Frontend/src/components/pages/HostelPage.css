@@ -302,6 +302,47 @@
   min-height: 48px;
 }
 
+@media (max-width: 640px) {
+  .cms-hostel-pagination-attached {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+    text-align: center !important;
+  }
+  .cms-hostel-pagination-attached .cms-page-info {
+    width: 100% !important;
+    text-align: center !important;
+    margin: 0 auto !important;
+    font-size: 12px !important;
+  }
+  .cms-hostel-pagination-attached .cms-pagination-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+  }
+  .cms-hostel-pagination-attached .cms-page-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 32px !important;
+    height: 32px !important;
+    padding: 0 8px !important;
+    font-size: 12.5px !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    white-space: nowrap !important;
+  }
+}
+
 .cms-hostel-table {
   width: 100%;
   min-width: 780px;

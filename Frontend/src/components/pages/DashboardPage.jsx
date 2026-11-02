@@ -45,6 +45,7 @@ import { getAuthToken } from "@/features/authStorage.js";
 import { holidayRecords } from "@/data/mockData.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
@@ -209,10 +210,17 @@ function parseMonthYearKey(str) {
   return null;
 }
 
-function CardHeader({ title, action, children }) {
+function CardHeader({ title, icon, iconName, action, children }) {
   return (
     <header className="dashboard-card-head">
-      <h2>{title}</h2>
+      <div className="dashboard-card-head-title-wrap">
+        {iconName ? (
+          <ThreeDIcon name={iconName} size={22} className="dashboard-card-title-icon" />
+        ) : icon ? (
+          icon
+        ) : null}
+        <h2>{title}</h2>
+      </div>
       {action || children ? <div className="dashboard-card-head-actions">{children}{action}</div> : null}
     </header>
   );
@@ -1573,7 +1581,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Main Analytics">
           {/* Card 1: Admission Overview */}
           <article className="dashboard-card dashboard-students-overview-card">
-            <CardHeader title="Admission Overview" />
+            <CardHeader title="Admission Overview" iconName="reports" />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
             ) : overviewState.error ? (
@@ -1654,21 +1662,21 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="admission" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.totalAdmissions ?? overviewState.data?.totalStudents ?? 0)}</strong>
                       <small>Total Admissions</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.boysCount ?? 0)}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.girlsCount ?? 0)}</strong>
                       <small>Girls</small>
@@ -1686,7 +1694,7 @@ export default function DashboardPage() {
 
           {/* Card 2: Students by Group */}
           <article className="dashboard-card dashboard-group-card">
-            <CardHeader title="Students by Group" />
+            <CardHeader title="Students by Group" iconName="total-groups" />
             {groupState.loading ? (
               <LoadingState label="Loading groups..." />
             ) : groupState.error ? (
@@ -1737,21 +1745,21 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.totalStudents)}</strong>
                       <small>Total Students</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.boys)}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.girls)}</strong>
                       <small>Girls</small>
@@ -1769,7 +1777,7 @@ export default function DashboardPage() {
 
           {/* Card 3: Students Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-attendance-today-card">
-            <CardHeader title="Students Attendance Overview (Today)" />
+            <CardHeader title="Students Attendance Overview (Today)" iconName="mark-attendance" />
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
@@ -1881,7 +1889,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
           {/* Card 1: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
-            <CardHeader title="Staff Attendance Overview (Today)" />
+            <CardHeader title="Staff Attendance Overview (Today)" iconName="teaching-staff" />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
@@ -2003,6 +2011,7 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
               title={`Upcoming Holidays (${holidaysList.length})`}
+              iconName="holiday"
             />
             {holidayState.loading ? (
               <LoadingState label="Loading holidays..." />
@@ -2016,7 +2025,7 @@ export default function DashboardPage() {
                   {holidaysList.map((item, index) => (
                     <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
-                        <CalendarDays size={15} />
+                        <ThreeDIcon name="holiday" size={18} />
                       </span>
                       <div className="dashboard-info-content">
                         <div className="dashboard-holiday-title-row">
@@ -2046,6 +2055,7 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-exams-card">
             <CardHeader
               title={`Upcoming Examinations (${examsList.length})`}
+              iconName="create-exam"
             />
             {examState.loading ? (
               <LoadingState label="Loading exams..." />
@@ -2059,7 +2069,7 @@ export default function DashboardPage() {
                   {examsList.map((item, index) => (
                     <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
-                        <CalendarDays size={15} />
+                        <ThreeDIcon name="create-exam" size={18} />
                       </span>
                       <div className="dashboard-info-content">
                         <div className="dashboard-exam-title-row">

@@ -38,6 +38,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
@@ -5369,7 +5370,7 @@ export default function ExaminationPage() {
               setViewMode("add");
             }}
           >
-            <Plus size={16} /> Create Examination
+            <ThreeDIcon name="add" size={16} /> Create Examination
           </button>
         )}
       </div>
@@ -5420,7 +5421,7 @@ export default function ExaminationPage() {
                 onClick={handleExportExaminationList}
                 title="Export Examination List"
               >
-                <Printer size={15} /> Export
+                <ThreeDIcon name="export" size={15} /> Export
               </button>
             </div>
           </div>
@@ -5512,7 +5513,7 @@ export default function ExaminationPage() {
                               aria-label="View Details"
                               onClick={() => handleOpenDetails(e)}
                             >
-                              <Eye size={15} />
+                              <ThreeDIcon name="view" size={15} />
                             </button>
                             {isDraft && (
                               <button
@@ -5522,7 +5523,7 @@ export default function ExaminationPage() {
                                 aria-label="Edit Examination Scope"
                                 onClick={() => handleEditExamScope(e)}
                               >
-                                <Pencil size={15} />
+                                <ThreeDIcon name="edit" size={15} />
                               </button>
                             )}
                             {(isScheduled || isCompleted) && (
@@ -5533,7 +5534,7 @@ export default function ExaminationPage() {
                                 aria-label="Print / Export Examination Schedule"
                                 onClick={() => printSchedule(e)}
                               >
-                                <Printer size={15} />
+                                <ThreeDIcon name="print" size={15} />
                               </button>
                             )}
                             {(isCancelled || isDraft) && (
@@ -5544,7 +5545,7 @@ export default function ExaminationPage() {
                                 aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
                                 onClick={() => setRemove(e)}
                               >
-                                <Trash2 size={15} />
+                                <ThreeDIcon name="delete" size={15} />
                               </button>
                             )}
                             {(isDraft || isScheduled) && (
@@ -6164,7 +6165,7 @@ export default function ExaminationPage() {
                         printSchedule(rowExam);
                       }}
                     >
-                      <Printer size={16} aria-hidden="true" /> Print / Export Schedule
+                      <ThreeDIcon name="print" size={16} aria-hidden="true" /> Print / Export Schedule
                     </button>
                     <div className="exam-row-more-divider" />
                     <button
@@ -6180,7 +6181,7 @@ export default function ExaminationPage() {
                         setCancelExamTarget(rowExam);
                       }}
                     >
-                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                      <ThreeDIcon name="cross" size={16} aria-hidden="true" /> Cancel Examination
                     </button>
                   </>
                 )}
@@ -6195,7 +6196,7 @@ export default function ExaminationPage() {
                         handleScheduleExam(rowExam);
                       }}
                     >
-                      <CalendarDays size={16} aria-hidden="true" /> Schedule Examination
+                      <ThreeDIcon name="calendar" size={16} aria-hidden="true" /> Schedule Examination
                     </button>
                     <button
                       type="button"
@@ -6205,7 +6206,7 @@ export default function ExaminationPage() {
                         handleEditExamScope(rowExam);
                       }}
                     >
-                      <Pencil size={16} aria-hidden="true" /> Edit Examination Scope
+                      <ThreeDIcon name="edit" size={16} aria-hidden="true" /> Edit Examination Scope
                     </button>
                     <button
                       type="button"
@@ -6219,7 +6220,7 @@ export default function ExaminationPage() {
                         setCancelExamTarget(rowExam);
                       }}
                     >
-                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                      <ThreeDIcon name="cross" size={16} aria-hidden="true" /> Cancel Examination
                     </button>
                     <div className="exam-row-more-divider" />
                     <button
@@ -6231,7 +6232,7 @@ export default function ExaminationPage() {
                         setRemove(rowExam);
                       }}
                     >
-                      <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                      <ThreeDIcon name="delete" size={16} aria-hidden="true" /> Delete Examination
                     </button>
                   </>
                 )}
@@ -6246,7 +6247,7 @@ export default function ExaminationPage() {
                       setRemove(rowExam);
                     }}
                   >
-                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                    <ThreeDIcon name="delete" size={16} aria-hidden="true" /> Delete Examination
                   </button>
                 )}
               </>
@@ -9427,7 +9428,7 @@ function ScheduleSection({
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={11} style={{ marginRight: "2px" }} /> Edit Period
+                        <ThreeDIcon name="edit" size={11} style={{ marginRight: "2px" }} /> Edit Period
                       </button>
                     )}
                   </div>
@@ -10041,7 +10042,7 @@ function HallAssignmentEditor({
               onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }]);
             }}
           >
-            <Plus size={14} /> Add Room / Hall
+            <ThreeDIcon name="add" size={14} /> Add Room / Hall
           </button>
         </div>
       </div>
@@ -10154,7 +10155,7 @@ function HallAssignmentEditor({
             title="Remove room"
             onClick={() => onChange(assignments.filter((_, i) => i !== index))}
           >
-            <Trash2 size={15} />
+            <ThreeDIcon name="delete" size={15} />
           </button>
         </div>
       ))}
@@ -10717,10 +10718,10 @@ function ScheduleTable({
                                 title="Edit / Postpone Date"
                                 onClick={() => edit(s)}
                               >
-                                <Pencil size={15} />
+                                <ThreeDIcon name="edit" size={15} />
                               </button>
                               <button className="cms-action-btn danger" title="Remove" onClick={() => remove(s)}>
-                                <Trash2 size={15} />
+                                <ThreeDIcon name="delete" size={15} />
                               </button>
                             </>
                           )}
@@ -10755,7 +10756,7 @@ function ScheduleTable({
                                 style={{ fontSize: "12px", padding: "4px 10px" }}
                                 onClick={() => setInlineAssignments((prev) => [...prev, { hallId: "", candidateCount: "", invigilatorIds: [] }])}
                               >
-                                <Plus size={13} style={{ marginRight: "4px" }} /> Add Room
+                                <ThreeDIcon name="add" size={13} style={{ marginRight: "4px" }} /> Add Room
                               </button>
                             </div>
                           </div>
@@ -11168,7 +11169,7 @@ function GlobalSchedulePreviewModal({
               disabled={loading || targetExams.length === 0}
               title="Download Excel spreadsheet matching this layout"
             >
-              <FileSpreadsheet size={16} /> Download Excel
+              <ThreeDIcon name="excel" size={16} /> Download Excel
             </button>
             <button
               type="button"
@@ -11177,7 +11178,7 @@ function GlobalSchedulePreviewModal({
               disabled={loading || targetExams.length === 0}
               title="Download PDF document matching this layout"
             >
-              <Printer size={16} /> Download PDF
+              <ThreeDIcon name="pdf" size={16} /> Download PDF
             </button>
             <button
               type="button"

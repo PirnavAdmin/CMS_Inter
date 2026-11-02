@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, FilterBar, Modal, Toast, StatusBadge } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { configFor, deleteRow, useRows } from "@/data/store.js";
@@ -37,6 +38,14 @@ function SummaryCards({ config, activeFilter, onSelect }) {
     return { text: "#2563eb", bg: "#dbeafe" };
   };
 
+  const iconFor = (label, title) => {
+    const l = label.toLowerCase();
+    if (l.includes("active") && !l.includes("inactive")) return "check";
+    if (l.includes("inactive") || l.includes("rejected")) return "cross";
+    if (l.includes("pending") || l.includes("warning")) return "warning";
+    return title ? String(title).toLowerCase().replace(/\s+/g, "-") : "dashboard";
+  };
+
   return (
     <div className="cms-summary-grid">
       {summary.map((card) => {
@@ -53,7 +62,10 @@ function SummaryCards({ config, activeFilter, onSelect }) {
               "--summary-accent-soft": c.bg,
             }}
           >
-            <span className="cms-summary-value">{card.value}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <ThreeDIcon name={iconFor(card.label, config.title)} size={28} />
+              <span className="cms-summary-value">{card.value}</span>
+            </div>
             <span className="cms-summary-label">{card.label}</span>
           </button>
         );

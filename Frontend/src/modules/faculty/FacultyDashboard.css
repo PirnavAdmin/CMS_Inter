@@ -71,7 +71,7 @@
 }
 
 /* ---------- Brand in Sidebar (Matches Admin Portal) ---------- */
-.cms-sidebar .cms-brand {
+.faculty-shell .cms-sidebar .cms-brand {
   height: var(--cms-header-height, 68px);
   min-height: var(--cms-header-height, 68px);
   box-sizing: border-box;
@@ -82,7 +82,7 @@
   padding: 0 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.cms-sidebar .cms-brand-logo {
+.faculty-shell .cms-sidebar .cms-brand-logo {
   display: block;
   width: 100%;
   max-width: 250px;
@@ -93,27 +93,27 @@
 }
 
 /* ---------- Staff Sidebar Navigation (Exact Admin Replica) ---------- */
-.cms-sidebar {
+.faculty-shell .cms-sidebar {
   background: linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%) !important;
   border-right: 1px solid rgba(91, 111, 45, 0.38) !important;
 }
 
-[data-theme="dark"] .cms-sidebar {
+[data-theme="dark"] .faculty-shell .cms-sidebar {
   background: linear-gradient(180deg, #252d21 0%, #20271d 100%) !important;
   border-right: 1px solid #3a4534 !important;
 }
 
-.cms-sidebar .cms-brand {
+.faculty-shell .cms-sidebar .cms-brand {
   background: linear-gradient(135deg, #fffdf5 0%, #f3f2dc 48%, #dbe5b8 100%) !important;
   border-bottom: 1px solid rgba(91, 111, 45, 0.35) !important;
 }
 
-[data-theme="dark"] .cms-sidebar .cms-brand {
+[data-theme="dark"] .faculty-shell .cms-sidebar .cms-brand {
   background: linear-gradient(135deg, #263221 0%, #1f2b1d 52%, #182318 100%) !important;
   border-bottom-color: rgba(187, 204, 148, 0.24) !important;
 }
 
-.cms-sidebar .cms-nav-group {
+.faculty-shell .cms-sidebar .cms-nav-group {
   padding: 14px 14px 6px !important;
   font-size: 11px !important;
   font-weight: 800 !important;
@@ -122,12 +122,12 @@
   color: #3b4816 !important;
 }
 
-[data-theme="dark"] .cms-sidebar .cms-nav-group {
+[data-theme="dark"] .faculty-shell .cms-sidebar .cms-nav-group {
   color: #a3bd7b !important;
 }
 
 /* Nav links - blend into background seamlessly without white overlay */
-.cms-sidebar .cms-nav-link {
+.faculty-shell .cms-sidebar .cms-nav-link {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
@@ -149,26 +149,26 @@
   transition: all 0.18s ease !important;
 }
 
-[data-theme="dark"] .cms-sidebar .cms-nav-link {
+[data-theme="dark"] .faculty-shell .cms-sidebar .cms-nav-link {
   color: #e2ebd5 !important;
 }
 
 /* Hover: Soft pistachio green highlight matching Admin portal */
-.cms-sidebar .cms-nav-link:hover {
+.faculty-shell .cms-sidebar .cms-nav-link:hover {
   background: var(--cms-primary-soft, #F1F4E2) !important;
   color: var(--cms-primary-dark, #3b4800) !important;
   transform: translateX(3px) !important;
   box-shadow: 0 2px 6px rgba(111, 132, 0, 0.12) !important;
 }
 
-[data-theme="dark"] .cms-sidebar .cms-nav-link:hover {
+[data-theme="dark"] .faculty-shell .cms-sidebar .cms-nav-link:hover {
   background: rgba(135, 157, 25, 0.22) !important;
   color: #e5f5ad !important;
 }
 
 /* Active: Rich Primary Brand Olive/Pistachio gradient with crisp white text */
-.cms-sidebar .cms-nav-link.is-active,
-.cms-sidebar .cms-nav-link.active {
+.faculty-shell .cms-sidebar .cms-nav-link.is-active,
+.faculty-shell .cms-sidebar .cms-nav-link.active {
   background: linear-gradient(90deg, #6F8400, #576800) !important;
   color: #ffffff !important;
   font-weight: 700 !important;
@@ -176,12 +176,12 @@
   transform: none !important;
 }
 
-.cms-sidebar .cms-nav-link.is-active .cms-nav-label,
-.cms-sidebar .cms-nav-link.active .cms-nav-label {
+.faculty-shell .cms-sidebar .cms-nav-link.is-active .cms-nav-label,
+.faculty-shell .cms-sidebar .cms-nav-link.active .cms-nav-label {
   color: #ffffff !important;
 }
 
-.cms-sidebar .cms-nav-link .cms-nav-label {
+.faculty-shell .cms-sidebar .cms-nav-link .cms-nav-label {
   color: inherit !important;
   font-size: 13px;
   font-weight: 600;
@@ -189,7 +189,7 @@
 }
 
 /* Sidebar Footer Profile Card */
-.cms-sidebar .cms-sidebar-footer {
+.faculty-shell .cms-sidebar .cms-sidebar-footer {
   padding: 12px 14px !important;
   border-top: 1px solid rgba(91, 111, 45, 0.25) !important;
   display: flex !important;
@@ -198,7 +198,7 @@
   background: rgba(255, 255, 255, 0.25) !important;
 }
 
-[data-theme="dark"] .cms-sidebar .cms-sidebar-footer {
+[data-theme="dark"] .faculty-shell .cms-sidebar .cms-sidebar-footer {
   border-top-color: rgba(255, 255, 255, 0.1) !important;
   background: rgba(0, 0, 0, 0.2) !important;
 }
@@ -1057,10 +1057,10 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
-  .cms-sidebar {
+  .faculty-shell .cms-sidebar {
     transform: translateX(-100%);
   }
-  .cms-sidebar.open {
+  .faculty-shell .cms-sidebar.open {
     transform: translateX(0);
   }
   .cms-main {
