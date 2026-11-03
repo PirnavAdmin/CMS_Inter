@@ -1173,6 +1173,96 @@
   margin: 0 0 16px;
 }
 
+.faculty-tt-empty-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  margin: 0 auto 20px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  border: 1px solid color-mix(in srgb, var(--cms-primary, #6f8400) 25%, transparent);
+  color: var(--cms-primary-dark, #3b4800);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.faculty-tt-empty-note svg {
+  color: var(--cms-primary, #6f8400);
+  flex-shrink: 0;
+}
+
+.faculty-tt-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.faculty-tt-action-btn.btn-subtle {
+  background: var(--cms-primary-soft, #f1f4e2);
+  border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 30%, transparent);
+  color: var(--cms-primary, #6f8400);
+}
+
+.faculty-tt-action-btn.btn-subtle:hover:not(:disabled) {
+  background: var(--cms-primary, #6f8400);
+  border-color: var(--cms-primary, #6f8400);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary, #6f8400) 25%, transparent);
+}
+
+.faculty-tt-action-btn.btn-primary {
+  background: var(--cms-primary, #6f8400);
+  border-color: var(--cms-primary, #6f8400);
+  color: #ffffff;
+}
+
+.faculty-tt-action-btn.btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-hover, var(--cms-primary-dark, #566900));
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark, #566900));
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--cms-primary, #6f8400) 25%, transparent);
+}
+
+.faculty-tt-action-btn:active {
+  transform: translateY(0);
+}
+
+.faculty-tt-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .faculty-tt-empty-note {
+  background: color-mix(in srgb, var(--cms-primary, #6f8400) 15%, #18201a);
+  border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 30%, transparent);
+  color: var(--cms-primary-soft, #e2ebd5);
+}
+
+[data-theme="dark"] .faculty-tt-action-btn.btn-subtle {
+  background: color-mix(in srgb, var(--cms-primary, #6f8400) 18%, #1f2922);
+  border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 35%, transparent);
+  color: var(--cms-primary, #a8cb68);
+}
+
+[data-theme="dark"] .faculty-tt-action-btn.btn-subtle:hover:not(:disabled) {
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff;
+}
+
 .modal-close-btn {
   display: grid;
   place-items: center;

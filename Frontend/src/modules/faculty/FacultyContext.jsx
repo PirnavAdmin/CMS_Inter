@@ -265,10 +265,9 @@ export function FacultyProvider({ children }) {
                 (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null);
 
               const activePhoto =
-                serverPhoto ||
-                current.photoUrl ||
-                savedPhoto ||
-                (apiStaff.photoPath ? apiStaff.photoPath : "");
+                (savedPhoto && savedPhoto.startsWith("data:"))
+                  ? savedPhoto
+                  : (serverPhoto || current.photoUrl || savedPhoto || (apiStaff.photoPath ? apiStaff.photoPath : ""));
 
               if (activePhoto) {
                 updated.photoUrl = activePhoto;

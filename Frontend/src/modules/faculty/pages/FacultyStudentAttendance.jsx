@@ -25,6 +25,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import "../styles/FacultyStudentAttendance.css";
+import FacultySearchableSelect from "../components/FacultySearchableSelect.jsx";
 
 const MONTHLY_PAGE_SIZE = 5;
 
@@ -1348,8 +1349,31 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       </div>
 
       {/* 2. Hierarchical Cascading Filter Card */}
-      <div className="cms-card" style={{ marginBottom: 16 }}>
-        <div className="cms-card-body">
+      <div className="cms-card" style={{ marginBottom: 16, overflow: "visible", position: "relative", zIndex: 20 }}>
+        {/* Scoped styles ensuring filter dropdown modal displays on top with highest z-index */}
+        <style>{`
+          .att-filters-single-line .cms-searchable-select-dropdown,
+          .att-field-compact .cms-searchable-select-dropdown {
+            top: auto !important;
+            bottom: calc(100% + 4px) !important;
+            z-index: 99999 !important;
+            box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.15), 0 -8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+          }
+          .att-filters-single-line .cms-field,
+          .att-field-compact {
+            position: relative !important;
+            z-index: 10;
+          }
+          .att-filters-single-line .cms-field:focus-within,
+          .att-field-compact:focus-within {
+            z-index: 100 !important;
+          }
+          .att-filters-single-line {
+            position: relative;
+            z-index: 15;
+          }
+        `}</style>
+        <div className="cms-card-body" style={{ overflow: "visible" }}>
           {/* Read-only Single Line Info Tab for Fetched Timetable Details (Board & Academic Year) */}
           <div className="att-timetable-info-bar">
             <div className="att-info-item">
@@ -1393,66 +1417,70 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
             <div className="cms-field att-field-compact">
               <label>Group</label>
-              <select
+              <FacultySearchableSelect
                 value={attGroup}
-                onChange={(e) => handleGroupChange(e.target.value)}
+                placeholder={loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group"}
                 disabled={loadingGroups && timetableGroups.length === 0}
-              >
-                <option value="">{loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group"}</option>
-                {timetableGroups.map((g) => (
-                  <option key={g.groupId || g.id} value={g.groupId || g.id}>
-                    {g.groupName || g.name || `Group ${g.groupId || g.id}`}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { id: "", name: loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group" },
+                  ...timetableGroups.map((g) => ({
+                    id: g.groupId || g.id,
+                    name: g.groupName || g.name || `Group ${g.groupId || g.id}`,
+                  })),
+                ]}
+                onChange={(e) => handleGroupChange(e.target.value)}
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Academic Level</label>
-              <select
+              <FacultySearchableSelect
                 value={attLevel}
-                onChange={(e) => handleLevelChange(e.target.value)}
+                placeholder={loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level"}
                 disabled={loadingLevels && timetableLevels.length === 0}
-              >
-                <option value="">{loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level"}</option>
-                {timetableLevels.map((l) => (
-                  <option key={l.academicLevelId || l.id} value={l.academicLevelId || l.id}>
-                    {l.levelName || l.name || `Level ${l.academicLevelId || l.id}`}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { id: "", name: loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level" },
+                  ...timetableLevels.map((l) => ({
+                    id: l.academicLevelId || l.id,
+                    name: l.levelName || l.name || `Level ${l.academicLevelId || l.id}`,
+                  })),
+                ]}
+                onChange={(e) => handleLevelChange(e.target.value)}
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Program</label>
-              <select
+              <FacultySearchableSelect
                 value={attProgram}
-                onChange={(e) => handleProgramChange(e.target.value)}
+                placeholder={loadingPrograms && timetablePrograms.length === 0 ? "Loading..." : "Select Program"}
                 disabled={loadingPrograms && timetablePrograms.length === 0}
-              >
-                <option value="">{loadingPrograms && timetablePrograms.length === 0 ? "Loading..." : "Select Program"}</option>
-                {timetablePrograms.map((p) => (
-                  <option key={p.programId || p.id} value={p.programId || p.id}>
-                    {p.programName || p.name || `Program ${p.programId || p.id}`}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { id: "", name: loadingPrograms && timetablePrograms.length === 0 ? "Loading..." : "Select Program" },
+                  ...timetablePrograms.map((p) => ({
+                    id: p.programId || p.id,
+                    name: p.programName || p.name || `Program ${p.programId || p.id}`,
+                  })),
+                ]}
+                onChange={(e) => handleProgramChange(e.target.value)}
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Section</label>
-              <select
+              <FacultySearchableSelect
                 value={attSection}
-                onChange={(e) => handleSectionChange(e.target.value)}
+                placeholder={loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section"}
                 disabled={loadingSections && timetableSections.length === 0}
-              >
-                <option value="">{loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section"}</option>
-                {timetableSections.map((s) => (
-                  <option key={s.sectionId || s.id} value={s.sectionId || s.id}>
-                    {s.isAssigned ? `${s.sectionName || s.name}` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`)}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { id: "", name: loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section" },
+                  ...timetableSections.map((s) => ({
+                    id: s.sectionId || s.id,
+                    name: s.isAssigned ? `${s.sectionName || s.name}` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`),
+                  })),
+                ]}
+                onChange={(e) => handleSectionChange(e.target.value)}
+              />
             </div>
 
           </div>
@@ -1933,25 +1961,19 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
                 {/* Customizable Threshold Selector (< 75%, < 65%, < 50%, < 30%) */}
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 260 }}>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--cms-muted)" }}>Threshold:</span>
-                    <select
+                    <FacultySearchableSelect
                       value={defaulterThreshold}
+                      options={[
+                        { id: 75, name: "< 75% (Mandatory Board Minimum)" },
+                        { id: 65, name: "< 65% (Condonation Limit)" },
+                        { id: 50, name: "< 50% (Severe Shortage)" },
+                        { id: 30, name: "< 30% (Critical Non-Attendance)" },
+                      ]}
                       onChange={(e) => setDefaulterThreshold(Number(e.target.value))}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        border: "1px solid var(--cms-border, #e4e8f0)",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        background: "var(--cms-surface, #ffffff)",
-                      }}
-                    >
-                      <option value={75}>&lt; 75% (Mandatory Board Minimum)</option>
-                      <option value={65}>&lt; 65% (Condonation Limit)</option>
-                      <option value={50}>&lt; 50% (Severe Shortage)</option>
-                      <option value={30}>&lt; 30% (Critical Non-Attendance)</option>
-                    </select>
+                      style={{ minWidth: 240 }}
+                    />
                   </div>
 
                   <span className="cms-badge cms-badge-danger" style={{ fontWeight: 700 }}>
