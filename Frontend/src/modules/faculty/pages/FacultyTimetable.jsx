@@ -18,6 +18,7 @@ import {
   Sun,
 } from "lucide-react";
 import "../styles/FacultyTimetable.css";
+import "@/modules/admin/AdminTimetable/TimetablePage.css";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -37,20 +38,18 @@ export const COLLEGE_WORKING_DAYS = [
 ];
 
 // Admin Portal Timetable Canonical Period Structure (Periods 1-8 + Break Slots)
-// Derived authoritatively from Admin Timetable Management (Period Structure 12 / Periods table)
-// Academic Day: 08:30 AM – 04:10 PM (Campus shift window 09:00 AM – 04:30 PM)
+// Derived authoritatively from Admin Timetable Management (Active Structure 17: 09:00 - 15:20)
 export const ADMIN_CANONICAL_PERIODS = [
-  { id: 806, periodId: 806, periodNumber: 1, name: "Period 1", startTime: "08:30:00", endTime: "09:20:00", timeRange: "08:30 AM – 09:20 AM", isBreak: false },
-  { id: 807, periodId: 807, periodNumber: 2, name: "Period 2", startTime: "09:20:00", endTime: "10:10:00", timeRange: "09:20 AM – 10:10 AM", isBreak: false },
-  { id: 808, periodId: 808, periodNumber: null, name: "Tea Break", startTime: "10:10:00", endTime: "10:20:00", timeRange: "10:10 AM – 10:20 AM", isBreak: true },
-  { id: 809, periodId: 809, periodNumber: 3, name: "Period 3", startTime: "10:20:00", endTime: "11:10:00", timeRange: "10:20 AM – 11:10 AM", isBreak: false },
-  { id: 810, periodId: 810, periodNumber: 4, name: "Period 4", startTime: "11:10:00", endTime: "12:00:00", timeRange: "11:10 AM – 12:00 PM", isBreak: false },
-  { id: 814, periodId: 814, periodNumber: null, name: "Lunch Break", startTime: "12:00:00", endTime: "12:40:00", timeRange: "12:00 PM – 12:40 PM", isBreak: true },
-  { id: 815, periodId: 815, periodNumber: 5, name: "Period 5", startTime: "12:40:00", endTime: "13:30:00", timeRange: "12:40 PM – 01:30 PM", isBreak: false },
-  { id: 811, periodId: 811, periodNumber: 6, name: "Period 6", startTime: "13:30:00", endTime: "14:20:00", timeRange: "01:30 PM – 02:20 PM", isBreak: false },
-  { id: 812, periodId: 812, periodNumber: null, name: "Tea Break", startTime: "14:20:00", endTime: "14:30:00", timeRange: "02:20 PM – 02:30 PM", isBreak: true },
-  { id: 813, periodId: 813, periodNumber: 7, name: "Period 7", startTime: "14:30:00", endTime: "15:20:00", timeRange: "02:30 PM – 03:20 PM", isBreak: false },
-  { id: 816, periodId: 816, periodNumber: 8, name: "Period 8", startTime: "15:20:00", endTime: "16:10:00", timeRange: "03:20 PM – 04:10 PM", isBreak: false },
+  { id: 831, periodId: 831, periodNumber: 1, name: "Period 1", startTime: "09:00:00", endTime: "09:40:00", timeRange: "09:00 - 09:40", isBreak: false },
+  { id: 832, periodId: 832, periodNumber: 2, name: "Period 2", startTime: "09:40:00", endTime: "10:20:00", timeRange: "09:40 - 10:20", isBreak: false },
+  { id: 833, periodId: 833, periodNumber: null, name: "Tea Break", startTime: "10:20:00", endTime: "10:30:00", timeRange: "10:20 - 10:30", isBreak: true },
+  { id: 834, periodId: 834, periodNumber: 3, name: "Period 3", startTime: "10:30:00", endTime: "11:10:00", timeRange: "10:30 - 11:10", isBreak: false },
+  { id: 835, periodId: 835, periodNumber: 4, name: "Period 4", startTime: "11:10:00", endTime: "11:50:00", timeRange: "11:10 - 11:50", isBreak: false },
+  { id: 836, periodId: 836, periodNumber: null, name: "Lunch Break", startTime: "11:50:00", endTime: "12:40:00", timeRange: "11:50 - 12:40", isBreak: true },
+  { id: 837, periodId: 837, periodNumber: 5, name: "Period 5", startTime: "12:40:00", endTime: "13:20:00", timeRange: "12:40 - 13:20", isBreak: false },
+  { id: 838, periodId: 838, periodNumber: 6, name: "Period 6", startTime: "13:20:00", endTime: "14:00:00", timeRange: "13:20 - 14:00", isBreak: false },
+  { id: 839, periodId: 839, periodNumber: 7, name: "Period 7", startTime: "14:00:00", endTime: "14:40:00", timeRange: "14:00 - 14:40", isBreak: false },
+  { id: 840, periodId: 840, periodNumber: 8, name: "Period 8", startTime: "14:40:00", endTime: "15:20:00", timeRange: "14:40 - 15:20", isBreak: false },
 ];
 
 function formatTime12h(timeStr) {
@@ -68,18 +67,9 @@ function formatTime12h(timeStr) {
 
 function formatSlotTimeRange(startTime, endTime) {
   if (!startTime || !endTime) return "";
-  const parsePart = (t) => {
-    const parts = String(t).split(":");
-    let h = parseInt(parts[0], 10);
-    const m = parts[1] || "00";
-    const ampm = h >= 12 ? "PM" : "AM";
-    let h12 = h % 12;
-    if (h12 === 0) h12 = 12;
-    return { h12: String(h12).padStart(2, "0"), m, ampm };
-  };
-  const s = parsePart(startTime);
-  const e = parsePart(endTime);
-  return `${s.h12}:${s.m}–${e.h12}:${e.m} ${e.ampm}`;
+  const s = String(startTime).slice(0, 5);
+  const e = String(endTime).slice(0, 5);
+  return `${s} - ${e}`;
 }
 
 function getFacultyStaffId(profile, auth) {
@@ -178,11 +168,10 @@ export default function FacultyTimetable() {
       if (selectedCampusId) params.campusId = selectedCampusId;
       if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
 
-      // Query primary endpoint with StaffId alongside profile subject allocations and dynamic periods
-      const [res, allocRes, periodRes] = await Promise.allSettled([
+      // Query primary endpoint with StaffId alongside profile subject allocations
+      const [res, allocRes] = await Promise.allSettled([
         apiClient.get(endpoint, { params }),
         getStaffSubjectAllocations(staffId),
-        apiClient.get(apiEndpoints.periods.getAll, { params }),
       ]);
 
       let items = [];
@@ -216,38 +205,68 @@ export default function FacultyTimetable() {
         setAllocatedSubjects(Array.isArray(rawAllocs) ? rawAllocs : []);
       }
 
-      if (periodRes.status === "fulfilled") {
-        const rawPeriods = Array.isArray(periodRes.value?.data)
-          ? periodRes.value.data
-          : Array.isArray(periodRes.value?.data?.data)
-          ? periodRes.value.data.data
-          : [];
-        if (rawPeriods.length >= 8) {
-          const sorted = [...rawPeriods].sort((a, b) => {
-            const ordA = Number(a.displayOrder ?? a.DisplayOrder ?? a.periodId ?? a.PeriodId ?? 0);
-            const ordB = Number(b.displayOrder ?? b.DisplayOrder ?? b.periodId ?? b.PeriodId ?? 0);
-            return ordA - ordB;
-          });
-          const mappedPeriods = sorted.map((p, idx) => {
-            const isBrk = Boolean(p.isBreak ?? p.IsBreak);
-            const pName = p.periodName || p.PeriodName || p.name || p.Name;
-            const sTime = p.startTime || p.StartTime;
-            const eTime = p.endTime || p.EndTime;
-            const numMatch = String(pName).match(/\d+/);
-            const pId = Number(p.periodId ?? p.PeriodId ?? p.id ?? idx + 1);
-            return {
-              id: pId,
-              periodId: pId,
-              periodNumber: isBrk ? null : (numMatch ? parseInt(numMatch[0], 10) : idx + 1),
-              name: pName,
-              startTime: sTime,
-              endTime: eTime,
-              timeRange: formatSlotTimeRange(sTime, eTime),
-              isBreak: isBrk,
-            };
-          });
-          setCanonicalPeriods(mappedPeriods);
+      // Context parameters for period structure derived from slot items or active context
+      const contextParams = { ...params };
+      if (items.length > 0) {
+        const first = items[0];
+        if (first.boardId) contextParams.boardId = first.boardId;
+        if (first.academicLevelId) contextParams.academicLevelId = first.academicLevelId;
+        if (first.academicYearId) contextParams.academicYearId = first.academicYearId;
+        if (first.groupId) contextParams.groupId = first.groupId;
+        if (first.campusId) contextParams.campusId = first.campusId;
+      }
+
+      // Fetch dynamic period structure from context or periods endpoint
+      let rawPeriods = [];
+      try {
+        const structRes = await apiClient.get(apiEndpoints.periodStructures.context, { params: contextParams });
+        const list = Array.isArray(structRes?.data) ? structRes.data : structRes?.data?.data;
+        if (Array.isArray(list) && list.length >= 8) {
+          rawPeriods = list;
         }
+      } catch {
+        // Fallback
+      }
+
+      if (!rawPeriods.length) {
+        try {
+          const pRes = await apiClient.get(apiEndpoints.periods.getAll, { params: contextParams });
+          const list = Array.isArray(pRes?.data) ? pRes.data : pRes?.data?.data;
+          if (Array.isArray(list) && list.length >= 8) {
+            rawPeriods = list;
+          }
+        } catch {
+          // Fallback to ADMIN_CANONICAL_PERIODS
+        }
+      }
+
+      if (rawPeriods.length >= 8) {
+        const sorted = [...rawPeriods].sort((a, b) => {
+          const ordA = Number(a.displayOrder ?? a.DisplayOrder ?? a.periodId ?? a.PeriodId ?? 0);
+          const ordB = Number(b.displayOrder ?? b.DisplayOrder ?? b.periodId ?? b.PeriodId ?? 0);
+          return ordA - ordB;
+        });
+        const mappedPeriods = sorted.map((p, idx) => {
+          const isBrk = Boolean(p.isBreak ?? p.IsBreak);
+          const pName = p.periodName || p.PeriodName || p.name || p.Name;
+          const sTime = p.startTime || p.StartTime;
+          const eTime = p.endTime || p.EndTime;
+          const numMatch = String(pName).match(/\d+/);
+          const pId = Number(p.periodId ?? p.PeriodId ?? p.id ?? idx + 1);
+          return {
+            id: pId,
+            periodId: pId,
+            periodNumber: isBrk ? null : (numMatch ? parseInt(numMatch[0], 10) : idx + 1),
+            name: pName,
+            startTime: sTime,
+            endTime: eTime,
+            timeRange: formatSlotTimeRange(sTime, eTime),
+            isBreak: isBrk,
+          };
+        });
+        setCanonicalPeriods(mappedPeriods);
+      } else {
+        setCanonicalPeriods(ADMIN_CANONICAL_PERIODS);
       }
     } catch (err) {
       console.warn("Failed to fetch faculty timetable:", err);
@@ -499,7 +518,7 @@ export default function FacultyTimetable() {
                   {canonicalPeriods.map((period) => (
                     <th key={period.id}>
                       {period.name}
-                      {period.timeRange ? <small>{period.timeRange.replace(" – ", " - ").replace("–", "-")}</small> : null}
+                      {period.timeRange ? <small>{period.timeRange}</small> : null}
                     </th>
                   ))}
                 </tr>
@@ -567,7 +586,7 @@ export default function FacultyTimetable() {
                     {canonicalPeriods.map((period) => (
                       <th key={period.id}>
                         {period.name}
-                        {period.timeRange ? <small>{period.timeRange.replace(" – ", " - ").replace("–", "-")}</small> : null}
+                        {period.timeRange ? <small>{period.timeRange}</small> : null}
                       </th>
                     ))}
                   </tr>

@@ -397,7 +397,7 @@ namespace CollegeManagement.API.Repositories
         {
             var connection = Connection;
 
-            var rows = await connection.ExecuteAsync(
+            var rows = await connection.ExecuteScalarAsync<int>(
                 "sp_UpdateStudentSelfProfile",
                 new
                 {
@@ -678,7 +678,7 @@ namespace CollegeManagement.API.Repositories
         public async Task<bool> UpdatePhotoPathAsync(int studentId, string photoPath)
         {
             var connection = Connection;
-            var rows = await connection.ExecuteAsync(
+            var rows = await connection.ExecuteScalarAsync<int>(
                 "sp_UpdateStudentPhotoPath",
                 new
                 {
@@ -702,7 +702,7 @@ namespace CollegeManagement.API.Repositories
                 throw new ArgumentException($"Invalid document column: {documentColumn}");
 
             var connection = Connection;
-            var rows = await connection.ExecuteAsync(
+            var rows = await connection.ExecuteScalarAsync<int>(
                 "sp_UpdateStudentDocumentPath",
                 new
                 {

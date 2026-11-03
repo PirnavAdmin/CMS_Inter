@@ -123,7 +123,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long routeId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportRoute",
                 new { p_RouteId = routeId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);

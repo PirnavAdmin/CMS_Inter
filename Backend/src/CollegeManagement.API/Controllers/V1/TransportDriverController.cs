@@ -87,7 +87,19 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numericId) && numericId > 0)
+                {
+                    targetId = numericId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.DriverId;
+                }
+
+                var existing = targetId > 0 ? new TransportDriverDto { DriverId = targetId } : null;
                 if (existing == null)
                 {
                     return NotFound(new { success = false, message = "Driver not found." });
@@ -113,10 +125,22 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numericId) && numericId > 0)
+                {
+                    targetId = numericId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.DriverId;
+                }
+
+                var existing = targetId > 0 ? new TransportDriverDto { DriverId = targetId } : null;
                 if (existing != null)
                 {
-                    await _service.DeleteAsync(existing.DriverId, null);
+                    await _service.DeleteAsync(existing.DriverId, userId);
                 }
 
                 return Ok(new { success = true, message = "Driver deleted successfully." });
@@ -132,7 +156,19 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numericId) && numericId > 0)
+                {
+                    targetId = numericId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.DriverId;
+                }
+
+                var existing = targetId > 0 ? new TransportDriverDto { DriverId = targetId } : null;
                 if (existing == null)
                 {
                     return NotFound(new { success = false, message = "Driver not found." });
@@ -152,7 +188,19 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numericId) && numericId > 0)
+                {
+                    targetId = numericId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.DriverId;
+                }
+
+                var existing = targetId > 0 ? new TransportDriverDto { DriverId = targetId } : null;
                 if (existing == null)
                 {
                     return NotFound(new { success = false, message = "Driver not found." });
@@ -172,7 +220,19 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numericId) && numericId > 0)
+                {
+                    targetId = numericId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.DriverId;
+                }
+
+                var existing = targetId > 0 ? new TransportDriverDto { DriverId = targetId } : null;
                 if (existing == null)
                 {
                     return NotFound(new { success = false, message = "Driver not found." });

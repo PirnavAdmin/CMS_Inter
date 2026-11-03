@@ -106,7 +106,18 @@ namespace CollegeManagement.API.Controllers
             string id,
             [FromBody] UpdatePickupPointDto dto)
         {
-            var existing = await _service.GetByIdOrNameAsync(id);
+            long targetId = 0;
+            if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+            {
+                targetId = numId;
+            }
+            else if (!string.IsNullOrWhiteSpace(id))
+            {
+                var existingLookup = await _service.GetByIdOrNameAsync(id);
+                if (existingLookup != null) targetId = existingLookup.PickupPointId;
+            }
+
+            var existing = targetId > 0 ? new PickupPointDto { PickupPointId = targetId } : null;
             if (existing != null)
             {
                 var updated = await _service.UpdateAsync(existing.PickupPointId, dto, null);
@@ -120,8 +131,10 @@ namespace CollegeManagement.API.Controllers
             var createDto = new CreatePickupPointDto
             {
                 RouteId = dto.RouteId > 0 ? dto.RouteId : 0,
+                CampusId = dto.CampusId,
                 PickupPointName = !string.IsNullOrWhiteSpace(dto.PickupPointName) ? dto.PickupPointName : id,
                 Landmark = dto.Landmark ?? "",
+                Description = dto.Description,
                 SequenceNo = dto.SequenceNo > 0 ? dto.SequenceNo : 1,
                 PickupTime = dto.PickupTime,
                 DistanceFromStart = dto.DistanceFromStart,
@@ -136,7 +149,18 @@ namespace CollegeManagement.API.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(string id)
         {
-            var existing = await _service.GetByIdOrNameAsync(id);
+            long targetId = 0;
+            if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+            {
+                targetId = numId;
+            }
+            else if (!string.IsNullOrWhiteSpace(id))
+            {
+                var existingLookup = await _service.GetByIdOrNameAsync(id);
+                if (existingLookup != null) targetId = existingLookup.PickupPointId;
+            }
+
+            var existing = targetId > 0 ? new PickupPointDto { PickupPointId = targetId } : null;
             if (existing != null)
             {
                 await _service.DeleteAsync(existing.PickupPointId, null);

@@ -55,16 +55,16 @@ export const getThresholdWithGrace = (lateThreshold, graceMinutes = 15) => {
 };
 
 const INITIAL_FORM = {
-  configName: "Teaching Staff Shift (09:00 AM – 04:30 PM)",
+  configName: "Teaching Staff Shift (09:00 AM – 03:20 PM)",
   staffType: "1",
   departmentId: "",
   workStartTime: "09:00",
-  workEndTime: "16:30",
+  workEndTime: "15:20",
   lateThreshold: "09:15",
-  earlyCheckoutThreshold: "16:30",
+  earlyCheckoutThreshold: "15:20",
   gracePeriodMinutes: 15,
-  minWorkingHours: 7.0,
-  description: "Official Shift: 09:00 AM – 04:30 PM (Late arrival after 09:15 AM, 15m checkout window up to 04:45 PM).",
+  minWorkingHours: 6.33,
+  description: "Official Shift: 09:00 AM – 03:20 PM (Late arrival after 09:15 AM, 15m checkout window up to 03:35 PM).",
   isActive: true,
 };
 
@@ -100,15 +100,15 @@ export default function AttendanceTimingConfigPage() {
     if (type === "teaching") {
       setForm((prev) => ({
         ...prev,
-        configName: "Teaching Staff Shift (09:00 AM – 04:30 PM)",
+        configName: "Teaching Staff Shift (09:00 AM – 03:20 PM)",
         staffType: "1",
         workStartTime: "09:00",
-        workEndTime: "16:30",
+        workEndTime: "15:20",
         lateThreshold: "09:15",
-        earlyCheckoutThreshold: "16:30",
+        earlyCheckoutThreshold: "15:20",
         gracePeriodMinutes: 15,
-        minWorkingHours: 7.0,
-        description: "Official Teaching Shift: 09:00 AM – 04:30 PM (Late arrival after 09:15 AM, 15m checkout window up to 04:45 PM).",
+        minWorkingHours: 6.33,
+        description: "Official Teaching Shift: 09:00 AM – 03:20 PM (Late arrival after 09:15 AM, 15m checkout window up to 03:35 PM).",
       }));
     } else if (type === "nonteaching") {
       setForm((prev) => ({
@@ -232,7 +232,7 @@ export default function AttendanceTimingConfigPage() {
             <h4>Daily Attendance Timing Rules &amp; Grace Windows</h4>
             <p>
               Arrivals after the <strong>Late Threshold</strong> (+ 15m Grace) are automatically marked <strong>Late</strong>.
-              Staff have a <strong>15-minute check-out window</strong> following shift end (e.g. up to <strong>04:45 PM</strong> for Teaching, <strong>05:45 PM</strong> for Non-Teaching). If check-out is missed after this cutoff, it is flagged as <strong>Missed Checkout</strong> and self-checkout is disabled.
+              Staff have a <strong>15-minute check-out window</strong> following shift end (e.g. up to <strong>03:35 PM</strong> for Teaching, <strong>05:45 PM</strong> for Non-Teaching). If check-out is missed after this cutoff, it is flagged as <strong>Missed Checkout</strong> and self-checkout is disabled.
             </p>
           </div>
         </div>
@@ -375,7 +375,7 @@ export default function AttendanceTimingConfigPage() {
                   onClick={() => applyPreset("teaching")}
                 >
                   <Clock size={14} />
-                  <span>Teaching Staff (09:00 AM – 04:30 PM)</span>
+                  <span>Teaching Staff (09:00 AM – 03:20 PM)</span>
                 </button>
                 <button
                   type="button"

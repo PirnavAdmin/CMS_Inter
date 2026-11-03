@@ -473,8 +473,8 @@ export default function FacultyDashboardHome() {
           inTime: null,
           outTime: null,
           shiftStartTime: "09:00 AM",
-          shiftEndTime: "04:30 PM",
-          shiftName: "Morning (09:00 AM – 04:30 PM)",
+          shiftEndTime: "03:20 PM",
+          shiftName: "Morning (09:00 AM – 03:20 PM)",
         }
   );
   const [myAttMetrics, setMyAttMetrics] = useState(() =>
@@ -527,8 +527,8 @@ export default function FacultyDashboardHome() {
         inTime: null,
         outTime: null,
         shiftStartTime: "09:00 AM",
-        shiftEndTime: "04:30 PM",
-        shiftName: "Morning (09:00 AM – 04:30 PM)",
+        shiftEndTime: "03:20 PM",
+        shiftName: "Morning (09:00 AM – 03:20 PM)",
       };
 
       const todayPayload = todayRes?.data || todayRes?.Data || (todayRes?.status ? todayRes : null);

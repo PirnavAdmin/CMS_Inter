@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models;
+using CollegeManagement.API.Models.Settings;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -600,10 +602,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                 parameters.Add("p_CampusId", campusId, DbType.Int32);
                 parameters.Add("p_BaseSeriesCode", seriesCode, DbType.String);
 
-                nextId = await conn.QueryFirstOrDefaultAsync<string>(
+                var config = await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                     "sp_GenerateNextNumberSeries",
                     parameters,
                     commandType: CommandType.StoredProcedure);
+
+                if (config != null && !string.IsNullOrWhiteSpace(config.FormatPattern))
+                {
+                    nextId = NumberSeriesPatternEvaluator.Evaluate(
+                        pattern: config.FormatPattern,
+                        sequenceNumber: config.CurrentSequence,
+                        numberLength: config.NumberLength,
+                        prefix: config.Prefix,
+                        isPreview: false);
+                }
             }
             catch
             {

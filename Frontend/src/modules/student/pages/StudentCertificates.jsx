@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Download, Plus, X } from "lucide-react";
+import { CheckCircle2, Clock3, Download, Plus, X, XCircle } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -16,6 +16,20 @@ const read = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => val
 const list = (data, keys) => { const value = unwrap(data); if (Array.isArray(value)) return value; for (const key of keys) if (Array.isArray(value?.[key])) return value[key]; return []; };
 const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 const saveFile = (blob, filename) => { const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob])); const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url); };
+
+function CertificateStatusBadge({ value }) {
+  const status = String(value ?? "").trim();
+  const normalized = status.toLowerCase();
+  const variants = {
+    issued: { label: "Issued", className: "is-issued", Icon: CheckCircle2 },
+    cancelled: { label: "Cancelled", className: "is-cancelled", Icon: XCircle },
+    requested: { label: "Requested", className: "is-requested", Icon: Clock3 },
+  };
+  const variant = variants[normalized];
+  if (!variant) return <StudentStatusBadge value={status || "Pending"} />;
+  const { label, className, Icon } = variant;
+  return <span className={`sp-certificate-status ${className}`} data-status={normalized}><Icon size={14} aria-hidden="true"/>{label}</span>;
+}
 
 const DEFAULT_FALLBACK_TYPES = [
   "Bonafide Certificate",
@@ -42,6 +56,10 @@ export default function StudentCertificates() {
   const updateNavigation = navigation.update;
   const setOpen = useCallback((value) => updateNavigation({ action: value ? "request" : null }), [updateNavigation]);
   const [form, setForm] = useState({ type: "", purpose: "", notes: "" });
+  const [typeOptionsOpen, setTypeOptionsOpen] = useState(false);
+  const [highlightedTypeIndex, setHighlightedTypeIndex] = useState(0);
+  const typeFieldRef = useRef(null);
+  const typeOptionsRef = useRef(null);
 
   const load = useCallback(async (showLoading = true) => {
     if (!student?.studentId) { setLoading(false); return; }
@@ -152,7 +170,60 @@ export default function StudentCertificates() {
     .filter((item) => typeof item === "string" || ![false, 0, "false", "0", "Inactive"].includes(read(item, "isActive", "IsActive", "status", "Status")))
     .map((item) => String(typeof item === "string" ? item : read(item, "certificateType", "CertificateType", "title", "Title", "templateTitle", "TemplateTitle", "name", "Name", "templateCode", "TemplateCode") || "").trim())
     .filter(Boolean))];
+  const certificateTypeOptions = ["", ...templatesReady];
   const defaultCertificateType = templatesReady[0] || "";
+
+  useEffect(() => {
+    if (!typeOptionsOpen) return undefined;
+    const closeOnOutsidePointer = (event) => {
+      if (!typeFieldRef.current?.contains(event.target)) setTypeOptionsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [typeOptionsOpen]);
+
+  useEffect(() => {
+    if (!typeOptionsOpen) return;
+    typeOptionsRef.current?.querySelector(".is-highlighted")?.scrollIntoView({ block: "nearest" });
+  }, [typeOptionsOpen, highlightedTypeIndex]);
+
+  const chooseCertificateType = (type) => {
+    setForm((current) => ({ ...current, type }));
+    setTypeOptionsOpen(false);
+  };
+
+  const handleCertificateTypeKeyDown = (event) => {
+    if (event.key === "Tab") {
+      setTypeOptionsOpen(false);
+      return;
+    }
+    if (event.key === "Escape") {
+      setTypeOptionsOpen(false);
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (!certificateTypeOptions.length) return;
+      const currentIndex = typeOptionsOpen ? highlightedTypeIndex : Math.max(0, certificateTypeOptions.indexOf(form.type));
+      const nextIndex = event.key === "Home" ? 0
+        : event.key === "End" ? certificateTypeOptions.length - 1
+          : typeOptionsOpen
+            ? (currentIndex + (event.key === "ArrowDown" ? 1 : -1) + certificateTypeOptions.length) % certificateTypeOptions.length
+            : currentIndex;
+      setHighlightedTypeIndex(nextIndex);
+      setTypeOptionsOpen(true);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (typeOptionsOpen && certificateTypeOptions[highlightedTypeIndex] !== undefined) {
+        chooseCertificateType(certificateTypeOptions[highlightedTypeIndex]);
+      } else {
+        setHighlightedTypeIndex(Math.max(0, certificateTypeOptions.indexOf(form.type)));
+        setTypeOptionsOpen(true);
+      }
+    }
+  };
 
   const openRequestCertificate = useCallback(() => {
     setRequestError("");
@@ -175,7 +246,7 @@ export default function StudentCertificates() {
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
 
   return (
-    <div className="sp-page">
+    <div className="sp-page sp-certificates-page">
       <StudentPageHeader title="Certificates" subtitle="View and request your student certificates." action={<button className="sp-btn primary" type="button" onClick={openRequestCertificate}><Plus size={16}/> Request Certificate</button>}/>
       {success ? <Toast message={success} type="success" onClose={() => setSuccess("")}/> : null}
       {!templatesReady.length && !error ? <div className="sp-api-state">No admin-created certificate types are available for your academic context. Please contact the college administrator.</div> : null}
@@ -186,7 +257,7 @@ export default function StudentCertificates() {
           if (index === 1) return read(row, "certificateType", "CertificateType", "templateTitle", "TemplateTitle") || "—";
           if (index === 2) return date(read(row, "requestDate", "RequestDate", "generatedAt", "GeneratedAt"));
           if (index === 3) return read(row, "purpose", "Purpose") || "—";
-          if (index === 4) return <StudentStatusBadge value={read(row, "status", "Status") || "Pending"}/>;
+          if (index === 4) return <CertificateStatusBadge value={read(row, "status", "Status") || "Pending"}/>;
           const issued = /issued/i.test(String(read(row, "status", "Status") || ""));
           const id = String(read(row, "certificateId", "CertificateId", "id", "Id") || "");
           return <button type="button" className="sp-icon-action" title={issued ? "Download certificate" : "Certificate is not issued yet"} aria-label="Download certificate" disabled={!issued || downloading === id} onClick={() => download(row)}><Download size={16}/></button>;
@@ -204,12 +275,49 @@ export default function StudentCertificates() {
             </header>
             {requestError ? <div className="sp-api-state is-error" role="alert">{requestError}</div> : null}
             {!templatesReady.length ? <div className="sp-api-state" role="status">{error || "No admin-created certificate types are available for your academic context. Please contact the college administrator."}</div> : null}
-            <label>
+            <label className="sp-certificate-type-field" ref={typeFieldRef}>
               <span>Certificate Type</span>
-              <select required value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}>
+              <select
+                required
+                value={form.type}
+                aria-haspopup="listbox"
+                aria-expanded={typeOptionsOpen}
+                aria-controls="sp-certificate-type-options"
+                aria-activedescendant={typeOptionsOpen ? `sp-certificate-type-option-${highlightedTypeIndex}` : undefined}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.currentTarget.focus();
+                  setHighlightedTypeIndex(Math.max(0, certificateTypeOptions.indexOf(form.type)));
+                  setTypeOptionsOpen((current) => !current);
+                }}
+                onKeyDown={handleCertificateTypeKeyDown}
+                onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}
+              >
                 <option value="">Select certificate type</option>
                 {templatesReady.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
+              {typeOptionsOpen ? (
+                <div id="sp-certificate-type-options" className="sp-certificate-type-options" role="listbox" ref={typeOptionsRef}>
+                  {certificateTypeOptions.map((type, index) => (
+                    <div
+                      key={type}
+                      id={`sp-certificate-type-option-${index}`}
+                      role="option"
+                      aria-selected={form.type === type}
+                      className={highlightedTypeIndex === index ? "is-highlighted" : ""}
+                      onMouseEnter={() => setHighlightedTypeIndex(index)}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        chooseCertificateType(type);
+                      }}
+                    >
+                      {type || "Select certificate type"}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </label>
             <label>
               <span>Purpose</span>

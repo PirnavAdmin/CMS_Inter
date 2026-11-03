@@ -77,7 +77,7 @@ namespace CollegeManagement.API.Services.Implementations
                     request.AcademicYearId, 
                     isReferral: false);
 
-                if (!string.IsNullOrWhiteSpace(allocatedNumber))
+                if (!string.IsNullOrWhiteSpace(allocatedNumber) && allocatedNumber != "0")
                 {
                     request.AdmissionNo = allocatedNumber;
                 }
@@ -204,16 +204,38 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
+                string? boardCode = null;
+                if (boardId.HasValue && boardId.Value > 0)
+                {
+                    var b = await _context.Boards.FindAsync(boardId.Value);
+                    boardCode = b?.BoardCode;
+                }
+
+                string? ayName = null;
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                {
+                    var ay = await _context.AcademicYears.FindAsync(academicYearId.Value);
+                    ayName = ay?.AcademicYearName;
+                }
+
+                string? campusCode = null;
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    var c = await _context.Campuses.FindAsync(campusId.Value);
+                    campusCode = c?.CampusCode;
+                }
+
                 var preview = await _numberSeriesService.GetLivePreviewAsync(
                     "ADMISSION_NO", 
                     pattern: null, 
                     numberLength: null, 
                     prefix: null, 
                     campusId: campusId, 
-                    board: boardId?.ToString(), 
-                    academicYear: academicYearId?.ToString());
+                    board: boardCode ?? boardId?.ToString(), 
+                    academicYear: ayName ?? academicYearId?.ToString(),
+                    campusCode: campusCode);
 
-                if (!string.IsNullOrWhiteSpace(preview))
+                if (!string.IsNullOrWhiteSpace(preview) && preview != "0")
                 {
                     return preview;
                 }
@@ -234,16 +256,39 @@ namespace CollegeManagement.API.Services.Implementations
         {
             if (isReferral) return null;
 
+            string? boardCode = null;
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                var b = await _context.Boards.FindAsync(boardId.Value);
+                boardCode = b?.BoardCode;
+            }
+
+            string? ayName = null;
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                var ay = await _context.AcademicYears.FindAsync(academicYearId.Value);
+                ayName = ay?.AcademicYearName;
+            }
+
+            string? campusCode = null;
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var c = await _context.Campuses.FindAsync(campusId.Value);
+                campusCode = c?.CampusCode;
+            }
+
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
             { 
-                Board = boardId?.ToString(),
-                AcademicYear = academicYearId?.ToString()
+                Board = boardCode ?? boardId?.ToString(),
+                BoardCode = boardCode,
+                AcademicYear = ayName ?? academicYearId?.ToString(),
+                CampusCode = campusCode
             };
             
             // Generate next number purely from the NumberSeriesSequences table for global continuity
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
-            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && generatedDto.GeneratedNumber != "0")
             {
                 return generatedDto.GeneratedNumber;
             }

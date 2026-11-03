@@ -342,6 +342,208 @@ END;";
             await connection.ExecuteAsync(spDeleteTransportDrivers);
             Console.WriteLine("  [DEPLOYED] sp_DeleteTransportDrivers");
 
+            string spGetTransportDriversById = @"
+DROP PROCEDURE IF EXISTS `sp_GetTransportDriversById`;
+CREATE PROCEDURE `sp_GetTransportDriversById`(
+    IN p_Id BIGINT
+)
+BEGIN
+    SELECT 
+        s.Id AS DriverId,
+        s.Id AS StaffId,
+        s.EmployeeId AS EmployeeId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)) AS DriverName,
+        s.Mobile AS MobileNumber,
+        s.AlternateMobile AS AlternateMobileNumber,
+        s.Email AS Email,
+        s.DrivingLicenseNumber AS LicenseNumber,
+        DATE_FORMAT(s.DrivingLicenseExpiryDate, '%Y-%m-%d') AS LicenseExpiryDate,
+        s.CurrentAddress AS Address,
+        s.BloodGroup AS BloodGroup,
+        COALESCE(d.EmergencyContactName, '') AS EmergencyContactName,
+        COALESCE(d.EmergencyContactNumber, '') AS EmergencyContactNumber,
+        COALESCE(s.DrivingExperienceYears, d.Experience, 5) AS ExperienceYears,
+        COALESCE(va.VehicleId, d.AssignedVehicleId) AS AssignedVehicleId,
+        COALESCE(va.VehicleNumber, v.VehicleNumber) AS AssignedVehicleNumber,
+        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status
+    FROM Staff s
+    LEFT JOIN TransportDrivers d ON (d.StaffId = s.Id OR (d.EmployeeId = s.EmployeeId AND s.EmployeeId IS NOT NULL AND s.EmployeeId <> '')) AND d.IsDeleted = 0
+    LEFT JOIN (
+        SELECT va1.DriverId, va1.VehicleId, v1.VehicleNumber
+        FROM TransportVehicleAssignments va1
+        LEFT JOIN TransportVehicles v1 ON va1.VehicleId = v1.VehicleId AND v1.IsDeleted = 0
+        WHERE va1.IsDeleted = 0 AND va1.Status = 1
+          AND va1.AssignmentId = (
+              SELECT MAX(va2.AssignmentId)
+              FROM TransportVehicleAssignments va2
+              WHERE va2.DriverId = va1.DriverId AND va2.IsDeleted = 0 AND va2.Status = 1
+          )
+    ) va ON s.Id = va.DriverId
+    LEFT JOIN TransportVehicles v ON d.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
+    WHERE (s.Id = p_Id OR d.DriverId = p_Id) AND s.IsDeleted = 0 AND s.IsDriver = 1
+    LIMIT 1;
+END;";
+            await connection.ExecuteAsync(spGetTransportDriversById);
+            Console.WriteLine("  [DEPLOYED] sp_GetTransportDriversById");
+
+            string spGetTransportDriverByIdOrNumber = @"
+DROP PROCEDURE IF EXISTS `sp_GetTransportDriverByIdOrNumber`;
+CREATE PROCEDURE `sp_GetTransportDriverByIdOrNumber`(
+    IN p_SearchId BIGINT,
+    IN p_SearchStr VARCHAR(100)
+)
+BEGIN
+    SELECT 
+        s.Id AS DriverId,
+        s.Id AS StaffId,
+        s.EmployeeId AS EmployeeId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)) AS DriverName,
+        s.Mobile AS MobileNumber,
+        s.AlternateMobile AS AlternateMobileNumber,
+        s.Email AS Email,
+        s.DrivingLicenseNumber AS LicenseNumber,
+        DATE_FORMAT(s.DrivingLicenseExpiryDate, '%Y-%m-%d') AS LicenseExpiryDate,
+        s.CurrentAddress AS Address,
+        s.BloodGroup AS BloodGroup,
+        COALESCE(d.EmergencyContactName, '') AS EmergencyContactName,
+        COALESCE(d.EmergencyContactNumber, '') AS EmergencyContactNumber,
+        COALESCE(s.DrivingExperienceYears, d.Experience, 5) AS ExperienceYears,
+        COALESCE(va.VehicleId, d.AssignedVehicleId) AS AssignedVehicleId,
+        COALESCE(va.VehicleNumber, v.VehicleNumber) AS AssignedVehicleNumber,
+        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status
+    FROM Staff s
+    LEFT JOIN TransportDrivers d ON (d.StaffId = s.Id OR (d.EmployeeId = s.EmployeeId AND s.EmployeeId IS NOT NULL AND s.EmployeeId <> '')) AND d.IsDeleted = 0
+    LEFT JOIN (
+        SELECT va1.DriverId, va1.VehicleId, v1.VehicleNumber
+        FROM TransportVehicleAssignments va1
+        LEFT JOIN TransportVehicles v1 ON va1.VehicleId = v1.VehicleId AND v1.IsDeleted = 0
+        WHERE va1.IsDeleted = 0 AND va1.Status = 1
+          AND va1.AssignmentId = (
+              SELECT MAX(va2.AssignmentId)
+              FROM TransportVehicleAssignments va2
+              WHERE va2.DriverId = va1.DriverId AND va2.IsDeleted = 0 AND va2.Status = 1
+          )
+    ) va ON s.Id = va.DriverId
+    LEFT JOIN TransportVehicles v ON d.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
+    WHERE s.IsDeleted = 0 AND s.IsDriver = 1
+      AND (s.Id = p_SearchId OR d.DriverId = p_SearchId 
+           OR LOWER(s.EmployeeId) = LOWER(p_SearchStr) 
+           OR LOWER(s.DrivingLicenseNumber) = LOWER(p_SearchStr) 
+           OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) = LOWER(p_SearchStr) 
+           OR LOWER(s.Mobile) = LOWER(p_SearchStr)
+           OR LOWER(d.LicenseNo) = LOWER(p_SearchStr))
+    LIMIT 1;
+END;";
+            await connection.ExecuteAsync(spGetTransportDriverByIdOrNumber);
+            Console.WriteLine("  [DEPLOYED] sp_GetTransportDriverByIdOrNumber");
+
+            string spGetTransportDriverLookup = @"
+DROP PROCEDURE IF EXISTS `sp_GetTransportDriverLookup`;
+CREATE PROCEDURE `sp_GetTransportDriverLookup`()
+BEGIN
+    SELECT 
+        s.Id AS DriverId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)) AS DriverName,
+        s.DrivingLicenseNumber AS LicenceNumber,
+        s.Mobile AS MobileNumber
+    FROM Staff s
+    WHERE s.IsDeleted = 0 AND s.IsDriver = 1 AND s.Status = 'Active'
+    ORDER BY DriverName ASC;
+END;";
+            await connection.ExecuteAsync(spGetTransportDriverLookup);
+            Console.WriteLine("  [DEPLOYED] sp_GetTransportDriverLookup");
+
+            string spGetTransportVehicleAssignments = @"
+DROP PROCEDURE IF EXISTS `sp_GetTransportVehicleAssignments`;
+CREATE PROCEDURE `sp_GetTransportVehicleAssignments`(
+    IN p_RouteId BIGINT,
+    IN p_VehicleId BIGINT,
+    IN p_DriverId BIGINT,
+    IN p_Status TINYINT(1),
+    IN p_Search VARCHAR(100)
+)
+BEGIN
+    SELECT 
+        a.AssignmentId,
+        a.RouteId,
+        r.RouteName,
+        r.RouteCode,
+        a.VehicleId,
+        v.VehicleNumber,
+        v.Capacity,
+        a.DriverId,
+        COALESCE(CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)), d.DriverName, 'Unassigned') AS DriverName,
+        COALESCE(s.Mobile, d.MobileNo) AS DriverMobile,
+        a.AttendantId,
+        att.AttendantName,
+        a.EffectiveFrom,
+        a.EffectiveTo,
+        a.Shift,
+        a.MorningTripTime,
+        a.EveningTripTime,
+        a.Remarks,
+        a.Status,
+        (SELECT COUNT(*) FROM StudentTransportAssignments sta WHERE sta.VehicleAssignmentId = a.AssignmentId AND sta.IsDeleted = 0) AS AssignedStudents
+    FROM TransportVehicleAssignments a
+    LEFT JOIN TransportRoutes r ON a.RouteId = r.RouteId
+    LEFT JOIN TransportVehicles v ON a.VehicleId = v.VehicleId
+    LEFT JOIN Staff s ON a.DriverId = s.Id AND s.IsDeleted = 0
+    LEFT JOIN TransportDrivers d ON (a.DriverId = d.DriverId OR d.StaffId = a.DriverId) AND d.IsDeleted = 0
+    LEFT JOIN TransportAttendants att ON a.AttendantId = att.AttendantId
+    WHERE a.IsDeleted = 0
+      AND (p_RouteId IS NULL OR a.RouteId = p_RouteId)
+      AND (p_VehicleId IS NULL OR a.VehicleId = p_VehicleId)
+      AND (p_DriverId IS NULL OR a.DriverId = p_DriverId)
+      AND (p_Status IS NULL OR a.Status = p_Status)
+      AND (p_Search IS NULL OR p_Search = ''
+           OR LOWER(r.RouteName) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(v.VehicleNumber) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(d.DriverName) LIKE CONCAT('%', LOWER(p_Search), '%'))
+    ORDER BY a.EffectiveFrom DESC;
+END;";
+            await connection.ExecuteAsync(spGetTransportVehicleAssignments);
+            Console.WriteLine("  [DEPLOYED] sp_GetTransportVehicleAssignments");
+
+            string spGetTransportVehicleAssignmentById = @"
+DROP PROCEDURE IF EXISTS `sp_GetTransportVehicleAssignmentById`;
+CREATE PROCEDURE `sp_GetTransportVehicleAssignmentById`(
+    IN p_Id BIGINT
+)
+BEGIN
+    SELECT 
+        a.AssignmentId,
+        a.RouteId,
+        r.RouteName,
+        r.RouteCode,
+        a.VehicleId,
+        v.VehicleNumber,
+        v.Capacity,
+        a.DriverId,
+        COALESCE(CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)), d.DriverName, 'Unassigned') AS DriverName,
+        COALESCE(s.Mobile, d.MobileNo) AS DriverMobile,
+        a.AttendantId,
+        att.AttendantName,
+        a.EffectiveFrom,
+        a.EffectiveTo,
+        a.Shift,
+        a.MorningTripTime,
+        a.EveningTripTime,
+        a.Remarks,
+        a.Status,
+        (SELECT COUNT(*) FROM StudentTransportAssignments sta WHERE sta.VehicleAssignmentId = a.AssignmentId AND sta.IsDeleted = 0) AS AssignedStudents
+    FROM TransportVehicleAssignments a
+    LEFT JOIN TransportRoutes r ON a.RouteId = r.RouteId
+    LEFT JOIN TransportVehicles v ON a.VehicleId = v.VehicleId
+    LEFT JOIN Staff s ON a.DriverId = s.Id AND s.IsDeleted = 0
+    LEFT JOIN TransportDrivers d ON (a.DriverId = d.DriverId OR d.StaffId = a.DriverId) AND d.IsDeleted = 0
+    LEFT JOIN TransportAttendants att ON a.AttendantId = att.AttendantId
+    WHERE a.AssignmentId = p_Id AND a.IsDeleted = 0
+    LIMIT 1;
+END;";
+            await connection.ExecuteAsync(spGetTransportVehicleAssignmentById);
+            Console.WriteLine("  [DEPLOYED] sp_GetTransportVehicleAssignmentById");
+
             string spGetDriverDashboardData = @"
 DROP PROCEDURE IF EXISTS `sp_GetDriverDashboardData`;
 CREATE PROCEDURE `sp_GetDriverDashboardData`(

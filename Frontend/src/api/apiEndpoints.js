@@ -261,6 +261,8 @@ export const apiEndpoints = {
     downloadPdf: "/api/v1/results/download-pdf",
     studentMemo: "/api/v1/results/students/memo",
     memo: (studentId) => `/api/v1/results/student/${studentId}/memo`,
+    studentPublished: "/api/v1/students/me/results",
+    publishedStudentMemo: (examinationId) => `/api/v1/students/me/results/${encodeURIComponent(examinationId)}/memo`,
     revaluation: "/api/v1/results/revaluation",
     revaluationById: (revaluationId) => `/api/v1/results/revaluation/${revaluationId}`,
   },
@@ -377,7 +379,7 @@ export const apiEndpoints = {
     lockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/lock`,
     unlockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/unlock`,
     studentSubjects: (studentId) => `/api/v1/attendance/student/${studentId}/subjects`,
-    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${studentId}/daily-logs`,
+    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`,
   },
   staffAttendance: {
     load: "/api/v1/staff-attendance/load",
@@ -847,14 +849,6 @@ export const apiEndpoints = {
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
     myPermissions: "/api/v1/roles/my-permissions",
   },
-  numberSeries: {
-    getAll: "/api/v1/settings/number-series",
-    getByCode: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-    update: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-    generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
-    preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
-    delete: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
@@ -878,4 +872,3 @@ export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
 };
 
 export default apiEndpoints;
-

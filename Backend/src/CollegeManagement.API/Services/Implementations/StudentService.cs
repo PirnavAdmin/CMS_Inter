@@ -359,7 +359,8 @@ namespace CollegeManagement.API.Services
             // 2. Delete any existing files matching student_photo_{studentId}.* or student_photo_{studentId}_*.* in uploads folder
             try
             {
-                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}*");
+                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}.*")
+                    .Concat(Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}_*"));
                 foreach (var f in existingFiles)
                 {
                     try
@@ -377,8 +378,9 @@ namespace CollegeManagement.API.Services
                 // Ignore directory scan errors
             }
 
-            // 3. Save new photo with canonical replaced filename
-            var targetFileName = $"student_photo_{studentId}{ext}";
+            // 3. Save new photo with unique timestamped filename to prevent stale caching
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var targetFileName = $"student_photo_{studentId}_{timestamp}{ext}";
             var physicalPath = Path.Combine(uploadsFolder, targetFileName);
 
             using (var stream = new FileStream(physicalPath, FileMode.Create))
@@ -393,9 +395,57 @@ namespace CollegeManagement.API.Services
             {
                 StudentId = studentId,
                 Uploaded = true,
-                PhotoUrl = $"{relativePath}?v={DateTime.UtcNow.Ticks}",
+                PhotoUrl = $"{relativePath}?v={timestamp}",
                 Message = "Student photo uploaded successfully."
             };
+        }
+
+        public async Task<bool> RemovePhotoAsync(int studentId, System.Threading.CancellationToken ct = default)
+        {
+            var student = await _repository.GetByIdAsync(studentId);
+            if (student == null)
+            {
+                throw new KeyNotFoundException($"Student with ID {studentId} not found.");
+            }
+
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadsFolder = Path.Combine(webRoot, "uploads", "student-photos");
+
+            if (!string.IsNullOrWhiteSpace(student.Photo))
+            {
+                try
+                {
+                    var oldRelPath = student.Photo.Split('?')[0].TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar);
+                    var oldFile = Path.Combine(webRoot, oldRelPath);
+                    if (File.Exists(oldFile))
+                    {
+                        File.Delete(oldFile);
+                    }
+                }
+                catch
+                {
+                    // Ignore deletion error on legacy file
+                }
+            }
+
+            try
+            {
+                if (Directory.Exists(uploadsFolder))
+                {
+                    var legacyFiles = Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}.*")
+                        .Concat(Directory.GetFiles(uploadsFolder, $"student_photo_{studentId}_*"));
+                    foreach (var f in legacyFiles)
+                    {
+                        try { File.Delete(f); } catch { }
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore directory scan errors
+            }
+
+            return await _repository.UpdatePhotoPathAsync(studentId, null!);
         }
 
         public async Task<StudentDocumentUploadResultDto> UploadDocumentAsync(
@@ -441,7 +491,8 @@ namespace CollegeManagement.API.Services
             // Clean up any older document files for this student and target column
             try
             {
-                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_doc_{studentId}_{targetColumn}*");
+                var existingFiles = Directory.GetFiles(uploadsFolder, $"student_doc_{studentId}_{targetColumn}.*")
+                    .Concat(Directory.GetFiles(uploadsFolder, $"student_doc_{studentId}_{targetColumn}_*"));
                 foreach (var f in existingFiles)
                 {
                     try { File.Delete(f); } catch { }
@@ -452,7 +503,8 @@ namespace CollegeManagement.API.Services
                 // Ignore cleanup error
             }
 
-            var targetFileName = $"student_doc_{studentId}_{targetColumn}{ext}";
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var targetFileName = $"student_doc_{studentId}_{targetColumn}_{timestamp}{ext}";
             var physicalPath = Path.Combine(uploadsFolder, targetFileName);
 
             using (var stream = new FileStream(physicalPath, FileMode.Create))
@@ -468,7 +520,7 @@ namespace CollegeManagement.API.Services
                 StudentId = studentId,
                 DocumentType = targetColumn,
                 Uploaded = true,
-                DocumentUrl = $"{relativePath}?v={DateTime.UtcNow.Ticks}",
+                DocumentUrl = $"{relativePath}?v={timestamp}",
                 Message = $"{targetColumn} uploaded successfully."
             };
         }

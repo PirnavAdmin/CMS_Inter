@@ -79,13 +79,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DropTime = dto.DropTime,
                     p_DistanceFromSchool = dto.DistanceFromStart,
                     p_MonthlyFee = dto.MonthlyFee > 0 ? dto.MonthlyFee : (dto.MonthlyFare ?? 1200m),
-                    p_Description = (string?)null,
+                    p_Description = dto.Description,
                     p_Time = (TimeSpan?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsActive = (byte)1,
                     p_CreatedBy = userId,
                     p_UpdatedBy = userId,
-                    p_CampusId = (int?)null
+                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -106,13 +106,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DropTime = dto.DropTime,
                     p_DistanceFromSchool = dto.DistanceFromStart,
                     p_MonthlyFee = dto.MonthlyFee > 0 ? dto.MonthlyFee : (dto.MonthlyFare ?? 1200m),
-                    p_Description = (string?)null,
+                    p_Description = dto.Description,
                     p_Time = (TimeSpan?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsActive = (byte)1,
                     p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId,
-                    p_CampusId = (int?)null
+                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
