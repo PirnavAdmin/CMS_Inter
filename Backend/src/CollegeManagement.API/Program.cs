@@ -517,6 +517,23 @@ if (args.Contains("--test-timetable"))
     return;
 }
 
+if (args.Contains("--deploy-certificate"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var success = await CollegeManagement.API.Tests.CertificateDbDeployer.DeployProceduresAsync(connStr);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-certificate"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.CertificateModuleBackendTester(connStr);
+    var success = await tester.RunAllTestsAsync();
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
 if (args.Contains("--deploy-exam-cell"))
 {
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
