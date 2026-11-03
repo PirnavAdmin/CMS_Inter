@@ -228,18 +228,18 @@
 
 .sp-shell {
   --sp-sidebar-width: 218px;
-  --sp-primary: var(--cms-primary, #4338CA);
-  --sp-primary-dark: var(--cms-primary-dark, #312E81);
-  --sp-primary-hover: var(--cms-primary-hover, #60A5FA);
-  --sp-primary-soft: var(--cms-primary-soft, #E0E7FF);
-  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, #EFF6FF));
-  --sp-bg: transparent;
-  --sp-sidebar: var(--cms-sidebar-surface-bg, #312E81);
-  --sp-header: var(--cms-topbar-surface-bg, #EFF6FF);
-  --sp-surface: var(--cms-surface, #FFFFFF);
-  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, var(--cms-border, #DBEAFE)));
-  --sp-text: var(--cms-text, #172554);
-  --sp-muted: var(--cms-muted, #64748B);
+  --sp-primary: var(--cms-primary);
+  --sp-primary-dark: var(--cms-primary-dark);
+  --sp-primary-hover: var(--cms-primary-hover, var(--cms-primary-dark));
+  --sp-primary-soft: var(--cms-primary-soft);
+  --sp-soft: var(--cms-subtle, var(--cms-table-header, var(--cms-primary-soft)));
+  --sp-bg: var(--cms-bg);
+  --sp-sidebar: var(--cms-sidebar-surface-bg, var(--cms-sidebar, #1e2616));
+  --sp-header: var(--cms-topbar-surface-bg, var(--cms-header, #fff));
+  --sp-surface: var(--cms-surface, #fff);
+  --sp-border: var(--cms-nav-chrome-border, var(--cms-border, #d3dcbe));
+  --sp-text: var(--cms-text, #202914);
+  --sp-muted: var(--cms-muted, #6e7e59);
   position: fixed;
   inset: 0;
   display: flex;
@@ -250,19 +250,6 @@
   background: transparent;
   color: var(--sp-text);
   font-family: inherit;
-}
-
-:root[data-theme="dark"] .sp-shell,
-[data-theme="dark"] .sp-shell {
-  --sp-bg: transparent;
-  --sp-sidebar: var(--cms-sidebar-surface-bg, #1E1B4B);
-  --sp-header: var(--cms-topbar-surface-bg, #312E81);
-  --sp-surface: var(--cms-surface, #25215C);
-  --sp-border: var(--cms-nav-chrome-border, var(--cms-primary-border, #4338CA));
-  --sp-text: var(--cms-text, #EEF2FF);
-  --sp-muted: var(--cms-muted, #C7D2FE);
-  --sp-soft: var(--cms-table-header, var(--cms-primary-soft, #312E81));
-  --sp-primary-soft: var(--cms-primary-soft, #312E81);
 }
 
 .sp-shell * {
@@ -942,6 +929,41 @@
 .sp-badge.is-warning {
   background: #fff0d6;
   color: #a86200
+}
+
+.sp-certificates-page .sp-certificate-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 100px;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap
+}
+
+.sp-certificates-page .sp-certificate-status svg {
+  flex: 0 0 14px
+}
+
+.sp-certificates-page .sp-certificate-status.is-issued {
+  background: #DCFCE7;
+  color: #15803D
+}
+
+.sp-certificates-page .sp-certificate-status.is-cancelled {
+  background: #FEE2E2;
+  color: #B91C1C
+}
+
+.sp-certificates-page .sp-certificate-status.is-requested {
+  background: #DBEAFE;
+  color: #1D4ED8
 }
 
 .sp-metric-list {
@@ -1674,6 +1696,46 @@
 .sp-modal label {
   display: grid;
   gap: 5px
+}
+
+.sp-certificate-type-field {
+  position: relative
+}
+
+.sp-certificate-type-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 1px);
+  right: 0;
+  left: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--sp-border);
+  border-radius: 0 0 3px 3px;
+  background: var(--sp-surface);
+  color: var(--sp-text);
+  box-shadow: 0 4px 8px #00000018;
+  scrollbar-width: thin
+}
+
+.sp-certificate-type-options [role="option"] {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer
+}
+
+.sp-certificate-type-options [role="option"]:hover,
+.sp-certificate-type-options [role="option"].is-highlighted {
+  background: var(--sp-primary-soft);
+  color: var(--sp-primary-dark)
+}
+
+.sp-certificate-type-options [role="option"][aria-selected="true"] {
+  background: var(--sp-primary);
+  color: #fff
 }
 
 .sp-modal label span {
@@ -5572,10 +5634,11 @@
 .sp-shell .sp-profile-page .sp-photo-avatar-button { width: 60px; height: 60px; border-radius: 15px; background: var(--sp-soft); }
 .sp-shell .sp-profile-page .sp-photo-avatar-button :is(img, .sp-avatar) { border-radius: 13px; object-fit: cover; font-size: 21px; }
 .sp-shell .sp-profile-page .sp-photo-camera-button { width: 25px; height: 25px; bottom: -4px; right: -4px; box-shadow: 0 2px 5px #00000025; }
-.sp-shell .sp-profile-page .sp-profile-hero > div:nth-child(2) { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; min-width: 0; }
+.sp-shell .sp-profile-page .sp-profile-hero .sp-profile-identity { display: grid; justify-items: start; gap: 5px; min-width: 0; }
 .sp-shell .sp-profile-page .sp-profile-hero h2 { margin: 0; font-size: 18px; font-weight: 800; }
 .sp-shell .sp-profile-page .sp-profile-hero p { margin: 0; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .sp-shell .sp-profile-page .sp-profile-hero p strong { color: var(--sp-primary); }
+.sp-shell .sp-profile-page .sp-profile-roll-badge { display: inline-flex; align-items: center; width: fit-content; padding: 3px 9px; border-radius: 999px; background: var(--sp-primary-soft); color: var(--sp-primary-dark); font-size: 11px; font-weight: 650; line-height: 1.4; }
 .sp-shell .sp-profile-page .sp-profile-tabs { padding: 6px 10px; gap: 6px; border-radius: 12px; background: var(--sp-soft); }
 .sp-shell .sp-profile-page .sp-profile-tabs span { gap: 8px; padding: 8px 12px; font-size: 13px; border-radius: 8px; }
 .sp-shell .sp-profile-page .sp-profile-tabs input:checked + span { color: var(--sp-text); background: var(--sp-surface); box-shadow: 0 1px 4px #00000014; }
@@ -5605,7 +5668,7 @@
 .sp-photo-modal .cms-modal-foot { flex-wrap: wrap; gap: 8px; }
 @media (max-width: 640px) {
   .sp-shell .sp-profile-page .sp-profile-hero { padding: 12px; gap: 14px; }
-  .sp-shell .sp-profile-page .sp-profile-hero > div:nth-child(2) { flex: 1; gap: 4px; }
+  .sp-shell .sp-profile-page .sp-profile-hero .sp-profile-identity { flex: 1; gap: 5px; }
   .sp-shell .sp-profile-page .sp-profile-hero h2 { font-size: 17px; }
   .sp-shell .sp-profile-page .sp-profile-tabs span { padding: 8px; font-size: 11px; }
 }
@@ -5796,3 +5859,170 @@
 }
 
 .sp-shell .sp-results-page .sp-card-body:has(> .sp-results-toolbar) { padding-top: 8px; }
+
+/* Match the admin Examinations table without changing other student tables. */
+.sp-shell .sp-certificates-page .sp-card {
+  border-color: var(--cms-border);
+  border-radius: 16px;
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow, 0 12px 30px rgba(15, 23, 42, .07));
+}
+.sp-shell .sp-certificates-page .sp-card-body { padding: 0; }
+.sp-shell .sp-certificates-page .sp-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Keep the active Student Portal on the same CMS theme tokens as Admin. */
+.sp-shell .sp-sidebar {
+  background: var(--cms-sidebar-surface-bg, var(--cms-sidebar));
+  border-color: var(--cms-border);
+}
+.sp-shell .sp-brand {
+  background: var(--cms-brand-surface-bg, var(--cms-topbar-surface-bg, var(--cms-header)));
+  border-color: var(--cms-nav-chrome-border, var(--cms-border));
+}
+.sp-shell .sp-sidebar nav h2 {
+  color: var(--cms-sidebar-group-color, var(--cms-sidebar-group, var(--cms-muted)));
+}
+.sp-shell .sp-sidebar nav a {
+  color: var(--cms-sidebar-link-color, var(--cms-sidebar-text, var(--cms-text-secondary)));
+}
+.sp-shell .sp-sidebar nav a:hover:not(.is-active) {
+  background: var(--cms-sidebar-link-hover-bg, var(--cms-sidebar-hover, var(--cms-primary-soft)));
+  color: var(--cms-sidebar-link-hover-color, var(--cms-sidebar-text, var(--cms-primary-dark)));
+}
+.sp-shell .sp-sidebar nav a.is-active,
+.sp-shell .sp-sidebar nav a.is-active:hover {
+  background: var(--cms-sidebar-active, linear-gradient(90deg, var(--cms-primary), var(--cms-primary-hover)));
+  box-shadow: var(--cms-sidebar-active-glow, none);
+  color: #fff;
+}
+.sp-shell .sp-navbar {
+  background: var(--cms-topbar-surface-bg, var(--cms-header));
+  border-color: var(--cms-nav-chrome-border, var(--cms-border));
+}
+.sp-shell .sp-content {
+  color: var(--cms-text);
+}
+.sp-shell .sp-page-header h1 {
+  color: var(--cms-text);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -.3px;
+}
+.sp-shell .sp-page-header p {
+  color: var(--cms-muted);
+  font-size: 13px;
+}
+.sp-shell :is(.sp-card, .sp-student-strip, .sp-profile-hero, .sp-toolbar) {
+  border-color: var(--cms-border);
+  background-color: var(--cms-surface);
+  box-shadow: 0 3px 12px rgba(15, 23, 42, .04);
+}
+.sp-shell .sp-card-head {
+  border-color: var(--cms-border);
+  background: color-mix(in srgb, var(--cms-surface) 94%, var(--cms-subtle));
+}
+.sp-shell :is(.sp-summary, .sp-announcement-cards article, .sp-document-grid label, .sp-detail-grid div) {
+  border-color: var(--cms-border);
+  background-color: var(--cms-surface);
+}
+.sp-shell .sp-btn {
+  border-color: var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+}
+.sp-shell .sp-btn:hover:not(:disabled) {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+}
+.sp-shell .sp-btn.primary,
+.sp-shell .sp-btn.primary:hover:not(:disabled) {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary);
+  color: #fff;
+}
+.sp-shell .sp-btn.primary:hover:not(:disabled) {
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark));
+  background: var(--cms-primary-hover, var(--cms-primary-dark));
+}
+.sp-shell :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea
+) {
+  border-color: var(--cms-border);
+  background-color: var(--cms-surface);
+  color: var(--cms-text);
+}
+.sp-shell :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea
+):focus {
+  border-color: var(--cms-primary);
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary) 14%, transparent);
+}
+.sp-shell .sp-profile-tabs,
+.sp-shell .sp-attendance-tabs {
+  border-color: var(--cms-border);
+  background: var(--cms-surface);
+}
+.sp-shell .sp-profile-tabs input:checked + span {
+  background: var(--cms-primary);
+  color: #fff;
+  box-shadow: none;
+}
+.sp-shell .sp-profile-tabs input:checked + span .sp-student-step-number {
+  background: color-mix(in srgb, #fff 20%, var(--cms-primary));
+  color: #fff;
+}
+.sp-shell .sp-pagination {
+  border-color: var(--cms-border);
+  background: var(--cms-subtle);
+}
+.sp-shell .sp-page .sp-table {
+  width: 100%;
+  min-width: min(680px, 100%);
+  border-collapse: collapse;
+  color: var(--cms-text);
+}
+.sp-shell .sp-page .sp-table th,
+.sp-shell .sp-page .sp-table td {
+  padding: 10px 8px;
+  border-top: 0;
+  border-bottom: 1px solid var(--cms-border);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  vertical-align: middle;
+}
+.sp-shell .sp-page :is(.sp-table, .sp-weekly-timetable) thead th {
+  background-color: var(--cms-subtle, #e8edd6);
+  color: var(--cms-text-secondary, #4e5d3c);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sp-shell .sp-page .sp-table td {
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .sp-shell .sp-page .sp-table > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover,
+  .sp-shell .sp-page .sp-table > tbody > tr:not(:has(.sp-empty, .cms-loader)):hover > td {
+    background: var(--cms-hover);
+  }
+}
+.sp-shell .sp-modal {
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  box-shadow: var(--cms-shadow-lg);
+}
