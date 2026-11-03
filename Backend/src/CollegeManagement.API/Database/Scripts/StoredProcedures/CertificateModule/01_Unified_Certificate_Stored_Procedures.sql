@@ -429,6 +429,7 @@ BEGIN
     INSERT INTO `certificates` (
         `StudentId`,
         `CertificateNo`,
+        `CertificateNumber`,
         `CertificateType`,
         `Purpose`,
         `RequestDate`,
@@ -446,6 +447,7 @@ BEGIN
         `IsActive`
     ) VALUES (
         v_StudentId,
+        p_CertificateNo,
         p_CertificateNo,
         p_CertificateType,
         p_Purpose,
