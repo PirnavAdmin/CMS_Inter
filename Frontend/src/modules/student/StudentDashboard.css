@@ -5574,6 +5574,7 @@
 .sp-shell .sp-profile-page .sp-profile-tabs input:checked + span { color: var(--sp-text); background: var(--sp-surface); box-shadow: 0 1px 4px #00000014; }
 .sp-shell .sp-profile-page .sp-student-step-number { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border-radius: 50%; background: var(--sp-border); color: var(--sp-text); font-size: 11px; }
 .sp-shell .sp-profile-page .sp-profile-tabs input:checked + span .sp-student-step-number { background: var(--sp-primary); color: #fff; }
+.sp-shell .sp-profile-page .sp-profile-tabs label.is-complete .sp-student-step-number { background: var(--sp-primary-soft); color: var(--sp-primary-dark); }
 .sp-shell .sp-profile-page .sp-profile-section { border-radius: 14px; background: linear-gradient(140deg, var(--sp-surface), color-mix(in srgb, var(--sp-soft) 25%, var(--sp-surface))); }
 .sp-shell .sp-profile-page .sp-profile-value small, .sp-shell .sp-profile-page .sp-profile-input > span { color: var(--sp-text); font-weight: 650; font-size: 11px; }
 .sp-shell .sp-profile-page .sp-profile-value strong, .sp-shell .sp-profile-page .sp-profile-input :is(input, select, textarea) { min-height: 36px; padding: 8px 10px; font-size: 12px; background: var(--sp-soft); border-radius: 8px; }

@@ -10,7 +10,7 @@ import StudentCard from "./components/StudentCard.jsx";
 import StudentDataTable from "./components/StudentDataTable.jsx";
 import StudentSummaryCard from "./components/StudentSummaryCard.jsx";
 import { useStudentProfile } from "./context/StudentProfileContext.jsx";
-import { getStudentAttendance, getStudentExaminations, getStudentResult } from "./services/studentAcademicService.js";
+import { getStudentAttendance, getStudentExaminations, getPublishedStudentResults } from "./services/studentAcademicService.js";
 import profileIcon from "@/assets/dashboard-3d/total-students.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
 import attendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
@@ -144,7 +144,11 @@ export default function StudentDashboard() {
   const [attendanceError, setAttendanceError] = useState("");
   const [latestResult, setLatestResult] = useState(null);
   const [resultError, setResultError] = useState("");
-  const resultPublished = Boolean(latestResult && (latestResult.published || latestResult.status === "PUBLISHED" || latestResult.isPublished));
+  const resultPublished = Boolean(
+    latestResult &&
+      (read(latestResult, "isPublished", "published") === true ||
+        String(read(latestResult, "publicationStatus", "status") || "").toUpperCase() === "PUBLISHED"),
+  );
   const [feeSummary, setFeeSummary] = useState(null);
   const [feeLoading, setFeeLoading] = useState(true);
   const [feeError, setFeeError] = useState("");
@@ -173,12 +177,21 @@ export default function StudentDashboard() {
       const toDate = new Date().toISOString().slice(0, 10);
       const [attendanceResult, resultResponse] = await Promise.allSettled([
         getStudentAttendance(profile.studentId, fromDate, toDate),
-        getStudentResult(profile),
+        getPublishedStudentResults(profile),
       ]);
       if (!active) return;
       if (attendanceResult.status === "fulfilled") setAttendanceData(summarizeAttendance(attendanceResult.value));
       else setAttendanceError("Unable to load attendance summary.");
-      if (resultResponse.status === "fulfilled") setLatestResult(unwrap(resultResponse.value));
+      if (resultResponse.status === "fulfilled") {
+        const latest = resultResponse.value
+          .slice()
+          .sort((left, right) =>
+            String(read(right, "publishedAt", "publishedDate") || "").localeCompare(
+              String(read(left, "publishedAt", "publishedDate") || ""),
+            ),
+          )[0] || null;
+        setLatestResult(latest);
+      }
       else setResultError("Unable to load latest result.");
     };
     if (!loading && profile?.studentId) loadSummaryData();
@@ -221,7 +234,7 @@ export default function StudentDashboard() {
   const feeDate = feeLoading ? "Loading..." : feeSummary?.nextDueDate || "-";
   const attendance = attendanceData || { percentage: "—", present: "—", absent: "—", workingDays: "—" };
   const resultRows = latestResult && read(latestResult, "isPublished", "IsPublished") !== false
-    ? [[read(latestResult, "examName", "ExamName") || "Latest Exam", `${Number(read(latestResult, "percentage", "Percentage") || 0)}%`, read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—", read(latestResult, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "status", "Status") || "Published"]]
+    ? [[read(latestResult, "examName", "ExamName", "examinationName", "ExaminationName") || "Latest Exam", `${Number(read(latestResult, "percentage", "Percentage") || 0)}%`, read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—", read(latestResult, "finalResult", "FinalResult", "resultStatus", "ResultStatus", "status", "Status") || "Published"]]
     : [];
   return (
     <div className="sp-page sp-dashboard-page">
@@ -316,12 +329,19 @@ export default function StudentDashboard() {
 // Dashboard home: monthly attendance, upcoming holidays and examinations.
 const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const highlightRead = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
-const status = (value) => ({ 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday", P: "Present", A: "Absent" }[value] || value);
+const status = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ({
+    1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday",
+    p: "Present", a: "Absent", present: "Present", absent: "Absent",
+    "half day": "Half Day", "half-day": "Half Day", holiday: "Holiday",
+  }[normalized] || value);
+};
 const holidayTone = (type) => /national/i.test(String(type)) ? "orange" : /festival/i.test(String(type)) ? "violet" : "cyan";
 const examTone = (exam) => /objective/i.test(String(exam.examCategory || exam.category || "")) ? "blue" : "violet";
 const rowsFrom = (response) => {
   const data = response?.data?.data ?? response?.data ?? response;
-  return Array.isArray(data) ? data : data?.items || data?.Items || data?.records || data?.holidays || data?.Holidays || [];
+  return Array.isArray(data) ? data : data?.items || data?.Items || data?.records || data?.$values || data?.holidays || data?.Holidays || [];
 };
 
 function StudentDashboardHighlights({ student, upcomingExams, examsError, formatExamDate }) {
@@ -344,14 +364,39 @@ function StudentDashboardHighlights({ student, upcomingExams, examsError, format
       if (!active) return;
       if (attendanceResponse.status === "fulfilled") {
         const counts = { present: 0, absent: 0, halfDay: 0 };
-        const days = new Map(rowsFrom(attendanceResponse.value).map((row) => [String(highlightRead(row, "attendanceDate", "date") || "").slice(0, 10), row]));
-        days.forEach((row, date) => {
+        const days = new Map();
+        rowsFrom(attendanceResponse.value).forEach((row) => {
+          const date = String(highlightRead(row, "attendanceDate", "date") || "").slice(0, 10);
+          if (!date) return;
+          if (!days.has(date)) days.set(date, { morning: null, afternoon: null, fullDay: null, other: [] });
+          const day = days.get(date);
+          const explicitMorning = highlightRead(row, "morningStatus", "morningAttendanceStatus", "morningSessionStatus", "morning", "morningAttendance", "MorningStatus");
+          const explicitAfternoon = highlightRead(row, "afternoonStatus", "afternoonAttendanceStatus", "afternoonSessionStatus", "afternoon", "afternoonAttendance", "AfternoonStatus");
+          if (explicitMorning != null) day.morning = status(explicitMorning);
+          if (explicitAfternoon != null) day.afternoon = status(explicitAfternoon);
+          const rowStatus = status(highlightRead(row, "status", "attendanceStatus", "AttendanceStatus"));
+          const session = String(highlightRead(row, "sessionName", "SessionName", "session", "attendanceSession", "sessionType") || "").trim().toLowerCase();
+          const sessionId = String(highlightRead(row, "sessionId", "SessionId") ?? "");
+          if (session.includes("morning") || session === "am" || sessionId === "1") day.morning = rowStatus;
+          else if (session.includes("afternoon") || session === "pm" || sessionId === "2") day.afternoon = rowStatus;
+          else if (session.includes("full")) day.fullDay = rowStatus;
+          else if (rowStatus && rowStatus !== "—") day.other.push(rowStatus);
+        });
+        days.forEach((day, date) => {
           if (!date || date < monthStart || date > today) return;
-          const morning = status(highlightRead(row, "morningStatus", "morningAttendanceStatus", "morningSessionStatus", "morning", "morningAttendance", "MorningStatus"));
-          const afternoon = status(highlightRead(row, "afternoonStatus", "afternoonAttendanceStatus", "afternoonSessionStatus", "afternoon", "afternoonAttendance", "AfternoonStatus"));
-          if (morning === "Present" && afternoon === "Present") counts.present += 1;
-          else if (morning === "Absent" && afternoon === "Absent") counts.absent += 1;
-          else if ((morning === "Present" && afternoon === "Absent") || (morning === "Absent" && afternoon === "Present") || morning === "Half Day" || afternoon === "Half Day") counts.halfDay += 1;
+          if (day.fullDay === "Present" || (day.morning === "Present" && day.afternoon === "Present")) counts.present += 1;
+          else if (day.fullDay === "Absent" || (day.morning === "Absent" && day.afternoon === "Absent")) counts.absent += 1;
+          else if (
+            day.fullDay === "Half Day" ||
+            day.morning === "Half Day" ||
+            day.afternoon === "Half Day" ||
+            (day.morning && day.afternoon) ||
+            day.morning ||
+            day.afternoon
+          ) counts.halfDay += 1;
+          else if (day.other.includes("Present")) counts.present += 1;
+          else if (day.other.includes("Absent")) counts.absent += 1;
+          else if (day.other.includes("Half Day")) counts.halfDay += 1;
         });
         counts.days = counts.present + counts.absent + counts.halfDay;
         counts.percentage = counts.days ? Math.round((counts.present + counts.halfDay * .5) / counts.days * 100) : null;
@@ -386,7 +431,7 @@ function StudentDashboardHighlights({ student, upcomingExams, examsError, format
           <text x="60" y="59" textAnchor="middle" className="sp-chart-value">{attendance?.percentage != null ? `${attendance.percentage}%` : "—"}</text><text x="60" y="74" textAnchor="middle" className="sp-chart-label">ATTENDANCE</text>
         </svg><div className="sp-chart-legend">{segments.map(([label, count, color]) => <div key={label}><i style={{ background: color }} /><span>{label}</span><strong>{count}</strong></div>)}</div></div>
         <div className="sp-monthly-chart-counts">{[["Marked Days", attendance?.days || 0], ...segments.map(([label, count]) => [label, count])].map(([label, count]) => <div key={label}><span>{label}</span><strong>{count}</strong></div>)}</div>
-        {!attendance?.days && <p className="sp-highlight-empty">No complete attendance records for this month.</p>}
+        {!attendance?.days && <p className="sp-highlight-empty">No marked attendance records for this month.</p>}
       </>}
     </StudentCard>
     <StudentCard className="sp-upcoming-card" title={`Upcoming Holidays${!loading && !holidayError ? ` (${upcomingHolidays.length})` : ""}`} action={<Link className="sp-text-link" to="holidays">View All →</Link>}>
