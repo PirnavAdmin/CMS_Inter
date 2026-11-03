@@ -136,7 +136,7 @@ export default function StudentDashboard() {
       window.removeEventListener("focus", updateGreeting);
     };
   }, []);
-  const { profile, loading, error, activeAlerts = [], markAsRead, dismissNotification } = useStudentProfile() || {};
+  const { profile, loading, error, photoUrl, activeAlerts = [], markAsRead, dismissNotification } = useStudentProfile() || {};
   const [examinations, setExaminations] = useState([]);
   const [examsLoading, setExamsLoading] = useState(true);
   const [examsError, setExamsError] = useState("");
@@ -152,8 +152,10 @@ export default function StudentDashboard() {
   const [feeSummary, setFeeSummary] = useState(null);
   const [feeLoading, setFeeLoading] = useState(true);
   const [feeError, setFeeError] = useState("");
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const studentName = profile?.studentName || "Student";
   const initials = studentName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
+  const showPhoto = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
   useEffect(() => {
     let active = true;
     if (!profile?.studentId) {
@@ -276,7 +278,7 @@ export default function StudentDashboard() {
         </div>
       )}
       <section className="sp-student-strip">
-        <span className="sp-avatar is-large">{initials}</span>
+        <span className="sp-avatar is-large">{showPhoto ? <img src={photoUrl} alt="" onError={() => setFailedPhotoUrl(photoUrl)}/> : initials}</span>
         <div className="sp-student-name"><strong>{studentName}</strong><small>Admission No: <b>{profile?.admissionNo || "Not Assigned"}</b></small></div>
         {[
           ["Roll No", profile?.rollNo || "Not Assigned", FileText],
