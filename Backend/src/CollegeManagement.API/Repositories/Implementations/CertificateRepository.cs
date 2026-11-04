@@ -758,6 +758,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_RequestDate", requestDate, DbType.DateTime);
         parameters.Add("p_Remarks", request.Remarks?.Trim(), DbType.String);
         parameters.Add("p_CertificateNo", request.CertificateNo?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", request.CampusId, DbType.Int32);
 
         try
         {
@@ -801,6 +802,7 @@ public class CertificateRepository : ICertificateRepository
 
         var parameters = new DynamicParameters();
         parameters.Add("p_AdmissionNo", admissionNo?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", null, DbType.Int32);
 
         try
         {
@@ -920,6 +922,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_CertificateId", id, DbType.Int32);
         parameters.Add("p_NewStatus", status.Trim(), DbType.String);
         parameters.Add("p_IssuedBy", issuedBy?.Trim() ?? "Admin", DbType.String);
+        parameters.Add("p_CampusId", null, DbType.Int32);
 
         try
         {
@@ -1044,6 +1047,7 @@ public class CertificateRepository : ICertificateRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_CertificateId", id, DbType.Int32);
             parameters.Add("p_FeeClearanceRemarks", remarksAddition, DbType.String);
+            parameters.Add("p_CampusId", null, DbType.Int32);
 
             var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "sp_UpdateCertificateFeeClearance",
@@ -1079,6 +1083,7 @@ public class CertificateRepository : ICertificateRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_CertificateId", id, DbType.Int32);
             parameters.Add("p_FeeClearanceRemarks", remarksAddition, DbType.String);
+            parameters.Add("p_CampusId", null, DbType.Int32);
 
             var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                 "sp_UpdateCertificateFeeClearance",
@@ -1107,6 +1112,7 @@ public class CertificateRepository : ICertificateRepository
 
         var parameters = new DynamicParameters();
         parameters.Add("p_CertificateId", id, DbType.Int32);
+        parameters.Add("p_CampusId", null, DbType.Int32);
 
         try
         {
@@ -1138,6 +1144,7 @@ public class CertificateRepository : ICertificateRepository
 
         var parameters = new DynamicParameters();
         parameters.Add("p_CertificateId", id, DbType.Int32);
+        parameters.Add("p_CampusId", null, DbType.Int32);
 
         try
         {

@@ -1,3 +1,5 @@
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+
 const studentApiEndpoints = {
   facilityTransition: {
     history: (studentId) => `/api/v1/facility-transition/history/${encodeURIComponent(studentId)}`,
@@ -17,19 +19,21 @@ const studentApiEndpoints = {
     changePassword: "/api/v1/students/me/change-password",
   },
   examinations: {
-    list: "/api/v1/examinations",
-    getById: (examinationId) => `/api/v1/examinations/${encodeURIComponent(examinationId)}`,
-    schedules: (examinationId) => `/api/v1/examinations/${encodeURIComponent(examinationId)}/schedules`,
+    list: apiEndpoints.examinations.getAll,
+    getById: apiEndpoints.examinations.getById,
+    schedules: apiEndpoints.examinations.schedules,
   },
   attendance: {
-    search: "/api/v1/attendance/search",
-    dailySessions: "/api/v1/attendance/admin/students",
+    search: apiEndpoints.attendance.search,
+    dailyLogs: apiEndpoints.attendance.studentDailyLogs,
+    dailySessions: apiEndpoints.attendance.studentAdminDaily,
   },
   results: {
-    published: "/api/v1/students/me/results",
-    studentResult: "/api/v1/results/student-result",
-    studentMemo: (studentId) => `/api/v1/results/student/${encodeURIComponent(studentId)}/memo`,
-    studentMemoPdf: "/api/v1/results/students/memo",
+    published: apiEndpoints.results.studentPublished,
+    publishedMemo: apiEndpoints.results.publishedStudentMemo,
+    studentResult: apiEndpoints.results.studentResult,
+    studentMemo: (studentId) => apiEndpoints.results.memo(studentId),
+    studentMemoPdf: apiEndpoints.results.studentMemo,
   },
   certificates: {
     list: "/api/v1/certificates",
