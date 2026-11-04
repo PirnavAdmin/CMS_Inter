@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
     public interface IAcademicYearRepository
     {
         Task<IEnumerable<AcademicYear>> GetAllAsync();
-        Task<(IEnumerable<AcademicYear> Items, int TotalCount)> GetPagedAsync(string? search, bool? status, int pageNumber, int pageSize, int? campusId = null);
+        Task<(IEnumerable<AcademicYear> Items, int TotalCount)> GetPagedAsync(string? search, bool? status, int pageNumber, int pageSize, int? campusId = null, int? boardId = null);
         Task<IEnumerable<AcademicYear>> GetForExportAsync(string? search, bool? status, int? campusId = null);
         Task<AcademicYear?> GetByIdAsync(int id);
         Task AddAsync(AcademicYear academicYear);

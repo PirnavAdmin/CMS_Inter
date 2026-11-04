@@ -139,7 +139,20 @@ const getInitialProfileData = () => {
     if (key) {
       const saved = localStorage.getItem(key);
       if (saved) {
-        mergedUser = { ...mergedUser, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        mergedUser = {
+          ...mergedUser,
+          ...parsed,
+          ...(authUser?.department ? { department: authUser.department } : {}),
+          ...(authUser?.designation ? { designation: authUser.designation } : {}),
+          ...(authUser?.role ? { role: authUser.role } : {}),
+          ...(authUser?.employeeId ? { employeeId: authUser.employeeId } : {}),
+          ...(authUser?.campusId ? { campusId: authUser.campusId } : {}),
+          ...(authUser?.boardId ? { boardId: authUser.boardId } : {}),
+          ...(Array.isArray(authUser?.allocatedSubjects) && authUser.allocatedSubjects.length > 0
+            ? { allocatedSubjects: authUser.allocatedSubjects, subjects: authUser.allocatedSubjects }
+            : {}),
+        };
       }
     }
 
@@ -153,7 +166,19 @@ const getInitialProfileData = () => {
           parsedGeneric.email === mergedUser.email ||
           parsedGeneric.employeeId === mergedUser.employeeId
         ) {
-          mergedUser = { ...mergedUser, ...parsedGeneric };
+          mergedUser = {
+            ...mergedUser,
+            ...parsedGeneric,
+            ...(authUser?.department ? { department: authUser.department } : {}),
+            ...(authUser?.designation ? { designation: authUser.designation } : {}),
+            ...(authUser?.role ? { role: authUser.role } : {}),
+            ...(authUser?.employeeId ? { employeeId: authUser.employeeId } : {}),
+            ...(authUser?.campusId ? { campusId: authUser.campusId } : {}),
+            ...(authUser?.boardId ? { boardId: authUser.boardId } : {}),
+            ...(Array.isArray(authUser?.allocatedSubjects) && authUser.allocatedSubjects.length > 0
+              ? { allocatedSubjects: authUser.allocatedSubjects, subjects: authUser.allocatedSubjects }
+              : {}),
+          };
         }
       }
     } catch {}
@@ -262,69 +287,99 @@ export function FacultyProvider({ children }) {
     }));
 
     const staffId = authUser.staffId || authUser.id;
-    if (staffId) {
-      staffApi
-        .getStaffById(staffId)
-        .then((res) => {
-          const apiStaff = res?.data?.data || res?.data;
-          if (apiStaff && typeof apiStaff === "object") {
-            setProfileData((current) => {
-              const updated = { ...current, ...apiStaff };
-              const staffKey = getStaffStorageKey(updated);
-              const cachedStaffPhoto = staffKey ? localStorage.getItem(`${staffKey}_photo`) : null;
-              const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedStaffPhoto;
-
-              // Prioritize backend persistent static file path from DB, avoiding 401 controller routes
-              const serverPhoto =
-                (apiStaff.photoPath && String(apiStaff.photoPath).trim()) ||
-                (apiStaff.profilePhoto && String(apiStaff.profilePhoto).trim().startsWith("/") ? apiStaff.profilePhoto : null) ||
-                (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null);
-
-              const activePhoto =
-                (savedPhoto && savedPhoto.startsWith("data:"))
-                  ? savedPhoto
-                  : (serverPhoto || current.photoUrl || savedPhoto || (apiStaff.photoPath ? apiStaff.photoPath : ""));
-
-              if (activePhoto) {
-                updated.photoUrl = activePhoto;
-                try {
-                  localStorage.setItem("staff_profile_photo", activePhoto);
-                  if (staffKey) {
-                    localStorage.setItem(`${staffKey}_photo`, activePhoto);
-                  }
-                } catch {}
-              }
-              if (apiStaff.firstName || apiStaff.lastName) {
-                updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
-              }
-
-              const pStatus = apiStaff.profileStatus || updated.profileStatus;
-              const compPct = Number(apiStaff.profileCompletionPercentage || updated.profileCompletion || updated.profileCompletionPercentage || 0);
-              const isCompleted =
-                String(pStatus).toLowerCase() === "completed" ||
-                String(pStatus).toLowerCase() === "approved" ||
-                String(pStatus).toLowerCase() === "submitted" ||
-                compPct >= 50;
-              if (isCompleted) {
-                try {
-                  const currentAuth = getAuthUser();
-                  if (currentAuth) {
-                    const upAuth = { ...currentAuth, profileStatus: pStatus, isOnboarded: true, profileCompletionPercentage: compPct };
-                    if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(upAuth));
-                    if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(upAuth));
-                    if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(upAuth));
-                  }
-                } catch {}
-              }
-
-              return updated;
-            });
-          }
-        })
-        .catch((err) => {
-          console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
+    const fetchStaffProfile = () => {
+      if (staffId && !isNaN(Number(staffId))) {
+        return staffApi.getStaffById(staffId).catch((err) => {
+          if (authUser.employeeId) return staffApi.getStaffByEmployeeId(authUser.employeeId);
+          throw err;
         });
-    }
+      }
+      if (authUser.employeeId) {
+        return staffApi.getStaffByEmployeeId(authUser.employeeId);
+      }
+      return Promise.resolve(null);
+    };
+
+    fetchStaffProfile()
+      .then((res) => {
+        const apiStaff = res?.data?.data || res?.data;
+        if (apiStaff && typeof apiStaff === "object") {
+          setProfileData((current) => {
+            const updated = {
+              ...current,
+              ...apiStaff,
+              department: apiStaff.department || apiStaff.departmentName || current.department,
+              designation: apiStaff.designation || apiStaff.designationName || current.designation,
+              allocatedSubjects: apiStaff.allocatedSubjects || apiStaff.subjects || current.allocatedSubjects || [],
+              subjects: apiStaff.allocatedSubjects || apiStaff.subjects || current.subjects || [],
+            };
+            const staffKey = getStaffStorageKey(updated);
+            const cachedStaffPhoto = staffKey ? localStorage.getItem(`${staffKey}_photo`) : null;
+            const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedStaffPhoto;
+
+            // Prioritize backend persistent static file path from DB, avoiding 401 controller routes
+            const serverPhoto =
+              (apiStaff.photoPath && String(apiStaff.photoPath).trim()) ||
+              (apiStaff.profilePhoto && String(apiStaff.profilePhoto).trim().startsWith("/") ? apiStaff.profilePhoto : null) ||
+              (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null);
+
+            const activePhoto =
+              (savedPhoto && savedPhoto.startsWith("data:"))
+                ? savedPhoto
+                : (serverPhoto || current.photoUrl || savedPhoto || (apiStaff.photoPath ? apiStaff.photoPath : ""));
+
+            if (activePhoto) {
+              updated.photoUrl = activePhoto;
+              try {
+                localStorage.setItem("staff_profile_photo", activePhoto);
+                if (staffKey) {
+                  localStorage.setItem(`${staffKey}_photo`, activePhoto);
+                }
+              } catch {}
+            }
+            if (apiStaff.firstName || apiStaff.lastName) {
+              updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
+            }
+
+            const pStatus = apiStaff.profileStatus || updated.profileStatus;
+            const compPct = Number(apiStaff.profileCompletionPercentage || updated.profileCompletion || updated.profileCompletionPercentage || 0);
+            const isCompleted =
+              String(pStatus).toLowerCase() === "completed" ||
+              String(pStatus).toLowerCase() === "approved" ||
+              String(pStatus).toLowerCase() === "submitted" ||
+              compPct >= 50;
+
+            // Immediately persist updated staff record to local storage so refreshes and reloads stay synchronized
+            persistStaffProfile(updated);
+
+            try {
+              const currentAuth = getAuthUser();
+              if (currentAuth) {
+                const upAuth = {
+                  ...currentAuth,
+                  department: updated.department,
+                  designation: updated.designation,
+                  allocatedSubjects: updated.allocatedSubjects,
+                  subjects: updated.subjects,
+                  campusId: apiStaff.campusId || currentAuth.campusId,
+                  boardId: apiStaff.boardId || currentAuth.boardId,
+                  profileStatus: pStatus,
+                  isOnboarded: isCompleted || currentAuth.isOnboarded,
+                  profileCompletionPercentage: compPct,
+                };
+                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(upAuth));
+                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(upAuth));
+                if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(upAuth));
+              }
+            } catch {}
+
+            return updated;
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
+      });
   }, []);
 
   // Sync profile updates across tabs and storage events

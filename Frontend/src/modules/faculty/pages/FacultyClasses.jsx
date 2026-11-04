@@ -240,8 +240,8 @@ export default function FacultyClasses() {
   }, [workload, timetableSlots]);
 
   const departmentName = useMemo(() => {
-    return workload?.department || profileData?.department || authUser.department || "Chemistry";
-  }, [workload, profileData, authUser]);
+    return profileData?.department || workload?.department || authUser.department || "";
+  }, [profileData, workload, authUser]);
 
   return (
     <div className="faculty-classes-container">
