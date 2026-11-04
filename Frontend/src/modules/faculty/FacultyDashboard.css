@@ -89,28 +89,28 @@
   height: calc(var(--cms-header-height, 68px) - 16px);
   object-fit: contain;
   object-position: center;
-  filter: brightness(1.08) contrast(1.18) saturate(1.12) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+  filter: var(--cms-brand-logo-filter, brightness(1.08) contrast(1.18) saturate(1.12) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25))) !important;
 }
 
 /* ---------- Staff Sidebar Navigation (Exact Admin Replica) ---------- */
 .faculty-shell .cms-sidebar {
-  background: linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%) !important;
-  border-right: 1px solid rgba(91, 111, 45, 0.38) !important;
+  background: var(--cms-sidebar-surface-bg, linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%)) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border, rgba(91, 111, 45, 0.38)) !important;
 }
 
 [data-theme="dark"] .faculty-shell .cms-sidebar {
-  background: linear-gradient(180deg, #252d21 0%, #20271d 100%) !important;
-  border-right: 1px solid #3a4534 !important;
+  background: var(--cms-sidebar-surface-bg, linear-gradient(180deg, #252d21 0%, #20271d 100%)) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border, #3a4534) !important;
 }
 
 .faculty-shell .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #fffdf5 0%, #f3f2dc 48%, #dbe5b8 100%) !important;
-  border-bottom: 1px solid rgba(91, 111, 45, 0.35) !important;
+  background: var(--cms-brand-surface-bg, var(--cms-surface)) !important;
+  border-bottom: 1px solid var(--cms-nav-chrome-border, rgba(91, 111, 45, 0.35)) !important;
 }
 
 [data-theme="dark"] .faculty-shell .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #263221 0%, #1f2b1d 52%, #182318 100%) !important;
-  border-bottom-color: rgba(187, 204, 148, 0.24) !important;
+  background: var(--cms-brand-surface-bg, var(--cms-surface)) !important;
+  border-bottom-color: var(--cms-nav-chrome-border, rgba(187, 204, 148, 0.24)) !important;
 }
 
 .faculty-shell .cms-sidebar .cms-nav-group {

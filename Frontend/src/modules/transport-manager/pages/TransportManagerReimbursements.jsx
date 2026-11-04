@@ -29,7 +29,7 @@ import {
   fetchMyClaims as apiFetchMyClaims,
   submitClaim as apiSubmitClaim,
 } from "@/services/reimbursementService.js";
-import "@/modules/faculty/pages/FacultyReimbursement.css";
+import "@/modules/faculty/styles/FacultyReimbursement.css";
 
 const PAGE_SIZE = 6;
 
@@ -904,13 +904,12 @@ export default function TransportManagerReimbursements() {
                       <td>{claim.paymentMethod || "Bank Transfer"}</td>
                       <td>
                         <span
-                          className={`reimb-badge ${
-                            String(claim.status).toLowerCase().includes("approve")
+                          className={`reimb-badge ${String(claim.status).toLowerCase().includes("approve")
                               ? "approved"
                               : String(claim.status).toLowerCase().includes("reject")
-                              ? "rejected"
-                              : "pending"
-                          }`}
+                                ? "rejected"
+                                : "pending"
+                            }`}
                         >
                           {claim.status}
                         </span>
@@ -977,13 +976,12 @@ export default function TransportManagerReimbursements() {
                 <dt style={{ fontSize: 12, color: "var(--cms-muted)", fontWeight: 500 }}>Status</dt>
                 <dd style={{ margin: "2px 0 0" }}>
                   <span
-                    className={`reimb-badge ${
-                      String(selectedClaim.status).toLowerCase().includes("approve")
+                    className={`reimb-badge ${String(selectedClaim.status).toLowerCase().includes("approve")
                         ? "approved"
                         : String(selectedClaim.status).toLowerCase().includes("reject")
-                        ? "rejected"
-                        : "pending"
-                    }`}
+                          ? "rejected"
+                          : "pending"
+                      }`}
                   >
                     {selectedClaim.status}
                   </span>

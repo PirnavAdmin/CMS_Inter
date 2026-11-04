@@ -16,6 +16,11 @@ public class FeeRepository : IFeeRepository
 {
     private readonly AppDbContext _db;
     private readonly CollegeManagement.API.Services.Interfaces.INumberSeriesService _numberSeriesService;
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
 
     public FeeRepository(AppDbContext db, CollegeManagement.API.Services.Interfaces.INumberSeriesService numberSeriesService)
     {
@@ -106,7 +111,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest request)
     {
         var c = Connection();
-        string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>());
+        string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>(), _jsonOptions);
 
         using var multi = await c.QueryMultipleAsync(
             "sp_FeeStructure_Create",
@@ -128,9 +133,17 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
 
         var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
-        if (structure != null && !multi.IsConsumed)
+        if (structure != null)
         {
-            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+            if (!multi.IsConsumed)
+            {
+                structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+            }
+            if (structure.Items == null || structure.Items.Count == 0)
+            {
+                var full = await GetFeeStructureByIdAsync(structure.FeeStructureId);
+                if (full != null) return full;
+            }
         }
         return structure;
     }

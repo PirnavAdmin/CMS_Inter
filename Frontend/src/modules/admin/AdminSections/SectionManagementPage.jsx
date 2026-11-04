@@ -178,10 +178,22 @@ const normalizeProgram = (item) => ({
 const normalizeTeacher = (item) => ({
   ...item,
   id: normalizeId(item.staffId ?? item.facultyId ?? item.id ?? item.userId ?? (Number.isFinite(Number(item.employeeId)) ? item.employeeId : "")),
-  name: getFirstNonEmptyString(item.staffName, item.facultyName, item.fullName, item.name, item.employeeName),
+  name: getFirstNonEmptyString(
+    item.staffName,
+    item.facultyName,
+    item.fullName,
+    item.name,
+    item.classTeacherName,
+    item.inchargeName,
+    (item.firstName || item.lastName) ? `${item.firstName || ""} ${item.lastName || ""}`.trim() : "",
+    item.employeeName
+  ),
   employeeId: getFirstNonEmptyString(item.employeeId, item.employeeCode, item.facultyEmployeeId),
   isActive: (item.isActive !== undefined || item.status !== undefined) ? isActiveRecord(item, true) : true,
   staffType: getFirstNonEmptyString(item.staffType, item.type) || "Teaching",
+  campusId: normalizeId(item.campusId ?? item.CampusId ?? item.campus?.campusId ?? item.campus?.id),
+  boardId: normalizeId(item.boardId ?? item.BoardId ?? item.board?.boardId ?? item.board?.id),
+  boardCode: getFirstNonEmptyString(item.boardCode, item.BoardCode, item.board?.boardCode, item.board?.code),
 });
 
 const normalizeRoom = (item) => ({
@@ -1113,6 +1125,45 @@ export default function SectionManagementPage() {
     }
   }, [effectiveCampusId, loadStudentCounts]);
 
+  const loadTeachers = useCallback(async (targetCampusId = effectiveCampusId, targetBoard = effectiveNavbarBoard) => {
+    try {
+      const campusId = targetCampusId ? Number(targetCampusId) : undefined;
+      const bId = targetBoard?.id || targetBoard?.boardId;
+      const boardId = bId ? Number(bId) : undefined;
+      const boardCode = targetBoard?.code || targetBoard?.boardCode || undefined;
+
+      const params = {
+        PageNumber: 1,
+        PageSize: 100,
+        StaffType: "Teaching",
+        ...(campusId ? { CampusId: campusId } : {}),
+        ...(boardId ? { BoardId: boardId } : {}),
+        ...(boardCode ? { BoardCode: boardCode } : {}),
+      };
+
+      const response = await apiClient.get("/api/v1/staff", {
+        params,
+        ...(campusId ? { headers: { "X-Campus-Id": String(campusId) } } : {}),
+      });
+
+      const staffData = unwrapList(response).map(normalizeTeacher);
+      const teachingStaff = staffData.filter(
+        (item) => item.isActive && String(item.staffType || "Teaching").toLowerCase() === "teaching"
+      );
+      const campusFiltered = teachingStaff.filter((item) => {
+        if (!item.id) return false;
+        if (campusId && item.campusId && String(item.campusId) !== String(campusId)) return false;
+        return true;
+      });
+
+      setTeachersList(campusFiltered);
+      return campusFiltered;
+    } catch (err) {
+      console.warn("Could not load teachers:", err);
+      return [];
+    }
+  }, [effectiveCampusId, effectiveNavbarBoard]);
+
   useEffect(() => {
     let active = true;
     const boardRequests = boardRequestRef;
@@ -1124,7 +1175,17 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.academicYears.active),
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
-      apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
+      apiClient.get("/api/v1/staff", {
+        params: {
+          PageNumber: 1,
+          PageSize: 100,
+          StaffType: "Teaching",
+          ...(effectiveCampusId ? { CampusId: Number(effectiveCampusId) } : {}),
+          ...(effectiveNavbarBoard?.id ? { BoardId: Number(effectiveNavbarBoard.id) } : {}),
+          ...(effectiveNavbarBoard?.code || effectiveNavbarBoard?.boardCode ? { BoardCode: effectiveNavbarBoard.code || effectiveNavbarBoard.boardCode } : {}),
+        },
+        ...(effectiveCampusId ? { headers: { "X-Campus-Id": String(effectiveCampusId) } } : {}),
+      }),
       apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
@@ -1187,7 +1248,13 @@ export default function SectionManagementPage() {
         const teachingStaff = staffData.filter(
           (item) => item.isActive && String(item.staffType || "Teaching").toLowerCase() === "teaching"
         );
-        setTeachersList(teachingStaff.filter((item) => item.id));
+        const campusId = effectiveCampusId ? Number(effectiveCampusId) : undefined;
+        const campusFiltered = teachingStaff.filter((item) => {
+          if (!item.id) return false;
+          if (campusId && item.campusId && String(item.campusId) !== String(campusId)) return false;
+          return true;
+        });
+        setTeachersList(campusFiltered);
       }
       if (studentsResult?.status === "fulfilled") {
         try {
@@ -1215,7 +1282,8 @@ export default function SectionManagementPage() {
     if (initialLoading) return;
     loadRooms(effectiveCampusId);
     loadSections(effectiveCampusId);
-  }, [effectiveCampusId, loadRooms, loadSections, initialLoading]);
+    loadTeachers(effectiveCampusId, effectiveNavbarBoard);
+  }, [effectiveCampusId, effectiveNavbarBoard, loadRooms, loadSections, loadTeachers, initialLoading]);
 
   const loadPrograms = useCallback(async (groupId, programId = "") => {
     const requestId = ++programRequestRef.current;
@@ -1384,23 +1452,45 @@ export default function SectionManagementPage() {
     (!isSectionActive(row) || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
       .some((section) => isSectionActive(section) && normalizeId(section.roomId) === normalizeId(room.id))))
   );
-  const teacherAllowed = (teacher, row, otherRows = []) => isTeachingStaff(teacher) &&
-    (!isSectionActive(row) || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
-      .some((section) => isSectionActive(section) && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
+  const teacherAllowed = (teacher, row, otherRows = []) => {
+    if (!teacher || !isTeachingStaff(teacher)) return false;
+    if (effectiveCampusId && teacher.campusId && normalizeId(teacher.campusId) !== effectiveCampusId) return false;
+    if (row?.classTeacherId && normalizeId(teacher.id) === normalizeId(row.classTeacherId)) return true;
+    if (!isSectionActive(row)) return true;
+    const currentEditId = selectedSectionId;
+    const otherSections = sections.filter((section) => !currentEditId || normalizeId(section.id) !== normalizeId(currentEditId));
+    return ![...otherSections, ...otherRows].some((section) => isSectionActive(section) && normalizeId(section.classTeacherId) === normalizeId(teacher.id));
+  };
   const roomOptionsFor = (row, others = []) => campusRooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: room.roomNo + " (Cap: " + room.capacity + ")" }));
   const teacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
-    .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.employeeId ? teacher.name + " (" + teacher.employeeId + ")" : teacher.name }));
-  const previewOption = (options, id, label) => sectionFormMode === "preview" && id && !options.some((item) => item.value === normalizeId(id))
-    ? [{ value: normalizeId(id), label }, ...options] : options;
-  const previewSection = sections.find((item) => normalizeId(item.id) === normalizeId(selectedSectionId));
-  const availableRooms = previewOption(roomOptionsFor(sectionForm), sectionForm.roomId, previewSection?.roomNo || "Current Room");
-  const availableTeachers = previewOption(teacherOptionsFor(sectionForm), sectionForm.classTeacherId, previewSection?.teacher || "Current Incharge");
+    .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.employeeId ? (teacher.name ? `${teacher.name} (${teacher.employeeId})` : teacher.employeeId) : (teacher.name || "Faculty") }));
+  const previewOption = (options, id, label) => id && !options.some((item) => normalizeId(item.value) === normalizeId(id))
+    ? [{ value: normalizeId(id), label: label || "Current Option" }, ...options] : options;
+  const currentSectionRecord = sections.find((item) => normalizeId(item.id) === normalizeId(selectedSectionId));
+  const currentAssignedTeacher = teachersById.get(normalizeId(sectionForm.classTeacherId));
+  const currentAssignedTeacherLabel = currentAssignedTeacher?.name
+    ? (currentAssignedTeacher.employeeId ? `${currentAssignedTeacher.name} (${currentAssignedTeacher.employeeId})` : currentAssignedTeacher.name)
+    : (currentSectionRecord?.teacher
+        ? (currentSectionRecord.facultyEmployeeId ? `${currentSectionRecord.teacher} (${currentSectionRecord.facultyEmployeeId})` : currentSectionRecord.teacher)
+        : (currentSectionRecord?.incharge || currentSectionRecord?.classTeacherName || "Current Incharge"));
+  const availableRooms = previewOption(roomOptionsFor(sectionForm), sectionForm.roomId, currentSectionRecord?.roomNo || "Current Room");
+  const availableTeachers = previewOption(teacherOptionsFor(sectionForm), sectionForm.classTeacherId, currentAssignedTeacherLabel);
 
   const bulkRoomOptionsFor = (row, others = []) => campusRooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: String(room.roomNo) }));
-  const bulkTeacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
-    .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.name }));
+  const bulkTeacherOptionsFor = (row, others = []) => {
+    const options = teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
+      .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.name || teacher.employeeId || "Faculty" }));
+    if (row?.classTeacherId && !options.some((item) => normalizeId(item.value) === normalizeId(row.classTeacherId))) {
+      const assignedTeacher = teachersById.get(normalizeId(row.classTeacherId));
+      options.unshift({
+        value: normalizeId(row.classTeacherId),
+        label: assignedTeacher?.name || row.teacher || "Current Incharge",
+      });
+    }
+    return options;
+  };
   const getAvailableRoomsForBulkRow = (index) => bulkRoomOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
   const getAvailableTeachersForBulkRow = (index) => bulkTeacherOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
 

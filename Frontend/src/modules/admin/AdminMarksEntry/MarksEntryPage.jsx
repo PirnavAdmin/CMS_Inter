@@ -179,22 +179,33 @@ const calculateStudentSubjectResult = (row, workspace) => {
 };
 
 const isObjectiveExamination = (schedule, exam) => {
-  // 1. Direct examMode check on schedule or exam
+  // 1. Direct category / examCategory check (Primary Authority)
+  const cat = String(
+    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
+  ).trim().toUpperCase();
+  if (cat === "OBJECTIVE") return true;
+  if (cat === "REGULAR") return false;
+
+  // 2. Direct examMode check on schedule or exam
   const schedExamMode = String(schedule?.examMode || "").trim().toUpperCase();
   if (schedExamMode === "OBJECTIVE") return true;
+  if (schedExamMode === "REGULAR") return false;
 
   const examExamMode = String(exam?.examMode || "").trim().toUpperCase();
   if (examExamMode === "OBJECTIVE") return true;
+  if (examExamMode === "REGULAR") return false;
 
-  // 2. Schedule mode check on schedule
+  // 3. Schedule mode check on schedule
   const schedMode = String(schedule?.scheduleMode || schedule?.mode || "").trim().toUpperCase();
-  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(schedMode)) return true;
+  if (["COMBINED_OBJECTIVE", "OBJECTIVE"].includes(schedMode)) return true;
+  if (schedMode === "SUBJECT_WISE" || schedMode === "REGULAR") return false;
 
-  // 3. Schedule mode check on exam
+  // 4. Schedule mode check on exam
   const examSchedMode = String(exam?.scheduleMode || exam?.mode || "").trim().toUpperCase();
-  if (["PATTERN_WISE", "COMBINED", "COMBINED_OBJECTIVE", "OBJECTIVE"].includes(examSchedMode)) return true;
+  if (["COMBINED_OBJECTIVE", "OBJECTIVE"].includes(examSchedMode)) return true;
+  if (examSchedMode === "SUBJECT_WISE" || examSchedMode === "REGULAR") return false;
 
-  // 4. Pattern check (e.g. mains, neet, jee, bitsat, cuet, combined, objective)
+  // 5. Pattern check (e.g. mains, neet, jee, bitsat, cuet, combined, objective)
   const patternStr = String(
     exam?.patternName ||
     exam?.pattern ||
@@ -204,32 +215,21 @@ const isObjectiveExamination = (schedule, exam) => {
     ""
   ).trim().toLowerCase();
 
-  if (
-    patternStr &&
-    !["regular", "regular pattern", "regular_academic", "1", "default", "standard"].includes(patternStr)
-  ) {
+  if (patternStr) {
+    if (patternStr.includes("regular")) return false;
     if (
       patternStr.includes("objective") ||
       patternStr.includes("mains") ||
       patternStr.includes("neet") ||
       patternStr.includes("jee") ||
       patternStr.includes("bitsat") ||
-      patternStr.includes("combined") ||
-      patternStr.includes("pattern")
+      patternStr.includes("cuet")
     ) {
       return true;
     }
   }
 
-  // 5. Category check
-  const cat = String(
-    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
-  ).trim().toLowerCase();
-  if (cat === "objective" || cat === "combined" || cat.includes("objective")) return true;
-
-  if (schedMode === "SUBJECT_WISE" || schedMode === "REGULAR" || examSchedMode === "SUBJECT_WISE" || examSchedMode === "REGULAR") {
-    return false;
-  }
+  if (cat.includes("OBJECTIVE")) return true;
 
   return false;
 };
@@ -493,49 +493,6 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
   if (!sectionId) return [];
 
   const studentMap = new Map();
-  const approvedAdmissionMap = new Map();
-
-  // 1. Fetch Authoritative Student Admissions to verify Approved status & exact admissionDate
-  try {
-    const admParams = {
-      campusId: campusId ? Number(campusId) : undefined,
-      boardId: filters.board ? Number(filters.board) : undefined,
-      academicYearId: filters.year ? Number(filters.year) : undefined,
-      ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
-      ...(filters.group ? { groupId: Number(filters.group) } : {}),
-      ...(filters.program ? { programId: Number(filters.program) } : {}),
-      ...(sectionId ? { sectionId: Number(sectionId) || sectionId } : {}),
-    };
-    const admRes = await apiClient.get(apiEndpoints.studentAdmissions?.getAll || "/api/v1/student-admissions", {
-      params: admParams,
-      skipGlobalLoader: true,
-    });
-    const admPayload = admRes?.data?.data ?? admRes?.data?.items ?? admRes?.data ?? [];
-    const admList = Array.isArray(admPayload) ? admPayload : (admPayload?.items || admPayload?.data || []);
-
-    admList.forEach((adm) => {
-      const status = String(adm.status ?? adm.Status ?? adm.admissionStatus ?? adm.AdmissionStatus ?? "").trim().toLowerCase();
-      const isAppr = adm.isApproved ?? adm.IsApproved;
-      const isRej = adm.isRejected ?? adm.IsRejected;
-      const isAct = adm.isActive ?? adm.IsActive;
-
-      const isRejected = isRej === true || isRej === 1 || ["rejected", "inactive", "cancelled", "denied"].includes(status);
-      const isInactive = isAct === false || isAct === 0;
-      const isApproved = status === "approved" || isAppr === true || isAppr === 1 || (!status && !isRejected);
-
-      if (isRejected || isInactive || !isApproved) return;
-
-      const admSecId = normalizeId(adm.sectionId ?? adm.SectionId ?? adm.allocatedSectionId ?? adm.AllocatedSectionId);
-      if (admSecId && sectionId && admSecId !== normalizeId(sectionId)) return;
-
-      const admId = normalizeId(adm.studentId ?? adm.id);
-      const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
-      if (admId) approvedAdmissionMap.set(admId, adm);
-      if (admNo) approvedAdmissionMap.set(admNo, adm);
-    });
-  } catch (admErr) {
-    console.warn("Notice: could not query student admissions endpoint in MarksEntryPage:", admErr);
-  }
 
   const addRecords = (records) => {
     (records || []).forEach((s) => {
@@ -543,22 +500,14 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
       if (!sId) return;
       if (s.isActive === false || String(s.status || "").toLowerCase() === "inactive") return;
       const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? "").trim();
-
-      // If admissions endpoint provided approved admissions, ensure student is among approved admissions
-      let adm = null;
-      if (approvedAdmissionMap.size > 0) {
-        adm = approvedAdmissionMap.get(sId) || (admNo ? approvedAdmissionMap.get(admNo) : null);
-        if (!adm) return; // Exclude unapproved / ghost student records
-      }
-
-      const admissionDate = s.admissionDate || s.dateOfAdmission || adm?.admissionDate || adm?.AdmissionDate || s.allocatedDate || null;
+      const admissionDate = s.admissionDate || s.dateOfAdmission || s.allocatedDate || null;
 
       if (!studentMap.has(sId)) {
         studentMap.set(sId, {
           studentId: sId,
-          admissionNo: admNo || adm?.admissionNo || "",
-          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? adm?.rollNo ?? adm?.rollNumber ?? "").trim(),
-          studentName: s.studentName ?? s.fullName ?? s.name ?? adm?.studentName ?? "Student",
+          admissionNo: admNo,
+          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? "").trim(),
+          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
           isActive: true,
           admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
           allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || admissionDate || null,
@@ -598,62 +547,7 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
     console.warn("Notice: could not query students endpoint:", err);
   }
 
-  // Resilient fallback: query students by sectionId if multi-param filter returned 0
-  if (studentMap.size === 0 && sectionId) {
-    try {
-      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
-        params: { sectionId: Number(sectionId) || sectionId, pageSize: 100 },
-        skipGlobalLoader: true,
-      });
-      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
-      const batch = Array.isArray(payload)
-        ? payload
-        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
-      addRecords(batch);
-    } catch (err) {
-      console.warn("Fallback student query failed:", err);
-    }
-  }
-
-  // Fallback directly from approved admissions if student query was empty
-  if (studentMap.size === 0 && approvedAdmissionMap.size > 0) {
-    approvedAdmissionMap.forEach((adm, key) => {
-      const sId = normalizeId(adm.studentId ?? adm.id ?? key);
-      if (!sId || studentMap.has(sId)) return;
-      const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
-      studentMap.set(sId, {
-        studentId: sId,
-        admissionNo: admNo,
-        rollNo: String(adm.rollNo ?? adm.rollNumber ?? "").trim(),
-        studentName: adm.studentName ?? adm.fullName ?? adm.name ?? "Student",
-        isActive: true,
-        admissionDate: adm.admissionDate ? String(adm.admissionDate).slice(0, 10) : null,
-        allocatedDate: adm.allocatedDate || adm.admissionDate || null,
-      });
-    });
-  }
-
-  // Fallback to Attendance Student Roster (accessible by Faculty & Staff roles without 403 Forbidden)
-  if (studentMap.size === 0) {
-    try {
-      const attRes = await apiClient.get("/api/v1/attendance/admin/students", {
-        params: {
-          sectionId: Number(sectionId) || sectionId,
-          ...(filters.board ? { boardId: Number(filters.board) } : {}),
-          ...(filters.year ? { academicYearId: Number(filters.year) } : {}),
-          ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
-          ...(filters.group ? { groupId: Number(filters.group) } : {}),
-        },
-        skipGlobalLoader: true,
-      });
-      const rawAtt = unwrapRecords(attRes);
-      if (rawAtt.length > 0) {
-        addRecords(rawAtt);
-      }
-    } catch (attErr) {
-      console.warn("Notice: could not query attendance student roster fallback:", attErr);
-    }
-  }
+  // Authoritative query only - no unconstrained fallbacks that introduce mismatched students
 
   const list = Array.from(studentMap.values());
   list.sort((a, b) => {
@@ -700,51 +594,40 @@ const reconcileRosterWithMarks = (
   // Filter roster
   let effectiveRoster = [];
 
-  if (isFrozen) {
-    if (marksMap.size > 0) {
-      // FROZEN EVALUATION: Strictly show ONLY students who have marks in the submitted/approved exam (no new joinees)
-      effectiveRoster = (roster || []).filter((student) => {
-        const sId = normalizeId(student.studentId ?? student.id);
-        return marksMap.has(sId);
-      });
-
-      // If there are marks for students not currently in the section roster (e.g. transferred after exam), ensure they appear
-      marksMap.forEach((mark, sId) => {
-        if (!effectiveRoster.some((s) => normalizeId(s.studentId ?? s.id) === sId)) {
-          effectiveRoster.push({
-          studentId: sId,
-            admissionNo: mark.admissionNo || "",
-            rollNo: String(mark.rollNo || ""),
-            studentName: mark.studentName || "Student",
-            isActive: true,
-          });
-        }
-      });
-    } else {
-      effectiveRoster = (roster || []).filter((student) => {
-        const sId = normalizeId(student.studentId ?? student.id);
-        return existingMap.has(sId);
-      });
-    }
-  } else {
-    // DRAFT / IN-PROGRESS EVALUATION:
-    // A student is eligible only for exams held on or after their joining/admission date
+  if (marksMap.size > 0) {
+    // When marks exist: strictly show ONLY students who have marks in this examination/subject
     effectiveRoster = (roster || []).filter((student) => {
       const sId = normalizeId(student.studentId ?? student.id);
-      // If student already has a mark entered, keep them
-      if (marksMap.has(sId) || (existingMap.has(sId) && (existingMap.get(sId).internal !== "" || existingMap.get(sId).theory !== "" || existingMap.get(sId).absent))) {
-        return true;
+      return marksMap.has(sId);
+    });
+
+    // If there are marks for students not in raw roster (e.g. transferred after exam), ensure they appear
+    marksMap.forEach((mark, sId) => {
+      if (!effectiveRoster.some((s) => normalizeId(s.studentId ?? s.id) === sId)) {
+        effectiveRoster.push({
+          studentId: sId,
+          admissionNo: mark.admissionNo || "",
+          rollNo: String(mark.rollNo || ""),
+          studentName: mark.studentName || "Student",
+          isActive: true,
+        });
       }
-      // Check joining / admission date vs exam date
+    });
+  } else if (isFrozen) {
+    effectiveRoster = (roster || []).filter((student) => {
+      const sId = normalizeId(student.studentId ?? student.id);
+      return existingMap.has(sId);
+    });
+  } else {
+    // Fresh un-evaluated exam: filter roster by admission date vs exam date
+    effectiveRoster = (roster || []).filter((student) => {
+      const sId = normalizeId(student.studentId ?? student.id);
       const studentJoinDate = student.admissionDate || student.allocatedDate || student.dateOfAdmission || student.joiningDate;
       if (targetExamDate && studentJoinDate) {
         const adm = String(studentJoinDate).slice(0, 10);
         const exm = String(targetExamDate).slice(0, 10);
         if (/^\d{4}-\d{2}-\d{2}$/.test(adm) && /^\d{4}-\d{2}-\d{2}$/.test(exm) && !adm.startsWith("0001-")) {
-          if (adm > exm) {
-            // Student joined after the exam; not eligible
-            return false;
-          }
+          if (adm > exm) return false;
         }
       }
       return true;
@@ -1191,7 +1074,12 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             const gid = normalizeId(g.groupId ?? g.id);
             const code = g.groupCode ?? g.code ?? "";
             const gName = g.groupName ?? g.name ?? (code ? `Group ${code}` : `Group ${gid}`);
-            const displayName = code && code !== gName ? `${gName} (${code})` : gName;
+            let cleanGName = gName;
+            if (code) {
+              cleanGName = cleanGName.replace(new RegExp(`\\s*\\(${code}\\)`, "i"), "").trim();
+            }
+            cleanGName = cleanGName.replace(/\s*\([A-Z0-9\-_]+\)$/i, "").trim();
+            const displayName = cleanGName;
             return {
               ...g,
               id: gid,
@@ -4828,6 +4716,36 @@ function Entry({
   const blocked = !workspace?.rows?.length || Boolean(validateMarksConfiguration(workspace));
   const lockedText = locked ? `This ${workspace.status.toLowerCase()} subject is read-only.` : "";
 
+  const bulkActionButtons = (
+    <div className="cms-bulk-actions">
+      <button
+        type="button"
+        className="cms-btn cms-btn-secondary cms-btn-bulk-import"
+        disabled={Boolean(processing) || !subjectId || locked || loadingWorkspace}
+        onClick={onBulkImport}
+        title="Import student marks from an Excel (.xlsx, .xls) file"
+      >
+        Bulk Import
+      </button>
+      <button
+        type="button"
+        className="cms-btn cms-btn-secondary"
+        disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status) || loadingWorkspace}
+        onClick={onSave}
+      >
+        {processing === "SAVE_DRAFT" ? "Saving..." : "Save Draft"}
+      </button>
+      <button
+        type="button"
+        className="cms-btn cms-btn-primary"
+        disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status) || loadingWorkspace}
+        onClick={onSubmit}
+      >
+        {processing === "SUBMIT" ? "Submitting..." : "Submit Subject"}
+      </button>
+    </div>
+  );
+
   return (
     <section className="cms-card cms-main-card">
       <div className="cms-workspace-actions">
@@ -4835,6 +4753,7 @@ function Entry({
           <SearchableSelect
             id="marks-examination"
             label="EXAMINATION"
+            hideLabel
             value={examId}
             options={exams.map((exam) => ({
               ...exam,
@@ -4846,6 +4765,7 @@ function Entry({
           <SearchableSelect
             id="marks-subject"
             label="SUBJECT"
+            hideLabel
             value={subjectId}
             options={subjectOptions}
             disabled={!subjectOptions?.length}
@@ -4854,37 +4774,17 @@ function Entry({
             emptyText="No subjects configured for selected examination."
           />
         </div>
-        <div className="cms-bulk-actions">
-          <button
-            type="button"
-            className="cms-btn cms-btn-secondary cms-btn-bulk-import"
-            disabled={Boolean(processing) || !subjectId || locked || loadingWorkspace}
-            onClick={onBulkImport}
-            title="Import student marks from an Excel (.xlsx, .xls) file"
-          >
-            Bulk Import
-          </button>
-          <button
-            type="button"
-            className="cms-btn cms-btn-secondary"
-            disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status) || loadingWorkspace}
-            onClick={onSave}
-          >
-            {processing === "SAVE_DRAFT" ? "Saving..." : "Save Draft"}
-          </button>
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status) || loadingWorkspace}
-            onClick={onSubmit}
-          >
-            {processing === "SUBMIT" ? "Submitting..." : "Submit Subject"}
-          </button>
+        <div className="cms-bulk-actions-desktop">
+          {bulkActionButtons}
         </div>
       </div>
 
       {!workspace ? (
-        loadingWorkspace ? (
+        <>
+          <div className="cms-entry-toolbar cms-entry-toolbar-empty cms-bulk-actions-mobile">
+            {bulkActionButtons}
+          </div>
+          {loadingWorkspace ? (
           <div className="cms-table-wrap">
             <table className="cms-table">
               <thead>
@@ -4914,7 +4814,8 @@ function Entry({
                 : "No subjects are configured for the selected examination."
             }
           />
-        )
+        )}
+        </>
       ) : (
         <>
           {validateMarksConfiguration(workspace) && (
@@ -4929,11 +4830,11 @@ function Entry({
               <Badge status={workspace.status} />
               <span>
                 {workspace.faculty?.name || "Faculty"}
-                {workspace.facultyId ? ` (EMP-${workspace.facultyId})` : ""} · {workspace.mode} · Maximum{" "}
-                {workspace.maxMarks} · Pass {workspace.passPercentage}%
+                {workspace.facultyId ? ` (EMP-${workspace.facultyId})` : ""}
               </span>
             </div>
-            {workspace.status === "SUBMITTED" && !blocked && !loadingWorkspace && (
+            <div className="cms-entry-toolbar-actions">
+              {workspace.status === "SUBMITTED" && !blocked && !loadingWorkspace && (
               <div className="cms-entry-edit-action" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 {editing ? (
                   <>
@@ -4966,6 +4867,10 @@ function Entry({
                 )}
               </div>
             )}
+              <div className="cms-bulk-actions-mobile">
+                {bulkActionButtons}
+              </div>
+            </div>
           </div>
 
           <Table
