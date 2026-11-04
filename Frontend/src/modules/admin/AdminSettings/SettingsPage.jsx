@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2, Palette, Pipette } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2, Palette, Pipette, FileSignature } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
 import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
@@ -100,6 +100,16 @@ export default function SettingsPage() {
       image: templatesImage,
       to: "/dashboard/settings/templates",
       buttonText: "Manage Templates",
+      primary: true,
+    },
+    {
+      id: "offer-letter-configuration",
+      title: "College Offer Letters",
+      description: "Design staff appointment letters, customize dynamic placeholders, configure compensation tables, and set up automated email dispatch.",
+      icon: FileSignature,
+      image: templatesImage,
+      to: "/dashboard/settings/offer-letter-configuration",
+      buttonText: "Manage Offer Letters",
       primary: true,
     },
     {

@@ -124,6 +124,9 @@ namespace CollegeManagement.API.Controllers
                     photoPath = result.PhotoPath,
                     photoUrl = result.PhotoUrl,
                     photo = result.PhotoUrl,
+                    profileStatus = result.ProfileStatus,
+                    profileCompletionPercentage = result.ProfileCompletionPercentage,
+                    isOnboarded = result.IsOnboarded,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                 },
                 Data = new
@@ -140,9 +143,15 @@ namespace CollegeManagement.API.Controllers
                         roles = new[] { result.Role },
                         staffType = result.StaffType,
                         designation = result.Designation,
+                        profileStatus = result.ProfileStatus,
+                        profileCompletionPercentage = result.ProfileCompletionPercentage,
+                        isOnboarded = result.IsOnboarded,
                         isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                     }
-                }
+                },
+                ProfileStatus = result.ProfileStatus,
+                ProfileCompletionPercentage = result.ProfileCompletionPercentage,
+                IsOnboarded = result.IsOnboarded
             });
         }
 

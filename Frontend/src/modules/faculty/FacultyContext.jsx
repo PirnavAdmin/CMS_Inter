@@ -72,13 +72,29 @@ export const persistStaffProfile = (data) => {
       if (key) localStorage.removeItem(`${key}_photo`);
     }
 
-    // Synchronize photo with auth user in localStorage and sessionStorage so reloads retain it
+    // Synchronize photo and onboarding status with auth user in localStorage and sessionStorage so reloads retain it
     try {
       const authUser = getAuthUser();
-      if (authUser && data?.photoUrl) {
-        const updatedAuth = { ...authUser, photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl };
+      if (authUser) {
+        const compPct = Number(data?.profileCompletion || data?.profileCompletionPercentage || authUser.profileCompletionPercentage || 0);
+        const pStatus = data?.profileStatus || authUser.profileStatus;
+        const isCompleted =
+          String(pStatus).toLowerCase() === "completed" ||
+          String(pStatus).toLowerCase() === "approved" ||
+          String(pStatus).toLowerCase() === "submitted" ||
+          compPct >= 50;
+
+        const updatedAuth = {
+          ...authUser,
+          ...(data?.photoUrl ? { photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl } : {}),
+          ...(pStatus ? { profileStatus: pStatus } : {}),
+          ...(compPct ? { profileCompletionPercentage: compPct } : {}),
+          ...(isCompleted ? { isOnboarded: true } : {}),
+        };
         if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updatedAuth));
         if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updatedAuth));
+        if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(updatedAuth));
+        if (sessionStorage.getItem("auth_user")) sessionStorage.setItem("auth_user", JSON.stringify(updatedAuth));
       }
     } catch {}
   } catch {}
@@ -282,6 +298,26 @@ export function FacultyProvider({ children }) {
               if (apiStaff.firstName || apiStaff.lastName) {
                 updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
               }
+
+              const pStatus = apiStaff.profileStatus || updated.profileStatus;
+              const compPct = Number(apiStaff.profileCompletionPercentage || updated.profileCompletion || updated.profileCompletionPercentage || 0);
+              const isCompleted =
+                String(pStatus).toLowerCase() === "completed" ||
+                String(pStatus).toLowerCase() === "approved" ||
+                String(pStatus).toLowerCase() === "submitted" ||
+                compPct >= 50;
+              if (isCompleted) {
+                try {
+                  const currentAuth = getAuthUser();
+                  if (currentAuth) {
+                    const upAuth = { ...currentAuth, profileStatus: pStatus, isOnboarded: true, profileCompletionPercentage: compPct };
+                    if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(upAuth));
+                    if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(upAuth));
+                    if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(upAuth));
+                  }
+                } catch {}
+              }
+
               return updated;
             });
           }
@@ -359,10 +395,18 @@ export function FacultyProvider({ children }) {
   // Toast Notification System
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
-  const notify = (text, type = "success") => {
+  const notify = (text, type = "success", title = null) => {
     clearTimeout(toastTimer.current);
-    setToast({ text, type });
-    toastTimer.current = setTimeout(() => setToast(null), 3500);
+    if (typeof text === "object" && text !== null) {
+      setToast({
+        text: text.message || text.text || "",
+        type: text.type || type,
+        title: text.title || title || null,
+      });
+    } else {
+      setToast({ text, type, title });
+    }
+    toastTimer.current = setTimeout(() => setToast(null), 4500);
   };
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -402,6 +446,7 @@ export function FacultyProvider({ children }) {
       setPunchState,
       togglePunch,
       toast,
+      setToast,
       notify,
       selectedBoard,
       setSelectedBoard,

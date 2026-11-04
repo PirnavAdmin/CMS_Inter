@@ -306,6 +306,8 @@ builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 builder.Services.AddScoped<IBoardExportService, BoardExportService>();
 builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
+builder.Services.AddScoped<IStaffTransferService, StaffTransferService>();
+builder.Services.AddScoped<IStaffExperienceService, StaffExperienceService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
 builder.Services.AddScoped<IGroupService, GroupService>();

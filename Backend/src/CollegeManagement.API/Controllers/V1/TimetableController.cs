@@ -154,6 +154,14 @@ namespace CollegeManagement.API.Controllers.V1
                 facultyId = callerStaffId ?? 0;
             }
 
+            if (!campusId.HasValue || campusId.Value <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && int.TryParse(headerVal.FirstOrDefault(), out var hCid) && hCid > 0)
+                {
+                    campusId = hCid;
+                }
+            }
+
             var result = await _timetableService.GetFacultyTimetableAsync(facultyId.Value, academicYearId, campusId);
             return Ok(result);
         }

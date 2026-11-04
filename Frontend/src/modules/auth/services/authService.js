@@ -826,6 +826,34 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     payload.user?.photo ||
     "";
 
+  const rawProfileStatus =
+    data.ProfileStatus ||
+    data.profileStatus ||
+    payload.ProfileStatus ||
+    payload.profileStatus ||
+    jwtClaims.ProfileStatus ||
+    jwtClaims.profileStatus ||
+    data.user?.profileStatus ||
+    payload.user?.profileStatus;
+  const profileStatus = rawProfileStatus ? String(rawProfileStatus).trim() : (isFaculty ? "PendingLink" : "Completed");
+  const profileCompletionPercentage = Number(
+    data.ProfileCompletionPercentage ||
+    data.profileCompletionPercentage ||
+    payload.ProfileCompletionPercentage ||
+    payload.profileCompletionPercentage ||
+    data.user?.profileCompletionPercentage ||
+    payload.user?.profileCompletionPercentage ||
+    0
+  );
+  const rawIsOnboarded = data.IsOnboarded ?? data.isOnboarded ?? payload.IsOnboarded ?? payload.isOnboarded ?? data.user?.isOnboarded ?? payload.user?.isOnboarded;
+  const isCompleted =
+    String(profileStatus || "").toLowerCase() === "completed" ||
+    String(profileStatus || "").toLowerCase() === "approved" ||
+    String(profileStatus || "").toLowerCase() === "submitted" ||
+    profileCompletionPercentage >= 50 ||
+    rawIsOnboarded === true;
+  const isOnboarded = isCompleted || isAdmin;
+
   const user = {
     id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
     userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
@@ -848,6 +876,9 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     photoPath: photoUrl || null,
     profilePhoto: photoUrl || null,
     photo: photoUrl || null,
+    profileStatus,
+    isOnboarded,
+    profileCompletionPercentage: data.ProfileCompletionPercentage || data.profileCompletionPercentage || payload.ProfileCompletionPercentage || payload.profileCompletionPercentage || 0,
   };
 
 

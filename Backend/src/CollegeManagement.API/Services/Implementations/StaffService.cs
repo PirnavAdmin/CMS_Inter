@@ -101,6 +101,25 @@ namespace CollegeManagement.API.Services.Implementations
             var (staffs, totalCount) = await _staffRepository.GetPagedStaffAsync(queryParams);
             var dtos = _mapper.Map<List<StaffResponseDto>>(staffs);
 
+            for (int i = 0; i < staffs.Count; i++)
+            {
+                var st = staffs[i];
+                var dto = dtos[i];
+                EnrichStaffDto(st, dto);
+                if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
+                {
+                    var targetCid = queryParams.CampusId.Value;
+                    if (st.CampusId != targetCid)
+                    {
+                        var assignment = st.StaffCampusAssignments?.FirstOrDefault(a => a.CampusId == targetCid);
+                        if (assignment != null && (assignment.Status == "TransferredOut" || !assignment.IsActive))
+                        {
+                            dto.Status = "Transferred Out";
+                        }
+                    }
+                }
+            }
+
             return new PagedResult<StaffResponseDto>
             {
                 Items = dtos,
@@ -122,6 +141,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
             var dto = _mapper.Map<StaffResponseDto>(staff);
+            EnrichStaffDto(staff, dto);
             var linkedUser = await _userRepository.GetByStaffIdAsync(id);
             if (linkedUser != null && linkedUser.RoleId > 0)
             {
@@ -131,6 +151,56 @@ namespace CollegeManagement.API.Services.Implementations
             return dto;
         }
 
+        private void EnrichStaffDto(Staff staff, StaffResponseDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.BoardName) && staff.BoardRef != null)
+            {
+                dto.BoardName = staff.BoardRef.BoardName;
+                dto.BoardCode = staff.BoardRef.BoardCode;
+            }
+
+            if (staff.StaffCampusAssignments != null && staff.StaffCampusAssignments.Any(a => a.IsActive))
+            {
+                var activeCampuses = staff.StaffCampusAssignments.Where(a => a.IsActive).ToList();
+                dto.AssignedCampusIds = activeCampuses.Select(a => a.CampusId).ToList();
+                dto.AssignedCampuses = activeCampuses.Select(a => new
+                {
+                    id = a.CampusId,
+                    name = a.Campus != null ? a.Campus.CampusName : $"Campus #{a.CampusId}",
+                    code = a.Campus != null ? a.Campus.CampusCode : "",
+                    isPrimary = a.IsPrimary
+                }).Cast<object>().ToList();
+
+                var assignmentsList = activeCampuses.Select(a => new
+                {
+                    campusId = a.CampusId,
+                    campusName = a.Campus?.CampusName ?? $"Campus #{a.CampusId}",
+                    campusCode = a.Campus?.CampusCode ?? "",
+                    isPrimary = a.IsPrimary,
+                    boards = staff.StaffBoardAssignments?
+                        .Select(b => new
+                        {
+                            boardId = b.BoardId,
+                            boardName = b.Board?.BoardName ?? $"Board #{b.BoardId}",
+                            boardCode = b.Board?.BoardCode ?? ""
+                        }).ToList() ?? new()
+                }).ToList();
+
+                dto.CampusBoardAssignmentsJson = System.Text.Json.JsonSerializer.Serialize(assignmentsList);
+            }
+
+            if (staff.StaffBoardAssignments != null && staff.StaffBoardAssignments.Any())
+            {
+                dto.AssignedBoardIds = staff.StaffBoardAssignments.Select(b => b.BoardId).ToList();
+                dto.AssignedBoards = staff.StaffBoardAssignments.Select(b => new
+                {
+                    id = b.BoardId,
+                    name = b.Board != null ? b.Board.BoardName : $"Board #{b.BoardId}",
+                    code = b.Board != null ? b.Board.BoardCode : ""
+                }).Cast<object>().ToList();
+            }
+        }
+
         public async Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId)
         {
             var staff = await _staffRepository.GetByEmployeeIdAsync(employeeId);
@@ -138,6 +208,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
 
             var dto = _mapper.Map<StaffResponseDto>(staff);
+            EnrichStaffDto(staff, dto);
             var linkedUser = await _userRepository.GetByStaffIdAsync(staff.Id);
             if (linkedUser != null && linkedUser.RoleId > 0)
             {
@@ -765,17 +836,35 @@ namespace CollegeManagement.API.Services.Implementations
                     existingStaff.StaffCampusAssignments.Remove(rem);
                 }
 
+                var primaryCampusId = dto.CampusId.HasValue && dto.CampusId.Value > 0 ? dto.CampusId.Value : (existingStaff.CampusId ?? targetCampusIds.First());
                 var existingCampusIds = existingStaff.StaffCampusAssignments.Select(a => a.CampusId).ToHashSet();
                 foreach (var cId in targetCampusIds)
                 {
                     if (!existingCampusIds.Contains(cId))
                     {
-                        existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                        existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment
+                        {
+                            CampusId = cId,
+                            StaffId = existingStaff.Id,
+                            IsPrimary = (cId == primaryCampusId),
+                            IsActive = true,
+                            Status = "Active",
+                            StartDate = DateTime.UtcNow.Date
+                        });
+                    }
+                    else
+                    {
+                        var assign = existingStaff.StaffCampusAssignments.FirstOrDefault(a => a.CampusId == cId);
+                        if (assign != null)
+                        {
+                            assign.IsActive = true;
+                            assign.Status = "Active";
+                            assign.IsPrimary = (cId == primaryCampusId);
+                        }
                     }
                 }
 
-                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
-                    existingStaff.CampusId = targetCampusIds.First();
+                existingStaff.CampusId = primaryCampusId;
             }
 
             var targetBoardIds = (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
@@ -1134,12 +1223,56 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            staff.ProfileStatus = "Submitted";
-            staff.SubmittedAt = DateTime.UtcNow;
-            staff.ProfileCompletionPercentage = 100;
+            var percentage = CalculateCompletionPercentage(staff);
+            if (percentage < 50)
+            {
+                throw new ValidationException($"Profile completion must be at least 50% to submit. Current completion is {percentage}%.");
+            }
+
+            bool alreadyCompleted = string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) && staff.SubmittedAt.HasValue;
+
+            staff.ProfileStatus = "Completed";
+            if (!staff.SubmittedAt.HasValue)
+            {
+                staff.SubmittedAt = DateTime.UtcNow;
+            }
+            if (!staff.ApprovedAt.HasValue)
+            {
+                staff.ApprovedAt = DateTime.UtcNow;
+            }
+            staff.ProfileCompletionPercentage = Math.Max(percentage, staff.ProfileCompletionPercentage);
             staff.ProfileLinkToken = null; // Invalidate single-use token upon completion
             await _staffRepository.UpdateAsync(staff);
             await EnsureStaffPayrollStructureProvisionedAsync(staff);
+
+            // Generate Offer Letter PDF and dispatch via Email (idempotent: skip duplicate generation if already completed)
+            if (!alreadyCompleted)
+            {
+                try
+                {
+                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    {
+                        string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                        string body = $@"
+                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                                <h2>Welcome to Pirnav Educational Society</h2>
+                                <p>Dear {staff.FirstName} {staff.LastName},</p>
+                                <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
+                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                            </div>";
+
+                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                        _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
+                }
+            }
 
             return MapToFullProfileDto(staff);
         }
@@ -1167,6 +1300,31 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
                 await _staffRepository.UpdateAsync(staff);
                 await EnsureStaffPayrollStructureProvisionedAsync(staff);
+
+                // Dispatch Offer Letter PDF via Email
+                try
+                {
+                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    {
+                        string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                        string body = $@"
+                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                                <h2>Welcome to Pirnav Educational Society</h2>
+                                <p>Dear {staff.FirstName} {staff.LastName},</p>
+                                <p>Congratulations! Your faculty profile has been verified and approved by Human Resources.</p>
+                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                            </div>";
+
+                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to generate or email offer letter for approved staff ID {StaffId}", staff.Id);
+                }
             }
             else if (string.Equals(dto.Action, "RequestCorrection", StringComparison.OrdinalIgnoreCase))
             {
@@ -1927,6 +2085,183 @@ namespace CollegeManagement.API.Services.Implementations
             return (bytes, "application/pdf", filename);
         }
 
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateOfferLetterPdfAsync(int id)
+        {
+            var profile = await GetStaffProfileFullAsync(id);
+            var payroll = await GetStaffPayrollDetailsAsync(id);
+
+            var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
+            string offerNo = numRes?.GeneratedNumber ?? $"PC-OL/{DateTime.UtcNow.Year}/{profile.EmployeeId}";
+
+            string staffFullName = string.IsNullOrWhiteSpace(profile.MiddleName)
+                ? $"{profile.FirstName} {profile.LastName}".Trim()
+                : $"{profile.FirstName} {profile.MiddleName} {profile.LastName}".Trim();
+
+            // Determine role category and specific target template
+            bool isPrincipal = string.Equals(profile.RoleName, "Principal", StringComparison.OrdinalIgnoreCase)
+                || profile.RoleId == 2
+                || profile.RoleId == 15
+                || (profile.Designation != null && profile.Designation.Contains("Principal", StringComparison.OrdinalIgnoreCase));
+
+            bool isHOD = (profile.Designation != null && (profile.Designation.Contains("HOD", StringComparison.OrdinalIgnoreCase) || profile.Designation.Contains("Head of Department", StringComparison.OrdinalIgnoreCase)));
+
+            bool isNonTeaching = string.Equals(profile.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(profile.RoleName, "Non-Teaching", StringComparison.OrdinalIgnoreCase);
+
+            string targetTemplateCode = isPrincipal ? "OFFER_LETTER_PRINCIPAL"
+                : isHOD ? "OFFER_LETTER_HOD"
+                : isNonTeaching ? "OFFER_LETTER_NON_TEACHING"
+                : "OFFER_LETTER_STANDARD";
+
+            string roleCategory = isPrincipal ? "Principal"
+                : isHOD ? "HOD / Senior Faculty"
+                : isNonTeaching ? "Non-Teaching Staff"
+                : "Teaching Staff";
+
+            // Intermediate College defaults tailored to role
+            string documentHeading = isPrincipal
+                ? "EXECUTIVE APPOINTMENT & PRINCIPAL COMMISSION – INTERMEDIATE COLLEGE"
+                : isHOD
+                ? "APPOINTMENT ORDER – HEAD OF DEPARTMENT & SENIOR LECTURER"
+                : isNonTeaching
+                ? "OFFICIAL APPOINTMENT ORDER – CAMPUS ADMINISTRATIVE & SUPPORT STAFF"
+                : "OFFICIAL APPOINTMENT ORDER – JUNIOR COLLEGE FACULTY";
+
+            string departmentOffice = isPrincipal
+                ? "OFFICE OF THE SECRETARY & GOVERNING BODY – PIRNAV EDUCATIONAL SOCIETY"
+                : isNonTeaching
+                ? "OFFICE OF HUMAN RESOURCES & CAMPUS ADMINISTRATION"
+                : "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES";
+
+            string reportingAuthority = isPrincipal
+                ? "Board of Governors & Managing Secretary"
+                : isNonTeaching
+                ? "Campus Principal / Administrative Officer"
+                : "Campus Principal";
+
+            string signatoryName = isPrincipal ? "N. Venkateswara Rao" : (isNonTeaching ? "P. R. Mohan" : "Dr. K. V. Ramanamurthy");
+            string signatoryRole = isPrincipal ? "Secretary & Managing Trustee" : (isNonTeaching ? "Registrar / Administrative Officer" : "Director of Human Resources");
+            string boardName = !string.IsNullOrWhiteSpace(profile.BoardName) ? profile.BoardName : "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+            string primaryCampus = !string.IsNullOrWhiteSpace(profile.CampusName) ? profile.CampusName : "Main Campus (HQ)";
+            string institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? "PIRNAV EDUCATIONAL SOCIETY";
+
+            string openingStatement = isPrincipal
+                ? $"The Board of Governors is pleased to appoint you as Campus Principal & Executive Head of Institution for {primaryCampus}, with dual institutional purview over Intermediate academic instruction (BIEAP / TGBIE curriculum) and campus administrative operations."
+                : isHOD
+                ? $"We are pleased to appoint you as Head of Department (HOD) & Senior Lecturer in {profile.Department} at our {primaryCampus} campus under the Board of Intermediate Education curriculum."
+                : isNonTeaching
+                ? $"We are pleased to offer you appointment as {profile.Designation} in the {profile.Department} division at our {primaryCampus} campus."
+                : $"We have pleasure in offering you an official appointment as {profile.Designation} in the Department of {profile.Department} at our {primaryCampus} campus under the Board of Intermediate Education (BIEAP/TGBIE) curriculum.";
+
+            string terms = isPrincipal
+                ? "1. Institutional Governance: The Principal exercises dual oversight over Teaching Faculty (syllabus pacing, lesson plans, lab practicals) and Non-Teaching Staff (campus accounting, fee collections, student registers, timings, discipline).\n2. Board Compliance & Academic Results: Directly responsible for statutory Board of Intermediate Education affiliations, IPE board examination center management, student pass percentages, and integrated EAMCET / JEE / NEET competitive ranks.\n3. Administration & Fee Governance: Accountable for campus fee structures, student admissions, fee reconciliation, campus infrastructure security, and Loss of Pay (LOP) policy enforcement.\n4. Notice Period: Service notice period for Principal leadership is six (6) calendar months or equivalent salary in lieu thereof to maintain institutional leadership continuity.\n5. Multi-Campus Oversight: The Governing Body may depute cross-campus administrative or academic inspection duties across affiliated junior colleges based on operational exigencies."
+                : isHOD
+                ? "1. Departmental Leadership: Lead teaching faculty in the department, supervise theory lecture coverage, laboratory practical logbooks, and enforce BIEAP/TGBIE curriculum benchmarks.\n2. Academic Quality & Practical Examinations: Oversee science laboratories, ensure safety protocols, coordinate internal college examinations, and liaise with the Principal for IPE board examinations.\n3. Mentorship & Valuation: Mentor Junior Lecturers, review student progress in weekly tests, and coordinate IPE external spot valuation assignments.\n4. Service Notice Period: Service notice period is strictly three (3) calendar months or equivalent salary in lieu thereof."
+                : isNonTeaching
+                ? "1. Campus Duties: Carry out designated administrative, accounting, student registry, laboratory assistance, or campus maintenance tasks under the direction of the Principal and Administrative Officer.\n2. Diligence & Timings: Strictly adhere to campus biometric timings, fee counter protocols, admission record safety, and institutional asset care. Unexcused absence will incur Loss of Pay (LOP) deductions.\n3. Service Notice Period: Service notice period is strictly one (1) calendar month or equivalent gross salary in lieu thereof.\n4. Code of Conduct: Abide by institutional service bylaws and maintain absolute confidentiality of student records and accounts."
+                : "1. Teaching Obligations: The Lecturer shall conduct regular theory periods, laboratory practicals, and special study hours in accordance with the Board of Intermediate Education (BIEAP/TGBIE) curriculum and annual academic calendar.\n2. Student Academic Progress: Responsible for student syllabus completion, weekly unit test valuations, and intensive coaching for Intermediate Public Examinations (IPE) and integrated competitive entrance examinations (EAMCET / JEE / NEET).\n3. Examination Duties: Mandatory participation in BIEAP/TGBIE practical examination supervision, internal college assessments, and external spot valuation when deputed by the Principal.\n4. Service Notice Period: Service notice period is strictly three (3) calendar months or equivalent gross salary in lieu thereof. Mid-academic-session resignations are strictly barred to safeguard student syllabus continuity.\n5. Campus Postings: The management reserves the right to depute or transfer teaching assignments across affiliated junior college campuses based on institutional requirements without altering service seniority.";
+
+            // Check if Admin configured a custom template in Database for this role
+            var customTemplate = await _context.Templates
+                .Where(t => t.TemplateCode == targetTemplateCode && t.IsActive)
+                .OrderByDescending(t => t.UpdatedAt)
+                .FirstOrDefaultAsync();
+
+            if (customTemplate == null)
+            {
+                // Fallback to general offer letter template if exact role template is not in DB
+                customTemplate = await _context.Templates
+                    .Where(t => (t.Category == "Offer Letter" || t.Category == "OfferLetter" || t.TemplateCode.StartsWith("OFFER_LETTER")) && t.IsActive)
+                    .OrderByDescending(t => t.UpdatedAt)
+                    .FirstOrDefaultAsync();
+            }
+
+            if (customTemplate != null && !string.IsNullOrWhiteSpace(customTemplate.ContentBody))
+            {
+                try
+                {
+                    using var docJson = System.Text.Json.JsonDocument.Parse(customTemplate.ContentBody);
+                    var root = docJson.RootElement;
+                    if (root.TryGetProperty("documentHeading", out var dh) && !string.IsNullOrWhiteSpace(dh.GetString()))
+                        documentHeading = dh.GetString()!;
+                    if (root.TryGetProperty("departmentOffice", out var dof) && !string.IsNullOrWhiteSpace(dof.GetString()))
+                        departmentOffice = dof.GetString()!;
+                    if (root.TryGetProperty("reportingAuthority", out var ra) && !string.IsNullOrWhiteSpace(ra.GetString()))
+                        reportingAuthority = ra.GetString()!;
+                    if (root.TryGetProperty("authorizedSignatoryName", out var asn) && !string.IsNullOrWhiteSpace(asn.GetString()))
+                        signatoryName = asn.GetString()!;
+                    if (root.TryGetProperty("authorizedSignatoryRole", out var asr) && !string.IsNullOrWhiteSpace(asr.GetString()))
+                        signatoryRole = asr.GetString()!;
+                    if (root.TryGetProperty("institutionName", out var inProp) && !string.IsNullOrWhiteSpace(inProp.GetString()))
+                        institutionName = inProp.GetString()!;
+                    if (root.TryGetProperty("openingStatement", out var osProp) && !string.IsNullOrWhiteSpace(osProp.GetString()))
+                        openingStatement = osProp.GetString()!;
+                    if (root.TryGetProperty("termsAndConditions", out var tcProp) && !string.IsNullOrWhiteSpace(tcProp.GetString()))
+                        terms = tcProp.GetString()!;
+                }
+                catch
+                {
+                    if (!customTemplate.ContentBody.TrimStart().StartsWith("<") && !customTemplate.ContentBody.TrimStart().StartsWith("{"))
+                        terms = customTemplate.ContentBody;
+                }
+            }
+
+            // Replace dynamic tokens in opening statement and terms
+            string ResolveTokens(string input)
+            {
+                if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+                return input
+                    .Replace("{{StaffName}}", staffFullName)
+                    .Replace("{{EmployeeId}}", profile.EmployeeId ?? string.Empty)
+                    .Replace("{{Designation}}", profile.Designation ?? string.Empty)
+                    .Replace("{{Department}}", profile.Department ?? string.Empty)
+                    .Replace("{{PrimaryCampus}}", primaryCampus)
+                    .Replace("{{BoardName}}", boardName)
+                    .Replace("{{InstitutionName}}", institutionName)
+                    .Replace("{{ReportingAuthority}}", reportingAuthority)
+                    .Replace("{{BasicSalary}}", payroll?.BasicSalary.HasValue == true ? $"₹{payroll.BasicSalary.Value:N0}" : "₹45,000")
+                    .Replace("{{GrossSalary}}", payroll?.GrossSalary.HasValue == true ? $"₹{payroll.GrossSalary.Value:N0}" : "₹68,500")
+                    .Replace("{{AnnualCTC}}", payroll?.GrossSalary.HasValue == true ? $"₹{(payroll.GrossSalary.Value * 12):N0}" : "₹8,22,000")
+                    .Replace("{{DateOfJoining}}", (profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date).ToString("dd MMM yyyy"));
+            }
+
+            openingStatement = ResolveTokens(openingStatement);
+            terms = ResolveTokens(terms);
+
+            var model = new CollegeManagement.API.Services.Exports.StaffOfferLetterModel
+            {
+                OfferLetterNumber = offerNo,
+                StaffName = staffFullName,
+                EmployeeId = profile.EmployeeId,
+                Designation = profile.Designation,
+                Department = profile.Department,
+                PrimaryCampus = primaryCampus,
+                InstitutionName = institutionName,
+                DocumentHeading = documentHeading,
+                DepartmentOffice = departmentOffice,
+                OpeningStatement = openingStatement,
+                BoardName = boardName,
+                RoleCategory = roleCategory,
+                DateOfJoining = profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date,
+                BasicSalary = payroll?.BasicSalary,
+                GrossSalary = payroll?.GrossSalary,
+                ReportingAuthority = reportingAuthority,
+                AuthorizedSignatoryName = signatoryName,
+                AuthorizedSignatoryRole = signatoryRole,
+                TermsAndConditions = terms
+            };
+
+            var doc = new CollegeManagement.API.Services.Exports.StaffOfferLetterDocument(model);
+            byte[] bytes = doc.GeneratePdf();
+            return (bytes, "application/pdf", $"Offer_Letter_{profile.EmployeeId}.pdf");
+        }
+
+        public async Task<StaffExperienceSummaryDto> GetStaffExperienceSummaryAsync(int id)
+        {
+            var expService = new StaffExperienceService(_context);
+            return await expService.CalculateExperienceAsync(id);
+        }
+
         public async Task<StaffResponseDto> UploadPhotoAsync(UploadStaffPhotoDto dto)
         {
             if (dto == null)
@@ -2207,6 +2542,12 @@ namespace CollegeManagement.API.Services.Implementations
         private StaffProfileFullDto MapToFullProfileDto(Staff staff)
         {
             var dto = _mapper.Map<StaffProfileFullDto>(staff);
+            if (!string.IsNullOrWhiteSpace(staff.CurrentAddress))
+            {
+                var addrParts = staff.CurrentAddress.Split(new[] { ',' }, 2);
+                dto.HouseNumber = addrParts[0].Trim();
+                if (addrParts.Length > 1) dto.Street = addrParts[1].Trim();
+            }
             dto.FullName = string.IsNullOrWhiteSpace(staff.MiddleName) ? $"{staff.FirstName} {staff.LastName}".Trim() : $"{staff.FirstName} {staff.MiddleName} {staff.LastName}".Trim();
             if (!string.IsNullOrWhiteSpace(staff.PhotoPath))
             {
@@ -2403,12 +2744,19 @@ namespace CollegeManagement.API.Services.Implementations
                 if (dto.Personal.PanNumber != null || dto.Personal.Pan != null)
                     staff.PanNumber = (dto.Personal.PanNumber ?? dto.Personal.Pan)?.Trim();
                 if (dto.Personal.BloodGroup != null) staff.BloodGroup = dto.Personal.BloodGroup.Trim();
+                var mobVal = dto.Personal.Mobile ?? dto.Personal.Phone ?? dto.Personal.PhoneNumber;
+                if (!string.IsNullOrWhiteSpace(mobVal)) staff.Mobile = mobVal.Trim();
             }
 
             if (dto.Address != null)
             {
                 if (dto.Address.AlternateMobile != null) staff.AlternateMobile = dto.Address.AlternateMobile.Trim();
-                if (dto.Address.CurrentAddress != null) staff.CurrentAddress = dto.Address.CurrentAddress.Trim();
+                var resolvedCurrent = dto.Address.CurrentAddress;
+                if (!string.IsNullOrWhiteSpace(dto.Address.HouseNumber) || !string.IsNullOrWhiteSpace(dto.Address.Street))
+                {
+                    resolvedCurrent = string.Join(", ", new[] { dto.Address.HouseNumber, dto.Address.Street }.Where(s => !string.IsNullOrWhiteSpace(s)));
+                }
+                if (!string.IsNullOrWhiteSpace(resolvedCurrent)) staff.CurrentAddress = resolvedCurrent.Trim();
                 if (dto.Address.PermanentAddress != null) staff.PermanentAddress = dto.Address.PermanentAddress.Trim();
                 if (dto.Address.City != null) staff.City = dto.Address.City.Trim();
                 if (dto.Address.District != null) staff.District = dto.Address.District.Trim();

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } 
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Building2,
   Check,
   ChevronDown,
@@ -686,6 +687,33 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
   const targetId = selectedCampus.campusId ?? selectedCampus.id;
   const targetName = selectedCampus.campusName ?? selectedCampus.name;
   const targetCode = selectedCampus.campusCode ?? selectedCampus.code;
+
+  if (targetId == null && !targetName && !targetCode) return true;
+
+  // Active assigned campuses list (supports multi-campus or transferred staff)
+  const assignments = staffRecord.assignedCampuses || staffRecord.staffCampusAssignments || staffRecord.StaffCampusAssignments;
+  if (Array.isArray(assignments) && assignments.length > 0) {
+    const activeAssignments = assignments.filter(
+      (c) => c && c.isActive !== false && c.status !== "Inactive" && c.status !== "Transferred"
+    );
+    if (activeAssignments.length > 0) {
+      return activeAssignments.some((c) => {
+        const cId = c.campusId ?? c.id ?? c.Id;
+        const cCode = c.campusCode ?? c.code ?? c.Code;
+        const cName = c.campusName ?? c.name ?? c.Name;
+        if (targetId != null && cId != null) return String(cId) === String(targetId);
+        if (targetCode && cCode) return String(cCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+        if (targetName && cName) return String(targetName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+        return false;
+      });
+    }
+  }
+
+  // If staff is marked Transferred or Inactive overall, do not match legacy campus
+  if (staffRecord.status === "Transferred" || staffRecord.status === "Inactive") {
+    return false;
+  }
+
   const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
   const recordId = staffRecord.campusId ?? staffRecord.CampusId ?? recordCampus.campusId ?? recordCampus.id ?? recordCampus.Id;
   const recordName = staffRecord.campusName ?? staffRecord.CampusName ?? recordCampus.campusName ?? recordCampus.name ?? recordCampus.Name;
@@ -2055,7 +2083,7 @@ export function PrincipalCampusBoardAssignment({
   return (
     <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
+        <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>{values?.role?.toLowerCase() === "principal" ? "Principal Campus & Board Assignments" : "Multi-Campus & Educational Board Allocations"} <b style={{ color: "#ef4444" }}>*</b></strong>
       </div>
 
       {assignments.map((assignment, index) => {
@@ -3873,6 +3901,9 @@ function StaffList({ records = [], setRecords, forced }) {
   const [size] = useState(5);
   const [toast, setToast] = useState(null);
   const [remove, setRemove] = useState(null);
+  const [listTransferTarget, setListTransferTarget] = useState(null);
+  const [showListTransferModal, setShowListTransferModal] = useState(false);
+  const { campuses } = useCampusContext();
   const [apiItems, setApiItems] = useState(null);
   const [totalApiCount, setTotalApiCount] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
@@ -5144,8 +5175,54 @@ function StaffList({ records = [], setRecords, forced }) {
                     <tr key={`staff-item-${r.id || r.employeeId || idx}`}>
                       <td>{r.employeeId}</td>
                       <td>
-                        <strong>{r.fullName || `${r.firstName || ""} ${r.lastName || ""}`}</strong>
-                        <small>{r.email}</small>
+                        {(() => {
+                          const isMulti = (Array.isArray(r.assignedCampusIds) && r.assignedCampusIds.length > 1) ||
+                            (Array.isArray(r.assignedCampuses) && r.assignedCampuses.length > 1) ||
+                            (r.campusBoardAssignmentsJson && r.campusBoardAssignmentsJson.includes('campusId'));
+                          const campusCount = r.assignedCampusIds?.length || r.assignedCampuses?.length || (isMulti ? "Multi" : 1);
+
+                          return (
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <strong>{r.fullName || `${r.firstName || ""} ${r.lastName || ""}`}</strong>
+                                {isMulti ? (
+                                  <span style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                    fontSize: "10px",
+                                    fontWeight: "700",
+                                    background: "#eff6ff",
+                                    color: "#1d4ed8",
+                                    border: "1px solid #bfdbfe",
+                                    padding: "1px 7px",
+                                    borderRadius: "10px",
+                                    whiteSpace: "nowrap"
+                                  }} title={`Teaching across ${campusCount} campuses`}>
+                                    🌐 Global ({campusCount} Campuses)
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                    fontSize: "10px",
+                                    fontWeight: "500",
+                                    background: "#f8fafc",
+                                    color: "#64748b",
+                                    border: "1px solid #e2e8f0",
+                                    padding: "1px 6px",
+                                    borderRadius: "10px",
+                                    whiteSpace: "nowrap"
+                                  }}>
+                                    📍 Single Campus
+                                  </span>
+                                )}
+                              </div>
+                              <small>{r.email}</small>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td>{resolveBoardCode(r, boards)}</td>
                       <td>{r.department}</td>
@@ -5156,6 +5233,9 @@ function StaffList({ records = [], setRecords, forced }) {
                         <div className="row-actions">
                           <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
                             <Eye />
+                          </button>
+                          <button title="Transfer Campus" onClick={() => { setListTransferTarget(r); setShowListTransferModal(true); }}>
+                            <ArrowRightLeft />
                           </button>
                           <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
                             try {
@@ -5218,6 +5298,16 @@ function StaffList({ records = [], setRecords, forced }) {
         isSubmitting={isImportSubmitting}
       />
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
+      <StaffTransferModal
+        staff={listTransferTarget}
+        campuses={campuses}
+        isOpen={showListTransferModal}
+        onClose={() => { setShowListTransferModal(false); setListTransferTarget(null); }}
+        onSuccess={(msg) => {
+          setToast(msg || "Campus transfer executed successfully.");
+          setPage(1);
+        }}
+      />
     </DashboardLayout>
   );
 }
@@ -5302,6 +5392,23 @@ function TeachingForm({ records, setRecords, existing }) {
     Number(values.roleId) === 15 ||
     Number(values.roleId) === 2;
 
+  const [isGlobalStaff, setIsGlobalStaff] = useState(() => {
+    if (existing) {
+      return (
+        (Array.isArray(existing.assignedCampusIds) && existing.assignedCampusIds.length > 1) ||
+        (Array.isArray(existing.assignedCampuses) && existing.assignedCampuses.length > 1) ||
+        Boolean(existing.campusBoardAssignmentsJson)
+      );
+    }
+    return isPrincipal;
+  });
+
+  useEffect(() => {
+    if (isPrincipal && !isGlobalStaff) {
+      setIsGlobalStaff(true);
+    }
+  }, [isPrincipal]);
+
   useEffect(() => {
     if (!existing) {
       setValues((v) => ({
@@ -5317,9 +5424,9 @@ function TeachingForm({ records, setRecords, existing }) {
     }
   }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
-  // If role is changed away from Principal, reset multi-campus assignments
+  // If multi-campus is disabled and role is not Principal, reset multi-campus assignments
   useEffect(() => {
-    if (!isPrincipal && values.campusBoardAssignmentsJson) {
+    if (!isPrincipal && !isGlobalStaff && values.campusBoardAssignmentsJson) {
       setValues((v) => ({
         ...v,
         assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
@@ -5327,7 +5434,7 @@ function TeachingForm({ records, setRecords, existing }) {
         campusBoardAssignmentsJson: "",
       }));
     }
-  }, [isPrincipal, values.campusBoardAssignmentsJson, activeCampusId, activeCampusName]);
+  }, [isPrincipal, isGlobalStaff, values.campusBoardAssignmentsJson, activeCampusId, activeCampusName]);
 
   // Build the next employee ID from existing staff without advancing a series on form load.
   useEffect(() => {
@@ -5357,12 +5464,12 @@ function TeachingForm({ records, setRecords, existing }) {
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
     const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (isPrincipal ? 15 : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4)));
 
-    const hasAssignedCampuses = Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0;
+    const hasAssignedCampuses = (isGlobalStaff || isPrincipal) && Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0;
     const finalAssignedCampusIds = hasAssignedCampuses
       ? [...new Set(values.assignedCampusIds.map(Number).filter(Boolean))]
       : (values.campusId ? [Number(values.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []));
 
-    const hasAssignedBoards = Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0;
+    const hasAssignedBoards = (isGlobalStaff || isPrincipal) && Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0;
     const finalAssignedBoardIds = hasAssignedBoards
       ? [...new Set(values.assignedBoardIds.map(Number).filter(Boolean))]
       : (values.boardId ? [Number(values.boardId)] : (activeBoardId ? [Number(activeBoardId)] : []));
@@ -5521,7 +5628,57 @@ function TeachingForm({ records, setRecords, existing }) {
                       roleOptions={apiRoleObjects.length > 0 ? apiRoleObjects : apiRoles}
                       staffType="Teaching"
                     />
-                    {isPrincipal ? (
+                    <div style={{
+                      gridColumn: "1 / -1",
+                      margin: "8px 0 16px",
+                      padding: "14px 18px",
+                      background: (isGlobalStaff || isPrincipal) ? "#f0fdf4" : "#f8fafc",
+                      border: (isGlobalStaff || isPrincipal) ? "1.5px solid #86efac" : "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "14px"
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: (isGlobalStaff || isPrincipal) ? "#166534" : "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span>🌐 Employment Scope: Global / Multi-Campus Teaching Staff</span>
+                          {(isGlobalStaff || isPrincipal) && (
+                            <span style={{ fontSize: "11px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", padding: "1px 8px", borderRadius: "10px", fontWeight: "700" }}>
+                              Multi-Campus Active
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "12px", color: (isGlobalStaff || isPrincipal) ? "#15803d" : "#64748b", marginTop: "3px" }}>
+                          Enable this option to assign this teaching staff member across multiple campuses and boards simultaneously.
+                        </div>
+                      </div>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: isPrincipal ? "not-allowed" : "pointer", userSelect: "none" }}>
+                        <input
+                          type="checkbox"
+                          checked={isGlobalStaff || isPrincipal}
+                          disabled={isPrincipal}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIsGlobalStaff(checked);
+                            if (!checked) {
+                              setValues((v) => ({
+                                ...v,
+                                assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
+                                assignedCampuses: v.campusName ? [v.campusName] : (activeCampusName ? [activeCampusName] : []),
+                                campusBoardAssignmentsJson: "",
+                              }));
+                            }
+                          }}
+                          style={{ width: "18px", height: "18px", accentColor: "#16a34a", cursor: isPrincipal ? "not-allowed" : "pointer" }}
+                        />
+                        <span style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
+                          {isPrincipal ? "Mandatory for Principal" : "Assign Multiple Campuses"}
+                        </span>
+                      </label>
+                    </div>
+
+                    {(isGlobalStaff || isPrincipal) ? (
                       <PrincipalCampusBoardAssignment
                         values={values}
                         setValues={setValues}
@@ -6646,9 +6803,1212 @@ function Pending({ records = [], setRecords, activity }) {
 
 // ----------------------------------------------------------------------
 // ----------------------------------------------------------------------
-// STAFF DETAILS (GET /api/v1/staff/{id} & GET /api/v1/staff/{id}/print-pdf)
+
+// ----------------------------------------------------------------------
+// DYNAMIC EXPERIENCE & CAMPUS TENURE WIDGET
+// ----------------------------------------------------------------------
+function StaffExperienceWidget({ staffId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await apiClient.get(apiEndpoints.faculty.experienceSummary(staffId));
+        if (active && res.data) {
+          setData(res.data.data || res.data);
+        }
+      } catch (e) {
+        console.error("Failed to load experience summary", e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    if (staffId) load();
+    return () => { active = false; };
+  }, [staffId]);
+
+  if (loading) {
+    return <div style={{ padding: "16px", color: "var(--cms-muted)" }}>Calculating dynamic experience intervals...</div>;
+  }
+  if (!data) return null;
+
+  return (
+    <div style={{ marginTop: "10px", marginBottom: "10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px" }}>
+      <h3 style={{ margin: "0 0 14px", fontSize: "15px", fontWeight: "700", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+        <span>🎓 Dynamic Experience & Campus Tenure Calculation</span>
+        <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px" }}>
+          Non-Overlapping Union Engine
+        </span>
+      </h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #3b82f6" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Prior External Service</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.priorExternalExperienceYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Approved external history</div>
+        </div>
+
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #10b981" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Institutional Service</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.institutionalExperienceYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Campus assignments tenure</div>
+        </div>
+
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #f59e0b" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Current Campus Tenure</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.currentCampusTenureYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Active posting duration</div>
+        </div>
+
+        <div style={{ background: "#f0fdf4", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #16a34a" }}>
+          <div style={{ fontSize: "12px", color: "#15803d", fontWeight: "700" }}>Total Dynamic Experience</div>
+          <div style={{ fontSize: "22px", fontWeight: "900", color: "#15803d", marginTop: "4px" }}>
+            {data.totalDynamicExperienceYears ?? 0} <span style={{ fontSize: "13px", fontWeight: "600" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#16a34a", marginTop: "2px" }}>Certified service total</div>
+        </div>
+      </div>
+
+      {Array.isArray(data.campusTenures) && data.campusTenures.length > 0 && (
+        <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed #e2e8f0" }}>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+            Campus Tenure Breakdown:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {data.campusTenures.map((t, idx) => (
+              <span key={idx} style={{
+                background: t.isPrimary ? "#eff6ff" : "#f1f5f9",
+                border: t.isPrimary ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
+                color: t.isPrimary ? "#1e40af" : "#475569",
+                padding: "3px 10px",
+                borderRadius: "6px",
+                fontSize: "12px"
+              }}>
+                <strong>{t.campusName || `Campus ${t.campusId}`}</strong>: {t.tenureYears} yrs ({t.startDate ? t.startDate.split("T")[0] : "—"} to {t.endDate ? t.endDate.split("T")[0] : "Present"})
+                {t.isPrimary && <span style={{ marginLeft: "5px", color: "#2563eb", fontWeight: "bold" }}>★ Primary</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// CAMPUS TRANSFER HISTORY COMPONENT
+// ----------------------------------------------------------------------
+function StaffTransferHistory({ staffId, refreshKey }) {
+  const [transfers, setTransfers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await apiClient.get(apiEndpoints.staffTransfers.history(staffId));
+        if (active && res.data) {
+          setTransfers(res.data.data || res.data || []);
+        }
+      } catch (e) {
+        console.error("Failed to load staff transfer history", e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    if (staffId) load();
+    return () => { active = false; };
+  }, [staffId, refreshKey]);
+
+  if (loading) return <div style={{ padding: "12px 0", color: "var(--cms-muted)" }}>Loading transfer history...</div>;
+  if (!transfers.length) return null;
+
+  return (
+    <div style={{ marginTop: "10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px" }}>
+      <h3 style={{ margin: "0 0 12px", fontSize: "15px", fontWeight: "700", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+        <span>⇄ Campus Transfer & Relocation History</span>
+        <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px" }}>
+          {transfers.length} Recorded Transfer{transfers.length > 1 ? "s" : ""}
+        </span>
+      </h3>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ background: "#f8fafc", textAlign: "left", color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+              <th style={{ padding: "8px 12px" }}>Order #</th>
+              <th style={{ padding: "8px 12px" }}>Type</th>
+              <th style={{ padding: "8px 12px" }}>From Campus</th>
+              <th style={{ padding: "8px 12px" }}>To Campus</th>
+              <th style={{ padding: "8px 12px" }}>Effective Date</th>
+              <th style={{ padding: "8px 12px" }}>Status</th>
+              <th style={{ padding: "8px 12px", textAlign: "right" }}>Document</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transfers.map((t) => (
+              <tr key={t.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "10px 12px", fontWeight: "600", color: "#1e293b" }}>{t.transferOrderNumber || `TRF-${t.id}`}</td>
+                <td style={{ padding: "10px 12px", color: "#64748b" }}>{t.transferType || "PermanentRelocation"}</td>
+                <td style={{ padding: "10px 12px", color: "#334155" }}>{t.fromCampusName || `Campus ${t.fromCampusId}`}</td>
+                <td style={{ padding: "10px 12px", fontWeight: "600", color: "#047857" }}>➔ {t.toCampusName || `Campus ${t.toCampusId}`}</td>
+                <td style={{ padding: "10px 12px", color: "#475569" }}>{t.effectiveDate ? t.effectiveDate.split("T")[0] : "—"}</td>
+                <td style={{ padding: "10px 12px" }}>
+                  <span style={{
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    background: t.status === "Approved" ? "#dcfce7" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                    color: t.status === "Approved" ? "#15803d" : t.status === "Pending" ? "#b45309" : "#b91c1c"
+                  }}>
+                    {t.status}
+                  </span>
+                </td>
+                <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    style={{ fontSize: "12px", padding: "4px 8px" }}
+                    onClick={() => window.open(apiEndpoints.staffTransfers.orderPdf(t.id), "_blank")}
+                  >
+                    📄 Official Order PDF
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// STAFF TRANSFER MODAL COMPONENT
+// ----------------------------------------------------------------------
+function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
+  const [step, setStep] = useState(1); // 1 = Configure, 2 = Confirmation Summary
+  const [toCampusId, setToCampusId] = useState("");
+  const [transferType, setTransferType] = useState(""); // Starts empty for explicit user selection
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [relievingDate, setRelievingDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [reason, setReason] = useState("");
+  const [approvalRemarks, setApprovalRemarks] = useState("");
+  const [confirmedWarning, setConfirmedWarning] = useState(false);
+
+  // Teaching Staff Allocation State - All start empty for user selection
+  const [toBoardId, setToBoardId] = useState("");
+  const [toBoardName, setToBoardName] = useState("");
+  const [academicYear, setAcademicYear] = useState("");
+  const [academicLevel, setAcademicLevel] = useState("");
+  const [academicGroup, setAcademicGroup] = useState("");
+  const [academicSection, setAcademicSection] = useState("");
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
+
+  // Non-Teaching Staff State - All start empty for user selection
+  const [toDepartmentId, setToDepartmentId] = useState("");
+  const [toDepartmentName, setToDepartmentName] = useState("");
+  const [toDesignationId, setToDesignationId] = useState("");
+  const [toDesignationName, setToDesignationName] = useState("");
+  const [toRole, setToRole] = useState("");
+  const [reportingManager, setReportingManager] = useState("");
+
+  // Lookups & System data loaded from real dependency endpoints
+  const [boardsList, setBoardsList] = useState([]);
+  const [academicYearsList, setAcademicYearsList] = useState([]);
+  const [academicLevelsList, setAcademicLevelsList] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
+  const [sectionsList, setSectionsList] = useState([]);
+  const [subjectsList, setSubjectsList] = useState([]);
+  const [deptList, setDeptList] = useState([]);
+  const [desigList, setDesigList] = useState([]);
+  const [preflight, setPreflight] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingLookups, setLoadingLookups] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const isTeaching = staff?.staffType === "Teaching" || (!staff?.staffType && String(staff?.designation || "").toLowerCase().includes("lecturer"));
+
+  // Deduplicate destination subjects so each subject name appears strictly once
+  const deduplicatedSubjects = useMemo(() => {
+    const seen = new Set();
+    const unique = [];
+    for (const s of subjectsList) {
+      const name = (typeof s === "string" ? s : (s.subjectName || s.name || s.subjectCode || "")).trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        unique.push({ id: s.id || s.subjectId || name, name });
+      }
+    }
+    return unique;
+  }, [subjectsList]);
+
+  // Baseline Lookups (Academic Years, Departments, Designations)
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+
+    async function loadBaselineLookups() {
+      try {
+        setLoadingLookups(true);
+        const [yearsRes, deptRes, desigRes] = await Promise.allSettled([
+          apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years"),
+          apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments"),
+          apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations"),
+        ]);
+
+        if (active) {
+          if (yearsRes.status === "fulfilled" && yearsRes.value?.data) {
+            const raw = yearsRes.value.data.data || yearsRes.value.data || [];
+            setAcademicYearsList(Array.isArray(raw) ? raw : []);
+          }
+          if (deptRes.status === "fulfilled" && deptRes.value?.data) {
+            const raw = deptRes.value.data.data || deptRes.value.data || [];
+            setDeptList(Array.isArray(raw) ? raw : []);
+          }
+          if (desigRes.status === "fulfilled" && desigRes.value?.data) {
+            const raw = desigRes.value.data.data || desigRes.value.data || [];
+            setDesigList(Array.isArray(raw) ? raw : []);
+          }
+        }
+      } catch (e) {
+        console.warn("Baseline lookup error in StaffTransferModal:", e);
+      } finally {
+        if (active) setLoadingLookups(false);
+      }
+    }
+
+    loadBaselineLookups();
+    return () => { active = false; };
+  }, [isOpen]);
+
+  // 1. Hierarchical Destination Campus Selection -> Load affiliated Boards
+  useEffect(() => {
+    if (!isOpen || !toCampusId) {
+      setBoardsList([]);
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadCampusBoards() {
+      try {
+        let boards = [];
+        try {
+          const res = await apiClient.get(`/api/v1/campuses/${toCampusId}/boards`);
+          const raw = res.data?.data || res.data || [];
+          if (Array.isArray(raw) && raw.length > 0) boards = raw;
+        } catch {}
+
+        if (boards.length === 0) {
+          const fallbackRes = await apiClient.get(apiEndpoints.boards?.list || "/api/v1/boards");
+          const rawFallback = fallbackRes.data?.data || fallbackRes.data || [];
+          if (Array.isArray(rawFallback)) boards = rawFallback;
+        }
+
+        if (active) {
+          setBoardsList(boards);
+        }
+      } catch (err) {
+        console.warn("Failed to load campus boards:", err);
+      }
+    }
+
+    loadCampusBoards();
+    return () => { active = false; };
+  }, [isOpen, toCampusId]);
+
+  // 2. Hierarchical Destination Board Selection -> Load Academic Levels, Course Groups, and Subjects
+  useEffect(() => {
+    if (!isOpen || !toBoardId) {
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadBoardDependencies() {
+      try {
+        const [levelsRes, groupsRes, subjectsRes] = await Promise.allSettled([
+          apiClient.get(`/api/v1/academic-levels?boardId=${toBoardId}`),
+          apiClient.get(`/api/v1/groups/dropdown?boardId=${toBoardId}`),
+          apiClient.get(`/api/v1/subjects/board/${toBoardId}`),
+        ]);
+
+        if (active) {
+          if (levelsRes.status === "fulfilled" && levelsRes.value?.data) {
+            const raw = levelsRes.value.data.data || levelsRes.value.data || [];
+            setAcademicLevelsList(Array.isArray(raw) ? raw : []);
+          }
+          if (groupsRes.status === "fulfilled" && groupsRes.value?.data) {
+            const raw = groupsRes.value.data.data || groupsRes.value.data || [];
+            setGroupsList(Array.isArray(raw) ? raw : []);
+          }
+          if (subjectsRes.status === "fulfilled" && subjectsRes.value?.data) {
+            const raw = subjectsRes.value.data.data || subjectsRes.value.data || [];
+            setSubjectsList(Array.isArray(raw) ? raw : []);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load board dependencies:", err);
+      }
+    }
+
+    loadBoardDependencies();
+    return () => { active = false; };
+  }, [isOpen, toBoardId]);
+
+  // 3. Hierarchical Course Group Selection -> Load Sections and Group-Specific Subjects
+  useEffect(() => {
+    if (!isOpen || !academicGroup) {
+      setAcademicSection("");
+      setSectionsList([]);
+      return;
+    }
+
+    const selectedGrp = groupsList.find(
+      (g) => (g.groupName || g.name || g.masterGroupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup)
+    );
+    const groupId = selectedGrp?.id || selectedGrp?.groupId;
+
+    if (!groupId) return;
+
+    let active = true;
+    async function loadGroupDependencies() {
+      try {
+        const [secRes, subRes] = await Promise.allSettled([
+          apiClient.get(`/api/v1/Sections/group/${groupId}`),
+          apiClient.get(`/api/v1/subjects/group/${groupId}`),
+        ]);
+
+        if (active) {
+          if (secRes.status === "fulfilled" && secRes.value?.data) {
+            const raw = secRes.value.data.data || secRes.value.data || [];
+            setSectionsList(Array.isArray(raw) ? raw : []);
+          }
+          if (subRes.status === "fulfilled" && subRes.value?.data) {
+            const raw = subRes.value.data.data || subRes.value.data || [];
+            if (Array.isArray(raw) && raw.length > 0) {
+              setSubjectsList(raw);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load group dependencies:", err);
+      }
+    }
+
+    loadGroupDependencies();
+    return () => { active = false; };
+  }, [isOpen, academicGroup, groupsList]);
+
+  // Reset form with empty user-selectable fields whenever modal opens
+  useEffect(() => {
+    if (isOpen && staff) {
+      setStep(1);
+      setToCampusId("");
+      setTransferType(""); // User explicitly selects posting type
+      setEffectiveDate(new Date().toISOString().split("T")[0]);
+      setRelievingDate(new Date().toISOString().split("T")[0]);
+      setReason("");
+      setApprovalRemarks("");
+      setConfirmedWarning(false);
+      setErrorMsg("");
+
+      // Destination allocations start empty
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+
+      setToDepartmentId("");
+      setToDepartmentName("");
+      setToDesignationId("");
+      setToDesignationName("");
+      setToRole("");
+      setReportingManager("");
+    }
+  }, [isOpen, staff]);
+
+  // Run Preflight Check on Target Campus selection
+  useEffect(() => {
+    if (isOpen && staff?.id && toCampusId) {
+      let active = true;
+      async function runPreflight() {
+        try {
+          const res = await apiClient.get(`${apiEndpoints.staffTransfers.preflight(staff.id)}?toCampusId=${toCampusId}`);
+          if (active && res.data) {
+            setPreflight(res.data.data || res.data);
+          }
+        } catch (e) {
+          console.warn("Preflight check failed", e);
+        }
+      }
+      runPreflight();
+      return () => { active = false; };
+    } else {
+      setPreflight(null);
+    }
+  }, [isOpen, staff?.id, toCampusId]);
+
+  if (!isOpen || !staff) return null;
+
+  const currentCampusId = staff.campusId || staff.CampusId || staff.primaryCampusId || 1;
+  const currentCampusName = staff.campusName || "Main Campus (HQ)";
+  const availableCampuses = (campuses || []).filter(c => Number(c.id ?? c.campusId) !== Number(currentCampusId));
+  const selectedDestCampus = (campuses || []).find(c => String(c.id ?? c.campusId) === String(toCampusId));
+
+  const toggleSubject = (subName) => {
+    setSelectedSubjects(prev =>
+      prev.includes(subName) ? prev.filter(s => s !== subName) : [...prev, subName]
+    );
+  };
+
+  const handleKeepCurrentSubjects = () => {
+    const rawSubs = staff.allocatedSubjects || staff.subjects || [];
+    const currentSubs = Array.isArray(rawSubs)
+      ? rawSubs.map(s => typeof s === "object" ? s.name || s.subjectName || String(s) : String(s)).filter(Boolean)
+      : (typeof rawSubs === "string" ? rawSubs.split(",").map(s => s.trim()).filter(Boolean) : []);
+    if (currentSubs.length > 0) {
+      setSelectedSubjects(currentSubs);
+    }
+  };
+
+  const handleProceedToConfirmation = (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+
+    if (!toCampusId) {
+      setErrorMsg("Please select a target destination campus.");
+      return;
+    }
+    if (Number(toCampusId) === Number(currentCampusId)) {
+      setErrorMsg("Destination campus must be different from the current source campus.");
+      return;
+    }
+    if (!transferType) {
+      setErrorMsg("Please select a Transfer Posting Type.");
+      return;
+    }
+    if (!reason.trim()) {
+      setErrorMsg("Please specify a reason or administrative remarks for the campus transfer.");
+      return;
+    }
+    if (isTeaching && !toBoardId) {
+      setErrorMsg("Please select an affiliated destination board for teaching allocation.");
+      return;
+    }
+    if (isTeaching && selectedSubjects.length === 0) {
+      setErrorMsg("Please assign at least one teaching subject for the destination campus.");
+      return;
+    }
+    if (!isTeaching && !toDepartmentId) {
+      setErrorMsg("Please select a destination department for non-teaching staff.");
+      return;
+    }
+    if (!isTeaching && !toDesignationId) {
+      setErrorMsg("Please select a destination designation for non-teaching staff.");
+      return;
+    }
+
+    setStep(2);
+  };
+
+  const handleExecuteTransfer = async () => {
+    if (!confirmedWarning) {
+      setErrorMsg("Please verify destination allocations and check the authorization confirmation box before executing.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setErrorMsg("");
+
+      const payload = {
+        staffId: staff.id,
+        toCampusId: Number(toCampusId),
+        toBoardId: isTeaching && toBoardId ? Number(toBoardId) : null,
+        toBoardName: isTeaching ? toBoardName : null,
+        toDepartmentId: toDepartmentId ? Number(toDepartmentId) : null,
+        toDepartmentName: toDepartmentName || null,
+        toDesignationId: toDesignationId ? Number(toDesignationId) : null,
+        toDesignationName: toDesignationName || null,
+        transferType: transferType || "Permanent",
+        reason: reason.trim(),
+        effectiveDate: effectiveDate,
+        relievingDate: relievingDate || null,
+        joiningDate: effectiveDate,
+        approvalRemarks: approvalRemarks.trim() || reason.trim(),
+        academicYearName: isTeaching ? academicYear : null,
+        academicLevelName: isTeaching ? academicLevel : null,
+        groupName: isTeaching ? academicGroup : null,
+        sectionName: isTeaching ? academicSection : null,
+        allocatedSubjectNames: isTeaching ? selectedSubjects : null,
+        roleName: !isTeaching ? (toRole || "Staff") : "Faculty",
+        autoApprove: true
+      };
+
+      const res = await apiClient.post(apiEndpoints.staffTransfers.create, payload);
+      const created = res.data?.data || res.data;
+
+      const orderNo = created?.transferOrderNumber || "Generated";
+      const destName = selectedDestCampus?.campusName || selectedDestCampus?.name || `Campus #${toCampusId}`;
+
+      onSuccess?.(`Staff member successfully transferred to ${destName}! Full profile, service records, and experience transitioned seamlessly. Transfer Order ${orderNo} created.`, created?.id);
+      onClose();
+    } catch (err) {
+      console.error("Failed to execute transfer", err);
+      setErrorMsg(getApiErrorMessage(err, "Failed to execute staff transfer. Please verify data and try again."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+      background: "rgba(15, 23, 42, 0.65)", zIndex: 9999,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+      backdropFilter: "blur(3px)"
+    }}>
+      <div style={{
+        background: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "780px",
+        maxHeight: "92vh", overflowY: "auto", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
+        border: "1px solid #cbd5e1"
+      }}>
+        {/* MODAL HEADER */}
+        <div style={{
+          padding: "16px 24px", borderBottom: "1px solid #e2e8f0",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "linear-gradient(to right, #f8fafc, #f1f5f9)"
+        }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: "28px", height: "28px", borderRadius: "6px",
+                background: "var(--cms-primary, #355e3b)", color: "#fff"
+              }}>
+                <ArrowRightLeft size={16} />
+              </span>
+              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "700", color: "#1e293b" }}>
+                Staff Campus Transfer &amp; Posting Relocation
+              </h3>
+            </div>
+            <p style={{ margin: "4px 0 0 36px", fontSize: "12px", color: "#64748b" }}>
+              Official inter-campus transfer preserving identity, service history, and accumulated experience.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: "4px" }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* CURRENT STAFF PROFILE BANNER */}
+        <div style={{ padding: "14px 24px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", fontSize: "12px" }}>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Staff Member:</span>
+              <strong style={{ color: "#1e293b" }}>{staff.fullName || `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || staff.employeeId}</strong>
+            </div>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Employee ID:</span>
+              <span style={{ fontFamily: "monospace", fontWeight: "700", color: "var(--cms-primary, #355e3b)" }}>{staff.employeeId}</span>
+            </div>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Staff Type:</span>
+              <span style={{
+                padding: "1px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "700",
+                background: isTeaching ? "#e0f2fe" : "#fef3c7",
+                color: isTeaching ? "#0369a1" : "#b45309"
+              }}>
+                {isTeaching ? "Teaching Faculty" : "Non-Teaching Staff"}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Current Campus:</span>
+              <strong style={{ color: "#b91c1c" }}>📍 {currentCampusName}</strong>
+            </div>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Current Designation:</span>
+              <span style={{ color: "#334155" }}>{staff.designation || "—"}</span>
+            </div>
+            <div>
+              <span style={{ color: "#64748b", display: "block" }}>Current Department:</span>
+              <span style={{ color: "#334155" }}>{staff.department || "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP TABS */}
+        <div style={{ display: "flex", borderBottom: "1px solid #e2e8f0", background: "#fff" }}>
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            style={{
+              flex: 1, padding: "10px", fontSize: "13px", fontWeight: "600", border: "none",
+              borderBottom: step === 1 ? "2px solid var(--cms-primary, #355e3b)" : "2px solid transparent",
+              background: step === 1 ? "#fff" : "#f8fafc",
+              color: step === 1 ? "var(--cms-primary, #355e3b)" : "#64748b", cursor: "pointer"
+            }}
+          >
+            1. Configure Destination Allocations
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (toCampusId && transferType && reason.trim()) setStep(2); }}
+            style={{
+              flex: 1, padding: "10px", fontSize: "13px", fontWeight: "600", border: "none",
+              borderBottom: step === 2 ? "2px solid var(--cms-primary, #355e3b)" : "2px solid transparent",
+              background: step === 2 ? "#fff" : "#f8fafc",
+              color: step === 2 ? "var(--cms-primary, #355e3b)" : "#64748b", cursor: (toCampusId && transferType) ? "pointer" : "not-allowed"
+            }}
+          >
+            2. Confirmation &amp; Relocation Authorization
+          </button>
+        </div>
+
+        {/* FORM CONTENT */}
+        <div style={{ padding: "20px 24px" }}>
+          {errorMsg && (
+            <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#b91c1c", fontSize: "13px" }}>
+              {errorMsg}
+            </div>
+          )}
+
+          {/* PREFLIGHT ADVISORY BANNER */}
+          {preflight && (preflight.activeTimetableSlotsCount > 0 || (preflight.warnings && preflight.warnings.length > 0)) && (
+            <div style={{ marginBottom: "16px", padding: "12px 16px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", color: "#92400e", fontSize: "12px" }}>
+              <div style={{ fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>⚠️ Relieving Campus Audit Advisory</span>
+              </div>
+              {preflight.activeTimetableSlotsCount > 0 && (
+                <div style={{ marginTop: "4px" }}>
+                  Staff member currently holds <strong>{preflight.activeTimetableSlotsCount} active weekly timetable slots</strong> at {currentCampusName}. These will be gracefully unassigned without affecting historical attendance records.
+                </div>
+              )}
+              {preflight.warnings && preflight.warnings.map((w, idx) => (
+                <div key={idx} style={{ marginTop: "2px" }}>• {w}</div>
+              ))}
+            </div>
+          )}
+
+          {step === 1 ? (
+            <form onSubmit={handleProceedToConfirmation}>
+              {/* TARGET CAMPUS & DATES */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Destination Campus *
+                  </label>
+                  <select
+                    value={toCampusId}
+                    onChange={(e) => setToCampusId(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                  >
+                    <option value="">Select Destination Campus *...</option>
+                    {availableCampuses.map((c) => (
+                      <option key={c.id ?? c.campusId} value={c.id ?? c.campusId}>
+                        {c.campusName || c.name} ({c.campusCode || c.code || `ID: ${c.id ?? c.campusId}`})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Transfer Posting Type *
+                  </label>
+                  <select
+                    value={transferType}
+                    onChange={(e) => setTransferType(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                  >
+                    <option value="">Select Posting Type *...</option>
+                    <option value="Permanent">Permanent Relocation</option>
+                    <option value="VisitingFaculty">Visiting Faculty Allocation</option>
+                    <option value="Deputation">Deputation / Temporary Posting</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Effective Transfer Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={effectiveDate}
+                    onChange={(e) => setEffectiveDate(e.target.value)}
+                    required
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                    Relieving Date from {currentCampusName}
+                  </label>
+                  <input
+                    type="date"
+                    value={relievingDate}
+                    onChange={(e) => setRelievingDate(e.target.value)}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                  />
+                </div>
+              </div>
+
+              {/* TEACHING STAFF ALLOCATIONS CONTAINER - DYNAMIC & HIERARCHICAL */}
+              {isTeaching && (
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "var(--cms-primary, #355e3b)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span>🎓 Destination Academic &amp; Subject Allocations (Teaching)</span>
+                    </h4>
+                    {staff.allocatedSubjects && staff.allocatedSubjects.length > 0 && (
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-ghost"
+                        onClick={handleKeepCurrentSubjects}
+                        style={{ fontSize: "11px", padding: "3px 8px" }}
+                      >
+                        ↺ Keep Current Subjects
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Affiliated Educational Board *
+                      </label>
+                      <select
+                        value={toBoardId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToBoardId(val);
+                          const sel = boardsList.find(b => String(b.id || b.boardId) === String(val));
+                          setToBoardName(sel?.boardName || sel?.name || "");
+                        }}
+                        disabled={!toCampusId}
+                        required
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toCampusId ? "#f1f5f9" : "#fff" }}
+                      >
+                        <option value="">{!toCampusId ? "Select Destination Campus first..." : "Select Affiliated Board *..."}</option>
+                        {boardsList.map(b => (
+                          <option key={b.id || b.boardId} value={b.id || b.boardId}>
+                            {b.boardName || b.name || b.boardCode || b.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Academic Year
+                      </label>
+                      <select
+                        value={academicYear}
+                        onChange={(e) => setAcademicYear(e.target.value)}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                      >
+                        <option value="">Select Academic Year...</option>
+                        {academicYearsList.length > 0 ? (
+                          academicYearsList.map(y => {
+                            const yName = y.year || y.academicYearName || y.name || y.code;
+                            return (
+                              <option key={y.id || y.academicYearId || yName} value={yName}>
+                                {yName}
+                              </option>
+                            );
+                          })
+                        ) : (
+                          <>
+                            <option value="2026-2027">2026-2027</option>
+                            <option value="2025-2026">2025-2026</option>
+                          </>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Academic Level
+                      </label>
+                      <select
+                        value={academicLevel}
+                        onChange={(e) => setAcademicLevel(e.target.value)}
+                        disabled={!toBoardId}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toBoardId ? "#f1f5f9" : "#fff" }}
+                      >
+                        <option value="">{!toBoardId ? "Select Board first..." : "Select Academic Level..."}</option>
+                        {academicLevelsList.map(l => {
+                          const lName = l.levelName || l.name || l.academicLevelName;
+                          return (
+                            <option key={l.id || l.levelId || lName} value={lName}>
+                              {lName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Course Group / Stream
+                      </label>
+                      <select
+                        value={academicGroup}
+                        onChange={(e) => setAcademicGroup(e.target.value)}
+                        disabled={!toBoardId}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toBoardId ? "#f1f5f9" : "#fff" }}
+                      >
+                        <option value="">{!toBoardId ? "Select Board first..." : "Select Course Group..."}</option>
+                        {groupsList.map(g => {
+                          const gName = g.groupName || g.name || g.masterGroupName;
+                          return (
+                            <option key={g.id || g.groupId || gName} value={gName}>
+                              {gName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Section Allocation
+                      </label>
+                      <select
+                        value={academicSection}
+                        onChange={(e) => setAcademicSection(e.target.value)}
+                        disabled={!academicGroup}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !academicGroup ? "#f1f5f9" : "#fff" }}
+                      >
+                        <option value="">{!academicGroup ? "Select Group first..." : "Select Section Allocation..."}</option>
+                        {sectionsList.map(s => {
+                          const sName = s.sectionName || s.name;
+                          return (
+                            <option key={s.id || s.sectionId || sName} value={sName}>
+                              {sName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* DEDUPLICATED SUBJECT PILLS */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                      Assign Destination Subjects * (Select one or more)
+                    </label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", maxHeight: "150px", overflowY: "auto", padding: "4px 0" }}>
+                      {!toBoardId ? (
+                        <span style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", padding: "6px 0" }}>
+                          Please select an Affiliated Educational Board above to view and assign destination subjects.
+                        </span>
+                      ) : deduplicatedSubjects.length > 0 ? (
+                        deduplicatedSubjects.map((s) => {
+                          const subName = s.name;
+                          const isSelected = selectedSubjects.includes(subName);
+                          return (
+                            <button
+                              key={s.id || subName}
+                              type="button"
+                              onClick={() => toggleSubject(subName)}
+                              style={{
+                                padding: "4px 10px", borderRadius: "14px", fontSize: "11px", fontWeight: "600",
+                                border: isSelected ? "1px solid var(--cms-primary, #355e3b)" : "1px solid #cbd5e1",
+                                background: isSelected ? "rgba(53, 94, 59, 0.12)" : "#ffffff",
+                                color: isSelected ? "var(--cms-primary, #355e3b)" : "#475569",
+                                cursor: "pointer", transition: "all 0.15s ease"
+                              }}
+                            >
+                              {isSelected ? "✓ " : "+ "}{subName}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", padding: "6px 0" }}>
+                          No subjects configured for the selected board/group.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* NON-TEACHING SPECIFIC CONTAINER - POPULATED DYNAMICALLY */}
+              {!isTeaching && (
+                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
+                  <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "700", color: "#b45309", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span>🏢 Destination Department &amp; Operational Role (Non-Teaching)</span>
+                  </h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Destination Department *
+                      </label>
+                      <select
+                        value={toDepartmentId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToDepartmentId(val);
+                          const d = deptList.find(x => String(x.id || x.departmentId) === String(val));
+                          setToDepartmentName(d?.departmentName || d?.name || "");
+                        }}
+                        required
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                      >
+                        <option value="">Select Department *...</option>
+                        {deptList.map(d => (
+                          <option key={d.id || d.departmentId} value={d.id || d.departmentId}>
+                            {d.departmentName || d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Destination Designation *
+                      </label>
+                      <select
+                        value={toDesignationId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToDesignationId(val);
+                          const dg = desigList.find(x => String(x.id || x.designationId) === String(val));
+                          setToDesignationName(dg?.designationName || dg?.name || "");
+                        }}
+                        required
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                      >
+                        <option value="">Select Designation *...</option>
+                        {desigList.map(dg => (
+                          <option key={dg.id || dg.designationId} value={dg.id || dg.designationId}>
+                            {dg.designationName || dg.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
+                        Role &amp; Security Context
+                      </label>
+                      <select
+                        value={toRole}
+                        onChange={(e) => setToRole(e.target.value)}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                      >
+                        <option value="">Select Role...</option>
+                        <option value="Staff">Staff</option>
+                        <option value="Admin">Administrator</option>
+                        <option value="Accountant">Accountant</option>
+                        <option value="Librarian">Librarian</option>
+                        <option value="Hostel Admin">Hostel Admin</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* REASON FOR TRANSFER */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Reason for Transfer &amp; Official Justification *
+                </label>
+                <textarea
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Administrative relocation to meet intermediate batch requirements at destination campus; approved by Governing Board."
+                  required
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", resize: "vertical" }}
+                />
+              </div>
+
+              {/* BUTTONS STEP 1 */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "14px", borderTop: "1px solid #f1f5f9" }}>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>
+                  Cancel
+                </button>
+                <button type="submit" className="cms-btn cms-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span>Review Transfer &amp; Summary</span>
+                  <ArrowRightLeft size={14} />
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* STEP 2: CONFIRMATION SUMMARY & WARNING */
+            <div>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", marginBottom: "16px" }}>
+                <h4 style={{ margin: "0 0 14px", fontSize: "15px", fontWeight: "700", color: "#1e293b", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
+                  📋 Confirm Staff Campus Transfer Summary
+                </h4>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "13px" }}>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Staff Name:</span>
+                    <strong style={{ display: "block", color: "#1e293b" }}>{staff.fullName || staff.employeeId}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Staff ID:</span>
+                    <strong style={{ display: "block", color: "var(--cms-primary, #355e3b)" }}>{staff.employeeId}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Relieving From:</span>
+                    <strong style={{ display: "block", color: "#b91c1c" }}>{currentCampusName}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Posting Destination:</span>
+                    <strong style={{ display: "block", color: "var(--cms-primary, #355e3b)" }}>
+                      {selectedDestCampus?.campusName || selectedDestCampus?.name || `Campus #${toCampusId}`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Posting Type:</span>
+                    <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{transferType}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Effective Relocation Date:</span>
+                    <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{effectiveDate}</span>
+                  </div>
+                  {isTeaching && (
+                    <>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Assigned Board:</span>
+                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toBoardName || "—"}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Assigned Subjects:</span>
+                        <span style={{ display: "block", fontWeight: "600", color: "var(--cms-primary, #355e3b)" }}>
+                          {selectedSubjects.join(", ") || "—"}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {!isTeaching && (
+                    <>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Destination Dept:</span>
+                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toDepartmentName || "—"}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "#64748b" }}>Destination Designation:</span>
+                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toDesignationName || "—"}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* LIFECYCLE & HISTORICAL DATA PRESERVATION GUARANTEE */}
+              <div style={{ marginBottom: "16px", padding: "14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", color: "#166534", fontSize: "12px" }}>
+                <div style={{ fontWeight: "700", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>🛡️ Campus Lifecycle &amp; Service Continuity Policy</span>
+                </div>
+                <div>
+                  Transferring this staff member will mark them as <strong>Transferred / Relieved</strong> in {currentCampusName} while securely retaining all past attendance logs, payroll history, and timetable archives in the database. Their profile, credentials, and cumulative experience will transition active to {selectedDestCampus?.campusName || "Destination Campus"}.
+                </div>
+              </div>
+
+              {/* APPROVAL REMARKS */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
+                  Governing Authority Remarks / Approval Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={approvalRemarks}
+                  onChange={(e) => setApprovalRemarks(e.target.value)}
+                  placeholder="e.g. Sanctioned as per Board Order No. TR-2026/04."
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                />
+              </div>
+
+              {/* CONFIRMATION CHECKBOX */}
+              <div style={{ marginBottom: "18px" }}>
+                <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", fontSize: "13px", color: "#1e293b" }}>
+                  <input
+                    type="checkbox"
+                    checked={confirmedWarning}
+                    onChange={(e) => setConfirmedWarning(e.target.checked)}
+                    style={{ marginTop: "3px" }}
+                  />
+                  <span>
+                    I confirm this official inter-campus transfer. I understand that the staff member will be relieved from {currentCampusName} and inducted into {selectedDestCampus?.campusName || "Destination Campus"} with an official Transfer Order generated.
+                  </span>
+                </label>
+              </div>
+
+              {/* BUTTONS STEP 2 */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "14px", borderTop: "1px solid #f1f5f9" }}>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(1)} disabled={submitting}>
+                  ← Back to Allocations
+                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={submitting}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    onClick={handleExecuteTransfer}
+                    disabled={submitting || !confirmedWarning}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  >
+                    {submitting ? <Loader2 size={14} className="sp-spin" /> : <CheckCircle2 size={14} />}
+                    <span>{submitting ? "Executing Transfer..." : "Execute & Dispatch Transfer Order"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------------------------------------------------
 function Details({ record, records, setRecords, id }) {
+  const { campuses } = useCampusContext();
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferRefreshKey, setTransferRefreshKey] = useState(0);
   const n = useNavigate();
   const [toast, setToast] = useState(null);
   const [photoError, setPhotoError] = useState(false);
@@ -6773,8 +8133,15 @@ function Details({ record, records, setRecords, id }) {
     }
 
     let boardId = updatedRecord.boardId;
-    if (updatedRecord.board && updatedRecord.board !== activeRecord.board) {
+    if (Array.isArray(updatedRecord.assignedBoardIds) && updatedRecord.assignedBoardIds.length > 0) {
+      boardId = updatedRecord.boardId || updatedRecord.assignedBoardIds[0];
+    } else if (updatedRecord.board && updatedRecord.board !== activeRecord.board && !updatedRecord.boardId) {
       boardId = null;
+    }
+
+    let campusId = updatedRecord.campusId;
+    if (Array.isArray(updatedRecord.assignedCampusIds) && updatedRecord.assignedCampusIds.length > 0) {
+      campusId = updatedRecord.campusId || updatedRecord.assignedCampusIds[0];
     }
 
     const qualification = updatedRecord.highestQualification || updatedRecord.qualification || activeRecord.highestQualification || activeRecord.qualification || "Graduate";
@@ -6804,6 +8171,9 @@ function Details({ record, records, setRecords, id }) {
       ...(departmentId !== undefined ? { departmentId } : {}),
       ...(designationId !== undefined ? { designationId } : {}),
       ...(boardId !== undefined ? { boardId } : {}),
+      ...(campusId !== undefined ? { campusId } : {}),
+      ...(Array.isArray(updatedRecord.assignedBoardIds) ? { assignedBoardIds: updatedRecord.assignedBoardIds } : {}),
+      ...(Array.isArray(updatedRecord.assignedCampusIds) ? { assignedCampusIds: updatedRecord.assignedCampusIds } : {}),
       ...(experienceFrom ? { experienceFrom } : {}),
       ...(experienceTo ? { experienceTo } : {}),
       ...(updatedRecord.totalExperience !== undefined ? { totalExperience: updatedRecord.totalExperience } : {}),
@@ -6894,7 +8264,42 @@ function Details({ record, records, setRecords, id }) {
                 ))}
               </div>
             ) : null}
-            <Badge value={activeRecord.status || "Active"} />
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
+              <Badge value={activeRecord.status || "Active"} />
+              {((Array.isArray(activeRecord.assignedCampusIds) && activeRecord.assignedCampusIds.length > 1) ||
+                (Array.isArray(activeRecord.assignedCampuses) && activeRecord.assignedCampuses.length > 1) ||
+                Boolean(activeRecord.campusBoardAssignmentsJson)) ? (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  background: "#eff6ff",
+                  color: "#1e40af",
+                  border: "1px solid #bfdbfe"
+                }}>
+                  🌐 Global / Multi-Campus Staff ({activeRecord.assignedCampusIds?.length || activeRecord.assignedCampuses?.length || "Multi"} Campuses)
+                </span>
+              ) : (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  background: "#f8fafc",
+                  color: "#475569",
+                  border: "1px solid #e2e8f0"
+                }}>
+                  📍 Single-Campus ({activeRecord.campusName || "Main Campus"})
+                </span>
+              )}
+            </div>
           </div>
         </section>
         <section className="staff-panel">
@@ -6931,6 +8336,7 @@ function Review({ record, update, activity }) {
         reviewStatus: "Approved",
       });
       if (activity) activity(`${record.fullName} profile approved by administration`);
+      alert(`Faculty profile approved successfully! Official QuestPDF Offer Letter generated and emailed to ${record.email || "faculty email"}.`);
       n(`/dashboard/staff/${record.id}`);
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
@@ -7020,13 +8426,18 @@ function Review({ record, update, activity }) {
 }
 
 // ----------------------------------------------------------------------
-// SUMMARY COMPONENT (Supports field editing, masking and save)
+// SUMMARY COMPONENT (Supports field editing, masking, multi-campus allocation and save)
 // ----------------------------------------------------------------------
 function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
-  const { boards } = useAcademicContext();
+  const { boards, allBoards } = useAcademicContext();
   const { campuses } = useCampusContext();
   const [editingGroup, setEditingGroup] = useState(null);
   const [formData, setFormData] = useState({});
+
+  const [editingAllocations, setEditingAllocations] = useState(false);
+  const [allocCampusIds, setAllocCampusIds] = useState([]);
+  const [allocPrimaryCampusId, setAllocPrimaryCampusId] = useState(null);
+  const [allocBoardIds, setAllocBoardIds] = useState([]);
 
   const isPrincipalRecord = useMemo(() => {
     return (
@@ -7038,7 +8449,76 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     );
   }, [record]);
 
+  // Comprehensive institution boards (Includes all configured boards)
+  const institutionalBoards = useMemo(() => {
+    const list = Array.isArray(allBoards) && allBoards.length > 0 ? allBoards : (Array.isArray(boards) ? boards : []);
+    const seen = new Set();
+    return list.filter((b) => {
+      if (!b) return false;
+      const bKey = String(b.id || b.boardId || b.code || b.boardCode || b.name || b.boardName);
+      if (seen.has(bKey)) return false;
+      seen.add(bKey);
+      return true;
+    });
+  }, [allBoards, boards]);
+
+  // Comprehensive institution campuses
+  const institutionalCampuses = useMemo(() => {
+    const list = Array.isArray(campuses) ? campuses : [];
+    const seen = new Set();
+    return list.filter((c) => {
+      if (!c) return false;
+      const cKey = String(c.id || c.campusId || c.code || c.campusCode || c.name || c.campusName);
+      if (seen.has(cKey)) return false;
+      seen.add(cKey);
+      return true;
+    });
+  }, [campuses]);
+
+  // Board options for select dropdown
+  const activeBoardOptions = useMemo(() => {
+    return institutionalBoards.map((b) => ({
+      value: b.name || b.boardName,
+      label: b.code || b.boardCode ? `${b.name || b.boardName} (${b.code || b.boardCode})` : (b.name || b.boardName),
+      code: b.code || b.boardCode || "",
+      id: b.id || b.boardId,
+    }));
+  }, [institutionalBoards]);
+
+  // Campus options for select dropdown
+  const activeCampusOptions = useMemo(() => {
+    return institutionalCampuses.map((c) => ({
+      value: c.name || c.campusName,
+      label: c.code || c.campusCode ? `${c.name || c.campusName} (${c.code || c.campusCode})` : (c.name || c.campusName),
+      code: c.code || c.campusCode || "",
+      id: c.id || c.campusId,
+    }));
+  }, [institutionalCampuses]);
+
+  // Department options based on staff type and master data
+  const departmentOptions = useMemo(() => {
+    try {
+      const cached = loadCachedDepartments();
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached.map(d => d.departmentName || d.name).filter(Boolean);
+      }
+    } catch { }
+    return record?.staffType === "Non-Teaching" ? nonTeachingDepartments : teachingDepartments;
+  }, [record]);
+
+  // Designation options based on staff type and master data
+  const designationOptions = useMemo(() => {
+    try {
+      const cached = loadCachedDesignations();
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached.map(d => d.name || d.designationName).filter(Boolean);
+      }
+    } catch { }
+    return record?.staffType === "Non-Teaching" ? nonTeachingDesignations : teachingDesignations;
+  }, [record]);
+
   const resolvedCampusList = useMemo(() => {
+    let rawList = [];
     // 1. Try campusBoardAssignmentsJson
     try {
       if (record?.campusBoardAssignmentsJson) {
@@ -7047,11 +8527,12 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           const valid = parsed.filter(p => p.campusId || p.campusName);
           if (valid.length > 0) {
             return valid.map(p => {
-              const matched = (campuses || []).find(cp => Number(cp.id ?? cp.campusId) === Number(p.campusId));
+              const matched = institutionalCampuses.find(cp => Number(cp.id ?? cp.campusId) === Number(p.campusId));
               return {
                 id: p.campusId || matched?.id || matched?.campusId,
                 name: p.campusName || matched?.name || matched?.campusName || `Campus #${p.campusId}`,
-                code: matched?.code || matched?.campusCode || "",
+                code: matched?.code || matched?.campusCode || p.campusCode || "",
+                isPrimary: Boolean(p.isPrimary || (record.campusId && Number(record.campusId) === Number(p.campusId))),
               };
             });
           }
@@ -7064,49 +8545,68 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       return record.assignedCampuses.map((c) => {
         if (typeof c === "object" && c !== null) {
           const cid = c.id ?? c.campusId;
-          const matched = (campuses || []).find((cp) => (cid && Number(cp.id ?? cp.campusId) === Number(cid)) || (c.name && cp.name === c.name));
+          const matched = institutionalCampuses.find((cp) => (cid && Number(cp.id ?? cp.campusId) === Number(cid)) || (c.name && cp.name === c.name));
           return {
             id: cid || matched?.id || matched?.campusId,
             name: c.name || c.campusName || matched?.name || matched?.campusName || `Campus #${cid}`,
             code: c.code || c.campusCode || matched?.code || matched?.campusCode || "",
+            isPrimary: Boolean(c.isPrimary || (record.campusId && Number(record.campusId) === Number(cid))),
           };
         }
-        const matched = (campuses || []).find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
+        const matched = institutionalCampuses.find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
         return {
           id: matched ? (matched.id ?? matched.campusId) : c,
           name: matched ? (matched.name || matched.campusName) : String(c),
           code: matched ? (matched.code || matched.campusCode) : "",
+          isPrimary: Boolean(record.campusId && Number(record.campusId) === Number(matched ? matched.id : c)),
         };
       });
     }
 
     // 3. Try assignedCampusIds
-    if (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
-      return record.assignedCampusIds.map((cid) => {
-        const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
+    if (!rawList.length && Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+      rawList = record.assignedCampusIds.map((cid) => {
+        const matched = institutionalCampuses.find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
         return {
-          id: cid,
+          id: Number(cid),
           name: matched ? (matched.name || matched.campusName) : `Campus #${cid}`,
           code: matched ? (matched.code || matched.campusCode) : "",
+          isPrimary: Boolean(record.campusId && Number(record.campusId) === Number(cid)),
         };
       });
     }
 
-    if (record?.campusName || record?.campusId) {
-      const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(record.campusId));
-      return [{
-        id: record.campusId || 1,
+    if (!rawList.length && (record?.campusName || record?.campusId)) {
+      const matched = institutionalCampuses.find((cp) => Number(cp.id ?? cp.campusId) === Number(record.campusId));
+      rawList = [{
+        id: Number(record.campusId) || 1,
         name: record.campusName || matched?.name || matched?.campusName || "Main Campus (HQ)",
         code: record.campusCode || matched?.code || matched?.campusCode || "MAIN",
+        isPrimary: true,
       }];
     }
 
-    return [{
-      id: 1,
-      name: "Main Campus (HQ)",
-      code: "MAIN",
-    }];
-  }, [record, campuses]);
+    if (!rawList.length) {
+      rawList = [{
+        id: 1,
+        name: "Main Campus (HQ)",
+        code: "MAIN",
+        isPrimary: true,
+      }];
+    }
+
+    // Strict deduplication by campus ID & name
+    const seen = new Set();
+    const unique = [];
+    for (const item of rawList) {
+      const key = String(item.id || item.name).trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, [record, institutionalCampuses]);
 
   const hasMultipleCampuses = useMemo(() => {
     return isPrincipalRecord || (Array.isArray(resolvedCampusList) && resolvedCampusList.length > 1);
@@ -7118,33 +8618,61 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     if (Array.isArray(record?.assignedBoardIds) && record.assignedBoardIds.length > 0) {
       return record.assignedBoardIds.map((bid) => {
-        const matched = (boards || []).find((bp) => Number(bp.id ?? bp.boardId) === Number(bid));
+        const matched = institutionalBoards.find((bp) => Number(bp.id ?? bp.boardId) === Number(bid));
         return matched ? (matched.name || matched.boardName || matched.code || `Board #${bid}`) : `Board #${bid}`;
       });
     }
     if (record?.boardName || record?.board) {
       return [record.boardName || record.board];
     }
-    return ["All Affiliated Boards"];
-  }, [record, boards]);
+    if (isPrincipalRecord) {
+      return ["All Affiliated Boards"];
+    }
+    return [];
+  }, [record, institutionalBoards, isPrincipalRecord]);
 
-  const activeBoardNames = useMemo(() => {
-    if (!Array.isArray(boards)) return [];
-    return boards
-      .filter((b) => {
-        if (!b) return false;
-        if (b.status !== undefined && b.status !== null) {
-          const st = String(b.status).trim().toLowerCase();
-          if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
-        }
-        if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
-          return false;
-        }
-        return true;
-      })
-      .map((b) => b.name || b.boardName)
-      .filter((n) => Boolean(n) && n !== "—" && !isOther(n));
-  }, [boards]);
+  const startEditAllocations = () => {
+    const currentCampIds = (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0)
+      ? [...record.assignedCampusIds]
+      : resolvedCampusList.map(c => Number(c.id)).filter(Boolean);
+    const currentPrimary = record?.campusId || currentCampIds[0] || (institutionalCampuses[0]?.id || 1);
+    const currentBoardIds = (Array.isArray(record?.assignedBoardIds) && record.assignedBoardIds.length > 0)
+      ? [...record.assignedBoardIds]
+      : (record?.boardId ? [record.boardId] : []);
+    
+    setAllocCampusIds(currentCampIds.length > 0 ? currentCampIds : [Number(currentPrimary)]);
+    setAllocPrimaryCampusId(Number(currentPrimary));
+    setAllocBoardIds(currentBoardIds.map(Number));
+    setEditingAllocations(true);
+  };
+
+  const handleSaveAllocations = () => {
+    if (!allocCampusIds.length) {
+      alert("Please select at least one campus.");
+      return;
+    }
+    const primaryId = allocPrimaryCampusId && allocCampusIds.includes(allocPrimaryCampusId)
+      ? allocPrimaryCampusId
+      : allocCampusIds[0];
+    
+    const matchedCamp = institutionalCampuses.find(c => Number(c.id || c.campusId) === Number(primaryId));
+    const primaryBoardId = allocBoardIds[0] || record?.boardId || (institutionalBoards[0]?.id || 1);
+    const matchedBoard = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(primaryBoardId));
+
+    if (onSave) {
+      onSave({
+        ...record,
+        assignedCampusIds: allocCampusIds,
+        campusId: primaryId,
+        campusName: matchedCamp ? (matchedCamp.name || matchedCamp.campusName) : record?.campusName,
+        assignedBoardIds: allocBoardIds,
+        boardId: primaryBoardId,
+        board: matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : record?.board,
+        boardName: matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : record?.boardName,
+      });
+    }
+    setEditingAllocations(false);
+  };
 
   const defaultGroups = [
     [
@@ -7256,7 +8784,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       onEdit(groupIndex);
       return;
     }
-    setFormData({ ...record });
+    const initData = { ...record };
+
+    // Resolve existing assigned board IDs
+    let existingBoardIds = [];
+    if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+      existingBoardIds = record.assignedBoardIds.map(Number);
+    } else if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+      existingBoardIds = record.assignedBoards.map(b => typeof b === 'object' ? Number(b.id || b.boardId) : Number(b)).filter(Boolean);
+    } else if (record.boardId) {
+      existingBoardIds = [Number(record.boardId)];
+    } else if (record.board || record.boardName) {
+      const match = institutionalBoards.find(b => (b.name || b.boardName) === (record.board || record.boardName) || (b.code || b.boardCode) === (record.board || record.boardName) || String(b.id || b.boardId) === String(record.board));
+      if (match) existingBoardIds = [Number(match.id || match.boardId)];
+    }
+    initData.assignedBoardIds = existingBoardIds;
+
+    // Resolve existing assigned campus IDs
+    let existingCampIds = [];
+    if (Array.isArray(record.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+      existingCampIds = record.assignedCampusIds.map(Number);
+    } else if (Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0) {
+      existingCampIds = record.assignedCampuses.map(c => typeof c === 'object' ? Number(c.id || c.campusId) : Number(c)).filter(Boolean);
+    } else if (record.campusId) {
+      existingCampIds = [Number(record.campusId)];
+    }
+    initData.assignedCampusIds = existingCampIds;
+
+    const matchedBoard = institutionalBoards.find(b => existingBoardIds.includes(Number(b.id || b.boardId)));
+    initData.board = matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : (record.boardName || record.board || "");
+    initData.boardName = matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : (record.boardName || record.board || "");
+    initData.boardId = existingBoardIds[0] || record.boardId;
+
+    setFormData(initData);
     setEditingGroup(groupIndex);
   };
 
@@ -7268,13 +8828,49 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   };
 
   const fieldTypes = {
-    board: ["select", activeBoardNames],
+    board: ["select", activeBoardOptions],
+    campusName: ["select", activeCampusOptions],
+    assignedCampusesDisplay: ["select", activeCampusOptions],
     gender: ["select", ["Male", "Female", "Other"]],
     status: ["select", ["Active", "Inactive"]],
     bloodGroup: ["select", ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]],
-    maritalStatus: ["select", ["Single", "Married", "Other"]],
-    employmentType: ["select", ["Full Time", "Part Time", "Contract"]],
+    maritalStatus: ["select", ["Single", "Married", "Divorced", "Widowed", "Other"]],
+    employmentType: ["select", ["Full Time", "Part Time", "Contract", "Visiting"]],
     staffType: ["select", ["Teaching", "Non-Teaching"]],
+    nationality: ["select", ["Indian", "NRI", "Other"]],
+    department: ["select", departmentOptions],
+    designation: ["select", designationOptions],
+    highestQualification: ["select", [
+      "Ph.D / Doctorate",
+      "Master's Degree (M.Tech, M.Sc, M.A, M.Com)",
+      "Bachelor's Degree (B.Tech, B.Sc, B.A, B.Com)",
+      "B.Ed / M.Ed",
+      "Diploma / Polytechnic",
+      "Intermediate / 10+2",
+      "SSC / 10th",
+      "Other"
+    ]],
+    accountType: ["select", ["Savings", "Salary", "Current"]],
+    emergencyRelationship: ["select", ["Spouse", "Father", "Mother", "Brother", "Sister", "Son", "Daughter", "Guardian", "Friend", "Other"]],
+    state: ["select", [
+      "Andhra Pradesh",
+      "Telangana",
+      "Karnataka",
+      "Tamil Nadu",
+      "Maharashtra",
+      "Kerala",
+      "Delhi",
+      "Uttar Pradesh",
+      "West Bengal",
+      "Gujarat",
+      "Rajasthan",
+      "Madhya Pradesh",
+      "Bihar",
+      "Odisha",
+      "Punjab",
+      "Haryana",
+      "Other"
+    ]],
     dateOfBirth: ["date"],
     dateOfJoining: ["date"],
     experienceFrom: ["date"],
@@ -7282,15 +8878,12 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     currentAddress: ["textarea"],
     permanentAddress: ["textarea"],
     emergencyAddress: ["textarea"],
-    department: ["select", defaultDepartments],
   };
 
   const renderFieldInput = (key, label, fieldSpec) => {
-    // fieldSpec = [name, label, type, opts, required, layoutClass?]
     const specType = fieldSpec?.[2];
     const specOpts = Array.isArray(fieldSpec?.[3]) && fieldSpec[3].length > 0 ? fieldSpec[3] : null;
 
-    // File fields — read-only display in preview inline edit
     if (specType === "file") {
       const rawVal = formData[key] !== undefined ? formData[key] : record[key];
       const val = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
@@ -7301,7 +8894,6 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
-    // Subject allocation
     if (key === "allocatedSubjects" || key === "subjects") {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
@@ -7314,10 +8906,229 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
+    if (key === "board") {
+      const currentBoardIds = (() => {
+        if (formData.assignedBoardIds !== undefined) {
+          return (Array.isArray(formData.assignedBoardIds) ? formData.assignedBoardIds : []).map(Number);
+        }
+        if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+          return record.assignedBoardIds.map(Number);
+        }
+        if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+          return record.assignedBoards.map(b => typeof b === 'object' ? Number(b.id || b.boardId) : Number(b)).filter(Boolean);
+        }
+        const singleId = formData.boardId || record.boardId || (institutionalBoards.find(b => (b.name || b.boardName) === (formData.board || record.board || record.boardName))?.id);
+        return singleId ? [Number(singleId)] : [];
+      })();
+
+      const assignedBoardObjs = currentBoardIds.map(bid => {
+        const found = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(bid));
+        return {
+          id: bid,
+          name: found ? (found.name || found.boardName) : `Board #${bid}`,
+          code: found ? (found.code || found.boardCode) : "",
+        };
+      });
+
+      const handleAddBoard = (boardIdVal) => {
+        if (!boardIdVal) return;
+        const bId = Number(boardIdVal);
+        const updatedIds = currentBoardIds.includes(bId) ? currentBoardIds : [...currentBoardIds, bId];
+        const primaryB = institutionalBoards.find(b => Number(b.id || b.boardId) === updatedIds[0]);
+        setFormData(prev => ({
+          ...prev,
+          assignedBoardIds: updatedIds,
+          boardId: updatedIds[0],
+          board: primaryB ? (primaryB.name || primaryB.boardName) : prev.board,
+          boardName: primaryB ? (primaryB.name || primaryB.boardName) : prev.boardName,
+          boardCode: primaryB ? (primaryB.code || primaryB.boardCode) : prev.boardCode,
+        }));
+      };
+
+      const handleRemoveBoard = (bId) => {
+        const updatedIds = currentBoardIds.filter(id => id !== bId);
+        const primaryB = updatedIds.length > 0 ? institutionalBoards.find(b => Number(b.id || b.boardId) === updatedIds[0]) : null;
+        setFormData(prev => ({
+          ...prev,
+          assignedBoardIds: updatedIds,
+          boardId: primaryB ? Number(primaryB.id || primaryB.boardId) : null,
+          board: primaryB ? (primaryB.name || primaryB.boardName) : "",
+          boardName: primaryB ? (primaryB.name || primaryB.boardName) : "",
+          boardCode: primaryB ? (primaryB.code || primaryB.boardCode) : "",
+        }));
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {assignedBoardObjs.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              {assignedBoardObjs.map(b => (
+                <span
+                  key={b.id}
+                  style={{
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    background: "var(--cms-primary-soft, #edf7e2)",
+                    color: "var(--cms-primary, #355e3b)",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  {b.name} {b.code ? `(${b.code})` : ""}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBoard(b.id)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#dc2626",
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: "12px",
+                      lineHeight: 1
+                    }}
+                    title="Remove Board"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select
+            value=""
+            onChange={(e) => handleAddBoard(e.target.value)}
+            style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border, #cbd5e1)" }}
+          >
+            <option value="">+ Assign Board ({activeBoardOptions.length} available)</option>
+            {activeBoardOptions.map(opt => (
+              <option key={opt.id || opt.value} value={opt.id} disabled={currentBoardIds.includes(opt.id)}>
+                {opt.label} {currentBoardIds.includes(opt.id) ? "(Assigned)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (key === "campusName" || key === "assignedCampusesDisplay" || key === "assignedCampuses") {
+      const currentCampIds = (() => {
+        if (formData.assignedCampusIds !== undefined) {
+          return (Array.isArray(formData.assignedCampusIds) ? formData.assignedCampusIds : []).map(Number);
+        }
+        if (Array.isArray(record.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+          return record.assignedCampusIds.map(Number);
+        }
+        if (Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0) {
+          return record.assignedCampuses.map(c => typeof c === 'object' ? Number(c.id || c.campusId) : Number(c)).filter(Boolean);
+        }
+        const singleId = formData.campusId || record.campusId;
+        return singleId ? [Number(singleId)] : [1];
+      })();
+
+      const assignedCampObjs = currentCampIds.map(cid => {
+        const found = institutionalCampuses.find(c => Number(c.id || c.campusId) === Number(cid));
+        return {
+          id: cid,
+          name: found ? (found.name || found.campusName) : `Campus #${cid}`,
+          code: found ? (found.code || found.campusCode) : "",
+          isPrimary: Number(cid) === Number(formData.campusId || record.campusId || currentCampIds[0]),
+        };
+      });
+
+      const handleAddCampus = (campusIdVal) => {
+        if (!campusIdVal) return;
+        const cId = Number(campusIdVal);
+        const updatedIds = currentCampIds.includes(cId) ? currentCampIds : [...currentCampIds, cId];
+        const primaryC = institutionalCampuses.find(c => Number(c.id || c.campusId) === (formData.campusId || updatedIds[0]));
+        setFormData(prev => ({
+          ...prev,
+          assignedCampusIds: updatedIds,
+          campusId: prev.campusId || updatedIds[0],
+          campusName: primaryC ? (primaryC.name || primaryC.campusName) : prev.campusName,
+        }));
+      };
+
+      const handleRemoveCampus = (cId) => {
+        if (currentCampIds.length <= 1) {
+          alert("At least one campus must remain assigned.");
+          return;
+        }
+        const updatedIds = currentCampIds.filter(id => id !== cId);
+        const primaryC = institutionalCampuses.find(c => Number(c.id || c.campusId) === updatedIds[0]);
+        setFormData(prev => ({
+          ...prev,
+          assignedCampusIds: updatedIds,
+          campusId: updatedIds[0],
+          campusName: primaryC ? (primaryC.name || primaryC.campusName) : "",
+        }));
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+            {assignedCampObjs.map((c) => (
+              <span
+                key={c.id}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: "4px",
+                  background: "var(--cms-primary-soft, #edf7e2)",
+                  color: "var(--cms-primary, #355e3b)",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}
+              >
+                {c.name} {c.code ? `(${c.code})` : ""} {c.isPrimary ? "[PRIMARY]" : ""}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveCampus(c.id)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#dc2626",
+                    cursor: "pointer",
+                    padding: 0,
+                    fontSize: "12px",
+                    lineHeight: 1
+                  }}
+                  title="Remove Campus"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "2px" }}>
+            <select
+              value=""
+              onChange={(e) => handleAddCampus(e.target.value)}
+              style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border, #cbd5e1)" }}
+            >
+              <option value="">+ Assign Campus ({activeCampusOptions.length} available)</option>
+              {activeCampusOptions.map(c => (
+                <option key={c.id || c.value} value={c.id} disabled={currentCampIds.includes(c.id)}>
+                  {c.label} {currentCampIds.includes(c.id) ? "(Assigned)" : ""}
+                </option>
+              ))}
+            </select>
+
+          </div>
+        </div>
+      );
+    }
+
     const rawVal = formData[key] !== undefined ? formData[key] : record[key];
     const val = rawVal === null || rawVal === undefined ? "" : rawVal;
 
-    // search-select → SearchSelectInput
     if (specType === "search-select") {
       const opts = specOpts || [];
       return (
@@ -7330,7 +9141,6 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
-    // Determine type/options from fieldSpec or fieldTypes fallback
     const config = (specType && specType !== "text" && specType !== "search-select")
       ? [specType, specOpts]
       : (fieldTypes[key] || ["text"]);
@@ -7344,9 +9154,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
           <option value="">Select {label}</option>
-          {opts.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
+          {opts.map((opt, oi) => {
+            const optVal = typeof opt === "object" ? opt.value : opt;
+            const optLbl = typeof opt === "object" ? (opt.label || opt.name || opt.value) : opt;
+            return <option key={oi} value={optVal}>{optLbl}</option>;
+          })}
         </select>
       );
     }
@@ -7369,9 +9181,9 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     );
   };
 
-  // Helper for masking sensitive values
+  // Helper for formatting and masking sensitive values
   const formatDisplayValue = (key, rawVal) => {
-    if (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) {
+    if (key === "assignedCampusesDisplay" || key === "assignedCampuses" || (key === "campusName" && isPrincipalRecord)) {
       if (resolvedCampusList && resolvedCampusList.length > 0) {
         return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
       }
@@ -7384,8 +9196,54 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       }
       return "Main Campus (HQ)";
     }
+    if (key === "board") {
+      const assignedBoardNames = (() => {
+        if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+          return record.assignedBoards.map(b => typeof b === "object" ? (b.name || b.boardName || b.code || String(b)) : String(b));
+        }
+        if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+          return record.assignedBoardIds.map(bid => {
+            const found = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(bid));
+            return found ? (found.code ? `${found.name || found.boardName} (${found.code})` : (found.name || found.boardName)) : `Board #${bid}`;
+          });
+        }
+        if (record.boardName || record.board) {
+          return [record.boardName || record.board];
+        }
+        return [];
+      })();
+
+      if (assignedBoardNames.length > 0) {
+        return (
+          <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
+            {assignedBoardNames.map((bn, bi) => (
+              <span
+                key={bi}
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  background: "var(--cms-primary-soft, #edf7e2)",
+                  color: "var(--cms-primary, #355e3b)",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                }}
+              >
+                {bn}
+              </span>
+            ))}
+          </span>
+        );
+      }
+      return "—";
+    }
     if (rawVal === null || rawVal === undefined || String(rawVal).trim() === "") return "—";
     const str = String(rawVal).trim();
+    if (str.includes("T") && /^\d{4}-\d{2}-\d{2}T/.test(str)) {
+      const parts = str.split("T")[0].split("-");
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return str.split("T")[0];
+    }
     if (key === "aadhaar" && str.length >= 12) {
       return `XXXX XXXX ${str.slice(-4)}`;
     }
@@ -7446,71 +9304,81 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                 </span>
               </div>
             </div>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: "700",
-                padding: "4px 12px",
-                borderRadius: "20px",
-                background: "var(--cms-primary, #355e3b)",
-                color: "#ffffff",
-                boxShadow: "0 1px 3px rgba(53,94,59,0.2)",
-              }}
-            >
-              {resolvedCampusList.length} Assigned {resolvedCampusList.length === 1 ? "Campus" : "Campuses"}
-            </span>
-          </header>
-          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
-            {resolvedCampusList.map((c, i) => (
-              <div
-                key={c.id || i}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  padding: "14px 16px",
-                  background: "#ffffff",
-                  border: "1px solid var(--cms-border, #e5e7eb)",
-                  borderRadius: "8px",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  padding: "4px 12px",
+                  borderRadius: "20px",
+                  background: "var(--cms-primary, #355e3b)",
+                  color: "#ffffff",
+                  boxShadow: "0 1px 3px rgba(53,94,59,0.2)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--cms-text, #1f2937)", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
-                    {c.name}
-                  </span>
-                  {c.code && (
-                    <span style={{ fontSize: "10.5px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", background: "#f3f4f6", color: "#4b5563" }}>
-                      {c.code}
+                {resolvedCampusList.length} Assigned {resolvedCampusList.length === 1 ? "Campus" : "Campuses"}
+              </span>
+            </div>
+          </header>
+
+          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+              {resolvedCampusList.map((c, i) => (
+                <div
+                  key={c.id || i}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "14px 16px",
+                    background: "#ffffff",
+                    border: "1px solid var(--cms-border, #e5e7eb)",
+                    borderRadius: "8px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--cms-text, #1f2937)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
+                      {c.name}
                     </span>
-                  )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {c.isPrimary && (
+                        <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "10px", background: "var(--cms-primary-soft, #edf7e2)", color: "var(--cms-primary, #355e3b)", border: "1px solid var(--cms-primary-border, #cfe7b6)" }}>
+                          PRIMARY HQ
+                        </span>
+                      )}
+                      {c.code && (
+                        <span style={{ fontSize: "10.5px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", background: "#f3f4f6", color: "#4b5563" }}>
+                          {c.code}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                    <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: "600" }}>Affiliated Boards:</span>
+                    {resolvedBoardList.map((bName, bi) => (
+                      <span
+                        key={bi}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "3px 8px",
+                          borderRadius: "4px",
+                          background: "var(--cms-primary-soft, #edf7e2)",
+                          color: "var(--cms-primary, #355e3b)",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                        }}
+                      >
+                        <GraduationCap size={12} /> {bName}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: "600" }}>Affiliated Boards:</span>
-                  {resolvedBoardList.map((bName, bi) => (
-                    <span
-                      key={bi}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        padding: "3px 8px",
-                        borderRadius: "4px",
-                        background: "var(--cms-primary-soft, #edf7e2)",
-                        color: "var(--cms-primary, #355e3b)",
-                        fontSize: "11px",
-                        fontWeight: "600",
-                        border: "1px solid var(--cms-primary-border, #cfe7b6)",
-                      }}
-                    >
-                      <GraduationCap size={12} /> {bName}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </article>
       ) : null}
       {groups.map(([t, fields], groupIndex) => {
@@ -7539,93 +9407,122 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               <div style={{ overflowX: "auto", margin: "8px 0" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                   <thead>
-                    <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Level</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Degree</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>University</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Specialization</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Year</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>% / CGPA</th>
+                    <tr style={{ background: "var(--cms-surface-subtle, #f8fafc)", borderBottom: "1px solid var(--cms-border)" }}>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Degree</th>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Institution</th>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Specialization</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center" }}>Year</th>
+                      <th style={{ padding: "6px 8px", textAlign: "right" }}>Percentage</th>
                     </tr>
                   </thead>
                   <tbody>
                     {record.education.map((edu, idx) => (
-                      <tr key={edu.id || `edu-row-${idx}`}>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}><strong>{edu.highestQualification || "—"}</strong></td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.degreeName || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.university || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.specialization || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.passingYear || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.percentage || "—"}</td>
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--cms-border-light, #f1f5f9)" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "600" }}>{edu.degree || edu.degreeName || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{edu.institution || edu.institutionName || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{edu.specialization || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "center" }}>{edu.yearOfPassing || edu.passingYear || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{edu.percentage || edu.cgpa || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : hasCustomExperience ? (
-              <div style={{ margin: "8px 0" }}>
+            ) : null}
+
+            {hasCustomExperience ? (
+              <div style={{ overflowX: "auto", margin: "8px 0" }}>
                 {record.isFresher ? (
-                  <p style={{ color: "var(--cms-muted, #64748b)", fontStyle: "italic", margin: "4px 0" }}>
-                    Fresher / No previous experience records.
-                  </p>
+                  <p style={{ margin: "4px 0", fontSize: "12px", color: "var(--cms-muted)" }}>Fresher (No prior experience)</p>
                 ) : (
-                  <div style={{ overflowX: "auto" }}>
-                    <p style={{ fontSize: "12px", color: "var(--cms-muted, #64748b)", marginBottom: "6px" }}>
-                      Total Experience: <strong>{record.totalExperience || 0} Years</strong>
-                    </p>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                      <thead>
-                        <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Institution</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Designation</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>From</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>To</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Working</th>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--cms-surface-subtle, #f8fafc)", borderBottom: "1px solid var(--cms-border)" }}>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>Institution</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>Designation</th>
+                        <th style={{ padding: "6px 8px", textAlign: "center" }}>From</th>
+                        <th style={{ padding: "6px 8px", textAlign: "center" }}>To</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Years</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {record.experience.map((exp, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid var(--cms-border-light, #f1f5f9)" }}>
+                          <td style={{ padding: "6px 8px", fontWeight: "600" }}>{exp.organization || exp.institution || "—"}</td>
+                          <td style={{ padding: "6px 8px" }}>{exp.designation || exp.role || "—"}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>{formatDisplayValue("experienceFrom", exp.from || exp.fromYear)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>{exp.isCurrent ? "Present" : formatDisplayValue("experienceTo", exp.to || exp.toYear)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right" }}>{exp.years || "—"}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {record.experience.map((exp, idx) => (
-                          <tr key={exp.id || `exp-row-${idx}`}>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}><strong>{exp.institution || "—"}</strong></td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.designation || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.fromDate || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.currentlyWorking ? "Present" : exp.toDate || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.currentlyWorking ? "Yes" : "No"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
-            ) : (
-              fields.map((field) => {
-                const [key, label] = Array.isArray(field)
-                  ? field
-                  : [field, field.replace(/([A-Z])/g, " $1")];
+            ) : null}
+
+            {!(hasCustomEducation && t === "Educational Qualifications") && !(hasCustomExperience && t === "Experience") && (
+              fields.map(([key, label, type, options]) => {
+                const isCustomDepartmentField = (key === "departmentSpecific" || key === "departmentSpecificJson" || key === "customFields");
+
+                if (isCustomDepartmentField) {
+                  const dynamicData = typeof record[key] === "object" && record[key] !== null ? record[key] : {};
+                  const dynamicEntries = Object.entries(dynamicData).filter(([k]) => k !== "allocatedSubjects" && k !== "subjects");
+                  if (dynamicEntries.length === 0) return null;
+                  return (
+                    <div key={key} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginTop: "8px", borderTop: "1px dashed var(--cms-border, #e5e7eb)", paddingTop: "8px" }}>
+                      {dynamicEntries.map(([dynKey, dynVal]) => (
+                        <p key={dynKey}>
+                          <small>{dynKey.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</small>
+                          <strong>{dynVal === null || dynVal === undefined || String(dynVal).trim() === "" ? "—" : String(dynVal)}</strong>
+                        </p>
+                      ))}
+                    </div>
+                  );
+                }
+
                 return (
                   <p key={key}>
-                    <span>{label}</span>
+                    <small>{label}</small>
                     {isEditing ? (
-                      renderFieldInput(key, label, Array.isArray(field) ? field : null)
+                      renderFieldInput(key, label, [key, label, type, options])
                     ) : (
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
-                          Array.isArray(record[key] || record.allocatedSubjects || record.subjects) &&
-                            (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
-                              {(record[key] || record.allocatedSubjects || record.subjects).map((sub, i) => (
-                                <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "10px" }}>
+                          Array.isArray(record[key]) && record[key].length > 0 ? (
+                            <span style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                              {record[key].map((sub, i) => (
+                                <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "11px" }}>
                                   {typeof sub === "object" ? sub.name || sub.subjectName || String(sub) : String(sub)}
                                 </span>
                               ))}
-                            </div>
-                          ) : typeof (record[key] || record.allocatedSubjects || record.subjects) === "string" &&
-                            (record[key] || record.allocatedSubjects || record.subjects).trim() ? (
-                            record[key] || record.allocatedSubjects || record.subjects
+                            </span>
                           ) : (
                             "—"
                           )
+                        ) : key === "board" && resolvedBoardList.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
+                            {resolvedBoardList.map((bName, i) => (
+                              <span
+                                key={i}
+                                className="board-badge"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: "var(--cms-primary-soft, #edf7e2)",
+                                  color: "var(--cms-primary, #355e3b)",
+                                  fontSize: "11px",
+                                  fontWeight: "600",
+                                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                                }}
+                              >
+                                <GraduationCap size={12} /> {bName}
+                              </span>
+                            ))}
+                          </div>
                         ) : (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) && resolvedCampusList.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
                             {resolvedCampusList.map((c, i) => (
@@ -7645,7 +9542,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                                   border: "1px solid var(--cms-primary-border, #cfe7b6)",
                                 }}
                               >
-                                <Building2 size={12} /> {c.name}{c.code ? ` (${c.code})` : ""}
+                                <Building2 size={12} /> {c.name}{c.code ? ` (${c.code})` : ""} {c.isPrimary ? "[PRIMARY]" : ""}
                               </span>
                             ))}
                           </div>

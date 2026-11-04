@@ -248,7 +248,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
+                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath, ProfileStatus, ProfileCompletionPercentage FROM Staff WHERE Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -257,7 +257,7 @@ namespace CollegeManagement.API.Services.Implementations
                     }
                     
                     var campuses = await connection.QueryAsync<int>(
-                        "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id",
+                        "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id AND IsActive = 1 AND (EndDate IS NULL OR EndDate >= CURDATE())",
                         new { Id = user.StaffId.Value });
                     assignedCampusIds = campuses.Distinct().ToList();
 
@@ -333,7 +333,14 @@ namespace CollegeManagement.API.Services.Implementations
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds,
                     PhotoPath = resolvedPhotoPath,
-                    PhotoUrl = resolvedPhotoPath
+                    PhotoUrl = resolvedPhotoPath,
+                    ProfileStatus = (string?)staffInfo?.ProfileStatus ?? (user.AdminId.HasValue ? "Approved" : "PendingLink"),
+                    ProfileCompletionPercentage = staffInfo?.ProfileCompletionPercentage != null ? Convert.ToInt32(staffInfo.ProfileCompletionPercentage) : 0,
+                    IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase)
+                        || (staffInfo?.ProfileCompletionPercentage != null && Convert.ToInt32(staffInfo.ProfileCompletionPercentage) >= 50)
                 };
             }
 

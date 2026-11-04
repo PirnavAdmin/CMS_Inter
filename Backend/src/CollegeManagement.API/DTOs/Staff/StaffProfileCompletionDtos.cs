@@ -63,6 +63,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? BloodGroup { get; set; }
 
         // Contact & Address
+        public string? HouseNumber { get; set; }
+        public string? Street { get; set; }
         public string? CurrentAddress { get; set; }
         public string? PermanentAddress { get; set; }
         public string? City { get; set; }
@@ -125,26 +127,14 @@ namespace CollegeManagement.API.DTOs.Staff
             get => ProfileCompletionPercentage;
             set => ProfileCompletionPercentage = value;
         }
-        public int ProfileCompletionPercentage { get; set; } = 30;
-        public string? ProfileLinkToken { get; set; }
-        public bool LinkSent => ProfileLinkSentAt.HasValue || ProfileStatus == "Link Sent" || ProfileStatus == "LinkSent";
-        public string? LinkSentAt => ProfileLinkSentAt.HasValue ? ProfileLinkSentAt.Value.ToString("yyyy-MM-dd") : null;
-        public DateTime? ProfileLinkSentAt { get; set; }
-        public DateTime? ProfileLinkExpiresAt { get; set; }
+        public int ProfileCompletionPercentage { get; set; }
         public DateTime? SubmittedAt { get; set; }
         public DateTime? ApprovedAt { get; set; }
         public DateTime? CorrectionRequestedAt { get; set; }
-        public string? CorrectionNote
-        {
-            get => CorrectionNotes;
-            set => CorrectionNotes = value;
-        }
         public string? CorrectionNotes { get; set; }
-        public string? ReviewStatus { get; set; }
-        public string? AddedOn => CreatedAt.ToString("yyyy-MM-dd");
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public bool IsOnboarded => string.Equals(ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase);
 
-        // Flattened Academic & Experience Fields for Frontend Views
+        // Flattened Qualifications
         public string? HighestQualification { get; set; }
         public string? University { get; set; }
         public string? Specialization { get; set; }
@@ -330,10 +320,23 @@ namespace CollegeManagement.API.DTOs.Staff
             set => PanNumber = value;
         }
         public string? BloodGroup { get; set; }
+        public string? Mobile { get; set; }
+        public string? Phone
+        {
+            get => Mobile;
+            set => Mobile = value;
+        }
+        public string? PhoneNumber
+        {
+            get => Mobile;
+            set => Mobile = value;
+        }
     }
 
     public class UpdateStaffAddressDto
     {
+        public string? HouseNumber { get; set; }
+        public string? Street { get; set; }
         public string? AlternateMobile { get; set; }
         public string? CurrentAddress { get; set; }
         public string? PermanentAddress { get; set; }

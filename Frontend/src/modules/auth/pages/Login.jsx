@@ -189,7 +189,21 @@ export default function Login() {
       } else if (isNonTeaching) {
         navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
-        navigate("/faculty-dashboard", { replace: true });
+        const pStatus = result?.user?.profileStatus;
+        const compPct = Number(result?.user?.profileCompletionPercentage || 0);
+        const isOnboarded = result?.user?.isOnboarded === true;
+        const isCompleted =
+          isOnboarded ||
+          String(pStatus || "").toLowerCase() === "completed" ||
+          String(pStatus || "").toLowerCase() === "approved" ||
+          String(pStatus || "").toLowerCase() === "submitted" ||
+          compPct >= 50;
+
+        if (!isCompleted) {
+          navigate("/faculty-dashboard/profile", { replace: true });
+        } else {
+          navigate("/faculty-dashboard", { replace: true });
+        }
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
       } else {

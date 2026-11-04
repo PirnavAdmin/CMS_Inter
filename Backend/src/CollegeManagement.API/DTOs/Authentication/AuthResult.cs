@@ -15,6 +15,9 @@ namespace CollegeManagement.API.DTOs.Authentication
         public string? StaffType { get; set; }
         public string? Designation { get; set; }
         public string? EmployeeId { get; set; }
+        public string ProfileStatus { get; set; } = "PendingLink";
+        public int ProfileCompletionPercentage { get; set; } = 0;
+        public bool IsOnboarded { get; set; } = true;
         public List<int> AssignedCampusIds { get; set; } = new();
         public List<int> AssignedBoardIds { get; set; } = new();
         public string? PhotoPath { get; set; }

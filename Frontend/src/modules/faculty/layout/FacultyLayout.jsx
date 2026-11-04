@@ -1,6 +1,6 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
 import FacultySidebar from "./FacultySidebar.jsx";
 import FacultyNavbar from "./FacultyNavbar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
@@ -9,7 +9,7 @@ import "@/cms.css";
 import "../FacultyDashboard.css";
 
 export default function FacultyLayout({ children }) {
-  const { sidebarOpen, setSidebarOpen, toast } = useFaculty();
+  const { sidebarOpen, setSidebarOpen, toast, setToast } = useFaculty();
 
   return (
     <div className={`cms-shell faculty-shell ${sidebarOpen ? "" : "nav-closed"}`}>
@@ -38,9 +38,35 @@ export default function FacultyLayout({ children }) {
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
-          {toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{toast.text}</span>
+        <div
+          className={`sp-toast sp-toast-${toast.type || "success"} ${toast.type === "error" ? "error" : ""}`}
+          role="alert"
+        >
+          <div className="sp-toast-icon-wrap">
+            {toast.type === "error" ? (
+              <AlertCircle size={18} />
+            ) : toast.type === "warning" ? (
+              <AlertTriangle size={18} />
+            ) : toast.type === "info" ? (
+              <Info size={18} />
+            ) : (
+              <CheckCircle2 size={18} />
+            )}
+          </div>
+          <div className="sp-toast-content">
+            {toast.title && <strong className="sp-toast-title">{toast.title}</strong>}
+            <span className="sp-toast-message">{toast.text}</span>
+          </div>
+          {setToast && (
+            <button
+              type="button"
+              className="sp-toast-close-btn"
+              onClick={() => setToast(null)}
+              aria-label="Dismiss notification"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       )}
 
