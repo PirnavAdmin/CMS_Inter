@@ -4,6 +4,7 @@ import { getJwtExpiryState } from "@/api/apiClient.js";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
+import { getPlatformSession } from "@/modules/super-admin/superAdminSession.js";
 
 export function isInventoryRole(role, user) {
   if (user?.roleType === "inventory") return true;
@@ -463,6 +464,7 @@ export default function ProtectedRoute({
 }
 
 export function PublicOnlyRoute({ children }) {
+  if (getPlatformSession()) return <Navigate to="/super-admin/dashboard" replace />;
   // Discard sessions created by the removed local preview login.
   const storedToken = getAuthToken();
   const isPreview = storedToken === "exam-cell-local-preview" || /^(demo-|mock-)/.test(storedToken);

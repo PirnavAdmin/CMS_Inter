@@ -180,7 +180,7 @@ apiClient.interceptors.request.use(
       !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
+      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
     ) {
       config.adapter = handleMockApiRequest;
     }
@@ -266,7 +266,7 @@ apiClient.interceptors.response.use(
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;

@@ -10,6 +10,7 @@ import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
+import { isSuperAdminRole, loginPreview, previewEmail, previewEnabled } from "@/modules/super-admin/superAdminSession.js";
 
 const fields = [
   {
@@ -92,6 +93,16 @@ export default function Login() {
       return;
     }
 
+    if (previewEnabled && emailOrMobile.toLowerCase() === previewEmail) {
+      setBusy(true);
+      try {
+        await loginPreview(emailOrMobile, password);
+        navigate("/super-admin/dashboard", { replace: true });
+      } catch (failure) { setError(failure.message); }
+      finally { setBusy(false); }
+      return;
+    }
+
     if (!remember) saveRememberedCredentials(null);
 
     setBusy(true);
@@ -101,6 +112,10 @@ export default function Login() {
       const result = await loginUser({ emailOrMobile, password });
       if (!result.token) throw new Error("The login response did not include an access token.");
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+      if (isSuperAdminRole(result.user?.role)) {
+        navigate("/super-admin/dashboard", { replace: true });
+        return;
+      }
       try {
         const permsRes = await getCurrentUserPermissions();
         if (permsRes?.data && Array.isArray(permsRes.data)) {
@@ -298,6 +313,7 @@ export default function Login() {
           </button>
         </fieldset>
       </form>
+      {previewEnabled ? <Link to="/super-admin/preview-login">Super Admin · Development preview</Link> : null}
     </AuthLayout>
   );
 }

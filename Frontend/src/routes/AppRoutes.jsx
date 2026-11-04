@@ -61,6 +61,7 @@ const SettingsFallback = () => (
   </div>
 );
 import Login from "@/modules/auth/pages/Login.jsx";
+const SuperAdminPortalRoutes = lazy(() => import("@/modules/super-admin/SuperAdminPortalRoutes.jsx"));
 import Register from "@/modules/auth/pages/Register.jsx";
 import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/modules/auth/pages/VerifyOTP.jsx";
@@ -136,6 +137,7 @@ function StudentEnrollmentRoute() {
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route path="/super-admin/*" element={<Suspense fallback={<SettingsFallback/>}><SuperAdminPortalRoutes/></Suspense>} />
       <Route path="/" element={<LandingPage />} />
       <Route path="/about" element={<PublicWebsitePage page="about" />} />
       <Route path="/academics" element={<PublicWebsitePage page="academics" />} />
