@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   User,
   ShieldCheck,
@@ -30,6 +30,7 @@ export default function DriverProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const hasLoadedOnce = useRef(false);
 
   const [profileData, setProfileData] = useState({
     mobile: "",
@@ -57,7 +58,9 @@ export default function DriverProfilePage() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        setLoading(true);
+        if (!hasLoadedOnce.current) {
+          setLoading(true);
+        }
         const res = await getProfile();
         const data = unwrapDriverData(res);
         const profile = getDriverIdentity({ ...data, ...(data.profile || data.driverProfile || {}) });
@@ -73,6 +76,7 @@ export default function DriverProfilePage() {
         setError(err.response?.data?.message || err.message || "Failed to load profile.");
       } finally {
         setLoading(false);
+        hasLoadedOnce.current = true;
       }
     };
     fetchProfile();

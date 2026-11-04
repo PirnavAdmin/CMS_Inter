@@ -29,6 +29,17 @@ function getHolidayStartDate(holiday) {
   return holiday.startDate || holiday.holidayDate || "";
 }
 
+function isSundayHoliday(holiday) {
+  const start = getHolidayStartDate(holiday);
+  const end = getHolidayEndDate(holiday);
+  if (!start) return false;
+  if (!end || start === end) {
+    const d = new Date(`${start}T00:00:00`);
+    return d.getDay() === 0;
+  }
+  return false;
+}
+
 function getHolidayEndDate(holiday) {
   return holiday.endDate || getHolidayStartDate(holiday);
 }
@@ -139,7 +150,8 @@ export default function TransportManagerHolidays() {
           const campusId = holiday?.campusId ?? holiday?.CampusId;
           return campusId == null || String(campusId) === String(selectedCampusId);
         });
-        setHolidays(filteredList.length > 0 ? filteredList : holidayRecords);
+        const nonSunday = (filteredList.length > 0 ? filteredList : holidayRecords).filter(h => !isSundayHoliday(h));
+        setHolidays(nonSunday);
         setRestorableHolidays({ scope, rows: filteredList });
       } else {
         setHolidays(holidayRecords);

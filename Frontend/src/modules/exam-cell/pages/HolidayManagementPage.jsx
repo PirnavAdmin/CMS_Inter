@@ -37,6 +37,17 @@ function getHolidayStartDate(holiday) {
   return holiday.startDate || holiday.holidayDate || "";
 }
 
+function isSundayHoliday(holiday) {
+  const start = getHolidayStartDate(holiday);
+  const end = getHolidayEndDate(holiday);
+  if (!start) return false;
+  if (!end || start === end) {
+    const d = new Date(`${start}T00:00:00`);
+    return d.getDay() === 0;
+  }
+  return false;
+}
+
 function getHolidayEndDate(holiday) {
   return holiday.endDate || getHolidayStartDate(holiday);
 }
@@ -294,6 +305,7 @@ export default function HolidayManagementPage() {
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
     return sortedHolidays.filter((holiday) => {
+      if (isSundayHoliday(holiday)) return false;
       // 1. Text Search Filter
       if (query.trim()) {
         const q = query.trim().toLowerCase();
