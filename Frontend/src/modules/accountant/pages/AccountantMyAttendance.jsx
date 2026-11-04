@@ -1,4 +1,4 @@
-import { useAccountantViewParams } from "../components/AccountantUI.jsx";
+import { AccountantPageHeader, useAccountantViewParams } from "../components/AccountantUI.jsx";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Clock,
@@ -6,6 +6,7 @@ import {
   LogOut,
   Calendar,
   CheckCircle2,
+  ShieldCheck,
   Briefcase,
   UserX,
   AlertCircle,
@@ -75,8 +76,17 @@ const normalizeTodayData = (raw) => {
     canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: raw.regularizationState || raw.RegularizationState || null,
+    markedByAdmin: Boolean(raw.markedByAdmin ?? raw.MarkedByAdmin),
   };
 };
+
+const HISTORY_PAGE_SIZE = 5;
+
+const normalizeMetrics = (raw = {}) => Object.fromEntries(
+  ["workingDays", "workingDaysSub", "presentDays", "presentDaysSub", "leaves", "leavesSub", "absentDays", "absentDaysSub"].map((key) =>
+    [key, raw[key] ?? raw[key[0].toUpperCase() + key.slice(1)] ?? "--"]
+  )
+);
 
 export default function AccountantMyAttendance() {
   const [todayError, setTodayError] = useState(null);
@@ -102,6 +112,11 @@ export default function AccountantMyAttendance() {
   activeFilterRef.current = activeFilter;
   const regularizeDate = viewParams.get("regularize");
   const [historyPeriod, setHistoryPeriod] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
+  const [monthlyMetrics, setMonthlyMetrics] = useState({});
+  const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [metricsError, setMetricsError] = useState(null);
+  const [metricsRefresh, setMetricsRefresh] = useState(0);
 
   // Loading States
   const [loadingToday, setLoadingToday] = useState(true);
@@ -122,6 +137,7 @@ export default function AccountantMyAttendance() {
     canRegularize: false,
     dateFormatted: new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: null,
+    markedByAdmin: false,
   });
 
   // Live History & Analytics Metrics
@@ -207,6 +223,11 @@ export default function AccountantMyAttendance() {
         setHistoryPeriod(period);
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
+        if (period === "month") {
+          setMonthlyMetrics(normalizeMetrics(rawMetrics));
+          setLoadingMetrics(false);
+          setMetricsError(null);
+        }
         setHistoryData({
           logs: rawLogs.map((l) => ({
             id: l.id || l.Id,
@@ -224,20 +245,18 @@ export default function AccountantMyAttendance() {
             regularizationState: l.regularizationState || l.RegularizationState,
             holidayName: l.holidayName || l.HolidayName || null,
           })),
-          metrics: {
-            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "--",
-            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
-            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "--",
-            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
-            leaves: rawMetrics.leaves || rawMetrics.Leaves || "--",
-            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
-            absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "--",
-            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
-          },
+          metrics: normalizeMetrics(rawMetrics),
         });
       }
     } catch (err) {
-      if (request === historyRequest.current && period === activeFilterRef.current) setHistoryError(getApiErrorMessage(err));
+      if (request === historyRequest.current && period === activeFilterRef.current) {
+        setHistoryError(getApiErrorMessage(err));
+        if (period === "month") {
+          setMetricsError(getApiErrorMessage(err));
+          setMonthlyMetrics({});
+          setLoadingMetrics(false);
+        }
+      }
     } finally {
       if (request === historyRequest.current && period === activeFilterRef.current) setLoadingHistory(false);
     }
@@ -250,8 +269,34 @@ export default function AccountantMyAttendance() {
 
   // When filter tab changes, load corresponding history
   useEffect(() => {
+    setHistoryPage(1);
     fetchHistory(activeFilterRef.current);
-  }, [activeFilter, fetchHistory]);
+  }, [activeFilter, fetchHistory, metricsRefresh]);
+
+  // Like Faculty, summary cards describe the current month independently of history range.
+  // Reuse the history request when the selected range is already the current month.
+  useEffect(() => {
+    let active = true;
+    setMonthlyMetrics({});
+    setMetricsError(null);
+    setLoadingMetrics(true);
+    if (activeFilter === "month") return;
+    attendanceService.getMyAttendanceHistory("month").then((res) => {
+      const payload = res?.data ?? res?.Data;
+      if ((res?.status ?? res?.Status) === false || !payload) throw new Error(res?.message || res?.Message || "Attendance summary is unavailable.");
+      if (active) setMonthlyMetrics(normalizeMetrics(payload.metrics ?? payload.Metrics));
+    }).catch((err) => {
+      if (active) setMetricsError(getApiErrorMessage(err));
+    }).finally(() => {
+      if (active) setLoadingMetrics(false);
+    });
+    return () => { active = false; };
+  }, [activeFilter, metricsRefresh]);
+
+  const totalHistoryPages = Math.max(1, Math.ceil(historyData.logs.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, totalHistoryPages);
+  const historyStart = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  const historyEnd = Math.min(historyStart + HISTORY_PAGE_SIZE, historyData.logs.length);
 
   const changeFilter = (period) => {
     if (period === activeFilterRef.current) return;
@@ -263,7 +308,7 @@ export default function AccountantMyAttendance() {
 
   // Punch In Handler
   const handlePunchIn = async () => {
-    if (todayData.status !== "not_punched" || actionLoading || loadingToday || todayError || actionLock.current) return;
+    if (todayData.status !== "not_punched" || todayData.markedByAdmin || actionLoading || loadingToday || todayError || actionLock.current) return;
     actionLock.current = true;
     setActionLoading(true);
     try {
@@ -281,7 +326,7 @@ export default function AccountantMyAttendance() {
           setTodayData(normalized);
         }
         notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
-        fetchHistory(activeFilterRef.current);
+        setMetricsRefresh(value => value + 1);
       } else {
         notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
@@ -296,7 +341,7 @@ export default function AccountantMyAttendance() {
 
   // Punch Out Handler
   const handlePunchOut = async () => {
-    if (todayData.status !== "punched_in" || actionLoading || loadingToday || todayError || actionLock.current) return;
+    if (todayData.status !== "punched_in" || todayData.markedByAdmin || actionLoading || loadingToday || todayError || actionLock.current) return;
     actionLock.current = true;
     setActionLoading(true);
     try {
@@ -314,7 +359,7 @@ export default function AccountantMyAttendance() {
           setTodayData(normalized);
         }
         notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
-        fetchHistory(activeFilterRef.current);
+        setMetricsRefresh(value => value + 1);
       } else {
         notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
@@ -365,7 +410,7 @@ export default function AccountantMyAttendance() {
         notify("Attendance regularization request submitted successfully. Pending Principal/Admin approval.", "success");
         setRegModalOpen(false);
         fetchTodayStatus();
-        fetchHistory(activeFilterRef.current);
+        setMetricsRefresh(value => value + 1);
       } else {
         notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
@@ -401,6 +446,8 @@ export default function AccountantMyAttendance() {
         return "leave";
       case "Absent":
         return "absent";
+      case "Missed Checkout":
+        return "absent";
       case "Holiday":
         return "holiday";
       case "Weekly Off":
@@ -415,16 +462,18 @@ export default function AccountantMyAttendance() {
 
   return (
     <div className="acct-att-accountant-attendance-page" aria-label="My Attendance">
+      <AccountantPageHeader title="My Attendance" subtitle="Campus shift schedule, check-in status & calculated working hours." />
       {todayError && <div className="acct-att-attendance-error" role="alert"><AlertCircle size={16} /><span>Today’s attendance unavailable: {todayError}</span><button type="button" onClick={fetchTodayStatus}>Retry</button></div>}
       {historyError && <div className="acct-att-attendance-error" role="alert"><AlertCircle size={16} /><span>Attendance history unavailable: {historyError}</span><button type="button" onClick={() => fetchHistory(activeFilterRef.current)}>Retry</button></div>}
+      {metricsError && <div className="acct-att-attendance-error" role="alert"><AlertCircle size={16} /><span>Current month summary unavailable: {metricsError}</span><button type="button" onClick={() => setMetricsRefresh(value => value + 1)}>Retry</button></div>}
       {/* Top Punch & Shift Grid */}
       <div className="acct-att-attendance-top-grid">
         {/* Left Card: Attendance & Shift Summary */}
         <div className="cms-card acct-att-shift-summary-card">
           <div className="acct-att-card-header">
-            <h3 className="acct-att-card-title">Attendance & Shift Summary</h3>
+            <h3 className="acct-att-card-title">Today's Attendance Summary</h3>
             <p className="acct-att-card-desc">
-              Campus shift schedule, check-in status & calculated shift duration.
+              Campus shift schedule, check-in status & calculated working hours.
             </p>
           </div>
 
@@ -434,19 +483,25 @@ export default function AccountantMyAttendance() {
               <span className="acct-att-summary-label">Check Status:</span>
               <span
                 className={`acct-att-check-status-badge ${
-                  todayData.status === "punched_in"
-                    ? "in"
+                  todayData.status === "missed_checkout"
+                    ? "missed"
+                    : todayData.status === "punched_in"
+                    ? todayData.isLate ? "late" : "in"
                     : todayData.status === "punched_out"
                     ? "completed"
                     : "not-checked"
                 }`}
               >
-                <span className="acct-att-status-bullet">•</span>
-                {todayData.status === "punched_in"
-                  ? `Checked In (${todayData.inTime || "--"})`
+                {todayData.markedByAdmin ? <ShieldCheck size={14} /> : <span className="acct-att-status-bullet">•</span>}
+                {loadingToday ? "Loading..." : todayError || todayData.status === "unavailable" ? "Unavailable" : todayData.markedByAdmin
+                  ? "Present | Marked by Admin"
+                  : todayData.status === "missed_checkout"
+                  ? "Missed Checkout"
+                  : todayData.status === "punched_in"
+                  ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
                   : todayData.status === "punched_out"
                   ? `Completed (${todayData.outTime || "--"})`
-                  : loadingToday ? "Loading..." : todayError ? "Unavailable" : "Not Checked In"}
+                  : "Not Checked In"}
               </span>
             </div>
 
@@ -465,7 +520,7 @@ export default function AccountantMyAttendance() {
                 </span>
               </div>
               <div className="acct-att-summary-col">
-                <span className="acct-att-metric-col-label">SHIFT DURATION</span>
+                <span className="acct-att-metric-col-label">WORKING HOURS</span>
                 <span className={`acct-att-metric-col-val ${todayData.status === "punched_in" ? "highlight" : ""}`}>
                   {clockShiftDuration === "--" ? "--:--" : clockShiftDuration}
                 </span>
@@ -490,7 +545,7 @@ export default function AccountantMyAttendance() {
         {/* Right Card: Check-In / Check-Out Actions */}
         <div className="cms-card acct-att-punch-action-card">
           <div className="acct-att-card-header">
-            <h3 className="acct-att-card-title">Check-In / Check-Out</h3>
+            <h3 className="acct-att-card-title">Attendance Check-In & Check-Out</h3>
             <p className="acct-att-card-desc">
               Click below to record your campus entry or exit timestamp.
             </p>
@@ -499,27 +554,13 @@ export default function AccountantMyAttendance() {
           <div className="acct-att-punch-twin-grid">
             {/* Check In Panel */}
             <div className="acct-att-twin-panel checkin-panel">
-              <div className="acct-att-twin-icon-box checkin">
-                <LogIn size={16} />
-              </div>
-              <div className="acct-att-twin-title checkin">CHECK IN</div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="acct-att-digital-display checkin">
-                <span className="acct-att-digital-time">{todayData.inTime || "--:-- --"}</span>
-                <span className={`acct-att-digital-status-pill ${todayData.inTime ? "checked" : "pending"}`}>
-                  <span className="acct-att-status-dot">•</span>
-                  {todayData.inTime ? "Checked In" : loadingToday ? "Loading..." : todayError ? "Unavailable" : "Not Checked In"}
-                </span>
-              </div>
-
               {/* Check In Button */}
               <button
                 type="button"
                 className={`acct-att-punch-pill-btn checkin ${
-                  todayData.status === "not_punched" && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
+                  todayData.status === "not_punched" && !todayData.markedByAdmin && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
                 }`}
-                disabled={todayData.status !== "not_punched" || actionLoading || loadingToday || Boolean(todayError)}
+                disabled={todayData.status !== "not_punched" || todayData.markedByAdmin || actionLoading || loadingToday || Boolean(todayError)}
                 onClick={handlePunchIn}
               >
                 {actionLoading && todayData.status === "not_punched" ? (
@@ -527,35 +568,21 @@ export default function AccountantMyAttendance() {
                 ) : (
                   <LogIn size={15} />
                 )}
-                <span>Check In</span>
+                <span>{todayData.markedByAdmin ? "Present | Marked by Admin" : todayData.inTime ? "Checked In" : "Check In"}</span>
               </button>
 
-              <div className="acct-att-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
+              <div className="acct-att-punch-foot-hint">{todayData.markedByAdmin ? "Attendance recorded by Administration." : <>Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</>}</div>
             </div>
 
             {/* Check Out Panel */}
             <div className="acct-att-twin-panel checkout-panel">
-              <div className="acct-att-twin-icon-box checkout">
-                <LogOut size={16} />
-              </div>
-              <div className="acct-att-twin-title checkout">CHECK OUT</div>
-
-              {/* Modern Digital Clock & Status Badge */}
-              <div className="acct-att-digital-display checkout">
-                <span className="acct-att-digital-time">{todayData.outTime || "--:-- --"}</span>
-                <span className={`acct-att-digital-status-pill ${todayData.outTime ? "checked" : "pending"}`}>
-                  <span className="acct-att-status-dot">•</span>
-                  {todayData.outTime ? "Checked Out" : loadingToday ? "Loading..." : todayError ? "Unavailable" : "Not Checked Out"}
-                </span>
-              </div>
-
               {/* Check Out Button */}
               <button
                 type="button"
                 className={`acct-att-punch-pill-btn checkout ${
-                  todayData.status === "punched_in" && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
+                  todayData.status === "punched_in" && !todayData.markedByAdmin && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
                 }`}
-                disabled={todayData.status !== "punched_in" || actionLoading || loadingToday || Boolean(todayError)}
+                disabled={todayData.status !== "punched_in" || todayData.markedByAdmin || actionLoading || loadingToday || Boolean(todayError)}
                 onClick={handlePunchOut}
               >
                 {actionLoading && todayData.status === "punched_in" ? (
@@ -563,10 +590,10 @@ export default function AccountantMyAttendance() {
                 ) : (
                   <LogOut size={15} />
                 )}
-                <span>Check Out</span>
+                <span>{todayData.markedByAdmin ? "Check Out (Admin Managed)" : todayData.status === "missed_checkout" ? "Missed Checkout" : todayData.outTime ? "Checked Out" : "Check Out"}</span>
               </button>
 
-              <div className="acct-att-punch-foot-hint">After check-in only</div>
+              <div className="acct-att-punch-foot-hint">{todayData.markedByAdmin ? "Attendance recorded by Administration." : "After check-in only"}</div>
             </div>
           </div>
         </div>
@@ -581,15 +608,15 @@ export default function AccountantMyAttendance() {
           </div>
           <div className="acct-att-kpi-content">
             <div className="acct-att-kpi-label">Working Days</div>
-            {loadingHistory ? (
+            {loadingMetrics ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
                 <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
               </>
             ) : (
               <>
-                <div className="acct-att-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "--"}</div>
-                <div className="acct-att-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+                <div className="acct-att-kpi-value">{monthlyMetrics.workingDays ?? "--"}</div>
+                <div className="acct-att-kpi-sub">{monthlyMetrics.workingDaysSub ?? "--"}</div>
               </>
             )}
           </div>
@@ -602,15 +629,15 @@ export default function AccountantMyAttendance() {
           </div>
           <div className="acct-att-kpi-content">
             <div className="acct-att-kpi-label">Present Days</div>
-            {loadingHistory ? (
+            {loadingMetrics ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
                 <Skeleton style={{ width: 95, height: 11, marginTop: 4 }} />
               </>
             ) : (
               <>
-                <div className="acct-att-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "--"}</div>
-                <div className="acct-att-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+                <div className="acct-att-kpi-value green-val">{monthlyMetrics.presentDays ?? "--"}</div>
+                <div className="acct-att-kpi-sub">{monthlyMetrics.presentDaysSub ?? "--"}</div>
               </>
             )}
           </div>
@@ -623,15 +650,15 @@ export default function AccountantMyAttendance() {
           </div>
           <div className="acct-att-kpi-content">
             <div className="acct-att-kpi-label">Approved Leaves</div>
-            {loadingHistory ? (
+            {loadingMetrics ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
                 <Skeleton style={{ width: 85, height: 11, marginTop: 4 }} />
               </>
             ) : (
               <>
-                <div className="acct-att-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "--"}</div>
-                <div className="acct-att-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+                <div className="acct-att-kpi-value">{monthlyMetrics.leaves ?? "--"}</div>
+                <div className="acct-att-kpi-sub">{monthlyMetrics.leavesSub ?? "--"}</div>
               </>
             )}
           </div>
@@ -644,15 +671,15 @@ export default function AccountantMyAttendance() {
           </div>
           <div className="acct-att-kpi-content">
             <div className="acct-att-kpi-label">Absent Days</div>
-            {loadingHistory ? (
+            {loadingMetrics ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
                 <Skeleton style={{ width: 75, height: 11, marginTop: 4 }} />
               </>
             ) : (
               <>
-                <div className="acct-att-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "--"}</div>
-                <div className="acct-att-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+                <div className="acct-att-kpi-value red-val">{monthlyMetrics.absentDays ?? "--"}</div>
+                <div className="acct-att-kpi-sub">{monthlyMetrics.absentDaysSub ?? "--"}</div>
               </>
             )}
           </div>
@@ -756,7 +783,7 @@ export default function AccountantMyAttendance() {
                   </tr>
                 ))
               ) : historyData.logs && historyData.logs.length > 0 ? (
-                  historyData.logs.map((log) => {
+                  historyData.logs.slice(historyStart, historyEnd).map((log) => {
                     const id = log.id || log.Id;
                     const day = log.day || log.Day;
                     const date = log.date || log.Date;
@@ -839,6 +866,16 @@ export default function AccountantMyAttendance() {
               </tbody>
             </table>
         </div>
+          {!loadingHistory && !historyError && historyPeriod === activeFilter && historyData.logs.length > 0 && (
+            <div className="acct-payroll-pagination acct-att-history-pagination">
+              <span role="status" aria-live="polite">Showing {historyStart + 1}–{historyEnd} of {historyData.logs.length} records</span>
+              <nav aria-label="My attendance history pagination">
+                <button type="button" className="sp-btn" disabled={currentHistoryPage === 1} onClick={() => setHistoryPage(currentHistoryPage - 1)}>Previous</button>
+                <span className="sp-btn primary" aria-label={`Page ${currentHistoryPage} of ${totalHistoryPages}`} aria-current="page">{currentHistoryPage}</span>
+                <button type="button" className="sp-btn" disabled={currentHistoryPage === totalHistoryPages} onClick={() => setHistoryPage(currentHistoryPage + 1)}>Next</button>
+              </nav>
+            </div>
+          )}
       </div>
 
       {/* Attendance Regularization Modal */}

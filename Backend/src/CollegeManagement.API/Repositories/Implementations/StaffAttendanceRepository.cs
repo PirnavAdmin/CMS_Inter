@@ -511,11 +511,9 @@ WHERE sa.StaffAttendanceId = @AttId LIMIT 1;";
                         string rem = (string?)attRow.Remarks ?? "";
                         byte vm = Convert.ToByte(attRow.VerificationMethod ?? 0);
 
-                        markedByAdmin = role.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                            || role.Contains("Principal", StringComparison.OrdinalIgnoreCase)
-                            || dev.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                            || rem.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                            || vm == 1; // Manual Admin Entry
+                        markedByAdmin = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                            || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                            || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
                     }
                 }
                 catch {}
@@ -592,11 +590,9 @@ LIMIT 1;";
                 string rem = (string?)existingAttIn.Remarks ?? "";
                 byte vm = Convert.ToByte(existingAttIn.VerificationMethod ?? 0);
 
-                bool isAdminMarked = role.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || role.Contains("Principal", StringComparison.OrdinalIgnoreCase)
-                    || dev.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || rem.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || vm == 1;
+                bool isAdminMarked = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                    || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                    || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
 
                 if (isAdminMarked)
                 {
@@ -653,11 +649,9 @@ LIMIT 1;";
                 string rem = (string?)existingAttOut.Remarks ?? "";
                 byte vm = Convert.ToByte(existingAttOut.VerificationMethod ?? 0);
 
-                bool isAdminMarked = role.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || role.Contains("Principal", StringComparison.OrdinalIgnoreCase)
-                    || dev.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || rem.Contains("Admin", StringComparison.OrdinalIgnoreCase)
-                    || vm == 1;
+                bool isAdminMarked = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                    || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                    || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
 
                 if (isAdminMarked)
                 {
@@ -883,11 +877,9 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                     var inT = att.ParsedInTime;
                     var outT = att.ParsedOutTime;
 
-                    bool isAdminMarked = (att.RoleName != null && att.RoleName.Contains("Admin", StringComparison.OrdinalIgnoreCase))
-                        || (att.RoleName != null && att.RoleName.Contains("Principal", StringComparison.OrdinalIgnoreCase))
-                        || (att.DeviceId != null && att.DeviceId.Contains("Admin", StringComparison.OrdinalIgnoreCase))
-                        || (att.Remarks != null && att.Remarks.Contains("Admin", StringComparison.OrdinalIgnoreCase))
-                        || att.VerificationMethod == 1;
+                    bool isAdminMarked = (att.RoleName != null && (att.RoleName.Contains("Admin", StringComparison.OrdinalIgnoreCase) || att.RoleName.Contains("Principal", StringComparison.OrdinalIgnoreCase)))
+                        || (att.DeviceId != null && att.DeviceId.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !att.DeviceId.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                        || (att.Remarks != null && att.Remarks.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !att.Remarks.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
 
                     if (inT.HasValue)
                     {

@@ -32,6 +32,7 @@ import {
   XCircle,
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { AccountantPageHeader } from "@/modules/accountant/components/AccountantUI.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { Modal, Skeleton, Toast } from "@/shared/components/Ui.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
@@ -81,7 +82,10 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const usesRouteNavigation = isAdminRoute || isAccountantRoute;
   const tabsByQuery = { review: "all-claims", "all-claims": "all-claims", claims: "submit", submit: "submit", "my-claims": "my-claims", history: "history" };
   const tabQuery = searchParams.get("tab");
-  const activePortalTab = usesRouteNavigation ? (Object.hasOwn(tabsByQuery, tabQuery) ? tabsByQuery[tabQuery] : "all-claims") : legacyPortalTab;
+  const requestedPortalTab = usesRouteNavigation ? (Object.hasOwn(tabsByQuery, tabQuery) ? tabsByQuery[tabQuery] : "all-claims") : legacyPortalTab;
+  // Keep legacy review links usable after merging the Accountant review into history.
+  const activePortalTab = isAccountantView && requestedPortalTab === "all-claims" ? "history" : requestedPortalTab;
+  const isReviewTab = activePortalTab === "all-claims" || (isAccountantView && activePortalTab === "history");
   const setActivePortalTab = useCallback((tab) => {
     if (!usesRouteNavigation) { setLegacyPortalTab(tab); return; }
     const next = new URLSearchParams(searchParams);
@@ -869,14 +873,14 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         counts:
           summaryData.counts ||
           reimbursementService.calculateFinancialMetrics(
-            activePortalTab === "all-claims" ? filteredClaims : claims
+            isReviewTab ? filteredClaims : claims
           ).counts,
       };
     }
     return reimbursementService.calculateFinancialMetrics(
-      activePortalTab === "all-claims" ? filteredClaims : claims
+      isReviewTab ? filteredClaims : claims
     );
-  }, [summaryData, filteredClaims, claims, activePortalTab]);
+  }, [summaryData, filteredClaims, claims, isReviewTab]);
 
   // ── CSV Export Action ──────────────────────────────────────────────
   const handleExportCsv = () => {
@@ -914,6 +918,12 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   const pageContent = (
     <div className="reimb-page-container">
+        {isAccountantView && (
+          <AccountantPageHeader
+            title={<><span aria-hidden="true">💸</span> Reimbursements</>}
+            subtitle="Manage reimbursement claims, track approvals, and view payment history."
+          />
+        )}
         {/* Toast Notification */}
         {toast && (
           <Toast
@@ -926,13 +936,13 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         {/* ── Top Toolbar with Portal View Toggle & Account Integration Sync ── */}
         <div className="reimb-toolbar">
           <div className="reimb-role-toggle">
-            <button
+            {!isAccountantView && <button
               type="button"
               className={`reimb-toggle-btn ${activePortalTab === "all-claims" ? "is-active" : ""}`}
               onClick={() => setActivePortalTab("all-claims")}
             >
               <ShieldCheck size={15} /> Finance &amp; Admin Review ({(summary.pending || 0) + (summary.underReview || 0)})
-            </button>
+            </button>}
             <button
               type="button"
               className={`reimb-toggle-btn ${activePortalTab === "submit" ? "is-active" : ""}`}
@@ -1027,7 +1037,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
         </section>
 
         {/* ── Compact Financial Summary Bar (Finance & Admin Review Tab) ── */}
-        {activePortalTab === "all-claims" && (
+        {isReviewTab && (
           <>
             {!isFinanceUser && (
               <div className="reimb-profile-warning" style={{ margin: "4px 0 14px" }}>

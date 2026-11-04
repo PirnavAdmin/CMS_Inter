@@ -79,7 +79,31 @@ export const getTrips = async (params = {}) => {
   try {
     const res = await apiClient.get(apiEndpoints.transport.trips, { params });
     const payload = res.data?.data?.trips || res.data?.data || res.data;
-    return extractList(payload);
+    const rawList = extractList(payload);
+    return rawList.map((t) => ({
+      ...t,
+      id: t.tripId || t.id,
+      tripId: t.tripId || t.id,
+      assignmentId: t.assignmentId || t.vehicleAssignmentId,
+      vehicleId: t.vehicleId,
+      vehicleNumber: t.vehicleNumber || t.busNumber || "",
+      routeName: t.routeName || t.route || "",
+      driverId: t.driverId,
+      driverName: t.driverName || t.driver || "",
+      attendantId: t.attendantId,
+      attendantName: t.attendantName || t.attendant || "",
+      tripType: t.tripType || (t.morningTripTime && t.eveningTripTime ? "Both (M/E)" : t.morningTripTime ? "Morning" : t.eveningTripTime ? "Evening" : "Regular"),
+      tripDate: t.tripDate ? String(t.tripDate).split("T")[0] : (t.date ? String(t.date).split("T")[0] : new Date().toISOString().split("T")[0]),
+      morningTripTime: t.morningTripTime || t.morningTrip || t.startTime || "",
+      eveningTripTime: t.eveningTripTime || t.eveningTrip || t.endTime || "",
+      startTime: t.startTime || t.morningTripTime || t.morningTrip || "",
+      endTime: t.endTime || t.eveningTripTime || t.eveningTrip || "",
+      studentsCount: Number(t.studentsCount ?? t.studentsPresent ?? 0),
+      studentsPresent: t.studentsCount ?? t.studentsPresent ?? t.assignedStudents ?? 0,
+      capacity: Number(t.capacity || 0),
+      status: t.status || t.tripStatus || "Scheduled",
+      gpsStatus: t.gpsStatus || "Online",
+    }));
   } catch (error) {
     console.warn("Transport trips fetch failed:", error);
     return [];

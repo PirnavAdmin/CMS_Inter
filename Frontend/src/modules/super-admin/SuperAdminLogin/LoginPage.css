@@ -1,0 +1,12 @@
+.sa-login-page { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--cms-bg); color: var(--cms-text); }
+.sa-login-card { width: min(450px, 100%); padding: 36px; background: var(--cms-surface); border: 1px solid var(--cms-border); border-radius: 20px; box-shadow: var(--cms-shadow); }
+.sa-login-card > svg { color: var(--cms-primary); margin-bottom: 18px; }
+.sa-login-eyebrow { display: block; font-size: 10px; color: var(--cms-muted); letter-spacing: 1.5px; font-weight: 700; }
+.sa-login-card h1 { font-size: 30px; margin: 10px 0; }
+.sa-login-card > p { color: var(--cms-muted); font-size: 13px; }
+.sa-login-notice { display: flex; align-items: center; gap: 10px; margin: 24px 0; padding: 14px; border-radius: 9px; background: var(--cms-secondary); font-size: 11px; line-height: 1.6; }
+.sa-login-notice svg { flex-shrink: 0; color: var(--cms-primary); }
+.sa-login-card form { display: grid; gap: 18px; }
+.sa-login-card label { display: grid; gap: 7px; font-size: 12px; }
+.sa-login-card input { min-height: 44px; padding: 11px 12px; border: 1px solid var(--cms-border); border-radius: 9px; background: var(--cms-surface); color: var(--cms-text); }
+.sa-login-card > a { display: block; text-align: center; margin-top: 24px; color: var(--cms-primary); font-size: 12px; }

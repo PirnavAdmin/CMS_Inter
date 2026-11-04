@@ -1,75 +1,127 @@
 import { useSearchParams } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Route as RouteIcon,
   MapPin,
   Bus,
   Clock,
   Users,
-  ShieldCheck,
-  UserCheck,
-  Calendar,
   CheckCircle2,
   Navigation,
   ArrowRight,
-  Phone,
-  Info,
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { getRoute } from "../../../api/transportDriverApi.js";
+import { getRoute, getDashboard } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
+import { useDriverData } from "../DriverDataContext.jsx";
+import { unwrapDriverData, formatTime12Hour } from "../data/driverData.js";
 
 export default function DriverRoutePage({ onNavigateTab }) {
   const [routeDetails, setRouteDetails] = useState(null);
+  const { driverProfile, dashboard } = useDriverData();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedStopId = searchParams.get("stopId") ?? routeDetails?.stops?.[0]?.id;
-  const setSelectedStopId = (id) => setSearchParams((previous) => {
-    const next = new URLSearchParams(previous);
-    next.set("stopId", String(id));
-    return next;
-  });
+  const setSelectedStopId = (id) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("stopId", String(id));
+      return next;
+    });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const hasLoadedOnce = useRef(false);
+
+  const toTitleCase = (str) => {
+    if (!str || typeof str !== "string") return "";
+    return str.replace(/\b\w/g, (c) => c.toUpperCase());
+  };
 
   useEffect(() => {
+    let isMounted = true;
     const fetchRoute = async () => {
       try {
-        setIsLoading(true);
-        const res = await getRoute();
-        const routeData = res.data?.route || {
-          routeName: "Loading...",
-          routeCode: "...",
-          startPoint: "...",
-          morningStartTime: "...",
-          endPoint: "...",
-          morningEndTime: "...",
-          distanceKm: 0,
-          busNumber: "...",
-          vehicleModel: "...",
-          assignedAttendant: "...",
-          attendantPhone: "...",
-          shift: "...",
-          effectiveDate: "...",
-          totalStudents: 0,
-          stops: []
+        if (!hasLoadedOnce.current) {
+          setIsLoading(true);
+        }
+        const [routeRes, dashRes] = await Promise.allSettled([
+          getRoute().then(unwrapDriverData),
+          getDashboard().then(unwrapDriverData),
+        ]);
+
+        if (!isMounted) return;
+
+        const routePayload = routeRes.status === "fulfilled" ? routeRes.value : {};
+        const dashPayload = dashRes.status === "fulfilled" ? dashRes.value : {};
+
+        const rawRoute = routePayload.route || routePayload;
+        const rawStops = routePayload.pickupPoints || routePayload.stops || rawRoute.stops || [];
+
+        const assignedVeh = dashPayload.assignedVehicle || dashPayload.assignment || {};
+        const assignedAtt = dashPayload.attendant || dashPayload.assignment || {};
+
+        const mappedStops = rawStops.map((s, idx) => ({
+          id: s.pickupPointId ?? s.id ?? idx + 1,
+          stopNumber: s.stopOrder ?? s.sequenceNo ?? s.stopNumber ?? idx + 1,
+          name: toTitleCase(s.stopName ?? s.name ?? `Stop ${idx + 1}`),
+          landmark: s.landmark ?? s.stopAddress ?? "Scheduled Stop Landmark",
+          pickupTime: formatTime12Hour(s.pickupTime) || "07:30 AM",
+          dropTime: formatTime12Hour(s.dropTime) || "04:15 PM",
+          studentCount: s.studentCount != null ? Number(s.studentCount) : 0,
+          status: s.status ?? "Scheduled",
+        }));
+
+        const combinedRoute = {
+          routeName: rawRoute.routeName || driverProfile?.assignedRoute || "Assigned Route",
+          routeCode: rawRoute.routeCode || "ROUTE-01",
+          startPoint: rawRoute.StartLocation || rawRoute.startLocation || "Campus Gate",
+          endPoint: rawRoute.EndLocation || rawRoute.endLocation || "Designated Drop",
+          morningStartTime: dashPayload.morningTripTime || dashPayload.assignment?.morningTripTime || "07:00 AM",
+          morningEndTime: "08:30 AM",
+          distanceKm: rawRoute.DistanceKm || rawRoute.distanceKm || "0",
+          busNumber: assignedVeh.vehicleNumber || driverProfile?.assignedVehicle || "Not Assigned",
+          vehicleModel: assignedVeh.vehicleType || driverProfile?.vehicleModel || "Transport Vehicle",
+          assignedAttendant: assignedAtt.attendantName || driverProfile?.assignedAttendant || "N/A",
+          attendantPhone: assignedAtt.contactNumber || driverProfile?.attendantPhone || "N/A",
+          shift: dashPayload.shift || dashPayload.assignment?.shift || driverProfile?.shift || "Morning",
+          effectiveDate: assignedVeh.assignedDate ? String(assignedVeh.assignedDate).slice(0, 10) : "Active Term",
+          totalStudents: dashPayload.assignedStudents ?? dashPayload.assignment?.assignedStudents ?? mappedStops.reduce((acc, s) => acc + (s.studentCount || 0), 0),
+          stops: mappedStops,
         };
-        setRouteDetails(routeData);
+
+        setRouteDetails(combinedRoute);
+        setError("");
       } catch (err) {
-        console.error(err);
-        setError("Failed to load route details.");
+        if (isMounted) {
+          setError(err?.response?.data?.message || err.message || "Failed to load route details.");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+          hasLoadedOnce.current = true;
+        }
       }
     };
+
     fetchRoute();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (isLoading) {
-    return <div className="dp-page-container"><SkeletonPage variant="page" /></div>;
+    return (
+      <div className="dp-page-container">
+        <SkeletonPage variant="page" />
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
+    return (
+      <div className="dp-page-container">
+        <p className="dp-text-danger">{error}</p>
+      </div>
+    );
   }
 
   const activeStop = routeDetails?.stops?.find((s) => String(s.id) === String(selectedStopId));
@@ -83,9 +135,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
             <RouteIcon size={14} /> Assigned Route Information
           </div>
           <h1 className="dp-page-title">My Route</h1>
-          <p className="dp-page-subtitle">
-            View your assigned transport route and pickup points.
-          </p>
+          <p className="dp-page-subtitle">View your assigned transport route and pickup points.</p>
         </div>
         <div className="dp-header-actions">
           <button
@@ -118,17 +168,17 @@ export default function DriverRoutePage({ onNavigateTab }) {
             <div className="dp-rd-item">
               <span className="dp-rd-label">Start Point</span>
               <strong className="dp-rd-val">{routeDetails?.startPoint}</strong>
-              <small className="dp-rd-sub">Pickup Departs: {routeDetails?.morningStartTime}</small>
+              <small className="dp-rd-sub">Pickup Departs: {formatTime12Hour(routeDetails?.morningStartTime)}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">End Point</span>
               <strong className="dp-rd-val">{routeDetails?.endPoint}</strong>
-              <small className="dp-rd-sub">Arrives Campus: {routeDetails?.morningEndTime}</small>
+              <small className="dp-rd-sub">Arrives: {routeDetails?.morningEndTime}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Distance</span>
               <strong className="dp-rd-val">{routeDetails?.distanceKm} km</strong>
-              <small className="dp-rd-sub">Approx. 90 mins loop</small>
+              <small className="dp-rd-sub">Scheduled Route Loop</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Bus Number</span>
@@ -143,12 +193,12 @@ export default function DriverRoutePage({ onNavigateTab }) {
             <div className="dp-rd-item">
               <span className="dp-rd-label">Shift</span>
               <strong className="dp-rd-val">{routeDetails?.shift}</strong>
-              <small className="dp-rd-sub">Morning & Evening</small>
+              <small className="dp-rd-sub">Active Duty</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Effective Date</span>
               <strong className="dp-rd-val">{routeDetails?.effectiveDate}</strong>
-              <small className="dp-rd-sub">Academic Term 2026-27</small>
+              <small className="dp-rd-sub">Current Assignment</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Assigned Students</span>
@@ -172,43 +222,73 @@ export default function DriverRoutePage({ onNavigateTab }) {
         </div>
 
         <div className="dp-card-body">
-          <div className="dp-visual-route-track">
-            {routeDetails?.stops?.map((stop, index) => {
-              const isSelected = String(selectedStopId) === String(stop.id);
-              const isCompleted = stop.status === "Completed";
-              const isInProgress = stop.status === "In Progress";
+          {/* Corridor Progress Header */}
+          <div className="dp-route-corridor-summary">
+            <div className="dp-corridor-metric">
+              <Bus size={15} className="dp-text-primary" />
+              <span>{routeDetails?.stops?.length || 0} Scheduled Stops</span>
+            </div>
+            <div className="dp-corridor-sep">•</div>
+            <div className="dp-corridor-metric">
+              <RouteIcon size={15} className="dp-text-primary" />
+              <span>{routeDetails?.distanceKm || 21} km Total Transit</span>
+            </div>
+            <div className="dp-corridor-sep">•</div>
+            <div className="dp-corridor-metric">
+              <Users size={15} className="dp-text-primary" />
+              <span>{routeDetails?.totalStudents || 2} Students Assigned</span>
+            </div>
+          </div>
 
-              return (
-                <div
-                  key={stop.id}
-                  className={`dp-vrt-node ${
-                    isSelected ? "is-selected" : ""
-                  } ${isCompleted ? "is-done" : ""} ${
-                    isInProgress ? "is-active" : ""
-                  }`}
-                  onClick={() => setSelectedStopId(stop.id)}
-                >
-                  <div className="dp-vrt-circle">
-                    {isCompleted ? (
-                      <CheckCircle2 size={18} />
-                    ) : (
-                      <span>{stop.stopNumber}</span>
+          {/* Stepper Grid of Interactive Cards */}
+          <div className="dp-route-stepper-grid">
+            {routeDetails?.stops && routeDetails.stops.length > 0 ? (
+              routeDetails.stops.map((stop, index) => {
+                const isSelected = String(selectedStopId) === String(stop.id);
+                const isCompleted = stop.status === "Completed";
+                const isLast = index === routeDetails.stops.length - 1;
+
+                return (
+                  <React.Fragment key={stop.id}>
+                    <div
+                      className={`dp-route-step-card ${isSelected ? "is-selected" : ""} ${isCompleted ? "is-done" : ""}`}
+                      onClick={() => setSelectedStopId(stop.id)}
+                    >
+                      <div className="dp-rsc-header">
+                        <span className="dp-rsc-order-badge">
+                          {isCompleted ? <CheckCircle2 size={13} /> : `Stop ${stop.stopNumber}`}
+                        </span>
+                        <span className="dp-rsc-time-tag">
+                          <Clock size={11} /> {stop.pickupTime}
+                        </span>
+                      </div>
+                      <div className="dp-rsc-body">
+                        <h4 className="dp-rsc-title">{stop.name}</h4>
+                        <p className="dp-rsc-landmark">
+                          <MapPin size={12} /> {stop.landmark}
+                        </p>
+                      </div>
+                      <div className="dp-rsc-footer">
+                        <span className="dp-rsc-student-chip">
+                          <Users size={11} /> {stop.studentCount > 0 ? `${stop.studentCount} ${stop.studentCount === 1 ? 'Student' : 'Students'}` : isLast ? 'Campus Drop' : 'En-route Stop'}
+                        </span>
+                        <DriverStatusBadge status={stop.status} />
+                      </div>
+                    </div>
+                    {!isLast && (
+                      <div className="dp-route-step-arrow" aria-hidden="true">
+                        <ArrowRight size={18} />
+                      </div>
                     )}
-                  </div>
-                  <div className="dp-vrt-label">
-                    <strong>{stop.name}</strong>
-                    <small>{stop.pickupTime}</small>
-                  </div>
-                  {index < routeDetails.stops.length - 1 && (
-                    <div className={`dp-vrt-connector ${isCompleted ? "is-filled" : ""}`} />
-                  )}
-                </div>
-              );
-            })}
+                  </React.Fragment>
+                );
+              })
+            ) : (
+              <p className="text-gray-500 py-3">No stops configured for this route.</p>
+            )}
           </div>
 
           {/* Selected Stop Callout Card */}
-          {searchParams.has("stopId") && !activeStop && <p role="alert" className="dp-text-danger">This route stop is no longer available.</p>}
           {activeStop && (
             <div className="dp-selected-stop-banner">
               <div className="dp-ssb-left">
@@ -273,45 +353,53 @@ export default function DriverRoutePage({ onNavigateTab }) {
                 </tr>
               </thead>
               <tbody>
-                {routeDetails?.stops?.map((stop) => (
-                  <tr
-                    key={stop.id}
-                    className={String(selectedStopId) === String(stop.id) ? "dp-row-highlight" : ""}
-                    onClick={() => setSelectedStopId(stop.id)}
-                    style={{ cursor: "pointer" }}
-                  >
-                    <td>
-                      <span className="dp-stop-seq">{stop.stopNumber}</span>
-                    </td>
-                    <td>
-                      <div className="dp-flex-row gap-1">
-                        <MapPin size={15} className="dp-text-primary" />
-                        <strong>{stop.name}</strong>
-                      </div>
-                    </td>
-                    <td>
-                      <span className="dp-text-muted">{stop.landmark}</span>
-                    </td>
-                    <td>
-                      <span className="dp-time-pill">
-                        <Clock size={12} /> {stop.pickupTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="dp-time-pill">
-                        <Clock size={12} /> {stop.dropTime}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="dp-student-count-chip">
-                        <Users size={12} /> {stop.studentCount} Students
-                      </span>
-                    </td>
-                    <td>
-                      <DriverStatusBadge status={stop.status} />
+                {routeDetails?.stops && routeDetails.stops.length > 0 ? (
+                  routeDetails.stops.map((stop) => (
+                    <tr
+                      key={stop.id}
+                      className={String(selectedStopId) === String(stop.id) ? "dp-row-highlight" : ""}
+                      onClick={() => setSelectedStopId(stop.id)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <td>
+                        <span className="dp-stop-seq">{stop.stopNumber}</span>
+                      </td>
+                      <td>
+                        <div className="dp-flex-row gap-1">
+                          <MapPin size={15} className="dp-text-primary" />
+                          <strong>{stop.name}</strong>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="dp-text-muted">{stop.landmark}</span>
+                      </td>
+                      <td>
+                        <span className="dp-time-pill">
+                          <Clock size={12} /> {stop.pickupTime}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="dp-time-pill">
+                          <Clock size={12} /> {stop.dropTime}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="dp-student-count-chip">
+                          <Users size={12} /> {stop.studentCount} Students
+                        </span>
+                      </td>
+                      <td>
+                        <DriverStatusBadge status={stop.status} />
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="text-center py-4 text-gray-500">
+                      No pickup points found for this route.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

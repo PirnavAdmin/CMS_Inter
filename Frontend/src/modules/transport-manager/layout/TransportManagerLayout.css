@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Transport Manager Layout Styles — Scoped to .tm-shell
+   Transport Manager Layout Styles
    Inherits full theme-based design from cms.css & DashboardLayout.css
    Does NOT override or bleed into Admin (/dashboard) or other modules
    ========================================================================== */
@@ -12,4 +12,197 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+/* ==========================================================================
+   Transport Manager Responsive Sidebar (Icon-Only Rail on Small Screens)
+   ========================================================================== */
+
+/* Collapsed Mini Sidebar (Icon-Only Rail) */
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar {
+  width: var(--cms-sidebar-collapsed-w, 70px) !important;
+  flex: 0 0 var(--cms-sidebar-collapsed-w, 70px) !important;
+  flex-basis: var(--cms-sidebar-collapsed-w, 70px) !important;
+  transform: none !important;
+  visibility: visible !important;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-brand {
+  padding: 0 6px !important;
+  justify-content: center !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-brand-logo {
+  max-width: 44px !important;
+  height: 40px !important;
+  object-fit: contain !important;
+  transform: none !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav {
+  padding: 10px 6px 24px !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-group-wrap {
+  margin-bottom: 6px !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-group {
+  display: none !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-link {
+  width: 100% !important;
+  margin-left: 0 !important;
+  padding: 10px 0 !important;
+  justify-content: center !important;
+  gap: 0 !important;
+  border-radius: 12px !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-link:hover {
+  transform: translateY(-1px) scale(1.04) !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-label {
+  display: none !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-caret {
+  display: none !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-sidebar-footer {
+  padding: 10px 0 !important;
+  justify-content: center !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-sidebar-footer-text {
+  display: none !important;
+}
+
+/* Adjust main content when sidebar is collapsed */
+.tm-layout-shell.nav-closed .cms-main {
+  width: calc(100% - var(--cms-sidebar-collapsed-w, 70px)) !important;
+  margin-left: var(--cms-sidebar-collapsed-w, 70px) !important;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Expanded sidebar on large screens */
+.tm-layout-shell:not(.nav-closed) .cms-sidebar.tm-sidebar {
+  width: var(--cms-sidebar-w, 260px) !important;
+  flex: 0 0 var(--cms-sidebar-w, 260px) !important;
+  transform: none !important;
+  visibility: visible !important;
+}
+
+.tm-layout-shell:not(.nav-closed) .cms-main {
+  width: calc(100% - var(--cms-sidebar-w, 260px)) !important;
+  margin-left: var(--cms-sidebar-w, 260px) !important;
+}
+
+/* Responsive adjustments & overlay backdrop for small screens (<= 1024px) */
+@media (max-width: 1024px) {
+  .tm-layout-shell:not(.nav-closed) .cms-sidebar.tm-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 60 !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25) !important;
+  }
+
+  .tm-sidebar-backdrop {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: rgba(13, 27, 51, 0.45) !important;
+    z-index: 55 !important;
+    cursor: pointer !important;
+    backdrop-filter: blur(2px) !important;
+    -webkit-backdrop-filter: blur(2px) !important;
+  }
+}
+
+@media (min-width: 1025px) {
+  .tm-sidebar-backdrop {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* On very small mobile screens (<640px), keep icon-only rail */
+  .tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar {
+    width: 60px !important;
+  }
+  .tm-layout-shell.nav-closed .cms-main {
+    width: calc(100% - 60px) !important;
+    margin-left: 60px !important;
+  }
+}
+
+/* ==========================================================================
+   Transport Manager Sidebar Tooltip (Active only in collapsed icon-only rail)
+   ========================================================================== */
+
+.tm-sidebar-tooltip {
+  display: none;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar {
+  overflow: visible !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav {
+  overflow: visible !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-brand,
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-link,
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-sidebar-footer {
+  position: relative !important;
+}
+
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .tm-sidebar-tooltip {
+  display: block;
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 6px 12px;
+  background: var(--cms-surface-elevated, #1e293b);
+  color: var(--cms-surface-elevated-text, #ffffff);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9999;
+  border: 1px solid var(--cms-border, rgba(255, 255, 255, 0.12));
+}
+
+/* Tooltip Arrow */
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .tm-sidebar-tooltip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: transparent var(--cms-surface-elevated, #1e293b) transparent transparent;
+}
+
+/* Hover trigger */
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-brand:hover .tm-sidebar-tooltip,
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-nav-link:hover .tm-sidebar-tooltip,
+.tm-layout-shell.nav-closed .cms-sidebar.tm-sidebar .cms-sidebar-footer:hover .tm-sidebar-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
 }

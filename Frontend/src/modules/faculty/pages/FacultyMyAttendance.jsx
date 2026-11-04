@@ -106,8 +106,8 @@ const normalizeTodayData = (raw, timing) => {
     raw.MarkedByAdmin ??
     raw.markedBy === "Admin" ??
     raw.MarkedBy === "Admin" ??
-    (typeof raw.remarks === "string" && raw.remarks.toLowerCase().includes("admin")) ??
-    (typeof raw.deviceId === "string" && raw.deviceId.toLowerCase().includes("admin"))
+    (typeof raw.remarks === "string" && raw.remarks.toLowerCase().includes("admin") && !raw.remarks.toLowerCase().includes("driver portal")) ??
+    (typeof raw.deviceId === "string" && raw.deviceId.toLowerCase().includes("admin") && !raw.deviceId.toLowerCase().includes("driver-portal"))
   );
 
   let status = rawStatus;
@@ -389,7 +389,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             l.MarkedBy === "Admin" ||
             String(rawStatus).toLowerCase().includes("admin") ||
             (typeof l.device === "string" && l.device.toLowerCase().includes("admin")) ||
-            (rawStatus === "Present" && (inTime === "--" || !inTime || outTime === "--" || !outTime))
+            (!isToday && rawStatus === "Present" && (inTime === "--" || !inTime || outTime === "--" || !outTime))
           );
 
           let status = rawStatus;
@@ -403,7 +403,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           // Fall back to configured shift start & end times
           let finalInTime = inTime;
           let finalOutTime = outTime;
-          if (status === "Present (Admin)" || (status === "Present" && (inTime === "--" || markedByAdmin))) {
+          if (!isToday && (status === "Present (Admin)" || (status === "Present" && (inTime === "--" || markedByAdmin)))) {
             const shiftParts = String(shift || "").split(/[–-]/).map((s) => s.trim());
             if (finalInTime === "--" || !finalInTime) finalInTime = shiftParts[0] || "09:00 AM";
             if (finalOutTime === "--" || !finalOutTime) finalOutTime = shiftParts[1] || "03:20 PM";

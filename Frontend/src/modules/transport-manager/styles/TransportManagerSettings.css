@@ -1,4 +1,9 @@
-/* Transport Manager Settings Styles */
+/* ==========================================================================
+   Transport Manager Settings Styles
+   Inherits full theme-based design from cms.css & DashboardLayout.css
+   Does NOT override or bleed into Admin (/dashboard) or other modules
+   ========================================================================== */
+
 @import "../../faculty/styles/FacultySettings.css";
 
 .tm-settings-container {
@@ -6,16 +11,16 @@
   width: 100%;
 }
 
-/* Ensure consistent button & badge themes */
+/* Ensure consistent card & button themes */
 .tm-settings-container .faculty-settings-card.is-featured {
-  border-color: var(--cms-primary-border, #a3c267);
-  background: linear-gradient(180deg, var(--cms-primary-soft, #f7f9ea) 0%, var(--cms-surface, #ffffff) 100%);
+  border-color: color-mix(in srgb, var(--cms-primary) 35%, transparent) !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cms-primary) 8%, var(--cms-card-bg, #ffffff)) 0%, var(--cms-card-bg, #ffffff) 100%) !important;
 }
 
 .tm-settings-container .faculty-settings-card-footer .cms-btn-primary {
-  background: var(--cms-primary, #6F8400);
-  border-color: var(--cms-primary, #6F8400);
-  color: #ffffff;
+  background: var(--cms-primary) !important;
+  border-color: var(--cms-primary) !important;
+  color: #ffffff !important;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -28,42 +33,9 @@
 }
 
 .tm-settings-container .faculty-settings-card-footer .cms-btn-primary:hover {
-  background: var(--cms-primary-dark, #576700);
-  border-color: var(--cms-primary-dark, #576700);
+  background: var(--cms-primary-hover, var(--cms-primary-dark)) !important;
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark)) !important;
 }
-
-/* Multi-theme modal obedience for Transport Manager Settings */
-.tm-settings-container .faculty-settings-modal-foot .cms-btn-primary {
-  background: var(--cms-primary, #6F8400) !important;
-  border-color: var(--cms-primary, #6F8400) !important;
-  color: #ffffff !important;
-}
-
-.tm-settings-container .faculty-settings-modal-foot .cms-btn-primary:hover:not(:disabled) {
-  background: var(--cms-primary-hover, var(--cms-primary-dark, #566900)) !important;
-  border-color: var(--cms-primary-hover, var(--cms-primary-dark, #566900)) !important;
-}
-
-.tm-settings-container .faculty-settings-tab-btn.is-active {
-  color: var(--cms-primary, #6F8400) !important;
-  border-bottom-color: var(--cms-primary, #6F8400) !important;
-}
-
-.tm-settings-container .faculty-settings-tab-btn:hover {
-  color: var(--cms-primary, #6F8400) !important;
-}
-
-.tm-settings-container .faculty-settings-shield-icon,
-.tm-settings-container .faculty-settings-modal-head h2 svg {
-  color: var(--cms-primary, #6F8400) !important;
-}
-
-.tm-settings-container .faculty-settings-field input:focus,
-.tm-settings-container .faculty-settings-field select:focus {
-  border-color: var(--cms-primary, #6F8400) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary, #6F8400) 25%, transparent) !important;
-}
-
 
 /* Theme Swatches in Settings Card */
 .settings-theme-swatches-grid {
@@ -81,9 +53,9 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border: 1px solid var(--cms-border);
+  border: 1px solid var(--cms-border, #e2e8f0);
   border-radius: 8px;
-  background: var(--cms-surface);
+  background: var(--cms-card-bg, #ffffff);
   cursor: pointer;
   transition: all 0.16s ease;
   text-align: left;
@@ -92,42 +64,459 @@
 
 .settings-theme-swatch-item:hover {
   border-color: var(--cms-primary);
-  background: var(--cms-subtle);
+  background: var(--cms-subtle, #f8fafc);
 }
 
 .settings-theme-swatch-item.is-selected {
   border-color: var(--cms-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 25%, transparent);
-  background: var(--cms-subtle);
 }
 
-.settings-theme-swatch-bars {
-  display: flex;
-  width: 26px;
-  height: 15px;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid var(--cms-border);
-  flex-shrink: 0;
+/* ==========================================================================
+   Compact, Space-Utilized Theme-Based Settings Modal for Transport Manager
+   ========================================================================== */
+
+.tm-settings-modal-overlay,
+.faculty-settings-modal-overlay.tm-settings-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  background: rgba(15, 23, 42, 0.55) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  box-sizing: border-box !important;
 }
 
-.settings-theme-swatch-bars i {
-  flex: 1;
+.tm-settings-modal,
+.faculty-settings-modal.tm-settings-modal {
+  display: flex !important;
+  flex-direction: column !important;
+  width: min(530px, calc(100vw - 32px)) !important;
+  max-width: 530px !important;
+  max-height: min(88vh, 580px) !important;
+  border-radius: 14px !important;
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  animation: tmModalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
-.settings-theme-swatch-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--cms-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
+@keyframes tmModalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
-.settings-theme-swatch-check {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--cms-primary);
-  flex-shrink: 0;
+/* Compact Modal Header */
+.tm-settings-modal .faculty-settings-modal-head,
+.tm-settings-modal-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 18px !important;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0) !important;
+  background: var(--cms-card-bg, #ffffff) !important;
+  flex-shrink: 0 !important;
+}
+
+.tm-settings-modal .faculty-settings-modal-head h2,
+.tm-settings-modal-head h2 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 14.5px !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+  color: var(--cms-text, #1e293b) !important;
+}
+
+.tm-settings-modal .faculty-settings-shield-icon,
+.tm-settings-modal-head h2 svg {
+  color: var(--cms-primary) !important;
+}
+
+.tm-settings-modal .faculty-settings-modal-close {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--cms-muted, #64748b) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.tm-settings-modal .faculty-settings-modal-close:hover {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  color: var(--cms-text, #1e293b) !important;
+}
+
+/* Compact Modal Tabs */
+.tm-settings-modal .faculty-settings-tabs {
+  display: flex !important;
+  background: var(--cms-card-bg, #ffffff) !important;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0) !important;
+  padding: 0 14px !important;
+  margin: 0 !important;
+  gap: 4px !important;
+  flex-shrink: 0 !important;
+}
+
+.tm-settings-modal .faculty-settings-tab-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 10px 14px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  color: var(--cms-muted, #64748b) !important;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  flex: none !important;
+}
+
+.tm-settings-modal .faculty-settings-tab-btn:hover {
+  color: var(--cms-primary) !important;
+}
+
+.tm-settings-modal .faculty-settings-tab-btn.is-active {
+  color: var(--cms-primary) !important;
+  border-bottom-color: var(--cms-primary) !important;
+  background: transparent !important;
+  font-weight: 600 !important;
+}
+
+/* Compact Modal Body (Utilized Space) */
+.tm-settings-modal .faculty-settings-modal-body,
+.tm-settings-modal-body {
+  padding: 14px 18px !important;
+  background: var(--cms-card-bg, #ffffff) !important;
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+}
+
+/* Form Fields with Reduced Gaps */
+.tm-settings-modal .faculty-settings-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  margin-bottom: 6px !important;
+}
+
+.tm-settings-modal .faculty-settings-field label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--cms-text, #1e293b) !important;
+  margin: 0 !important;
+}
+
+.tm-settings-modal .faculty-settings-password-wrap {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.tm-settings-modal .faculty-settings-field input,
+.tm-settings-modal .faculty-settings-field select {
+  width: 100% !important;
+  height: 38px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--cms-border, #cbd5e1) !important;
+  background: var(--cms-surface, #ffffff) !important;
+  color: var(--cms-text, #1e293b) !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.tm-settings-modal .faculty-settings-password-wrap input {
+  padding-right: 36px !important;
+}
+
+.tm-settings-modal .faculty-settings-field input:focus,
+.tm-settings-modal .faculty-settings-field select:focus {
+  border-color: var(--cms-primary) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary) 18%, transparent) !important;
+  outline: none !important;
+}
+
+.tm-settings-modal .faculty-settings-password-toggle {
+  position: absolute !important;
+  right: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--cms-muted, #64748b) !important;
+  cursor: pointer !important;
+}
+
+.tm-settings-modal .faculty-settings-password-toggle:hover {
+  color: var(--cms-primary) !important;
+}
+
+.tm-settings-modal .faculty-settings-hint {
+  font-size: 11px !important;
+  color: var(--cms-muted, #64748b) !important;
+  margin-top: 2px !important;
+}
+
+/* Compact Password Strength Box */
+.tm-settings-modal .faculty-password-strength-box {
+  margin-top: 6px !important;
+  padding: 8px 10px !important;
+  border-radius: 8px !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+}
+
+.tm-settings-modal .faculty-password-strength-label {
+  display: flex !important;
+  justify-content: space-between !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  margin-bottom: 4px !important;
+  color: var(--cms-text, #1e293b) !important;
+}
+
+.tm-settings-modal .faculty-password-strength-bar-bg {
+  width: 100% !important;
+  height: 3px !important;
+  border-radius: 2px !important;
+  background: var(--cms-border, #e2e8f0) !important;
+  overflow: hidden !important;
+  margin-bottom: 6px !important;
+}
+
+.tm-settings-modal .faculty-password-strength-bar-fill {
+  height: 100% !important;
+  transition: width 0.25s ease, background-color 0.25s ease !important;
+}
+
+.tm-settings-modal .faculty-password-criteria-list {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 3px 6px !important;
+}
+
+.tm-settings-modal .faculty-password-criteria-item {
+  font-size: 10.5px !important;
+  color: var(--cms-muted, #64748b) !important;
+}
+
+.tm-settings-modal .faculty-password-criteria-item.met {
+  color: #16a34a !important;
+  font-weight: 600 !important;
+}
+
+/* Compact Preferences Switches */
+.tm-settings-modal .faculty-settings-switch-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 9px 12px !important;
+  border-radius: 8px !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  margin-bottom: 6px !important;
+  gap: 10px !important;
+}
+
+.tm-settings-modal .faculty-settings-switch-info h4 {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  margin: 0 0 1px 0 !important;
+  color: var(--cms-text, #1e293b) !important;
+}
+
+.tm-settings-modal .faculty-settings-switch-info p {
+  font-size: 11px !important;
+  color: var(--cms-muted, #64748b) !important;
+  margin: 0 !important;
+}
+
+/* Compact Modal Alerts */
+.tm-settings-modal .faculty-settings-alert {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 7px 10px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  margin-bottom: 8px !important;
+}
+
+.tm-settings-modal .faculty-settings-alert.error {
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  color: #b91c1c !important;
+}
+
+.tm-settings-modal .faculty-settings-alert.success {
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  color: #15803d !important;
+}
+
+/* Compact Modal Footer */
+.tm-settings-modal .faculty-settings-modal-foot,
+.tm-settings-modal-foot {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  padding: 10px 18px !important;
+  border-top: 1px solid var(--cms-border, #e2e8f0) !important;
+  background: var(--cms-card-bg, #ffffff) !important;
+  flex-shrink: 0 !important;
+}
+
+.tm-settings-modal-foot .cms-btn-primary {
+  background: var(--cms-primary) !important;
+  border-color: var(--cms-primary) !important;
+  color: #ffffff !important;
+  height: 35px !important;
+  padding: 0 16px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.tm-settings-modal-foot .cms-btn-primary:hover:not(:disabled) {
+  background: var(--cms-primary-hover, var(--cms-primary-dark)) !important;
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark)) !important;
+}
+
+.tm-settings-modal-foot .cms-btn-ghost {
+  background: var(--cms-card-bg, #ffffff) !important;
+  border: 1px solid var(--cms-border, #cbd5e1) !important;
+  color: var(--cms-text, #334155) !important;
+  height: 35px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.tm-settings-modal-foot .cms-btn-ghost:hover:not(:disabled) {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  color: var(--cms-text, #1e293b) !important;
+}
+
+/* ==========================================================================
+   Dark Theme Adaptation
+   ========================================================================== */
+[data-theme="dark"] .tm-settings-modal,
+.dark-theme .tm-settings-modal {
+  background: var(--cms-card-bg, #1e293b) !important;
+  border-color: var(--cms-border, #334155) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal-head,
+.dark-theme .tm-settings-modal-head,
+[data-theme="dark"] .tm-settings-modal .faculty-settings-modal-head,
+[data-theme="dark"] .tm-settings-modal-body,
+.dark-theme .tm-settings-modal-body,
+[data-theme="dark"] .tm-settings-modal .faculty-settings-modal-body,
+[data-theme="dark"] .tm-settings-modal-foot,
+.dark-theme .tm-settings-modal-foot,
+[data-theme="dark"] .tm-settings-modal .faculty-settings-modal-foot {
+  background: var(--cms-card-bg, #1e293b) !important;
+  border-color: var(--cms-border, #334155) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal .faculty-settings-tabs,
+.dark-theme .tm-settings-modal .faculty-settings-tabs {
+  background: var(--cms-card-bg, #1e293b) !important;
+  border-color: var(--cms-border, #334155) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal .faculty-settings-field input,
+.dark-theme .tm-settings-modal .faculty-settings-field input,
+[data-theme="dark"] .tm-settings-modal .faculty-settings-field select,
+.dark-theme .tm-settings-modal .faculty-settings-field select {
+  background: var(--cms-surface-subtle, #0f172a) !important;
+  border-color: var(--cms-border, #334155) !important;
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal .faculty-password-strength-box,
+.dark-theme .tm-settings-modal .faculty-password-strength-box,
+[data-theme="dark"] .tm-settings-modal .faculty-settings-switch-row,
+.dark-theme .tm-settings-modal .faculty-settings-switch-row {
+  background: var(--cms-surface-subtle, #0f172a) !important;
+  border-color: var(--cms-border, #334155) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal-foot .cms-btn-ghost,
+.dark-theme .tm-settings-modal-foot .cms-btn-ghost {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, #334155) !important;
+  color: var(--cms-text, #cbd5e1) !important;
+}
+
+[data-theme="dark"] .tm-settings-modal-foot .cms-btn-ghost:hover:not(:disabled),
+.dark-theme .tm-settings-modal-foot .cms-btn-ghost:hover:not(:disabled) {
+  background: var(--cms-subtle, #334155) !important;
+  color: #ffffff !important;
+}
+
+/* Responsive compact sizing */
+@media (max-width: 640px) {
+  .tm-settings-modal,
+  .faculty-settings-modal.tm-settings-modal {
+    width: 100% !important;
+    max-height: 94vh !important;
+    border-radius: 12px !important;
+  }
+  .tm-settings-modal .faculty-settings-modal-head,
+  .tm-settings-modal-head,
+  .tm-settings-modal .faculty-settings-modal-body,
+  .tm-settings-modal-body,
+  .tm-settings-modal .faculty-settings-modal-foot,
+  .tm-settings-modal-foot {
+    padding: 10px 12px !important;
+  }
+  .tm-settings-modal .faculty-password-criteria-list {
+    grid-template-columns: 1fr !important;
+  }
 }

@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Play, Square, CheckSquare, AlertTriangle, Clock, Gauge, Fuel, ShieldAlert, PhoneCall, Info } from "lucide-react";
 import DriverStatusBadge from "./DriverStatusBadge.jsx";
 
@@ -11,7 +11,8 @@ export default function DriverTripCard({
   emergencyContact = "+91 98765 43210",
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const showChecklistModal = searchParams.get("view") === "checklist" && searchParams.get("tripId") === String(trip.id) && ["Pending", "Not Started"].includes(trip.status);
+  const isStartable = ["Pending", "Not Started", "Scheduled"].includes(trip.status);
+  const showChecklistModal = searchParams.get("view") === "checklist" && searchParams.get("tripId") === String(trip.id) && isStartable;
   const setShowChecklistModal = (value) => setSearchParams((previous) => {
     const next = new URLSearchParams(previous);
     if (value) { next.set("view", "checklist"); next.set("tripId", String(trip.id)); }
@@ -52,15 +53,32 @@ export default function DriverTripCard({
     setCheckedItems((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const DEFAULT_CHECKLIST = [
+    { id: "c1", label: "Tire Pressure & Wheel Lug Nuts", category: "Wheels & Tires", mandatory: true },
+    { id: "c2", label: "Service Brakes & Steering Response", category: "Control Systems", mandatory: true },
+    { id: "c3", label: "Fuel, Engine Oil & Coolant Levels", category: "Engine & Fluids", mandatory: true },
+    { id: "c4", label: "First Aid Kit & Fire Extinguisher", category: "Emergency Gear", mandatory: true },
+  ];
+
+  const effectiveChecklist = useMemo(() => {
+    if (!checklist || checklist.length === 0) return DEFAULT_CHECKLIST;
+    return checklist.map((item, idx) => ({
+      id: item.id || `check-${idx + 1}`,
+      label: item.label || item.task || item.name || item.title || `Safety Parameter ${idx + 1}`,
+      category: item.category || "Vehicle Safety Inspection",
+      mandatory: item.mandatory !== undefined ? item.mandatory : true,
+    }));
+  }, [checklist]);
+
   const handleSelectAllChecks = () => {
     const allChecked = {};
-    checklist.forEach((item) => {
+    effectiveChecklist.forEach((item) => {
       allChecked[item.id] = true;
     });
     setCheckedItems(allChecked);
   };
 
-  const isChecklistComplete = checklist.every((item) => !item.mandatory || checkedItems[item.id]);
+  const isChecklistComplete = effectiveChecklist.every((item) => !item.mandatory || checkedItems[item.id]);
 
   const handleConfirmStart = () => {
     if (!isChecklistComplete) return;
@@ -126,13 +144,13 @@ export default function DriverTripCard({
       </div>
 
       <div className="dp-trip-footer">
-        {trip.status === "Not Started" && (
+        {isStartable && (
           <button
             type="button"
             className="dp-btn dp-btn-primary dp-btn-full"
             onClick={() => setShowChecklistModal(true)}
           >
-            <Play size={16} /> Start Trip (Safety Checklist)
+            <Play size={16} /> {trip.type?.toLowerCase().includes("evening") ? "Start Evening Trip (Safety Checklist)" : "Start Trip (Safety Checklist)"}
           </button>
         )}
 
@@ -161,16 +179,6 @@ export default function DriverTripCard({
             <span>Trip successfully completed & logged in transport registry.</span>
           </div>
         )}
-
-        {trip.status === "Pending" && (
-          <button
-            type="button"
-            className="dp-btn dp-btn-outline dp-btn-full"
-            onClick={() => setShowChecklistModal(true)}
-          >
-            <Play size={16} /> Prepare & Start Evening Trip
-          </button>
-        )}
       </div>
 
       {/* Checklist Modal */}
@@ -194,7 +202,7 @@ export default function DriverTripCard({
             <div className="dp-modal-body">
               <div className="dp-checklist-toolbar">
                 <span className="dp-chk-progress">
-                  {Object.values(checkedItems).filter(Boolean).length} of {checklist.length} verified
+                  {Object.values(checkedItems).filter(Boolean).length} of {effectiveChecklist.length} verified
                 </span>
                 <button
                   type="button"
@@ -206,7 +214,7 @@ export default function DriverTripCard({
               </div>
 
               <div className="dp-checklist-list">
-                {checklist.map((item) => (
+                {effectiveChecklist.map((item) => (
                   <label
                     key={item.id}
                     className={`dp-checklist-item ${checkedItems[item.id] ? "is-checked" : ""}`}

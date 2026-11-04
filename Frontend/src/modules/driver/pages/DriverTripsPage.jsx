@@ -1,39 +1,32 @@
 import { useSearchParams } from "react-router-dom";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Bus,
-  Play,
-  Square,
-  CheckSquare,
-  Clock,
-  Gauge,
-  Fuel,
+  CheckCircle2,
+  Zap,
+  FileText,
   ShieldAlert,
   PhoneCall,
-  AlertTriangle,
-  FileText,
-  CheckCircle2,
-  Calendar,
-  Zap,
 } from "lucide-react";
 import DriverTripCard from "../components/DriverTripCard.jsx";
-import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getTrips, startTrip, endTrip, getProfile, getDashboard } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
+import { useDriverData } from "../DriverDataContext.jsx";
+import { unwrapDriverData } from "../data/driverData.js";
 
-export default function DriverTripsPage({
-  onNavigateTab,
-}) {
+export default function DriverTripsPage({ onNavigateTab, activeTripState, onStartTrip, onEndTrip }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { driverProfile: contextProfile } = useDriverData();
   const [morningTrip, setMorningTrip] = useState(null);
   const [eveningTrip, setEveningTrip] = useState(null);
   const [driverProfile, setDriverProfile] = useState(null);
   const [emergencyHelpline, setEmergencyHelpline] = useState(null);
   const [preTripChecklist, setPreTripChecklist] = useState([]);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const hasLoadedOnce = useRef(false);
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -41,87 +34,122 @@ export default function DriverTripsPage({
   };
 
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       try {
-        setIsLoading(true);
-        // Fetch trips, profile, dashboard in parallel
-        const [tripsRes, profileRes, dashboardRes] = await Promise.all([
-          getTrips(),
-          getProfile(),
-          getDashboard()
-        ]);
-        
-        // Use real data if available, fallback to defaults that match the UI structure
-        const tripsData = tripsRes.data?.trips || {};
-        setMorningTrip(tripsData.morningTrip || {
-          id: "trip-01",
-          time: "07:00 AM - 08:30 AM",
-          title: "Morning Trip",
-          type: "Morning Pickup",
-          route: "Loading...",
-          stops: "0 Stops",
-          students: 0,
-          status: "Pending",
-        });
-        
-        setEveningTrip(tripsData.eveningTrip || {
-          id: "trip-02",
-          time: "04:00 PM - 05:30 PM",
-          title: "Evening Trip",
-          type: "Evening Drop",
-          route: "Loading...",
-          stops: "0 Stops",
-          students: 0,
-          status: "Pending",
-        });
-
-        setDriverProfile(profileRes.data?.profile || {
-          assignedVehicle: "N/A",
-          vehicleModel: "N/A",
-          assignedRoute: "N/A",
-          routeCode: "N/A",
-          assignedAttendant: "N/A",
-        });
-
-        setEmergencyHelpline(dashboardRes.data?.emergencyHelpline || {
-          headPhone: "N/A",
-          transportHead: "N/A",
-          altHelpdesk: "N/A",
-          depotManager: "N/A"
-        });
-
-        setPreTripChecklist(dashboardRes.data?.preTripChecklist || [
-          { id: "c1", task: "Tire Pressure & Tread", isChecked: true },
-          { id: "c2", task: "Brakes & Steering", isChecked: true },
-          { id: "c3", task: "Fuel & Fluids Level", isChecked: true }
+        if (!hasLoadedOnce.current) {
+          setIsLoading(true);
+        }
+        const results = await Promise.allSettled([
+          getTrips().then(unwrapDriverData),
+          getProfile().then(unwrapDriverData),
+          getDashboard().then(unwrapDriverData),
         ]);
 
+        if (!isMounted) return;
+
+        const [tripsRes, profileRes, dashboardRes] = results;
+
+        const tripsData = tripsRes.status === "fulfilled" ? tripsRes.value?.trips || tripsRes.value || {} : {};
+        const profileData = profileRes.status === "fulfilled" ? profileRes.value?.profile || profileRes.value || {} : {};
+        const dashboardData = dashboardRes.status === "fulfilled" ? dashboardRes.value || {} : {};
+
+        const mTrip = tripsData.morningTrip || null;
+        const eTrip = tripsData.eveningTrip || null;
+
+        const assignedVeh = dashboardData.assignedVehicle || dashboardData.assignment || {};
+        const assignedRoute = dashboardData.route || dashboardData.assignment || {};
+        const assignedAtt = dashboardData.attendant || dashboardData.assignment || {};
+
+        setMorningTrip(
+          mTrip || {
+            id: 1,
+            time: dashboardData.morningTripTime || dashboardData.assignment?.morningTripTime || "07:35 AM - 08:30 AM",
+            title: "Morning Pickup Operation",
+            type: "Morning Pickup",
+            route: assignedRoute.routeName || contextProfile?.assignedRoute || "Assigned Route",
+            stops: `${dashboardData.routeDetails?.stops?.length || 2} Stops`,
+            students: dashboardData.assignedStudents ?? dashboardData.assignment?.assignedStudents ?? 2,
+            status: "Scheduled",
+          }
+        );
+
+        setEveningTrip(
+          eTrip || {
+            id: 2,
+            time: dashboardData.eveningTripTime || dashboardData.assignment?.eveningTripTime || "04:45 PM - 05:30 PM",
+            title: "Evening Drop Operation",
+            type: "Evening Drop",
+            route: assignedRoute.routeName || contextProfile?.assignedRoute || "Assigned Route",
+            stops: `${dashboardData.routeDetails?.stops?.length || 2} Stops`,
+            students: dashboardData.assignedStudents ?? dashboardData.assignment?.assignedStudents ?? 2,
+            status: "Scheduled",
+          }
+        );
+
+        setDriverProfile({
+          assignedVehicle: assignedVeh.vehicleNumber || profileData.assignedVehicle || contextProfile?.assignedVehicle || "Not Assigned",
+          vehicleModel: assignedVeh.vehicleType || profileData.vehicleModel || contextProfile?.vehicleModel || "Transport Vehicle",
+          assignedRoute: assignedRoute.routeName || profileData.assignedRoute || contextProfile?.assignedRoute || "Route Not Assigned",
+          routeCode: assignedRoute.routeCode || profileData.routeCode || "N/A",
+          assignedAttendant: assignedAtt.attendantName || profileData.assignedAttendant || contextProfile?.assignedAttendant || "Govardhan Rao",
+        });
+
+        setEmergencyHelpline(
+          dashboardData.emergencyHelpline || {
+            headPhone: "+91 98765 99221",
+            transportHead: "Transport Cell Incharge",
+            altHelpdesk: "+91 98765 43210",
+            depotManager: "Campus Fleet Workshop",
+          }
+        );
+
+        setPreTripChecklist(
+          dashboardData.preTripChecklist || [
+            { id: "c1", label: "Tire Pressure & Wheel Lug Nuts", task: "Tire Pressure & Wheel Lug Nuts", category: "Wheels & Tires", mandatory: true },
+            { id: "c2", label: "Service Brakes & Steering Response", task: "Service Brakes & Steering Response", category: "Control Systems", mandatory: true },
+            { id: "c3", label: "Fuel, Engine Oil & Coolant Levels", task: "Fuel, Engine Oil & Coolant Levels", category: "Engine & Fluids", mandatory: true },
+            { id: "c4", label: "First Aid Kit & Fire Extinguisher", task: "First Aid Kit & Fire Extinguisher", category: "Emergency Gear", mandatory: true },
+          ]
+        );
+
+        setError("");
       } catch (err) {
-        console.error("Error fetching trips page data:", err);
-        setError("Failed to load data. Please try again.");
+        if (isMounted) {
+          console.error("Error fetching trips data:", err);
+          setError("Failed to load trips data. Please refresh.");
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+          hasLoadedOnce.current = true;
+        }
       }
     };
 
     fetchData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const handleStartMorning = async (id, data) => {
+  const handleStartMorning = async (id) => {
     try {
       await startTrip(id);
       setMorningTrip((prev) => ({ ...prev, status: "In Progress" }));
-      triggerToast("Morning trip started successfully! GPS telemetry is live.");
+      if (onStartTrip) onStartTrip("morning");
+      triggerToast("Morning trip started successfully! Live GPS tracking active.");
     } catch (err) {
       console.error(err);
       triggerToast("Failed to start morning trip.");
     }
   };
 
-  const handleEndMorning = async (id, data) => {
+  const handleEndMorning = async (id) => {
     try {
       await endTrip(id);
       setMorningTrip((prev) => ({ ...prev, status: "Completed" }));
+      if (onEndTrip) onEndTrip("morning");
       triggerToast("Morning trip ended and logged to Transport Registry.");
     } catch (err) {
       console.error(err);
@@ -129,21 +157,23 @@ export default function DriverTripsPage({
     }
   };
 
-  const handleStartEvening = async (id, data) => {
+  const handleStartEvening = async (id) => {
     try {
       await startTrip(id);
       setEveningTrip((prev) => ({ ...prev, status: "In Progress" }));
-      triggerToast("Evening trip started successfully! GPS telemetry is live.");
+      if (onStartTrip) onStartTrip("evening");
+      triggerToast("Evening trip started successfully! Live GPS tracking active.");
     } catch (err) {
       console.error(err);
       triggerToast("Failed to start evening trip.");
     }
   };
 
-  const handleEndEvening = async (id, data) => {
+  const handleEndEvening = async (id) => {
     try {
       await endTrip(id);
       setEveningTrip((prev) => ({ ...prev, status: "Completed" }));
+      if (onEndTrip) onEndTrip("evening");
       triggerToast("Evening trip ended and logged to Transport Registry.");
     } catch (err) {
       console.error(err);
@@ -152,11 +182,19 @@ export default function DriverTripsPage({
   };
 
   if (isLoading) {
-    return <div className="dp-page-container"><SkeletonPage variant="page" /></div>;
+    return (
+      <div className="dp-page-container">
+        <SkeletonPage variant="page" />
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
+    return (
+      <div className="dp-page-container">
+        <p className="dp-text-danger">{error}</p>
+      </div>
+    );
   }
 
   return (
@@ -176,23 +214,13 @@ export default function DriverTripsPage({
             <Bus size={14} /> Daily Trip Console
           </div>
           <h1 className="dp-page-title">Trips Management</h1>
-          <p className="dp-page-subtitle">
-            Start, monitor, and log your daily college transport trips.
-          </p>
+          <p className="dp-page-subtitle">Start, monitor, and log your daily college transport trips.</p>
         </div>
         <div className="dp-header-actions">
-          <button
-            type="button"
-            className="dp-btn dp-btn-outline"
-            onClick={() => onNavigateTab("gps")}
-          >
+          <button type="button" className="dp-btn dp-btn-outline" onClick={() => onNavigateTab("gps")}>
             <Zap size={16} /> Live GPS Console
           </button>
-          <button
-            type="button"
-            className="dp-btn dp-btn-primary"
-            onClick={() => onNavigateTab("reports")}
-          >
+          <button type="button" className="dp-btn dp-btn-primary" onClick={() => onNavigateTab("reports")}>
             <FileText size={16} /> Trip History Logs
           </button>
         </div>
@@ -202,11 +230,15 @@ export default function DriverTripsPage({
       <div className="dp-trips-overview-strip">
         <div className="dp-tos-item">
           <small>Vehicle Assigned</small>
-          <strong>{driverProfile?.assignedVehicle} ({driverProfile?.vehicleModel})</strong>
+          <strong>
+            {driverProfile?.assignedVehicle} ({driverProfile?.vehicleModel})
+          </strong>
         </div>
         <div className="dp-tos-item">
           <small>Current Route</small>
-          <strong>{driverProfile?.assignedRoute} ({driverProfile?.routeCode})</strong>
+          <strong>
+            {driverProfile?.assignedRoute} ({driverProfile?.routeCode})
+          </strong>
         </div>
         <div className="dp-tos-item">
           <small>Attendant on Board</small>
@@ -220,7 +252,6 @@ export default function DriverTripsPage({
         </div>
       </div>
 
-      {searchParams.get("view") === "checklist" && ![morningTrip, eveningTrip].some((trip) => trip && String(trip.id) === searchParams.get("tripId") && ["Pending", "Not Started"].includes(trip.status)) && <div className="dp-card" role="alert"><p>This trip is unavailable or has already started.</p><button type="button" className="dp-btn dp-btn-outline" onClick={() => setSearchParams((previous) => { const next = new URLSearchParams(previous); next.delete("view"); next.delete("tripId"); return next; })}>Close</button></div>}
       {/* Trip Cards Grid */}
       <div className="dp-trips-deck-grid">
         {/* Morning Trip Card */}

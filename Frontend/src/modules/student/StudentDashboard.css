@@ -233,6 +233,8 @@
   --sp-primary-hover: var(--cms-primary-hover, var(--cms-primary-dark));
   --sp-primary-soft: var(--cms-primary-soft);
   --sp-soft: var(--cms-subtle, var(--cms-table-header, var(--cms-primary-soft)));
+  --sp-table-chrome-bg: var(--cms-subtle, #F7F8EF);
+  --sp-table-chrome-text: var(--cms-muted, #7B8275);
   --sp-bg: var(--cms-bg);
   --sp-sidebar: var(--cms-sidebar-surface-bg, var(--cms-sidebar, #1e2616));
   --sp-header: var(--cms-topbar-surface-bg, var(--cms-header, #fff));
@@ -250,6 +252,16 @@
   background: transparent;
   color: var(--sp-text);
   font-family: inherit;
+}
+
+.sp-shell[data-dashboard-palette="olive"] {
+  --sp-table-chrome-bg: #e8edd6;
+  --sp-table-chrome-text: #6e7e59;
+}
+
+[data-theme="dark"] .sp-shell[data-dashboard-palette="olive"] {
+  --sp-table-chrome-bg: #293322;
+  --sp-table-chrome-text: #8e9b7f;
 }
 
 .sp-shell * {
@@ -5982,7 +5994,7 @@
 }
 .sp-shell .sp-pagination {
   border-color: var(--cms-border);
-  background: var(--cms-subtle);
+  background: var(--sp-table-chrome-bg);
 }
 .sp-shell .sp-page .sp-table {
   width: 100%;
@@ -6000,9 +6012,10 @@
   text-align: center;
   vertical-align: middle;
 }
-.sp-shell .sp-page :is(.sp-table, .sp-weekly-timetable) thead th {
-  background-color: var(--cms-subtle, #e8edd6);
-  color: var(--cms-text-secondary, #4e5d3c);
+#root .sp-shell .sp-page table.sp-table thead th,
+#root .sp-shell .sp-page table.sp-weekly-timetable thead th:not(.is-break-column) {
+  background: var(--sp-table-chrome-bg);
+  color: var(--sp-table-chrome-text);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .5px;
@@ -6025,4 +6038,88 @@
   background: var(--cms-surface);
   color: var(--cms-text);
   box-shadow: var(--cms-shadow-lg);
+}
+
+/* Student table presentation follows the Admin tables; data and controls stay intact. */
+.sp-shell .sp-page .sp-card:has(.sp-table) {
+  border-radius: 0 0 10px 10px;
+  border-color: var(--cms-border);
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow, 0 3px 12px rgba(15, 23, 42, .04));
+}
+
+.sp-shell .sp-page .sp-card:has(.sp-table) > .sp-card-head {
+  padding: 14px 18px;
+  background: var(--cms-secondary, var(--sp-table-chrome-bg));
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.sp-shell .sp-page .sp-card:has(.sp-table) > .sp-card-body {
+  padding: 0;
+}
+
+.sp-shell .sp-page .sp-table-wrap {
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow, 0 2px 6px rgba(15, 23, 42, .04));
+  -webkit-overflow-scrolling: touch;
+}
+
+.sp-shell .sp-page .sp-table {
+  min-width: 640px;
+}
+
+.sp-shell .sp-page .sp-table :is(th, td) {
+  padding: clamp(10px, .8vw, 14px) clamp(12px, 1vw, 16px);
+  border-bottom: 1px solid var(--cms-border);
+  text-align: left;
+}
+
+#root .sp-shell .sp-page table.sp-table thead th {
+  background: var(--sp-table-chrome-bg);
+  color: var(--sp-table-chrome-text);
+  font-size: clamp(10px, .72vw, 11.5px);
+  font-weight: 700;
+  letter-spacing: .6px;
+}
+
+.sp-shell .sp-page .sp-table td {
+  font-size: clamp(11px, .8vw, 13px);
+}
+
+.sp-shell .sp-page .sp-table tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+.sp-shell .sp-page .sp-pagination {
+  min-height: 46px;
+  margin: 16px 0 0;
+  padding: 10px 18px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--sp-table-chrome-bg);
+  color: var(--sp-table-chrome-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.sp-shell .sp-page .sp-pagination > div {
+  gap: 6px;
+}
+
+.sp-shell .sp-page .sp-pagination .sp-btn {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.sp-shell .sp-page .sp-pagination strong {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--cms-primary);
+  color: #fff;
+  font-size: 12px;
 }

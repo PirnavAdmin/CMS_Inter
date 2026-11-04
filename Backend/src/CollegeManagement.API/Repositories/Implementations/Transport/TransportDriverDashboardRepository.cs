@@ -149,6 +149,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 assignedVehicle = new
                 {
                     vehicleId = (long?)row.VehicleId,
+                    vehicleNumber = (string?)row.VehicleNumber,
                     registrationNumber = (string?)row.RegistrationNumber,
                     vehicleType = (string?)row.VehicleType,
                     capacity = (int?)row.Capacity,
@@ -168,7 +169,25 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     attendantName = (string)(row.AttendantName ?? ("Attendant " + row.AttendantId)),
                     contactNumber = (string)(row.ContactNumber ?? "N/A")
                 },
-                assignmentId = (long)row.AssignmentId
+                assignment = new
+                {
+                    assignmentId = (long)row.AssignmentId,
+                    vehicleNumber = (string?)row.VehicleNumber,
+                    registrationNumber = (string?)row.RegistrationNumber,
+                    vehicleName = (string?)row.VehicleType,
+                    vehicleCapacity = (int?)row.Capacity,
+                    routeName = (string?)row.RouteName,
+                    attendantName = (string?)row.AttendantName,
+                    morningTripTime = (string?)row.MorningTripTime,
+                    eveningTripTime = (string?)row.EveningTripTime,
+                    shift = (string?)row.Shift,
+                    assignedStudents = (int?)row.AssignedStudents ?? 0
+                },
+                assignmentId = (long)row.AssignmentId,
+                morningTripTime = (string?)row.MorningTripTime,
+                eveningTripTime = (string?)row.EveningTripTime,
+                shift = (string?)row.Shift,
+                assignedStudents = (int?)row.AssignedStudents ?? 0
             };
         }
 
@@ -201,11 +220,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             {
                 pickupPointId = (long)(p.PickupPointId ?? 0L),
                 stopName = (string)(p.StopName ?? ""),
+                name = (string)(p.StopName ?? ""),
+                landmark = (string)(p.Landmark ?? "Scheduled Stop"),
+                stopOrder = (int)(p.StopOrder ?? 1),
+                sequenceNo = (int)(p.StopOrder ?? 1),
                 pickupTime = p.PickupTime != null ? (p.PickupTime is TimeSpan ts ? ts.ToString(@"hh\:mm") : Convert.ToString(p.PickupTime)) : "07:30 AM",
-                dropTime = p.DropTime != null ? (p.DropTime is TimeSpan dts ? dts.ToString(@"hh\:mm") : Convert.ToString(p.DropTime)) : "04:15 PM"
+                dropTime = p.DropTime != null ? (p.DropTime is TimeSpan dts ? dts.ToString(@"hh\:mm") : Convert.ToString(p.DropTime)) : "04:15 PM",
+                studentCount = Convert.ToInt32(p.StudentCount ?? 0)
             }).ToList();
 
-            return new { route = routeData, pickupPoints = pickupPoints };
+            return new { route = routeData, pickupPoints = pickupPoints, stops = pickupPoints };
         }
 
         public async Task<object?> GetProfileAsync(int staffId, CancellationToken ct = default)
@@ -328,9 +352,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 id = (long)r.StudentId,
                 name = (string)(r.StudentName ?? "Student"),
                 rollNo = (string)(r.AdmissionNo ?? $"STU-{r.StudentId}"),
+                @class = (string)(r.AcademicClass ?? "B.Tech CSE - II Year"),
+                academicClass = (string)(r.AcademicClass ?? "B.Tech CSE - II Year"),
                 stop = (string)(r.StopName ?? "Campus Gate"),
-                time = (string)(r.PickupTime ?? "07:30 AM"),
-                contact = (string)(r.ContactNumber ?? "N/A"),
+                time = (string)(r.PickupTime ?? "07:35 AM"),
+                pickupTime = (string)(r.PickupTime ?? "07:35 AM"),
+                parentName = (string)(r.ParentName ?? "Guardian"),
+                parentPhone = (string)(r.ParentPhone ?? r.ContactNumber ?? "9876543210"),
+                contact = (string)(r.ContactNumber ?? r.ParentPhone ?? "9876543210"),
                 status = (string)(r.AttendanceStatus ?? "Pending")
             }).ToList();
 
