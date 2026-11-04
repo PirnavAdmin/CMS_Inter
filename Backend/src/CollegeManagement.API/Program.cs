@@ -157,8 +157,8 @@ builder.Services.AddSingleton<DatabaseContext>();
 
 builder.Services.AddScoped<IDbConnection>(sp =>
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    return new MySqlConnection(config.GetConnectionString("DefaultConnection"));
+    var context = sp.GetRequiredService<AppDbContext>();
+    return context.Database.GetDbConnection();
 });
 
 builder.Services.AddMemoryCache();

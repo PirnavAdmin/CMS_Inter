@@ -218,7 +218,7 @@ export default function FacultyReimbursement() {
       let strictlyMyClaims = (myClaimsList || []).filter(isClaimOwnedByFaculty);
 
       // If my-claims endpoint returned nothing, check if any claims matching this faculty exist in the general list
-      if (strictlyMyClaims.length === 0) {
+      if (strictlyMyClaims.length === 0 && isFinanceUser) {
         try {
           const all = await apiFetchClaims({
             facultyId: defaultFacultyId,
@@ -232,12 +232,16 @@ export default function FacultyReimbursement() {
 
       setClaims(strictlyMyClaims);
 
-      // Fetch Account entries for the ledger pill
-      try {
-        const acc = await reimbursementService.fetchAccountEntries();
-        setAccountEntries(acc || []);
-      } catch (e) {
-        // Silently handle if account entries endpoint is unavailable
+      // Fetch Account entries for the ledger pill (Only for Finance / Admin users)
+      if (isFinanceUser) {
+        try {
+          const acc = await reimbursementService.fetchAccountEntries();
+          setAccountEntries(acc || []);
+        } catch (e) {
+          // Silently handle if account entries endpoint is unavailable
+        }
+      } else {
+        setAccountEntries([]);
       }
     } catch (err) {
       console.warn("[FacultyReimbursement] Failed to load data:", err?.message || err);
@@ -245,7 +249,7 @@ export default function FacultyReimbursement() {
     } finally {
       setIsLoadingClaims(false);
     }
-  }, [defaultFacultyId, defaultFacultyName, authUser.employeeId, isClaimOwnedByFaculty]);
+  }, [defaultFacultyId, defaultFacultyName, authUser.employeeId, isClaimOwnedByFaculty, isFinanceUser]);
 
   // Load data on mount
   useEffect(() => {
@@ -853,15 +857,17 @@ export default function FacultyReimbursement() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            className="reimb-sync-pill"
-            onClick={() => setViewAccountsDrawerOpen(true)}
-            title="Click to view integrated payables in Account section"
-            style={{ cursor: "pointer" }}
-          >
-            <CheckCircle2 size={14} /> Account Ledger: {accountEntries.length} Integrated Payables
-          </button>
+          {isFinanceUser && (
+            <button
+              type="button"
+              className="reimb-sync-pill"
+              onClick={() => setViewAccountsDrawerOpen(true)}
+              title="Click to view integrated payables in Account section"
+              style={{ cursor: "pointer" }}
+            >
+              <CheckCircle2 size={14} /> Account Ledger: {accountEntries.length} Integrated Payables
+            </button>
+          )}
           <button
             type="button"
             className="reimb-btn-icon"

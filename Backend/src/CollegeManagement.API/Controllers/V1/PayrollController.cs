@@ -620,6 +620,7 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/payroll/payslips
         [HttpGet("payslips")]
+        [BypassPermission]
         public async Task<IActionResult> GetPayslipHistory(
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
@@ -639,7 +640,19 @@ namespace CollegeManagement.API.Controllers
             if (!IsAdminOrHr())
             {
                 var callerStaffId = GetCallerStaffId();
-                result = result.Where(p => p.StaffId == (callerStaffId ?? 0));
+                var callerEmployeeId = GetCallerEmployeeId();
+                if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                {
+                    result = result.Where(p => p.StaffId == callerStaffId.Value);
+                }
+                else if (!string.IsNullOrEmpty(callerEmployeeId))
+                {
+                    result = result.Where(p => string.Equals(p.EmployeeId, callerEmployeeId, StringComparison.OrdinalIgnoreCase));
+                }
+                else if (!string.IsNullOrEmpty(search))
+                {
+                    result = result.Where(p => string.Equals(p.EmployeeId, search, StringComparison.OrdinalIgnoreCase));
+                }
             }
 
             return Ok(result);
@@ -742,6 +755,13 @@ namespace CollegeManagement.API.Controllers
         {
             var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
             return int.TryParse(claim, out int id) ? id : null;
+        }
+
+        private string? GetCallerEmployeeId()
+        {
+            return User.FindFirst("EmployeeId")?.Value 
+                ?? User.FindFirst("employee_id")?.Value
+                ?? User.FindFirst("staff_code")?.Value;
         }
 
         // GET: api/payroll/revisions?staffId=10&status=Pending
