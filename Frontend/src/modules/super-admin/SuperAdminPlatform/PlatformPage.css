@@ -1,0 +1,11 @@
+.sa-profile-details dl { display: grid; grid-template-columns: 140px 1fr; gap: 14px; margin: 20px 0; font-size: 13px; }
+.sa-profile-details dt { color: var(--cms-muted); }
+.sa-profile-details dd { margin: 0; overflow-wrap: anywhere; }
+@media(max-width: 500px) { .sa-profile-details dl { grid-template-columns: 1fr; gap: 7px; } .sa-profile-details dd { margin-bottom: 10px; } }
+.sa-module-switch { display:flex; gap:6px; align-items:center; }
+.sa-record-details { display:grid; gap:12px; }
+.sa-record-details > div { border-bottom:1px solid var(--cms-border); padding-bottom:10px; }
+.sa-record-details dt { font-size:12px; color:var(--cms-muted); }
+.sa-record-details dd { margin:5px 0 0; overflow-wrap:anywhere; }
+.sa-record-details pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
+.sa-platform-select { padding:8px; border:1px solid var(--cms-border); border-radius:8px; background:var(--cms-surface); color:var(--cms-text); }

@@ -14,7 +14,6 @@ import {
   Edit3,
   Eye,
   FileText,
-  IndianRupee,
   MapPin,
   PieChart,
   Plus,
@@ -34,6 +33,7 @@ import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAllTransportPages, scopeTransportRecords, scopeTransportReport, transportValue } from "./transportContext.js";
+import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
 import "./TransportPage.css";
 
 const sectionTabs = [
@@ -97,10 +97,6 @@ today.setHours(0, 0, 0, 0);
 
 function formatCurrency(value) {
   return currency.format(Number(value) || 0);
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("en-IN").format(Number(value) || 0);
 }
 
 function daysUntil(dateString) {
@@ -205,7 +201,7 @@ function reportColumnsFromRows(rows, fallback) {
   const keys = Object.keys(rows[0]).filter((key) => {
     const value = rows[0][key];
     return value == null || ["string", "number", "boolean"].includes(typeof value);
-  }).slice(0, 9);
+  });
   if (!keys.length) return fallback;
   return keys.map((key) => ({
     key,
@@ -521,106 +517,6 @@ function AddPickupPointsModal({ routes, pickupPoints, isSaving, onCancel, onSave
   );
 }
 
-function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
-  const [values, setValues] = useState({
-    staffId: "",
-    driverName: "",
-    employeeId: "",
-    mobileNumber: "",
-    email: "",
-    licenseNumber: "",
-    licenseExpiryDate: "",
-    address: "",
-    status: "Active",
-  });
-  const [error, setError] = useState("");
-
-  const update = (name, value) => setValues((current) => ({ ...current, [name]: value }));
-  const selectStaffDriver = (staffId) => {
-    const driver = drivers.find((item) => String(item.id) === String(staffId));
-    setError("");
-    setValues((current) => ({
-      ...current,
-      staffId,
-      driverName: driver?.driverName || "",
-      employeeId: driver?.employeeId || "",
-      mobileNumber: driver?.mobileNumber || "",
-      email: driver?.email || "",
-      address: driver?.address || "",
-    }));
-  };
-  const submit = async () => {
-    if (!values.staffId || !values.driverName || !values.employeeId || !values.mobileNumber || !values.licenseNumber) {
-      setError("Select a driver and complete all required fields.");
-      return;
-    }
-    await onSave(values);
-  };
-
-  return (
-    <Modal
-      title="Add Driver"
-      className="cms-transport-add-driver-modal"
-      onClose={isSaving ? () => {} : onCancel}
-      footer={
-        <>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={onCancel}>Cancel</button>
-          <button type="button" className="cms-btn cms-btn-primary" disabled={isSaving} onClick={submit}>
-            {isSaving ? <span className="cms-transport-action-loading"><i aria-hidden="true" />Adding...</span> : "Save"}
-          </button>
-        </>
-      }
-    >
-      <div className="cms-form-grid cols-3 cms-transport-add-driver-form">
-        <label className="cms-field full">
-          <span>Select Driver from Non-Teaching Staff <span className="required-star">*</span></span>
-          <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
-            <option value="">Select Driver</option>
-            {drivers.map((driver, driverIndex) => <option key={`${driver.id}-${driverIndex}`} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
-          </select>
-        </label>
-        <label className="cms-field">
-          <span>Driver Full Name <span className="required-star">*</span></span>
-          <input value={values.driverName} readOnly />
-        </label>
-        <label className="cms-field">
-          <span>Employee ID <span className="required-star">*</span></span>
-          <input value={values.employeeId} readOnly />
-        </label>
-        <label className="cms-field">
-          <span>Mobile Number <span className="required-star">*</span></span>
-          <input value={values.mobileNumber} readOnly />
-        </label>
-        <label className="cms-field">
-          <span>Email</span>
-          <input value={values.email} readOnly />
-        </label>
-        <label className="cms-field">
-          <span>Commercial License No <span className="required-star">*</span></span>
-          <input value={values.licenseNumber} disabled={isSaving} onChange={(event) => update("licenseNumber", event.target.value)} />
-        </label>
-        <label className="cms-field">
-          <span>License Expiry Date</span>
-          <input type="date" value={values.licenseExpiryDate} disabled={isSaving} onChange={(event) => update("licenseExpiryDate", event.target.value)} />
-        </label>
-        <label className="cms-field full">
-          <span>Address</span>
-          <textarea value={values.address} readOnly />
-        </label>
-        <label className="cms-field">
-          <span>Status</span>
-          <select value={values.status} disabled={isSaving} onChange={(event) => update("status", event.target.value)}>
-            <option value="Active">Active</option>
-            <option value="On Leave">On Leave</option>
-            <option value="Inactive">Inactive</option>
-          </select>
-        </label>
-        {error ? <p className="cms-error cms-transport-add-driver-error">{error}</p> : null}
-      </div>
-    </Modal>
-  );
-}
-
 function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
   const [values, setValues] = useState({ staffId: "", employeeId: "", attendantName: "", mobileNumber: "", gender: "", status: "Active" });
   const [error, setError] = useState("");
@@ -846,13 +742,6 @@ function reportRowsFromPayload(payload) {
     }));
 }
 
-function readReportMetric(payload, keys, fallback) {
-  const value = unwrapReportPayload(payload);
-  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
-  const key = keys.find((candidate) => value[candidate] !== undefined && value[candidate] !== null);
-  return key ? value[key] : fallback;
-}
-
 function normalizeMaintenanceStatus(item) {
   const completionFlag = item?.statusBool
     ?? item?.StatusBool
@@ -889,26 +778,6 @@ function readCustomFields(staff) {
   } catch {
     return {};
   }
-}
-
-function isDriverStaffRecord(staff) {
-  const personal = transportValue(staff, "personal");
-  const personalData = personal && typeof personal === "object" ? personal : {};
-  const departmentSpecific = readDepartmentSpecific(staff);
-  const customFields = readCustomFields(staff);
-  const explicitDriverFlag = [
-    transportValue(staff, "isDriver", "driver"),
-    transportValue(departmentSpecific, "isDriver", "driver"),
-    transportValue(customFields, "isDriver", "driver"),
-  ]
-    .some((value) => value === true || value === 1 || String(value).toLowerCase() === "true");
-  const driverFields = [
-    transportValue(staff, "role", "roleName", "roleCode", "designation", "designationName", "designationCode", "transportRole"),
-    transportValue(personalData, "role", "roleName", "designation", "designationName"),
-    transportValue(departmentSpecific, "role", "roleName", "designation", "designationName"),
-    transportValue(customFields, "role", "roleName", "designation", "designationName"),
-  ];
-  return explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim()));
 }
 
 function toTimeInputValue(value) {
@@ -1028,11 +897,6 @@ function TransportContextPage({ navigation, onNavigate }) {
     setFormConfigState(value);
     if (!value) closeAction();
   };
-  const [isAddDriverOpen, setIsAddDriverOpenState] = useState(false);
-  const setIsAddDriverOpen = (open) => {
-    if (open) routeAction("add", "drivers");
-    else { setIsAddDriverOpenState(false); closeAction(); }
-  };
   const [isAddAttendantOpen, setIsAddAttendantOpenState] = useState(false);
   const setIsAddAttendantOpen = (open) => {
     if (open) routeAction("add", "attendants");
@@ -1058,6 +922,7 @@ function TransportContextPage({ navigation, onNavigate }) {
   const [pickupPoints, setPickupPoints] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [driverLoadError, setDriverLoadError] = useState("");
   const [driverStaffRecords, setDriverStaffRecords] = useState({});
   const [nonTeachingStaff, setNonTeachingStaff] = useState([]);
   const [attendants, setAttendants] = useState([]);
@@ -1068,7 +933,6 @@ function TransportContextPage({ navigation, onNavigate }) {
   const [gpsSnapshots, setGpsSnapshots] = useState([]);
   const [dashboardMetrics, setDashboardMetrics] = useState(null);
   const [reportApiRows, setReportApiRows] = useState({});
-  const [reportApiPayloads, setReportApiPayloads] = useState({});
   const [reportLoading, setReportLoading] = useState(false);
   const [printPayload, setPrintPayload] = useState(null);
 
@@ -1104,7 +968,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     try {
       const driverListUrl = apiEndpoints.faculty.list;
       if (import.meta.env.DEV) {
-        console.log("Transport Driver Staff API Request:", { url: driverListUrl, method: "GET" });
+        console.log("Transport Attendant Staff API Request:", { url: driverListUrl, method: "GET" });
       }
       const [
         routesRes,
@@ -1127,7 +991,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         Promise.resolve({ data: [] }), // Global lookup is not campus scoped; use scoped pickup records instead.
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicles, campusParams, signal),
         getAllTransportPages(apiClient, driverListUrl, campusParams, signal),
-        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, campusParams, signal),
+        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, { campusId: Number(selectedCampusId), boardId: Number(selectedBoardId) || undefined, academicYearId: Number(selectedAcademicYearId) || undefined, PageSize: 1000 }, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}, signal),
         apiClient.get(apiEndpoints.transport.trips, { signal }),
@@ -1141,6 +1005,7 @@ function TransportContextPage({ navigation, onNavigate }) {
       ]);
 
       if (!current()) return;
+      setDriverLoadError(driversRes.status === "rejected" ? getApiErrorMessage(driversRes.reason) : "");
       const resultRows = (result) => result.status === 'fulfilled' ? extractList(result.value.data) : [];
       const records = scopeTransportRecords({
         routes: resultRows(routesRes), pickups: resultRows(pickupsRes), vehicles: resultRows(vehiclesRes),
@@ -1184,7 +1049,15 @@ function TransportContextPage({ navigation, onNavigate }) {
           });
         }
 
-        if (attendantsRes.status === "fulfilled") {
+        if (driversRes.status === "fulfilled") {
+        setDrivers(scoped(extractList(driversRes.value.data)).map((driver) => ({
+          ...normalizeDriver(driver),
+          staffId: driver.staffId ?? null,
+          driverId: driver.driverId ?? null,
+        })).filter((driver) => driver.id != null));
+      }
+
+      if (attendantsRes.status === "fulfilled") {
           console.log("Transport Bus Attendants Master API Response:", attendantsRes.value?.data);
           console.log("Transport Bus Attendants Master API Response Status:", attendantsRes.value?.status);
         } else {
@@ -1303,44 +1176,9 @@ function TransportContextPage({ navigation, onNavigate }) {
               gender: transportValue(staff, "gender") || "",
             })),
         );
-        const driverStaff = items.filter(isDriverStaffRecord);
-        setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [String(transportValue(staff, "staffId", "id", "facultyId")), staff])));
-        setDrivers(
-          driverStaff
-            .map((staff) => {
-              const personalValue = transportValue(staff, "personal");
-              const personal = personalValue && typeof personalValue === "object" ? personalValue : {};
-              const contactValue = transportValue(staff, "contact");
-              const contact = contactValue && typeof contactValue === "object" ? contactValue : {};
-              const departmentSpecific = readDepartmentSpecific(staff);
-              const customFields = readCustomFields(staff);
-              return {
-                id: transportValue(staff, "staffId", "id", "facultyId"),
-                staffId: transportValue(staff, "staffId", "id", "facultyId"),
-                source: "staff",
-                driverName: transportValue(staff, "fullName", "staffName")
-                  || [transportValue(staff, "firstName") || transportValue(personal, "firstName"), transportValue(staff, "middleName") || transportValue(personal, "middleName"), transportValue(staff, "lastName") || transportValue(personal, "lastName")].filter(Boolean).join(" "),
-                employeeId: transportValue(staff, "employeeId", "empId") || "",
-                mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || transportValue(contact, "primaryMobile") || "",
-                email: transportValue(staff, "email") || transportValue(contact, "primaryEmail") || "",
-                licenseNumber: transportValue(staff, "drivingLicenseNumber", "driverLicenseNumber", "licenseNumber", "licenceNumber")
-                  || transportValue(departmentSpecific, "drivingLicenseNumber", "licenseNumber")
-                  || transportValue(customFields, "drivingLicenseNumber", "driverLicenseNumber", "licenseNumber")
-                  || "",
-                licenseExpiryDate: String(transportValue(staff, "drivingLicenseExpiryDate", "driverLicenseExpiryDate", "licenseExpiryDate", "licenceExpiry")
-                  || transportValue(departmentSpecific, "drivingLicenseExpiryDate", "licenseExpiry")
-                  || transportValue(customFields, "drivingLicenseExpiryDate", "driverLicenseExpiryDate", "licenseExpiry")
-                  || "").split("T")[0],
-                address: transportValue(staff, "currentAddress", "address") || transportValue(contact, "currentAddress") || "",
-                experience: Number(transportValue(staff, "experienceYears", "drivingExperienceYears", "experience")
-                  ?? transportValue(departmentSpecific, "experienceYears")
-                  ?? transportValue(customFields, "experienceYears")
-                  ?? 0),
-                status: [transportValue(staff, "status")].some((value) => value === true || value === 1 || /^active$/i.test(String(value || ""))) ? "Active" : /^on leave$/i.test(String(transportValue(staff, "status") || "")) ? "On Leave" : "Inactive",
-              };
-            })
-        );
       }
+
+
 
       if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
         const items = scoped(extractList(attendantsRes.value.data));
@@ -1356,39 +1194,6 @@ function TransportContextPage({ navigation, onNavigate }) {
             status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
           }))
         );
-      }
-
-      if (driversRes.status === "fulfilled" && driversRes.value?.data) {
-        const items = scoped(extractList(driversRes.value.data));
-        if (items.length) {
-          setDrivers(items.map((driver) => {
-            const rawDriverId = transportValue(driver, "driverId");
-            const transportDriverId = Number(rawDriverId) > 0 ? rawDriverId : null;
-            const driverApiId = transportDriverId
-              || transportValue(driver, "licenceNumber", "licenseNumber")
-              || transportValue(driver, "employeeId")
-              || transportValue(driver, "id");
-            return {
-              id: driverApiId,
-              driverId: rawDriverId,
-              staffId: transportValue(driver, "staffId"),
-              source: "transport",
-              transportDriverId,
-              driverApiId,
-              driverName: transportValue(driver, "driverName", "driverFullName", "fullName", "name")
-                || transportValue(driver?.staff, "fullName", "staffName", "name")
-                || "",
-              employeeId: transportValue(driver, "employeeId", "driverCode") || "",
-              mobileNumber: transportValue(driver, "mobileNumber", "mobile", "phone") || "",
-              email: transportValue(driver, "email") || "",
-              licenseNumber: transportValue(driver, "licenceNumber", "licenseNumber") || "",
-              licenseExpiryDate: String(transportValue(driver, "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
-              address: transportValue(driver, "address") || "",
-              experience: Number(transportValue(driver, "experience", "experienceYears") || 0),
-              status: [transportValue(driver, "status")].some((value) => value === true || value === 1 || /^active$/i.test(String(value || ""))) ? "Active" : "Inactive",
-            };
-          }));
-        }
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1453,12 +1258,12 @@ function TransportContextPage({ navigation, onNavigate }) {
               id: g.vehicleId || g.id,
               vehicleNumber: g.vehicleNumber || g.busNumber || "",
               routeName: g.routeName || g.route || "",
-              speed: parseInt(String(g.speed || "40").replace(/[^\d]/g, ""), 10) || 40,
-              nextStop: g.nextStop || "Main Gate",
-              lastUpdated: g.eta ? `ETA: ${g.eta}` : (g.gpsSignal || "Active"),
-              latitude: g.latitude || "17.3850",
-              longitude: g.longitude || "78.4867",
-              status: g.tripStatus || "In Transit",
+              speed: g.speed ?? null,
+              nextStop: g.nextStop || "-",
+              lastUpdated: g.eta ? `ETA: ${g.eta}` : (g.gpsSignal || g.gpsStatus || "-"),
+              latitude: g.latitude ?? null,
+              longitude: g.longitude ?? null,
+              status: g.tripStatus || "Unknown",
             }))
           );
         }
@@ -1514,8 +1319,8 @@ function TransportContextPage({ navigation, onNavigate }) {
             vehicleNumber: s.vehicleNumber || s.VehicleNumber || s.assignedVehicleNumber || s.vehicle?.vehicleNumber || "Unassigned",
             vehicleId: s.vehicleId ?? s.VehicleId ?? s.assignedVehicleId ?? s.AssignedVehicleId ?? s.vehicle?.vehicleId ?? s.vehicle?.id ?? s.vehicleAssignment?.vehicleId ?? "",
             feePlan: s.feePlan || "Annual",
-            monthlyFee: Number(s.monthlyFee || 1200),
-            annualFee: Number(s.annualFee || (s.monthlyFee ? s.monthlyFee * 10 : 12000)),
+            monthlyFee: s.monthlyFee == null ? null : Number(s.monthlyFee),
+            annualFee: s.annualFee == null ? null : Number(s.annualFee),
             status: s.status === true || s.status === 1 || s.status === "Active" ? "Active" : "Inactive",
           }))
         );
@@ -1539,7 +1344,7 @@ function TransportContextPage({ navigation, onNavigate }) {
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
-    if (isLoading || !selectedCampusId || activeSection !== "reports" || activeReportTab === "trip-reports") return undefined;
+    if (isLoading || !selectedCampusId || activeSection !== "reports") return undefined;
     const definition = reportDefinitions[activeReportTab];
     if (!definition) return undefined;
     let active = true;
@@ -1551,19 +1356,18 @@ function TransportContextPage({ navigation, onNavigate }) {
       status: reportFilters.status !== "All" ? reportFilters.status : undefined,
     };
     setReportApiRows((data) => { const next = { ...data }; delete next[activeReportTab]; return next; });
-    setReportApiPayloads((data) => { const next = { ...data }; delete next[activeReportTab]; return next; });
     setReportLoading(true);
     apiClient.get(definition.endpoint, { params, signal: request.signal })
       .then((response) => {
         if (!active) return;
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load this transport report.");
         const scoped = scopedRecords.current;
         if (!scoped) return;
-        setReportApiPayloads((current) => ({ ...current, [activeReportTab]: null }));
-        if (activeReportTab !== "transport-dashboard-report") setReportApiRows((current) => ({ ...current, [activeReportTab]: scopeTransportReport(activeReportTab, reportRowsFromPayload(response.data), scoped, params) }));
+        setReportApiRows((current) => ({ ...current, [activeReportTab]: scopeTransportReport(activeReportTab, reportRowsFromPayload(response.data), scoped, params) }));
       })
       .catch((error) => {
         if (!active) return;
-        showErrorToast(`${getApiErrorMessage(error) || "Unable to load this transport report."} Showing the currently loaded transport data where available.`);
+        showErrorToast(getApiErrorMessage(error) || "Unable to load this transport report.");
       })
       .finally(() => active && setReportLoading(false));
     return () => { active = false; request.abort(); };
@@ -1951,9 +1755,9 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "drivers") {
         if (isEdit) {
-          const staffRecord = driverStaffRecords[String(record.id)]
+          const staffRecord = record.source === "staff" ? (driverStaffRecords[String(record.id)]
             ?? Object.values(driverStaffRecords).find((staff) => String(staff.employeeId || staff.empId || "").trim().toLowerCase()
-              === String(record.employeeId || values.employeeId || "").trim().toLowerCase());
+              === String(record.employeeId || values.employeeId || "").trim().toLowerCase())) : null;
           if (staffRecord) {
             const departmentSpecific = {
               ...readDepartmentSpecific(staffRecord),
@@ -2094,42 +1898,6 @@ function TransportContextPage({ navigation, onNavigate }) {
     }
   };
 
-  const saveNewDriver = async (values) => {
-    if (isFormSubmitting || !alive.current) return;
-    setIsFormSubmitting(true);
-    try {
-      if (!driverStaffRecords[String(values.staffId)]) throw new Error("Select a driver staff record from the current campus.");
-      const payload = {
-        staffId: Number(values.staffId),
-        driverName: values.driverName,
-        employeeId: values.employeeId,
-        mobileNumber: values.mobileNumber,
-        email: values.email || "",
-        licenceNumber: values.licenseNumber,
-        licenceExpiry: values.licenseExpiryDate || null,
-        address: values.address || "",
-        status: values.status === "Active",
-      };
-      if (import.meta.env.DEV) console.log("Transport Driver POST Payload:", payload);
-      const response = await apiClient.post(apiEndpoints.transport.drivers, payload);
-      if (import.meta.env.DEV) console.log("Transport Driver API Response:", response?.data, response?.status);
-      setIsAddDriverOpen(false);
-      await fetchTransportData();
-      showToast("Transport driver added successfully.");
-    } catch (err) {
-      console.error("Transport Driver API Error:", {
-        url: apiEndpoints.transport.drivers,
-        method: "POST",
-        status: err?.response?.status,
-        response: err?.response?.data,
-        error: err,
-      });
-      showErrorToast(`Error adding driver: ${getApiErrorMessage(err)}`);
-    } finally {
-      setIsFormSubmitting(false);
-    }
-  };
-
   const saveNewAttendant = async (values) => {
     if (isFormSubmitting || !alive.current) return;
     setIsFormSubmitting(true);
@@ -2169,13 +1937,13 @@ function TransportContextPage({ navigation, onNavigate }) {
     const id = key === "studentAssignments"
       ? getStudentTransportAssignmentId(row)
       : key === "drivers"
-      ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
+      ? row.source === "staff" ? row.staffId ?? row.id : row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
       : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
     const detailEndpoints = {
       routes: apiEndpoints.transport.routeById,
       pickupPoints: apiEndpoints.transport.pickupPointById,
       vehicles: apiEndpoints.transport.vehicleById,
-      drivers: apiEndpoints.transport.driverById,
+      drivers: row.source === "staff" ? apiEndpoints.faculty.getById : apiEndpoints.transport.driverById,
       attendants: apiEndpoints.transport.attendantById,
       vehicleAssignments: apiEndpoints.transport.vehicleAssignmentById,
       studentAssignments: apiEndpoints.transport.studentAssignmentById,
@@ -2193,7 +1961,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     }
     try {
       const requests = [apiClient.get(endpointFactory(id))];
-      if (key === "drivers") requests.push(apiClient.get(apiEndpoints.transport.driverDocuments(id)));
+      if (key === "drivers" && row.source !== "staff") requests.push(apiClient.get(apiEndpoints.transport.driverDocuments(id)));
       const responses = await Promise.allSettled(requests);
       const detailResponse = responses[0].status === "fulfilled" ? responses[0].value.data : null;
       const detail = detailResponse?.data ?? detailResponse;
@@ -2208,8 +1976,8 @@ function TransportContextPage({ navigation, onNavigate }) {
   const confirmDelete = async () => {
     if (isDeleteSubmitting || !deleteConfig) return;
     const { key, row } = deleteConfig;
-    const staffIdToDelete = key === "drivers"
-      ? row.staffId ?? (row.source === "staff" ? row.id : null)
+    const staffIdToDelete = key === "drivers" && row.source === "staff"
+      ? row.staffId ?? row.id
       : null;
     const numericId = key === "studentAssignments"
       ? getStudentTransportAssignmentId(row)
@@ -2486,10 +2254,10 @@ function TransportContextPage({ navigation, onNavigate }) {
     },
     drivers: {
       title: "Driver Master",
-      subtitle: "Fetched automatically from Non-Teaching Staff (Role: Driver). Update transport licenses and contact details.",
+      subtitle: driverLoadError || "Drivers for the selected campus. Assign vehicles in Vehicle Assignment.",
       rows: drivers,
       fields: driverFields,
-      addLabel: "Add Driver",
+      addLabel: undefined,
       columns: [
         { key: "employeeId", label: "Employee ID", strong: true },
         { key: "driverName", label: "Driver" },
@@ -2734,7 +2502,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     if (restoredAction.current === actionQuery) return undefined;
     let current = true;
     setFormConfigState(null); setDetailConfigState(null); setDeleteConfigState(null);
-    setIsAddDriverOpenState(false); setIsAddAttendantOpenState(false); setRestoringAction(false);
+    setIsAddAttendantOpenState(false); setRestoringAction(false);
     if (!action) { restoredAction.current = actionQuery; return undefined; }
     if (!recordsReady || isLoading) return undefined;
     if ([["campusId", selectedCampusId], ["boardId", selectedBoardId], ["yearId", selectedAcademicYearId]].some(([name, id]) => actionParams.get(name) && String(id || "") !== actionParams.get(name))) { restoredAction.current = actionQuery; showErrorToast("This transport action belongs to a different campus, board or academic year."); return undefined; }
@@ -2742,6 +2510,12 @@ function TransportContextPage({ navigation, onNavigate }) {
     const validEntity = activeSection === "dashboard" ? actionEntity === "trips" && action === "details" : activeSection === "setup" ? actionEntity === activeSetupTab : activeSection === "operations" && actionEntity === activeOperationTab;
     if (!config || !validEntity || !["add", "edit", "view", "delete", "details"].includes(action) || (action !== "add" && (!actionId.trim() || actionId.length > 200 || Array.from(actionId).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)))) {
       restoredAction.current = actionQuery; showErrorToast("Invalid transport action or record identifier."); return undefined;
+    }
+    if (action === "add" && actionEntity === "drivers") {
+      restoredAction.current = actionQuery;
+      closeAction();
+      showErrorToast("Drivers are managed in Staff Management. Use Vehicle Assignment to assign a vehicle.");
+      return undefined;
     }
     const row = config.rows.find((item) => String(actionEntity === "studentAssignments" ? getStudentTransportAssignmentId(item) : item.id) === actionId);
     if (action !== "add" && !row) {
@@ -2754,8 +2528,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     setRestoringAction(true);
     const restore = async () => {
       if (action === "add") {
-        if (actionEntity === "drivers") setIsAddDriverOpenState(true);
-        else if (actionEntity === "attendants") setIsAddAttendantOpenState(true);
+        if (actionEntity === "attendants") setIsAddAttendantOpenState(true);
         else actionLoaders.current.add(actionEntity, config.addLabel, config.fields, null, true);
       } else if (action === "edit") await actionLoaders.current.edit(actionEntity, `Edit ${config.title}`, config.fields, row, true);
       else if (action === "view") await actionLoaders.current.view(actionEntity, row, config.title, true);
@@ -2792,9 +2565,9 @@ function TransportContextPage({ navigation, onNavigate }) {
         printSection={activeSection === "setup" ? "Setup" : "Operations"}
         printSubsection={setupTabs.concat(operationTabs).find((tab) => tab.id === key)?.label || config.title}
         onPrint={preparePrint}
-        onAdd={key === "drivers" ? () => setIsAddDriverOpen(true) : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onAdd={key === "drivers" ? undefined : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
-        onDelete={(row) => requestDelete(key, row, config.title)}
+        onDelete={key === "drivers" ? undefined : (row) => requestDelete(key, row, config.title)}
         onView={(row) => openRecordDetails(key, row, config.title)}
         toolbarClassName={key === "vehicles" ? "cms-transport-vehicle-toolbar" : undefined}
         tableClassName={key === "drivers" ? "cms-transport-driver-table" : undefined}
@@ -2938,10 +2711,10 @@ function TransportContextPage({ navigation, onNavigate }) {
             <p>{snapshot.routeName}</p>
             <InfoGrid
               items={[
-                { label: "Speed", value: `${snapshot.speed} km/h` },
+                { label: "Speed", value: snapshot.speed == null ? "-" : `${snapshot.speed} km/h` },
                 { label: "Next Stop", value: snapshot.nextStop },
                 { label: "Last Sync", value: snapshot.lastUpdated },
-                { label: "Coordinates", value: `${snapshot.latitude}, ${snapshot.longitude}` },
+                { label: "Coordinates", value: snapshot.latitude == null || snapshot.longitude == null ? "-" : `${snapshot.latitude}, ${snapshot.longitude}` },
               ]}
             />
             <div className="cms-transport-mapline">
@@ -2956,169 +2729,8 @@ function TransportContextPage({ navigation, onNavigate }) {
   );
 
   const renderReports = () => {
-    const totalTransportRevenue = studentAssignments.reduce((total, item) => total + (Number(item.annualFee) || 0), 0);
-    const activeMaintenanceCost = maintenance.reduce((total, item) => total + (Number(item.cost) || 0), 0);
-    const dashboardReportPayload = null;
-    const dashboardAnnualFee = readReportMetric(dashboardReportPayload, ["annualTransportFee", "totalTransportRevenue", "totalRevenue", "annualFee"], totalTransportRevenue);
-    const dashboardMaintenanceCost = readReportMetric(dashboardReportPayload, ["maintenanceCost", "totalMaintenanceCost", "activeMaintenanceCost"], activeMaintenanceCost);
-    const dashboardFleetCapacity = readReportMetric(dashboardReportPayload, ["fleetCapacity", "totalFleetCapacity", "totalSeats"], vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0));
-    const dashboardStaffCount = readReportMetric(dashboardReportPayload, ["driversAndAttendants", "transportStaff", "totalStaff"], drivers.length + attendants.length);
-    const localReportRows = activeReportTab === "student-transport-reports"
-      ? studentAssignments
-      : activeReportTab === "route-reports"
-        ? routes
-        : activeReportTab === "vehicle-reports"
-          ? vehicles
-          : activeReportTab === "driver-reports"
-            ? drivers
-            : activeReportTab === "maintenance-reports"
-            ? maintenance
-            : activeReportTab === "trip-reports"
-              ? trips
-              : activeReportTab === "transport-dashboard-report"
-                ? vehicleAssignments
-                : [];
-    const hasApiReport = Object.prototype.hasOwnProperty.call(reportApiRows, activeReportTab);
-    const rawReportRows = activeReportTab === "driver-reports"
-      ? drivers.map((driver) => ({ ...driver, driverName: resolveDriverName(driver) })).filter((driver) => String(driver.driverName || "").trim())
-      : activeReportTab === "trip-reports"
-        ? trips
-      : hasApiReport ? reportApiRows[activeReportTab] : localReportRows;
-    const reportRows = activeReportTab === "vehicle-reports"
-      ? rawReportRows.map((row) => {
-          const vehicle = vehicles.find((item) =>
-            (row.vehicleId != null && String(item.id) === String(row.vehicleId))
-            || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber)
-            || ((row.registrationNumber || row.registrationNo) && item.registrationNumber === (row.registrationNumber || row.registrationNo)));
-          const assignment = vehicleAssignments.find((item) =>
-            (item.status === "Active" || item.status === true)
-            && ((vehicle?.id != null && String(item.vehicleId) === String(vehicle.id))
-              || (row.vehicleId != null && String(item.vehicleId) === String(row.vehicleId))
-              || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber)))
-            ?? vehicleAssignments.find((item) =>
-              (vehicle?.id != null && String(item.vehicleId) === String(vehicle.id))
-              || (row.vehicleId != null && String(item.vehicleId) === String(row.vehicleId))
-              || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber));
-          const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
-          const driverName = resolveDriverName(assignment) || findDriver(assignment?.driverId)?.driverName;
-          const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
-          const assignedStudents = studentAssignments.filter((student) =>
-            (vehicle?.id != null && String(student.vehicleId) === String(vehicle.id))
-            || (row.vehicleId != null && String(student.vehicleId) === String(row.vehicleId))
-            || (row.vehicleNumber && student.vehicleNumber === row.vehicleNumber)).length;
-          return {
-            ...row,
-            assignedStudents: row.assignedStudents ?? row.AssignedStudents ?? assignedStudents,
-            assignedRoute: routeName || row.assignedRoute || row.AssignedRoute || "-",
-            assignedDriver: driverName || row.assignedDriver || row.AssignedDriver || "-",
-            busAttendant: (attendantName && attendantName !== "Unassigned" ? attendantName : null)
-              || row.busAttendant
-              || row.BusAttendant
-              || "-",
-          };
-        })
-      : activeReportTab === "trip-reports" || activeReportTab === "transport-dashboard-report"
-        ? rawReportRows.map((row) => ({
-            ...row,
-            driverName: resolveDriverName(row) || transportValue(row, "driverName") || "",
-          }))
-      : activeReportTab === "driver-reports"
-        ? rawReportRows.map((row) => {
-            const rowDriverName = resolveDriverName(row);
-            const rowLicense = transportValue(row, "licenseNumber", "licenceNumber");
-            const rowMobile = transportValue(row, "mobileNumber", "mobile", "phone");
-            const rowDriverIds = driverIdentifiers(row);
-            const matchesDriver = (item) => driverIdentifiers(item).some((identifier) =>
-              rowDriverIds.includes(identifier))
-              || (rowDriverName && resolveDriverName(item) === rowDriverName);
-            const driver = drivers.find((item) =>
-              matchesDriver(item)
-              || (rowLicense && item.licenseNumber === rowLicense)
-              || (rowMobile && item.mobileNumber === rowMobile));
-            const matchesAssignment = (item) => matchesDriver(item)
-              || (driver && driverIdentifiers(item).some((identifier) => [
-                driver.id, driver.driverId, driver.transportDriverId, driver.driverApiId, driver.staffId,
-              ].some((value) => value != null && String(value) === identifier)));
-            const assignment = vehicleAssignments.find((item) =>
-              (item.status === "Active" || item.status === true) && matchesAssignment(item))
-              ?? vehicleAssignments.find(matchesAssignment);
-            const vehicleNumber = assignment?.vehicleNumber || findVehicle(assignment?.vehicleId)?.vehicleNumber;
-            const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
-            const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
-            return {
-              ...row,
-              driverName: rowDriverName || driver?.driverName || "",
-              currentBus: vehicleNumber || "-",
-              currentRoute: routeName || "-",
-              busAttendant: attendantName && attendantName !== "Unassigned" ? attendantName : "-",
-              assignmentStatus: assignment?.status || (assignment ? "Active" : "Unassigned"),
-              experienceYears: driver?.experience ?? row.experienceYears ?? 0,
-            };
-          })
-        : activeReportTab === "route-reports"
-          ? rawReportRows.map((row) => {
-              const normalizeRoute = (value) => String(value ?? "").trim().toLowerCase();
-              const rowRouteId = row.routeId ?? row.RouteId ?? row.id;
-              const route = routes.find((item) =>
-                (rowRouteId != null && String(item.id) === String(rowRouteId))
-                || (row.routeCode && normalizeRoute(item.routeCode) === normalizeRoute(row.routeCode))
-                || (row.routeName && normalizeRoute(item.routeName) === normalizeRoute(row.routeName)));
-              const assignments = vehicleAssignments.filter((item) =>
-                (route?.id != null && String(item.routeId) === String(route.id))
-                || (rowRouteId != null && String(item.routeId) === String(rowRouteId))
-                || (row.routeName && normalizeRoute(item.routeName) === normalizeRoute(row.routeName)));
-              const activeAssignments = assignments.filter((item) => item.status === "Active" || item.status === true);
-              const applicableAssignments = activeAssignments.length ? activeAssignments : assignments;
-              const assignedBuses = [...new Set(applicableAssignments.map((item) =>
-                item.vehicleNumber || findVehicle(item.vehicleId)?.vehicleNumber).filter(Boolean))];
-              const assignedDrivers = [...new Set(applicableAssignments.map((item) =>
-                resolveDriverName(item) || findDriver(item.driverId)?.driverName).filter(Boolean))];
-              const assignedAttendants = [...new Set(applicableAssignments.map((item) =>
-                (item.attendantName !== "Unassigned" ? item.attendantName : "") || findAttendant(item.attendantId)?.attendantName).filter(Boolean))];
-              const routePickupCount = pickupPoints.filter((point) =>
-                (route?.id != null && String(point.routeId) === String(route.id))
-                || (rowRouteId != null && String(point.routeId) === String(rowRouteId))
-                || (row.routeName && normalizeRoute(point.routeName) === normalizeRoute(row.routeName))).length;
-              return {
-                ...row,
-                distanceKm: Number(route?.totalDistanceKm) || Number(row.distanceKm ?? row.DistanceKm ?? row.totalDistanceKm) || 0,
-                totalPickupPoints: routePickupCount || Number(row.totalPickupPoints) || 0,
-                assignedBus: assignedBuses.join(", ") || row.assignedBus || "-",
-                assignedDriver: assignedDrivers.join(", ") || row.assignedDriver || "-",
-                busAttendant: assignedAttendants.join(", ") || row.busAttendant || "-",
-              };
-            })
-      : activeReportTab === "pickup-wise-reports"
-        ? rawReportRows.map((row) => {
-            const pickupPointId = row.pickupPointId ?? row.PickupPointId ?? row.pickupId ?? row.PickupId;
-            const pickupPoint = pickupPoints.find((point) =>
-              String(point.id) === String(pickupPointId)
-              || String(point.pickupPointId) === String(pickupPointId)
-              || String(point.pickupId) === String(pickupPointId));
-            return {
-              ...row,
-              pickupPointName: row.pickupPointName
-                || row.PickupPointName
-                || row.pickupName
-                || row.PickupName
-                || pickupPoint?.pickupName
-                || pickupPoint?.pickupPointName
-                || pickupPoint?.name
-                || "-",
-            };
-          })
-      : activeReportTab === "seat-occupancy-reports"
-        ? rawReportRows.map((row) => {
-            const vehicle = vehicles.find((item) =>
-              (row.vehicleId != null && String(item.id) === String(row.vehicleId))
-              || (row.VehicleId != null && String(item.id) === String(row.VehicleId))
-              || (row.vehicleNumber && String(item.vehicleNumber) === String(row.vehicleNumber)));
-            return {
-              ...row,
-              vehicleName: vehicle?.vehicleType || row.vehicleName || row.VehicleName || "-",
-            };
-          })
-      : rawReportRows;
+    // Reports are read-only projections from their dedicated API, not master lists.
+    const reportRows = reportApiRows[activeReportTab] ?? [];
     const fallbackReportColumns = activeReportTab === "student-transport-reports"
       ? studentTransportReportColumns
       : activeReportTab === "route-reports"
@@ -3143,11 +2755,7 @@ function TransportContextPage({ navigation, onNavigate }) {
       : activeReportTab === "maintenance-reports"
         ? new Set(["maintenanceid", "id"])
         : new Set();
-    const reportColumns = (activeReportTab === "trip-reports"
-      ? tableConfigs.trips.columns
-      : activeReportTab === "driver-reports"
-      ? tableConfigs.drivers.columns.filter((column) => !["id", "transportDriverId", "driverApiId"].includes(column.key))
-      : hasApiReport ? reportColumnsFromRows(reportRows, fallbackReportColumns) : fallbackReportColumns)
+    const reportColumns = reportColumnsFromRows(reportRows, fallbackReportColumns)
       .filter((column) => !excludedReportColumnKeys.has(String(column.key).replace(/[_-]/g, "").toLowerCase()));
     const filterOption = (value, label) => ({ value, label });
     const routeFilterOptions = [
@@ -3202,42 +2810,6 @@ function TransportContextPage({ navigation, onNavigate }) {
         { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
       ],
     };
-    const matchesReportRoute = (row) => {
-      if (reportFilters.route === "All") return true;
-      const route = findRoute(reportFilters.route);
-      const assignment = findAssignment(row.assignmentId);
-      return (
-        row.id === reportFilters.route ||
-        row.routeId === reportFilters.route ||
-        assignment?.routeId === reportFilters.route ||
-        row.routeName === route?.routeName ||
-        row.routeName === route?.routeCode
-      );
-    };
-    const matchesReportVehicle = (row) => {
-      if (reportFilters.vehicle === "All") return true;
-      const vehicle = findVehicle(reportFilters.vehicle);
-      const assignment = findAssignment(row.assignmentId);
-      return (
-        row.id === reportFilters.vehicle ||
-        row.vehicleId === reportFilters.vehicle ||
-        assignment?.vehicleId === reportFilters.vehicle ||
-        row.vehicleNumber === vehicle?.vehicleNumber ||
-        (row.registrationNumber || row.registrationNo) === vehicle?.registrationNumber
-      );
-    };
-    const matchesReportStatus = (row) => reportFilters.status === "All" || row.status === reportFilters.status;
-    const filterReportRow = (row) => {
-      const filters = reportFilterFields[activeReportTab] || [];
-      const needsRoute = filters.some((filter) => filter.name === "route");
-      const needsVehicle = filters.some((filter) => filter.name === "vehicle");
-      const needsStatus = filters.some((filter) => filter.name === "status");
-      return (
-        (!needsRoute || matchesReportRoute(row)) &&
-        (!needsVehicle || matchesReportVehicle(row)) &&
-        (!needsStatus || matchesReportStatus(row))
-      );
-    };
     const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
     const activeReportDefinition = reportDefinitions[activeReportTab];
     const reportFilename = activeReportDefinition?.filename || "transport-report";
@@ -3255,16 +2827,13 @@ function TransportContextPage({ navigation, onNavigate }) {
         />
         {activeReportTab === "transport-dashboard-report" ? (
           <div className="cms-transport-stat-grid">
-            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(dashboardAnnualFee)} hint="from active assignments" tone="green" />
-            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(dashboardMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
-            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(dashboardFleetCapacity)} hint="total seats" tone="blue" />
-            <StatCard icon={UserCheck} label="Drivers & Attendants" value={formatNumber(dashboardStaffCount)} hint="staff profiles" tone="violet" />
+            {reportRows.map((row) => <StatCard key={row.metric} icon={BarChart3} label={row.metric} value={row.value} hint={row.status} tone="blue" />)}
           </div>
         ) : null}
         {reportLoading ? <SkeletonTable columns={6} rows={5} /> : null}
         {!reportLoading ? <TableSection
           title="Transport Report"
-          subtitle="Live transport report data derived from fleet records."
+          subtitle="Live data from the selected transport report API."
           rows={reportRows}
           columns={reportColumns}
           query={query}
@@ -3272,7 +2841,6 @@ function TransportContextPage({ navigation, onNavigate }) {
           filters={reportFilterFields[activeReportTab]}
           filterValues={reportFilters}
           onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
-          rowFilter={filterReportRow}
           printSection="Reports"
           printSubsection={reportTabs.find((tab) => tab.id === activeReportTab)?.label || "Transport Report"}
           exportFilename={`${reportFilename}.csv`}
@@ -3345,7 +2913,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         {renderActiveSection()}
       </div>
 
-      {restoringAction && !formConfig && !detailConfig && !deleteConfig && !isAddDriverOpen && !isAddAttendantOpen ? <Modal title="Loading transport record" onClose={closeAction}><SkeletonTable columns={3} rows={3} /></Modal> : null}
+      {restoringAction && !formConfig && !detailConfig && !deleteConfig && !isAddAttendantOpen ? <Modal title="Loading transport record" onClose={closeAction}><SkeletonTable columns={3} rows={3} /></Modal> : null}
       {formConfig?.key === "pickupPoints" && !formConfig.record?.id ? (
         <AddPickupPointsModal
           routes={routes}
@@ -3369,20 +2937,6 @@ function TransportContextPage({ navigation, onNavigate }) {
           onSave={saveForm}
           awaitSave
           savingLabel={<span className="cms-transport-action-loading"><i aria-hidden="true" />{formConfig.record?.id ? "Updating..." : "Adding..."}</span>}
-        />
-      ) : null}
-
-      {isAddDriverOpen ? (
-        <AddDriverModal
-          drivers={Object.values(driverStaffRecords).map((staff) => ({
-            id: staff.staffId || staff.id || staff.facultyId,
-            driverName: staff.fullName || staff.staffName || [staff.firstName, staff.lastName].filter(Boolean).join(' '),
-            employeeId: staff.employeeId || staff.empId || '', mobileNumber: staff.mobile || staff.mobileNumber || staff.phone || '',
-            email: staff.email || '', address: staff.currentAddress || staff.address || '',
-          }))}
-          isSaving={isFormSubmitting}
-          onCancel={() => { if (!isFormSubmitting) setIsAddDriverOpen(false); }}
-          onSave={saveNewDriver}
         />
       ) : null}
 

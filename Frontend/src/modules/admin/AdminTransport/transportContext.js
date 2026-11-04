@@ -13,11 +13,22 @@ export function scopeTransportRecords(records, context) {
   });
   const routes = records.routes.filter(exactCampus);
   const vehicles = records.vehicles.filter((row) => compatible(row, ['campusId']));
-  const staff = records.staff.filter(exactCampus);
+  const staff = records.staff.filter((row) => {
+    const assignments = transportValue(row, 'assignedCampuses', 'staffCampusAssignments');
+    if (Array.isArray(assignments) && assignments.length) return assignments.some((assignment) =>
+      assignment.isActive !== false && !['Inactive', 'Transferred'].includes(assignment.status)
+      && id(transportValue(assignment, 'campusId', 'id')) === campus);
+    const campusIds = transportValue(row, 'assignedCampusIds');
+    if (Array.isArray(campusIds) && campusIds.length) return campusIds.some((value) => id(value) === campus);
+    // Staff is fetched with CampusId; reject explicit conflicts if present.
+    return compatible(row, ['campusId']);
+  });
   const routeIds = ids(routes, 'routeId', 'id'), vehicleIds = ids(vehicles, 'vehicleId', 'id');
   const staffIds = ids(staff, 'staffId', 'id', 'facultyId'), employees = ids(staff, 'employeeId');
   const linkedStaff = (row) => contains(staffIds, row, 'staffId') || contains(employees, row, 'employeeId');
-  const drivers = records.drivers.filter((row) => compatible(row, ['campusId']) && (exactCampus(row) || linkedStaff(row) || contains(vehicleIds, row, 'assignedVehicleId')));
+  // Drivers are requested with CampusId. Some driver DTOs omit campus and
+  // staff links; preserve those results while rejecting explicit conflicts.
+  const drivers = records.drivers.filter((row) => compatible(row, ['campusId']));
   const attendants = records.attendants.filter((row) => compatible(row, ['campusId']) && (exactCampus(row) || linkedStaff(row) || contains(vehicleIds, row, 'assignedVehicleId')));
   const pickups = records.pickups.filter((row) => compatible(row, ['campusId']) && contains(routeIds, row, 'routeId'));
   const assignments = records.assignments.filter((row) => contains(routeIds, row, 'routeId') && contains(vehicleIds, row, 'vehicleId'));
@@ -31,6 +42,12 @@ export function scopeTransportRecords(records, context) {
     const vehicle = transportValue(row, 'vehicleId'), assignment = transportValue(row, 'vehicleAssignmentId');
     return member && compatible(row, ['campusId', 'boardId', 'academicYearId']) && contains(routeIds, row, 'routeId')
       && (vehicle == null || vehicleIds.has(id(vehicle))) && (assignment == null || Number(assignment) === 0 || assignmentIds.has(id(assignment)));
+  }).map((row) => {
+    const student = students.find((item) => id(transportValue(item, 'studentId', 'id')) === id(transportValue(row, 'studentId')));
+    return { ...row,
+      studentName: transportValue(row, 'studentName') || transportValue(student, 'studentName', 'fullName', 'name') || '',
+      admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || transportValue(student, 'admissionNo', 'admissionNumber') || '',
+    };
   });
   return { routes, vehicles, staff, drivers, attendants, pickups, assignments, students, studentAssignments,
     trips: records.trips.filter((row) => contains(routeIds, row, 'routeId') && contains(vehicleIds, row, 'vehicleId')),
@@ -40,9 +57,10 @@ export function scopeTransportRecords(records, context) {
 
 export async function getAllTransportPages(client, url, params = {}, signal) {
   const all = []; let previous = '';
+  const pageSize = Number(params.PageSize) || 100;
   for (let page = 1; page <= 1000; page++) {
     if (signal?.aborted) throw new DOMException('Transport request cancelled.', 'AbortError');
-    const response = await client.get(url, { params: { ...params, PageNumber: page, PageSize: 100 }, signal });
+    const response = await client.get(url, { params: { ...params, PageNumber: page, PageSize: pageSize }, signal });
     if (signal?.aborted) throw new DOMException('Transport request cancelled.', 'AbortError');
     let data = response.data;
     if (data?.success === false) throw new Error(data.message || 'Transport request failed.');
@@ -54,27 +72,16 @@ export async function getAllTransportPages(client, url, params = {}, signal) {
     all.push(...batch);
     const total = data?.totalCount ?? data?.TotalCount ?? data?.total ?? response.data?.totalCount;
     const totalPages = data?.totalPages ?? data?.TotalPages ?? response.data?.totalPages;
-    if (!batch.length || (total != null ? all.length >= Number(total) : totalPages != null ? page >= Number(totalPages) : batch.length < 100)) return { ...response, data: all };
+    if (!batch.length && Number(total) > all.length) throw new Error(`Transport API ${url} returned an empty page but reports ${total} records. The backend list response needs correction.`);
+    if (!batch.length || (total != null ? all.length >= Number(total) : totalPages != null ? page >= Number(totalPages) : batch.length < pageSize)) return { ...response, data: all };
     previous = fingerprint;
   }
   throw new Error('Transport data exceeds the supported pagination limit.');
 }
 
 export function scopeTransportReport(tab, rows, records, filters = {}) {
-  // Monthly aggregates have no resource identity; reproduce the existing grouping
-  // from scoped service records instead of displaying the global server totals.
-  if (tab === 'monthly-cost-reports') {
-    const groups = new Map();
-    records.maintenance.filter((row) => !filters.vehicleId || id(transportValue(row, 'vehicleId')) === id(filters.vehicleId)).forEach((row) => {
-      const date = String(transportValue(row, 'serviceDate') || '').slice(0, 10);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-      const key = date.slice(0, 7), year = Number(date.slice(0, 4)), month = Number(date.slice(5, 7));
-      const group = groups.get(key) || { year, month, monthName: new Date(year, month - 1, 1).toLocaleString('en-IN', { month: 'long' }), serviceCount: 0, totalCost: 0 };
-      group.serviceCount++; group.totalCost += Number(transportValue(row, 'cost') || 0);
-      groups.set(key, group);
-    });
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, row]) => row);
-  }
+  // These report projections omit resource IDs. The report API scopes them via CampusId.
+  if (['driver-reports', 'transport-dashboard-report', 'monthly-cost-reports'].includes(tab)) return rows;
   const matches = (row, collection, keys) => collection.find((item) => keys.some(([source, target]) => {
     const value = transportValue(row, source), other = transportValue(item, target);
     return value != null && other != null && id(value) === id(other);
@@ -91,13 +98,11 @@ export function scopeTransportReport(tab, rows, records, filters = {}) {
     if (tab === 'pickup-wise-reports') return Boolean(matches(row, records.pickups, [['pickupPointId', 'pickupPointId']]));
     return Boolean(matches(row, records.vehicles, [['vehicleId', 'vehicleId'], ['vehicleNumber', 'vehicleNumber'], ['registrationNumber', 'registrationNumber']]));
   }).map((row) => {
-    if (!['pickup-wise-reports', 'seat-occupancy-reports'].includes(tab)) return row;
-    const key = tab === 'pickup-wise-reports' ? 'pickupPointId' : 'vehicleId';
-    const count = records.studentAssignments.filter((student) => id(transportValue(student, key)) === id(transportValue(row, key)) && /^(true|1|active)$/i.test(String(transportValue(student, 'status')))).length;
-    const result = { ...row };
-    for (const name of ['assignedStudents', 'totalStudents', 'studentsCount', 'studentCount']) if (Object.hasOwn(result, name)) result[name] = count;
-    if (Object.hasOwn(result, 'availableSeats')) result.availableSeats = Math.max(0, Number(result.capacity || 0) - count);
-    if (Object.hasOwn(result, 'occupancyPercentage')) result.occupancyPercentage = Number(result.capacity) > 0 ? Math.round(count / Number(result.capacity) * 10000) / 100 : 0;
-    return result;
+    if (tab !== 'student-transport-reports') return row;
+    const assignment = studentMatch(row);
+    return { ...row,
+      studentName: transportValue(row, 'studentName') || transportValue(assignment, 'studentName') || '',
+      admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || transportValue(assignment, 'admissionNo', 'admissionNumber') || '',
+    };
   });
 }
