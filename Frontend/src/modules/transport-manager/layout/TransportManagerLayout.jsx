@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import DashboardLayout, { adminIconAssets, generatedSidebarIcons } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Route as RouteIcon, Settings as SettingsIcon } from "lucide-react";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -76,8 +76,31 @@ export default function TransportManagerLayout({ children }) {
   const { sidebarCollapsed, sidebarOpen, closeSidebar } = useTransportManager();
   const [themePaletteOpen, setThemePaletteOpen] = useState(false);
 
+  // Close sidebar on small screens (<= 1024px) when clicking anywhere outside
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sidebarCollapsed) return;
+
+    const handleOutsideClick = (e) => {
+      if (window.innerWidth > 1024) return;
+      const sidebarEl = document.querySelector(".tm-sidebar");
+      const toggleBtn = document.querySelector(".cms-menu-toggle");
+      if (sidebarEl && sidebarEl.contains(e.target)) return;
+      if (toggleBtn && toggleBtn.contains(e.target)) return;
+
+      closeSidebar();
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [sidebarCollapsed, closeSidebar]);
+
   return (
-    <div className={`cms-shell ${sidebarCollapsed ? "nav-closed" : ""}`}>
+    <div className={`cms-shell tm-layout-shell ${sidebarCollapsed ? "nav-closed" : ""}`}>
       {/* Transport Manager Sidebar with Pirnav branding & modules matching Screenshot 1 */}
       <TransportManagerSidebar />
 
@@ -100,12 +123,12 @@ export default function TransportManagerLayout({ children }) {
         hideTrigger={true}
       />
 
-      {/* Mobile Backdrop */}
-      {sidebarOpen && (
+      {/* Mobile/Tablet Backdrop when sidebar is open on small screens */}
+      {(!sidebarCollapsed || sidebarOpen) && (
         <div
-          className="cms-backdrop-mobile is-open"
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 55 }}
+          className="cms-backdrop-mobile is-open tm-sidebar-backdrop"
           onClick={closeSidebar}
+          aria-hidden="true"
         />
       )}
     </div>

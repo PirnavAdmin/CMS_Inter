@@ -16,12 +16,16 @@ import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import themeLightImage from "@/assets/navbar-3d/theme-light.png";
 import { useTheme } from "@/hooks/useTheme.js";
 import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
-import { useTransportManager } from "../TransportManagerContext.jsx";
+import {
+  useTransportManager,
+  useTransportManagerSafe,
+  TransportManagerProvider,
+} from "../TransportManagerContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "../styles/TransportManagerSettings.css";
 
-export default function TransportManagerSettings() {
+function TransportManagerSettingsInner() {
   const navigation = useTransportNavigation();
   const { showToast = () => {}, profile = {} } = useTransportManager();
   const effectiveStaffId = profile.staffId || profile.id || 1125;
@@ -69,21 +73,12 @@ export default function TransportManagerSettings() {
   const isConfirmEntered = confirmPwd.length > 0;
   const isPasswordsMatch = isConfirmEntered && newPwd === confirmPwd;
 
-  // General Preferences State with LocalStorage persistence
-  const PREF_STORAGE_KEY = "tm_settings_preferences";
-  const [preferences, setPreferences] = useState(() => {
-    try {
-      const saved = localStorage.getItem(PREF_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.warn("Could not read tm_settings_preferences:", e);
-    }
-    return {
-      fitnessAlerts: true,
-      unassignedReminders: true,
-      routeDispatchAlerts: true,
-      autoLogoutTimeout: "30",
-    };
+  // General Preferences State
+  const [preferences, setPreferences] = useState({
+    fitnessAlerts: true,
+    unassignedReminders: true,
+    routeDispatchAlerts: true,
+    autoLogoutTimeout: "30",
   });
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
@@ -201,11 +196,7 @@ export default function TransportManagerSettings() {
         }
       }
 
-      try {
-        localStorage.setItem("tm_user_password", passwordForm.newPassword);
-      } catch (err) {
-        console.warn("Could not save password locally:", err);
-      }
+
       setSavingPassword(false);
       setPasswordSuccess(true);
       showToast("Password updated successfully!", "success");
@@ -232,11 +223,7 @@ export default function TransportManagerSettings() {
     } catch (err) {
       console.warn("Could not save preferences to server:", err);
     }
-    try {
-      localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(preferences));
-    } catch (err) {
-      console.warn("Could not save preferences:", err);
-    }
+
     setSavingPreferences(false);
     showToast("General preferences saved successfully!", "success");
     setModalOpen(false);
@@ -286,9 +273,9 @@ export default function TransportManagerSettings() {
 
       {/* Interactive Management Modal matching Reference 3 */}
       {modalOpen && (
-        <div className="faculty-settings-modal-overlay" onClick={() => setModalOpen(false)}>
-          <div className="faculty-settings-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="faculty-settings-modal-head">
+        <div className="faculty-settings-modal-overlay tm-settings-modal-overlay" onClick={() => setModalOpen(false)}>
+          <div className="faculty-settings-modal tm-settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="faculty-settings-modal-head tm-settings-modal-head">
               <h2>
                 <ShieldCheck size={20} className="faculty-settings-shield-icon" />
                 General Settings Management
@@ -337,7 +324,7 @@ export default function TransportManagerSettings() {
             {/* Tab 1: Reset / Change Password matching Reference 3 */}
             {activeTab === "password" && (
               <form onSubmit={handleUpdatePassword}>
-                <div className="faculty-settings-modal-body">
+                <div className="faculty-settings-modal-body tm-settings-modal-body">
                   {passwordError && (
                     <div className="faculty-settings-alert error">
                       <AlertCircle size={16} /> {passwordError}
@@ -349,7 +336,7 @@ export default function TransportManagerSettings() {
                     </div>
                   )}
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <div className="faculty-settings-field">
                       <label>Current Password</label>
                       <div className="faculty-settings-password-wrap">
@@ -491,7 +478,7 @@ export default function TransportManagerSettings() {
                     </div>
                   </div>
                 </div>
-                <div className="faculty-settings-modal-foot">
+                <div className="faculty-settings-modal-foot tm-settings-modal-foot">
                   <button
                     type="button"
                     className="cms-btn cms-btn-ghost"
@@ -514,7 +501,7 @@ export default function TransportManagerSettings() {
             {/* Tab 2: General Preferences */}
             {activeTab === "preferences" && (
               <form onSubmit={handleSavePreferences}>
-                <div className="faculty-settings-modal-body">
+                <div className="faculty-settings-modal-body tm-settings-modal-body">
                   <div className="faculty-settings-switch-row">
                     <div className="faculty-settings-switch-info">
                       <h4>Vehicle Fitness &amp; Insurance Alerts</h4>
@@ -530,7 +517,7 @@ export default function TransportManagerSettings() {
                         width: 18,
                         height: 18,
                         cursor: "pointer",
-                        accentColor: "var(--cms-primary, #6f8400)",
+                        accentColor: "var(--cms-primary)",
                       }}
                       disabled={savingPreferences}
                     />
@@ -551,7 +538,7 @@ export default function TransportManagerSettings() {
                         width: 18,
                         height: 18,
                         cursor: "pointer",
-                        accentColor: "var(--cms-primary, #6f8400)",
+                        accentColor: "var(--cms-primary)",
                       }}
                       disabled={savingPreferences}
                     />
@@ -572,13 +559,13 @@ export default function TransportManagerSettings() {
                         width: 18,
                         height: 18,
                         cursor: "pointer",
-                        accentColor: "var(--cms-primary, #6f8400)",
+                        accentColor: "var(--cms-primary)",
                       }}
                       disabled={savingPreferences}
                     />
                   </div>
 
-                  <div className="faculty-settings-field" style={{ marginTop: 14 }}>
+                  <div className="faculty-settings-field" style={{ marginTop: 8 }}>
                     <label>Auto Logout Session Timeout</label>
                     <select
                       value={preferences.autoLogoutTimeout}
@@ -596,7 +583,7 @@ export default function TransportManagerSettings() {
                   </div>
                 </div>
 
-                <div className="faculty-settings-modal-foot">
+                <div className="faculty-settings-modal-foot tm-settings-modal-foot">
                   <button
                     type="button"
                     className="cms-btn cms-btn-ghost"
@@ -620,4 +607,17 @@ export default function TransportManagerSettings() {
       )}
     </div>
   );
+}
+
+
+export default function TransportManagerSettings() {
+  const context = useTransportManagerSafe();
+  if (!context) {
+    return (
+      <TransportManagerProvider>
+        <TransportManagerSettingsInner />
+      </TransportManagerProvider>
+    );
+  }
+  return <TransportManagerSettingsInner />;
 }

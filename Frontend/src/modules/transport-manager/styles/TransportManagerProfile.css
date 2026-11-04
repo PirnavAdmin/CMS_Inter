@@ -1,4 +1,9 @@
-/* Transport Manager Profile Styles */
+/* ==========================================================================
+   Transport Manager Profile Styles
+   Inherits full theme-based design from cms.css & DashboardLayout.css
+   Does NOT bleed into other modules
+   ========================================================================== */
+
 @import "../../faculty/styles/FacultyProfile.css";
 
 .tm-profile-page {
@@ -8,7 +13,7 @@
   width: 100%;
 }
 
-/* Ensure smooth theme compatibility */
+/* Page Header */
 .tm-profile-page .sp-profile-page-head {
   display: flex;
   align-items: center;
@@ -31,13 +36,13 @@
   color: var(--cms-muted, #64748b);
 }
 
-/* Completion Badge matching Screenshot 2 */
+/* Completion Badge matching theme */
 .tm-profile-completion-badge {
   font-size: 13px;
   font-weight: 700;
-  color: var(--cms-primary, #6F8400);
-  background: var(--cms-primary-soft, #f7f9ee);
-  border: 1px solid var(--cms-primary-soft-border, #e2e8b8);
+  color: var(--cms-primary, #7c3aed);
+  background: color-mix(in srgb, var(--cms-primary, #7c3aed) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cms-primary, #7c3aed) 28%, transparent);
   padding: 6px 14px;
   border-radius: 20px;
   display: inline-flex;
@@ -46,9 +51,9 @@
 
 /* Primary Button in theme */
 .tm-profile-page .cms-btn-primary {
-  background: var(--cms-primary, #6F8400);
+  background: var(--cms-primary, #7c3aed);
   color: #ffffff;
-  border: 1px solid var(--cms-primary, #6F8400);
+  border: 1px solid var(--cms-primary, #7c3aed);
   padding: 0 16px;
   height: 38px;
   border-radius: 8px;
@@ -62,8 +67,8 @@
 }
 
 .tm-profile-page .cms-btn-primary:hover:not(:disabled) {
-  background: var(--cms-primary-dark, #576700);
-  border-color: var(--cms-primary-dark, #576700);
+  background: var(--cms-primary-hover, var(--cms-primary-dark, #6d28d9));
+  border-color: var(--cms-primary-hover, var(--cms-primary-dark, #6d28d9));
 }
 
 .tm-profile-page .cms-btn-secondary {
@@ -85,6 +90,80 @@
 .tm-profile-page .cms-btn-secondary:hover:not(:disabled) {
   background: var(--cms-subtle, #f8f9fa);
   border-color: var(--cms-border-focus, #9ca3af);
+}
+
+/* Profile Identity Strip Theme & Fallbacks */
+.tm-profile-page .sp-profile-avatar {
+  border: 2px solid var(--cms-primary, #7c3aed) !important;
+  color: var(--cms-primary, #7c3aed) !important;
+  background: color-mix(in srgb, var(--cms-primary, #7c3aed) 8%, var(--cms-surface, #ffffff)) !important;
+}
+
+.tm-profile-page .sp-profile-user-icon {
+  color: var(--cms-primary, #7c3aed) !important;
+}
+
+.tm-profile-page .sp-profile-photo-edit {
+  background: var(--cms-primary, #7c3aed) !important;
+  color: #ffffff !important;
+}
+
+.tm-profile-page .sp-profile-photo-edit:hover {
+  background: var(--cms-primary-hover, var(--cms-primary-dark, #6d28d9)) !important;
+}
+
+.tm-profile-page .sp-profile-meta-id strong {
+  color: var(--cms-primary, #7c3aed) !important;
+}
+
+/* Stepper Tabs Theme */
+.tm-profile-page .sp-wizard-step:not(:disabled):hover {
+  background: color-mix(in srgb, var(--cms-primary, #7c3aed) 10%, transparent) !important;
+  color: var(--cms-primary, #7c3aed) !important;
+}
+
+.tm-profile-page .sp-wizard-step.active {
+  background: var(--cms-surface, #ffffff) !important;
+  color: var(--cms-primary, #7c3aed) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+}
+
+.tm-profile-page .sp-wizard-step.active .sp-wizard-num {
+  background: var(--cms-primary, #7c3aed) !important;
+  color: #ffffff !important;
+}
+
+.tm-profile-page .sp-wizard-step.completed .sp-wizard-num {
+  background: var(--cms-green, #10b981) !important;
+  color: #ffffff !important;
+}
+
+/* Modal and Photo Actions */
+.tm-profile-page .sp-photo-action-avatar {
+  border: 3px solid var(--cms-primary, #7c3aed) !important;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--cms-primary, #7c3aed) 25%, transparent) !important;
+}
+
+.tm-profile-page .sp-photo-action-item:hover:not(.disabled) .sp-photo-action-icon-wrap {
+  color: var(--cms-primary, #7c3aed) !important;
+}
+
+.tm-profile-page .sp-crop-slider {
+  accent-color: var(--cms-primary, #7c3aed) !important;
+}
+
+.tm-profile-page .sp-crop-control-btn:hover {
+  background: color-mix(in srgb, var(--cms-primary, #7c3aed) 12%, transparent) !important;
+  color: var(--cms-primary, #7c3aed) !important;
+  border-color: var(--cms-primary, #7c3aed) !important;
+}
+
+/* Form Inputs Focus */
+.tm-profile-page input:focus,
+.tm-profile-page select:focus,
+.tm-profile-page textarea:focus {
+  border-color: var(--cms-primary, #7c3aed) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary, #7c3aed) 25%, transparent) !important;
 }
 
 /* Responsive adjustment */

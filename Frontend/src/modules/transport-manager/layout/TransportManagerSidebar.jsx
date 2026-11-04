@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import React from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -117,15 +117,8 @@ export const NAV_GROUPS = [
 ];
 
 export default function TransportManagerSidebar() {
-  const { sidebarOpen, sidebarCollapsed, closeSidebar, profile } = useTransportManager();
+  const { sidebarOpen, sidebarCollapsed, closeSidebar } = useTransportManager();
   const location = useLocation();
-  const navigate = useNavigate();
-
-  const initials = useMemo(() => {
-    const parts = String(profile?.name || "Transport Manager").trim().split(/\s+/);
-    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return (parts[0]?.[0] || "T").toUpperCase();
-  }, [profile?.name]);
 
   return (
     <>
@@ -135,8 +128,9 @@ export default function TransportManagerSidebar() {
         }`}
       >
         {/* Brand Header — In collapsed mode shows only crest icon matching Image 2 */}
-        <div className="cms-brand" title={sidebarCollapsed ? "Pirnav Colleges" : undefined}>
+        <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
+          <span className="tm-sidebar-tooltip">Pirnav Colleges</span>
         </div>
 
         {/* Navigation List */}
@@ -155,7 +149,6 @@ export default function TransportManagerSidebar() {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    title={sidebarCollapsed ? item.label : undefined}
                     onClick={() => {
                       if (window.innerWidth <= 1024) closeSidebar();
                     }}
@@ -163,6 +156,7 @@ export default function TransportManagerSidebar() {
                   >
                     <SidebarIcon icon={item.icon} />
                     <span className="cms-nav-label">{item.label}</span>
+                    <span className="tm-sidebar-tooltip">{item.label}</span>
                   </NavLink>
                 );
               })}
@@ -170,63 +164,6 @@ export default function TransportManagerSidebar() {
           ))}
         </nav>
 
-        {/* Sidebar Footer User Card */}
-        <div
-          className="cms-sidebar-footer"
-          onClick={() => {
-            navigate("/transport-manager/profile");
-            if (window.innerWidth <= 1024) closeSidebar();
-          }}
-          title={
-            sidebarCollapsed
-              ? `${profile?.name || "muzan kibutsuzi"} (${profile?.role || "Transport Manager"})`
-              : "View My Profile"
-          }
-        >
-          <div
-            className="cms-avatar cms-avatar-fallback"
-            style={{
-              width: 34,
-              height: 34,
-              fontSize: 13,
-              fontWeight: 700,
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "50%",
-              background: "var(--cms-primary, #6F8400)",
-              color: "#ffffff",
-            }}
-          >
-            {initials}
-          </div>
-          <div className="cms-sidebar-footer-text" style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "var(--cms-text, #232a1e)",
-              }}
-            >
-              {profile?.name || "muzan kibutsuzi"}
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: "var(--cms-muted, #727c65)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {profile?.role || "Transport Manager"}
-            </div>
-          </div>
-        </div>
       </aside>
     </>
   );
