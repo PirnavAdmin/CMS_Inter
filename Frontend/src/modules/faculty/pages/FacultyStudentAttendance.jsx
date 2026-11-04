@@ -133,20 +133,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [attProgram, setAttProgram] = useState("");
   const [attSection, setAttSection] = useState("");
 
-  // Cascading Dropdown Data Lists
+  // Cascading Dropdown Data Lists (strictly sourced from Faculty Timetable)
   const [attBoards, setAttBoards] = useState([]);
   const [attYears, setAttYears] = useState([]);
-  const [attLevels, setAttLevels] = useState([]);
-  const [attGroups, setAttGroups] = useState([]);
-  const [attPrograms, setAttPrograms] = useState([]);
-  const [attSections, setAttSections] = useState([]);
   const [allocatedSections, setAllocatedSections] = useState([]);
 
-  // Filter loading flags
-  const [loadingLevels, setLoadingLevels] = useState(false);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [loadingPrograms, setLoadingPrograms] = useState(false);
-  const [loadingSections, setLoadingSections] = useState(false);
+  // Timetable loading flag
+  const [loadingTimetable, setLoadingTimetable] = useState(true);
 
   // Central Attendance Ledger for Continuity across Daily & Monthly
   const [attendanceLedger, setAttendanceLedger] = useState({});
@@ -379,23 +372,27 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     setValidationResult(null);
   };
 
-  // 0. Fetch Faculty Timetable Allocated Sections (e.g. REG-1, Reg-1A, MPC-2A for Tanjiro Kamado)
+  // 0. Fetch Faculty Timetable Allocated Sections strictly from live timetable (Zero hardcoded fallbacks)
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
-    if (!staffId) return;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
+    if (!staffId) {
+      setLoadingTimetable(false);
+      return;
+    }
 
+    setLoadingTimetable(true);
     apiClient
       .get(`/api/v1/timetable/faculty/${staffId}`)
       .then((res) => {
         const slots = res.data?.data || res.data || [];
-        if (!isMounted || !Array.isArray(slots)) return;
-
-        setTimetableSlots(slots);
+        if (!isMounted) return;
+        const validSlots = Array.isArray(slots) ? slots : [];
+        setTimetableSlots(validSlots);
 
         const secMap = new Map();
-        slots.forEach((s) => {
+        validSlots.forEach((s) => {
           if (s.sectionId && !secMap.has(s.sectionId)) {
             secMap.set(s.sectionId, {
               sectionId: s.sectionId,
@@ -412,21 +409,28 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
           }
         });
         const list = Array.from(secMap.values());
-        if (isMounted) {
-          setAllocatedSections(list);
-          if (slots.length > 0) {
-            const first = slots[0];
-            if (first.boardId && !attBoard) setAttBoard(first.boardId);
-            if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
-          }
+        setAllocatedSections(list);
+        if (validSlots.length > 0) {
+          const first = validSlots[0];
+          if (first.boardId && !attBoard) setAttBoard(first.boardId);
+          if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
         }
       })
-      .catch((err) => console.warn("Could not load faculty timetable sections:", err));
+      .catch((err) => {
+        console.warn("Could not load faculty timetable sections:", err);
+        if (isMounted) {
+          setTimetableSlots([]);
+          setAllocatedSections([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingTimetable(false);
+      });
 
     return () => { isMounted = false; };
   }, [context?.profile?.staffId, context?.profileData?.staffId]);
 
-  // 1. Initialize Boards & Academic Years from Context or Live API
+  // 1. Initialize Boards & Academic Years from Context or Live API (for metadata display)
   useEffect(() => {
     let isMounted = true;
 
@@ -470,125 +474,6 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return () => { isMounted = false; };
   }, [academicCtx.boards, academicCtx.academicYears, academicCtx.selectedBoardId, academicCtx.selectedAcademicYearId]);
 
-  // 2. Load Academic Levels when Board changes
-  useEffect(() => {
-    if (!attBoard) return;
-    let isMounted = true;
-    setLoadingLevels(true);
-
-    apiClient
-      .get(`/api/v1/academic-levels?boardId=${attBoard}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttLevels(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching academic levels:", err))
-      .finally(() => { if (isMounted) setLoadingLevels(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard]);
-
-  // 3. Load Groups when Board, Academic Year, or Academic Level changes
-  useEffect(() => {
-    if (!attBoard) return;
-    let isMounted = true;
-    setLoadingGroups(true);
-
-    const params = new URLSearchParams();
-    if (attBoard) params.append("boardId", attBoard);
-    if (attYear) params.append("academicYearId", attYear);
-    if (attLevel) params.append("academicLevelId", attLevel);
-
-    apiClient
-      .get(`/api/v1/groups?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttGroups(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching groups:", err))
-      .finally(() => { if (isMounted) setLoadingGroups(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel]);
-
-  // 4. Load Programs strictly by Group
-  useEffect(() => {
-    if (!attGroup) {
-      setAttPrograms([]);
-      setAttProgram("");
-      setLoadingPrograms(false);
-      return;
-    }
-
-    let isMounted = true;
-    setLoadingPrograms(true);
-
-    apiClient
-      .get(`/api/v1/programs/group/${attGroup}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          const validList = Array.isArray(list) ? list : [];
-          setAttPrograms(validList);
-          if (attProgram && !validList.some((p) => String(p.programId || p.id) === String(attProgram))) {
-            setAttProgram("");
-          }
-        }
-      })
-      .catch(async (err) => {
-        console.warn("Error fetching programs by group, trying /api/v1/groups/{id}/programs fallback:", err);
-        try {
-          const fallbackRes = await apiClient.get(`/api/v1/groups/${attGroup}/programs`);
-          const fallbackList = fallbackRes.data?.data || fallbackRes.data || [];
-          if (isMounted) {
-            const validFallback = Array.isArray(fallbackList) ? fallbackList : [];
-            setAttPrograms(validFallback);
-            if (attProgram && !validFallback.some((p) => String(p.programId || p.id) === String(attProgram))) {
-              setAttProgram("");
-            }
-          }
-        } catch (fbErr) {
-          console.warn("Fallback failed too:", fbErr);
-          if (isMounted) setAttPrograms([]);
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoadingPrograms(false);
-      });
-
-    return () => { isMounted = false; };
-  }, [attGroup]);
-
-  // 5. Load Sections when Hierarchy changes
-  useEffect(() => {
-    let isMounted = true;
-    setLoadingSections(true);
-
-    const params = new URLSearchParams();
-    if (attBoard) params.append("boardId", attBoard);
-    if (attYear) params.append("academicYearId", attYear);
-    if (attLevel) params.append("academicLevelId", attLevel);
-    if (attGroup) params.append("groupId", attGroup);
-    if (attProgram) params.append("programId", attProgram);
-
-    apiClient
-      .get(`/api/v1/sections?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttSections(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching sections:", err))
-      .finally(() => { if (isMounted) setLoadingSections(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel, attGroup, attProgram]);
-
   // Format month label ("October, 2026")
   const monthlyMonthLabel = useMemo(() => {
     try {
@@ -613,79 +498,83 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return list;
   }, [monthlyDateValue]);
 
-  // Strictly constrain sections to Faculty's allocated timetable sections
-  const displaySections = useMemo(() => {
+  // 1. Group options strictly derived from faculty timetable slots
+  const timetableGroups = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
-    // First prioritize allocated sections for this level, group, and program
-    allocatedSections.forEach((s) => {
-      if (!attLevel || String(s.academicLevelId) === String(attLevel)) {
-        if (!attGroup || !s.groupId || String(s.groupId) === String(attGroup)) {
-          if (!attProgram || !s.programId || String(s.programId) === String(attProgram)) {
-            map.set(String(s.sectionId), { ...s, isAssigned: true });
-          }
-        }
-      }
-    });
-    if (map.size > 0) {
-      return Array.from(map.values());
-    }
-    // Fallback only if no allocated sections found
-    attSections.forEach((s) => {
-      const id = String(s.sectionId || s.id);
-      if (!map.has(id)) {
-        map.set(id, {
-          sectionId: s.sectionId || s.id,
-          sectionName: s.sectionName || s.name || `Section #${id}`,
-          academicLevelId: s.academicLevelId,
-          groupId: s.groupId,
-          programId: s.programId,
-          isAssigned: false,
+    timetableSlots.forEach((s) => {
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
+      const id = s.groupId;
+      const name = s.groupName || s.groupCode;
+      if (id && !map.has(String(id))) {
+        map.set(String(id), {
+          id: id,
+          groupId: id,
+          name: name || `Group ${id}`,
+          groupName: name || `Group ${id}`,
         });
       }
     });
     return Array.from(map.values());
-  }, [allocatedSections, attSections, attLevel, attGroup, attProgram]);
+  }, [timetableSlots, attLevel]);
 
-  // Derived options directly from faculty timetable slots (how many academic levels he is attending)
+  // 2. Academic Level options strictly derived from faculty timetable slots
   const timetableLevels = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return attLevels;
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
-    // Strictly display academic levels according to faculty timetable slots
-    const relevantSlots = attGroup
-      ? timetableSlots.filter((s) => !s.groupId || String(s.groupId) === String(attGroup))
-      : timetableSlots;
-
-    const sourceSlots = relevantSlots.length > 0 ? relevantSlots : timetableSlots;
-
-    sourceSlots.forEach((s) => {
+    timetableSlots.forEach((s) => {
+      if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
       const id = s.academicLevelId;
+      const name = s.levelName || s.academicLevelName;
       if (id && !map.has(String(id))) {
         map.set(String(id), {
-          academicLevelId: id,
           id: id,
-          levelName: s.levelName || s.academicLevelName || `Level ${id}`,
-          name: s.levelName || s.academicLevelName || `Level ${id}`,
+          academicLevelId: id,
+          name: name || `Level ${id}`,
+          levelName: name || `Level ${id}`,
         });
       }
     });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : (timetableSlots.length > 0 ? [] : attLevels);
-  }, [timetableSlots, attGroup, attLevels]);
+    return Array.from(map.values());
+  }, [timetableSlots, attGroup]);
 
-  const timetableSections = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return displaySections;
+  // 3. Program options strictly derived from faculty timetable slots
+  const timetablePrograms = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
     timetableSlots.forEach((s) => {
-      if (attLevel && String(s.academicLevelId) !== String(attLevel)) return;
+      if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
+      const id = s.programId;
+      const name = s.programName;
+      if (id && !map.has(String(id))) {
+        map.set(String(id), {
+          id: id,
+          programId: id,
+          name: name || `Program ${id}`,
+          programName: name || `Program ${id}`,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [timetableSlots, attGroup, attLevel]);
+
+  // 4. Section options strictly derived from faculty timetable slots
+  const timetableSections = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
+    const map = new Map();
+    timetableSlots.forEach((s) => {
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
       if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
       if (attProgram && s.programId && String(s.programId) !== String(attProgram)) return;
       const id = s.sectionId;
+      const name = s.sectionName;
       if (id && !map.has(String(id))) {
         map.set(String(id), {
-          sectionId: id,
           id: id,
-          sectionName: s.sectionName || `Section ${id}`,
-          name: s.sectionName || `Section ${id}`,
+          sectionId: id,
+          name: name || `Section ${id}`,
+          sectionName: name || `Section ${id}`,
           academicLevelId: s.academicLevelId,
           groupId: s.groupId,
           programId: s.programId,
@@ -695,96 +584,42 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         });
       }
     });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : displaySections;
-  }, [timetableSlots, attLevel, attGroup, attProgram, displaySections]);
+    return Array.from(map.values());
+  }, [timetableSlots, attLevel, attGroup, attProgram]);
 
-  const timetableGroups = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return attGroups;
-    const map = new Map();
-    timetableSlots.forEach((s) => {
-      if (attLevel && String(s.academicLevelId) !== String(attLevel)) return;
-      const id = s.groupId;
-      if (id && !map.has(String(id))) {
-        map.set(String(id), {
-          groupId: id,
-          id: id,
-          groupName: s.groupName || `Group ${id}`,
-          name: s.groupName || `Group ${id}`,
-        });
-      }
-    });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : attGroups;
-  }, [timetableSlots, attLevel, attGroups]);
-
-  const timetablePrograms = useMemo(() => {
-    // If no group is selected, no programs are available
-    if (!attGroup) return [];
-
-    // Strictly display programs belonging to this group
-    if (attPrograms && attPrograms.length > 0) {
-      return attPrograms.map((p) => ({
-        programId: p.programId || p.id,
-        id: p.programId || p.id,
-        programName: p.programName || p.name || `Program ${p.programId || p.id}`,
-        name: p.programName || p.name || `Program ${p.programId || p.id}`,
-      }));
-    }
-
-    // Fallback: extract matching programs from faculty timetable slots
-    if (timetableSlots && timetableSlots.length > 0) {
-      const map = new Map();
-      timetableSlots.forEach((s) => {
-        if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
-        if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
-        const id = s.programId;
-        if (id && !map.has(String(id))) {
-          map.set(String(id), {
-            programId: id,
-            id: id,
-            programName: s.programName || `Program ${id}`,
-            name: s.programName || `Program ${id}`,
-          });
-        }
-      });
-      return Array.from(map.values());
-    }
-
-    return [];
-  }, [attGroup, attPrograms, timetableSlots, attLevel]);
-
-  // Read-only fetched timetable info (Board, Academic Year, Group, Program)
+  // Read-only fetched timetable info (Board, Academic Year, Group, Program) - strictly derived
   const timetableInfo = useMemo(() => {
     const slot = (attLevel ? timetableSlots.find((s) => String(s.academicLevelId) === String(attLevel)) : null)
       || (attSection ? timetableSlots.find((s) => String(s.sectionId) === String(attSection)) : null)
       || timetableSlots[0];
 
-    const fallbackBoard = attBoards.find((b) => String(b.boardId || b.id) === String(attBoard))?.name
+    const fallbackBoard = academicCtx.selectedBoard?.name
+      || attBoards.find((b) => String(b.boardId || b.id) === String(attBoard))?.name
       || attBoards[0]?.name
-      || "Board of Intermediate Education, Andhra Pradesh";
-    const fallbackYear = attYears.find((y) => String(y.academicYearId || y.id) === String(attYear))?.academicYear
+      || "-";
+    const fallbackYear = academicCtx.selectedAcademicYear?.name
+      || attYears.find((y) => String(y.academicYearId || y.id) === String(attYear))?.academicYear
       || attYears[0]?.academicYear
-      || "2026-2027";
+      || "-";
 
     return {
       boardName: slot?.boardName || fallbackBoard,
-      academicYearName: slot?.academicYearName || fallbackYear,
-      groupName: slot?.groupName || "MPC",
-      programName: slot?.programName || "Regular",
-      boardId: slot?.boardId || attBoard || 1,
-      academicYearId: slot?.academicYearId || attYear || 9,
-      groupId: slot?.groupId || attGroup || 37,
-      programId: slot?.programId || attProgram || 1,
+      academicYearName: slot?.academicYearName || slot?.academicYear || fallbackYear,
+      groupName: slot?.groupName || (attGroup ? `Group ${attGroup}` : "-"),
+      programName: slot?.programName || (attProgram ? `Program ${attProgram}` : "-"),
+      boardId: slot?.boardId || attBoard || "",
+      academicYearId: slot?.academicYearId || attYear || "",
+      groupId: slot?.groupId || attGroup || "",
+      programId: slot?.programId || attProgram || "",
     };
-  }, [timetableSlots, attLevel, attSection, attBoard, attYear, attGroup, attProgram, attBoards, attYears]);
+  }, [timetableSlots, attLevel, attSection, attBoard, attYear, attGroup, attProgram, attBoards, attYears, academicCtx.selectedBoard, academicCtx.selectedAcademicYear]);
 
   // Section Name Helper
   const currentSectionName = useMemo(() => {
     const found = timetableSections.find((s) => String(s.sectionId || s.id) === String(attSection))
-      || displaySections.find((s) => String(s.sectionId || s.id) === String(attSection));
+      || allocatedSections.find((s) => String(s.sectionId || s.id) === String(attSection));
     return found ? (found.sectionName || found.name) : (attSection ? `Section #${attSection}` : "All Sections");
-  }, [timetableSections, displaySections, attSection]);
+  }, [timetableSections, allocatedSections, attSection]);
 
   // Handlers for Filter Changes auto-synchronized with Timetable
   const handleLevelChange = (levelVal) => {
@@ -815,10 +650,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     setDailyPage(1);
     setMonthlyPage(1);
 
-    if (!groupVal) {
-      setAttPrograms([]);
-      return;
-    }
+    if (!groupVal) return;
 
     const slot = timetableSlots.find((s) => String(s.groupId) === String(groupVal));
     if (slot) {
@@ -1011,8 +843,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       if (slot.boardId && !attBoard) setAttBoard(slot.boardId);
       if (slot.academicYearId && !attYear) setAttYear(slot.academicYearId);
     } else {
-      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val))
-        || attSections.find((s) => String(s.sectionId || s.id) === String(val));
+      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val));
       if (matched) {
         if (matched.academicLevelId && !attLevel) setAttLevel(matched.academicLevelId);
         if (matched.groupId && !attGroup) setAttGroup(matched.groupId);
@@ -1429,10 +1260,11 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         <style>{`
           .att-filters-single-line .cms-searchable-select-dropdown,
           .att-field-compact .cms-searchable-select-dropdown {
-            top: auto !important;
-            bottom: calc(100% + 4px) !important;
+            top: calc(100% + 4px) !important;
+            bottom: auto !important;
+            position: absolute !important;
             z-index: 99999 !important;
-            box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.15), 0 -8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
           }
           .att-filters-single-line .cms-field,
           .att-field-compact {
@@ -1445,7 +1277,8 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
           }
           .att-filters-single-line {
             position: relative;
-            z-index: 15;
+            z-index: 25;
+            overflow: visible !important;
           }
         `}</style>
         <div className="cms-card-body" style={{ overflow: "visible" }}>
@@ -1494,15 +1327,20 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               <label>Group</label>
               <FacultySearchableSelect
                 value={attGroup}
-                placeholder={loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group"}
-                disabled={loadingGroups && timetableGroups.length === 0}
-                options={[
-                  { id: "", name: loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group" },
-                  ...timetableGroups.map((g) => ({
-                    id: g.groupId || g.id,
-                    name: g.groupName || g.name || `Group ${g.groupId || g.id}`,
-                  })),
-                ]}
+                placeholder={loadingTimetable ? "Loading..." : (timetableGroups.length === 0 ? "No groups in timetable" : "Select Group")}
+                disabled={loadingTimetable || timetableGroups.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No groups assigned in timetable" : "No matching groups"}
+                options={
+                  timetableGroups.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Group" },
+                        ...timetableGroups.map((g) => ({
+                          id: g.groupId || g.id,
+                          name: g.groupName || g.name || `Group ${g.groupId || g.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleGroupChange(e.target.value)}
               />
             </div>
@@ -1511,15 +1349,20 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               <label>Academic Level</label>
               <FacultySearchableSelect
                 value={attLevel}
-                placeholder={loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level"}
-                disabled={loadingLevels && timetableLevels.length === 0}
-                options={[
-                  { id: "", name: loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level" },
-                  ...timetableLevels.map((l) => ({
-                    id: l.academicLevelId || l.id,
-                    name: l.levelName || l.name || `Level ${l.academicLevelId || l.id}`,
-                  })),
-                ]}
+                placeholder={loadingTimetable ? "Loading..." : (timetableLevels.length === 0 ? "No academic levels in timetable" : "Select Academic Level")}
+                disabled={loadingTimetable || timetableLevels.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No academic levels assigned in timetable" : "No matching academic levels"}
+                options={
+                  timetableLevels.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Academic Level" },
+                        ...timetableLevels.map((l) => ({
+                          id: l.academicLevelId || l.id,
+                          name: l.levelName || l.name || `Level ${l.academicLevelId || l.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleLevelChange(e.target.value)}
               />
             </div>
@@ -1528,15 +1371,20 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               <label>Program</label>
               <FacultySearchableSelect
                 value={attProgram}
-                placeholder={loadingPrograms && timetablePrograms.length === 0 ? "Loading..." : "Select Program"}
-                disabled={loadingPrograms && timetablePrograms.length === 0}
-                options={[
-                  { id: "", name: loadingPrograms && timetablePrograms.length === 0 ? "Loading..." : "Select Program" },
-                  ...timetablePrograms.map((p) => ({
-                    id: p.programId || p.id,
-                    name: p.programName || p.name || `Program ${p.programId || p.id}`,
-                  })),
-                ]}
+                placeholder={loadingTimetable ? "Loading..." : (timetablePrograms.length === 0 ? (!attGroup ? "Select Group first" : "No programs in timetable") : "Select Program")}
+                disabled={loadingTimetable || timetablePrograms.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No programs assigned in timetable" : (!attGroup ? "Select Group first" : "No matching programs")}
+                options={
+                  timetablePrograms.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Program" },
+                        ...timetablePrograms.map((p) => ({
+                          id: p.programId || p.id,
+                          name: p.programName || p.name || `Program ${p.programId || p.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleProgramChange(e.target.value)}
               />
             </div>
@@ -1545,15 +1393,20 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
               <label>Section</label>
               <FacultySearchableSelect
                 value={attSection}
-                placeholder={loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section"}
-                disabled={loadingSections && timetableSections.length === 0}
-                options={[
-                  { id: "", name: loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section" },
-                  ...timetableSections.map((s) => ({
-                    id: s.sectionId || s.id,
-                    name: s.isAssigned ? `${s.sectionName || s.name}` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`),
-                  })),
-                ]}
+                placeholder={loadingTimetable ? "Loading..." : (timetableSections.length === 0 ? "No sections in timetable" : "Select Section")}
+                disabled={loadingTimetable || timetableSections.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No sections assigned in timetable" : "No matching sections"}
+                options={
+                  timetableSections.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Section" },
+                        ...timetableSections.map((s) => ({
+                          id: s.sectionId || s.id,
+                          name: s.sectionName || s.name || `Section ${s.sectionId || s.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleSectionChange(e.target.value)}
               />
             </div>
@@ -1592,18 +1445,32 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
           <div className="sp-att-notice-card">
             <div className="sp-att-notice-content">
               <div className="sp-att-notice-icon">
-                {fetchingDaily ? (
+                {fetchingDaily || loadingTimetable ? (
                   <Loader2 size={32} className="spin" style={{ color: "var(--cms-primary, #6F8400)" }} />
+                ) : timetableSlots.length === 0 ? (
+                  <AlertCircle size={32} style={{ color: "var(--cms-danger, #ef4444)" }} />
                 ) : (
                   <ClipboardCheck size={32} />
                 )}
               </div>
               <div className="sp-att-notice-text">
-                <h3>{fetchingDaily ? "Loading Student Attendance..." : "Select Details & Student Attendance"}</h3>
+                <h3>
+                  {fetchingDaily
+                    ? "Loading Student Attendance..."
+                    : loadingTimetable
+                      ? "Loading Faculty Timetable..."
+                      : timetableSlots.length === 0
+                        ? "No Timetable Assigned"
+                        : "Select Details & Student Attendance"}
+                </h3>
                 <p>
                   {fetchingDaily
                     ? `Retrieving attendance sheet for ${currentSectionName} on ${attDate}...`
-                    : "Please select your Group, Academic Level, Program, and Section from your assigned timetable above to load students and record attendance."}
+                    : loadingTimetable
+                      ? "Fetching assigned timetable classes..."
+                      : timetableSlots.length === 0
+                        ? "No teaching classes or sections are assigned to your timetable schedule. Student attendance can only be recorded for sections allocated in your timetable."
+                        : "Please select your Group, Academic Level, Program, and Section from your assigned timetable above to load students and record attendance."}
                 </p>
               </div>
             </div>

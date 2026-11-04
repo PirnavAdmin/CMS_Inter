@@ -197,8 +197,26 @@ export function TransportManagerProvider({ children }) {
   const { selectedCampus } = useCampusContext?.() || {};
   const academicContext = useAcademicContext?.() || {};
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth <= 1024;
+    }
+    return false;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window === "undefined") return;
+      if (window.innerWidth <= 1024) {
+        setSidebarCollapsed(true);
+      } else {
+        setSidebarCollapsed(false);
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
@@ -217,36 +235,23 @@ export function TransportManagerProvider({ children }) {
 
   const [revision, setRevision] = useState(0);
 
-  // Profile data from storage / API
+  // Profile data directly from authenticated user / API
   const [staffProfile, setStaffProfile] = useState(() => {
-    try {
-      const auth = getAuthUser();
-      const saved = localStorage.getItem("tm_profile_data");
-      const base = auth
-        ? {
-            ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
-            ...auth,
-            id: auth.staffId || auth.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.id,
-            staffId: auth.staffId || auth.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.staffId,
-            employeeId: auth.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
-            name: auth.name || auth.fullName || DEFAULT_TRANSPORT_MANAGER_PROFILE.name,
-            fullName: auth.fullName || auth.name || DEFAULT_TRANSPORT_MANAGER_PROFILE.fullName,
-            email: auth.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
-            role: auth.designation || auth.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.role,
-            designation: auth.designation || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
-          }
-        : DEFAULT_TRANSPORT_MANAGER_PROFILE;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (!auth || String(parsed.id) === String(auth.id) || parsed.email === auth.email || String(parsed.staffId) === String(auth.staffId)) {
-          return { ...base, ...parsed };
+    const auth = getAuthUser();
+    return auth
+      ? {
+          ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
+          ...auth,
+          id: auth.staffId || auth.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.id,
+          staffId: auth.staffId || auth.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.staffId,
+          employeeId: auth.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
+          name: auth.name || auth.fullName || DEFAULT_TRANSPORT_MANAGER_PROFILE.name,
+          fullName: auth.fullName || auth.name || DEFAULT_TRANSPORT_MANAGER_PROFILE.fullName,
+          email: auth.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
+          role: auth.designation || auth.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.role,
+          designation: auth.designation || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
         }
-      }
-      return base;
-    } catch (e) {
-      console.warn("Could not read saved tm profile:", e);
-    }
-    return DEFAULT_TRANSPORT_MANAGER_PROFILE;
+      : DEFAULT_TRANSPORT_MANAGER_PROFILE;
   });
 
   const effectiveStaffId = useMemo(() => {
@@ -290,13 +295,6 @@ export function TransportManagerProvider({ children }) {
               photoPath: data.photoPath || rawPhoto || prev.photoPath || "",
               profilePhoto: data.profilePhoto || rawPhoto || prev.profilePhoto || "",
             };
-            try {
-              const toPersist = { ...merged };
-              delete toPersist.photoUrl;
-              delete toPersist.photoPath;
-              delete toPersist.profilePhoto;
-              localStorage.setItem("tm_profile_data", JSON.stringify(toPersist));
-            } catch {}
             return merged;
           });
 
@@ -328,13 +326,7 @@ export function TransportManagerProvider({ children }) {
   }, [effectiveStaffId]);
 
   // Biometric punch state
-  const [punchState, setPunchState] = useState(() => {
-    try {
-      const saved = localStorage.getItem("staff_punch_state");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return { isPunchedIn: false, inTime: null, outTime: null, hoursWorked: "--" };
-  });
+  const [punchState, setPunchState] = useState({ isPunchedIn: false, inTime: null, outTime: null, hoursWorked: "--" });
 
   useEffect(() => {
     attendanceService
@@ -352,9 +344,7 @@ export function TransportManagerProvider({ children }) {
             hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunched) : "--",
           };
           setPunchState(next);
-          try {
-            localStorage.setItem("staff_punch_state", JSON.stringify(next));
-          } catch {}
+
         }
       })
       .catch((err) => {
@@ -362,22 +352,7 @@ export function TransportManagerProvider({ children }) {
       });
   }, []);
 
-  // Listen to profile updates from other components
-  useEffect(() => {
-    const handleStorage = (e) => {
-      if (e.key === "tm_profile_data" && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          delete parsed.photoUrl;
-          delete parsed.photoPath;
-          delete parsed.profilePhoto;
-          setStaffProfile((prev) => ({ ...prev, ...parsed }));
-        } catch {}
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+
 
   // Listen to in-memory photo update events
   useEffect(() => {
@@ -397,17 +372,7 @@ export function TransportManagerProvider({ children }) {
   }, []);
 
   const updateProfile = useCallback((patch) => {
-    setStaffProfile((prev) => {
-      const updated = { ...prev, ...patch };
-      try {
-        const toPersist = { ...updated };
-        delete toPersist.photoUrl;
-        delete toPersist.photoPath;
-        delete toPersist.profilePhoto;
-        localStorage.setItem("tm_profile_data", JSON.stringify(toPersist));
-      } catch {}
-      return updated;
-    });
+    setStaffProfile((prev) => ({ ...prev, ...patch }));
   }, []);
 
   // Normalised profile object
@@ -589,14 +554,11 @@ export function TransportManagerProvider({ children }) {
   }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, revision, filterByScope]);
 
   const toggleSidebar = useCallback(() => {
-    if (typeof window !== "undefined" && window.innerWidth <= 1024) {
-      setSidebarOpen((prev) => !prev);
-    } else {
-      setSidebarCollapsed((prev) => !prev);
-    }
+    setSidebarCollapsed((prev) => !prev);
   }, []);
 
   const closeSidebar = useCallback(() => {
+    setSidebarCollapsed(true);
     setSidebarOpen(false);
   }, []);
 
@@ -644,12 +606,39 @@ export function TransportManagerProvider({ children }) {
   );
 }
 
+const DEFAULT_FALLBACK_CONTEXT = {
+  sidebarCollapsed: false,
+  sidebarOpen: false,
+  toggleSidebar: () => {},
+  closeSidebar: () => {},
+  profile: DEFAULT_TRANSPORT_MANAGER_PROFILE,
+  updateProfile: () => {},
+  showToast: () => {},
+  authorizedCampuses: [{ id: 1, campusId: 1, name: "Main Campus (HQ)", code: "MAIN" }],
+  authorizedBoards: [{ id: 1, boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh" }],
+  selectedBoardId: "1",
+  setSelectedBoardId: () => {},
+  vehicles: [],
+  drivers: [],
+  assignments: [],
+  maintenance: [],
+  routes: [],
+  pickupPoints: [],
+  attendants: [],
+  trips: [],
+  studentAssignments: [],
+  dashboardMetrics: null,
+  punchState: { isPunchedIn: false, inTime: null, outTime: null, hoursWorked: "--" },
+  setPunchState: () => {},
+  loading: false,
+  error: null,
+  toast: null,
+  refreshAll: () => {},
+};
+
 export function useTransportManager() {
   const context = useContext(TransportManagerContext);
-  if (!context) {
-    throw new Error("useTransportManager must be used within TransportManagerProvider");
-  }
-  return context;
+  return context || DEFAULT_FALLBACK_CONTEXT;
 }
 
 export function useTransportManagerSafe() {
