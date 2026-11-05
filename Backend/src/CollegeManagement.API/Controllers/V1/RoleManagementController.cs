@@ -29,8 +29,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all roles with optional card statistics (user count, active status).
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Super Admin,Admin")]
-        public async Task<IActionResult> GetAllRoles([FromQuery] bool includeCards = false, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
+        [Authorize]
+        public async Task<IActionResult> GetAllRoles([FromQuery] bool includeCards = false, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null, [FromQuery] string? staffType = null, [FromQuery] bool includeInactive = false)
         {
             try
             {
@@ -40,7 +40,7 @@ namespace CollegeManagement.API.Controllers.V1
                     return Ok(new { success = true, data = cards });
                 }
 
-                var roles = await _roleManagementService.GetAllRolesAsync();
+                var roles = await _roleManagementService.GetAllRolesAsync(staffType, includeInactive);
                 return Ok(new { success = true, data = roles });
             }
             catch (Exception ex)

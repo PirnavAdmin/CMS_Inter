@@ -83,6 +83,11 @@ export const getStaffById = (id) => {
   return api.get(`/api/v1/staff/${id}`);
 };
 
+// 4b. Get single staff by Employee ID
+export const getStaffByEmployeeId = (employeeId) => {
+  return api.get(`/api/v1/staff/by-employee-id/${encodeURIComponent(employeeId)}`);
+};
+
 // 5. Create new staff member
 export const createStaff = (data) => {
   return api.post("/api/v1/staff", data);

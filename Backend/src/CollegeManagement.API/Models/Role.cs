@@ -20,6 +20,9 @@ namespace CollegeManagement.API.Models
         [StringLength(255)]
         public string? Description { get; set; }
 
+        [StringLength(20)]
+        public string StaffType { get; set; } = "Both";
+
         public bool IsSystemRole { get; set; } = false;
 
         public bool IsActive { get; set; } = true;

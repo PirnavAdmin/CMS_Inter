@@ -20,10 +20,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class MarksController : ControllerBase
     {
         private readonly IMarksService _marksService;
+        private readonly INotificationService _notificationService;
 
-        public MarksController(IMarksService marksService)
+        public MarksController(IMarksService marksService, INotificationService notificationService)
         {
             _marksService = marksService;
+            _notificationService = notificationService;
         }
 
         [HttpGet]
@@ -72,7 +74,41 @@ namespace CollegeManagement.API.Controllers.V1
                     }
                 }
             }
-            return Ok(await _marksService.BulkSaveMarksAsync(dto));
+            var saveResult = await _marksService.BulkSaveMarksAsync(dto);
+            try
+            {
+                var staffName = User.Identity?.Name ?? "Faculty";
+                var examId = dto?.Marks?.FirstOrDefault()?.ExaminationId;
+                await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                // Check for student absent during examination
+                var absentMarks = dto?.Marks?.Where(m => m.IsAbsent && m.StudentId > 0).ToList();
+                if (absentMarks != null && absentMarks.Any())
+                {
+                    foreach (var absent in absentMarks)
+                    {
+                        var studentName = !string.IsNullOrWhiteSpace(absent.StudentName) ? absent.StudentName : $"Student #{absent.StudentId}";
+                        await _notificationService.SendToStudentAsync(
+                            absent.StudentId,
+                            "Examination Absence Notice",
+                            $"You were marked ABSENT for examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/student/examinations");
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Parent" },
+                            null,
+                            "Exam Absence Alert",
+                            $"Alert: Your ward {studentName} was marked ABSENT for Examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/parent/dashboard");
+                    }
+                }
+            }
+            catch { }
+            return Ok(saveResult);
         }
 
         [HttpPut("{id:int}")]
@@ -121,11 +157,77 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpPost("verify")]
         [Authorize(Roles = "Admin,Super Admin,Principal")]
-        public async Task<IActionResult> VerifyMarks([FromBody] VerifyMarksDto dto) => Ok(new { Count = await _marksService.VerifyMarksAsync(dto) });
+        public async Task<IActionResult> VerifyMarks([FromBody] VerifyMarksDto dto)
+        {
+            var count = await _marksService.VerifyMarksAsync(dto);
+            try
+            {
+                await _notificationService.SendToRoleAsync("Faculty", null, "Marks Approved", $"Examination #{dto.ExaminationId} marks have been verified & approved by Admin.", "Marks", dto.ExaminationId, "/dashboard/faculty/marks");
+            }
+            catch { }
+            return Ok(new { Count = count });
+        }
 
         [HttpPatch("publish")]
         [Authorize(Roles = "Admin,Super Admin,Principal")]
-        public async Task<IActionResult> PublishMarks([FromBody] PublishMarksDto dto) => Ok(new { Count = await _marksService.PublishMarksAsync(dto) });
+        public async Task<IActionResult> PublishMarks([FromBody] PublishMarksDto dto)
+        {
+            var count = await _marksService.PublishMarksAsync(dto);
+            try
+            {
+                await _notificationService.SendToRoleAsync("Student", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published. Check your grades in student portal.", "Marks", dto.ExaminationId, "/student/results");
+                await _notificationService.SendToRoleAsync("Parent", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published.", "Marks", dto.ExaminationId, "/parent/dashboard");
+            }
+            catch { }
+            return Ok(new { Count = count });
+        }
+
+        /// <summary>
+        /// Sends pending marks submission reminder to Faculty.
+        /// </summary>
+        [HttpPost("send-submission-reminder")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Exam Cell,Examination Cell")]
+        public async Task<IActionResult> SendMarksSubmissionReminder(
+            [FromQuery] int examinationId,
+            [FromQuery] string? subjectName = null,
+            [FromQuery] int? staffId = null)
+        {
+            if (examinationId <= 0) return BadRequest(new { success = false, message = "Examination ID is required." });
+
+            try
+            {
+                var subjectText = !string.IsNullOrWhiteSpace(subjectName) ? $" for subject '{subjectName}'" : "";
+                var message = $"Reminder: Marks entry submission{subjectText} is PENDING for Examination #{examinationId}. Please enter and submit marks promptly.";
+
+                if (staffId.HasValue && staffId.Value > 0)
+                {
+                    await _notificationService.SendToStaffAsync(
+                        staffId.Value,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+                else
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Faculty", "Teacher", "Staff" },
+                        null,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+
+                return Ok(new { success = true, message = "Marks submission pending reminder sent successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
 
         [HttpGet("summary/{examinationId:int}")]
         public async Task<IActionResult> GetSummary(int examinationId) => Ok(await _marksService.GetSummaryAsync(examinationId));

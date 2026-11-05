@@ -5,6 +5,7 @@ import { PermissionProvider, useFacultyPermissions } from "./PermissionContext.j
 import { FacultyProvider } from "./FacultyContext.jsx";
 import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";
@@ -81,25 +82,73 @@ function PermissionRoute({ permission, moduleName, children }) {
   return hasAccess ? children : <AccessDeniedNotice moduleName={moduleName || "this module"} />;
 }
 
+export function OnboardingRoute({ children }) {
+  const authUser = getAuthUser();
+  let profileStatus = authUser?.profileStatus;
+  if (!profileStatus) {
+    try {
+      const cached = localStorage.getItem("staff_profile_data");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        profileStatus = parsed?.profileStatus;
+      }
+    } catch {}
+  }
+  const roleLower = String(authUser?.role || "").toLowerCase();
+  const staffTypeLower = String(authUser?.staffType || "").toLowerCase();
+  const isFaculty =
+    roleLower.includes("teach") ||
+    roleLower.includes("faculty") ||
+    roleLower.includes("professor") ||
+    roleLower.includes("lecturer") ||
+    roleLower.includes("staff") ||
+    staffTypeLower.includes("teach") ||
+    Boolean(authUser?.staffId) ||
+    Boolean(authUser?.employeeId);
+  let compPct = Number(authUser?.profileCompletionPercentage || 0);
+  try {
+    const cached = localStorage.getItem("staff_profile_data");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (!profileStatus && parsed?.profileStatus) profileStatus = parsed.profileStatus;
+      if (!compPct && (parsed?.profileCompletion || parsed?.profileCompletionPercentage)) {
+        compPct = Number(parsed.profileCompletion || parsed.profileCompletionPercentage || 0);
+      }
+    }
+  } catch {}
+
+  const isCompleted =
+    String(profileStatus || "").toLowerCase() === "completed" ||
+    String(profileStatus || "").toLowerCase() === "approved" ||
+    String(profileStatus || "").toLowerCase() === "submitted" ||
+    authUser?.isOnboarded === true ||
+    compPct >= 50;
+
+  if (isFaculty && !isCompleted) {
+    return <Navigate to="/faculty-dashboard/profile" replace />;
+  }
+  return children;
+}
+
 export function FacultyPortalContent() {
   return (
     <ErrorBoundary>
       <Routes>
         <Route path="/" element={<FacultyDashboard />}>
-          <Route index element={<PermissionRoute permission={routePermissions[""]} moduleName="Faculty Dashboard"><FacultyDashboardHome /></PermissionRoute>} />
+          <Route index element={<OnboardingRoute><PermissionRoute permission={routePermissions[""]} moduleName="Faculty Dashboard"><FacultyDashboardHome /></PermissionRoute></OnboardingRoute>} />
           <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]} moduleName="My Profile"><FacultyProfile /></PermissionRoute>} />
-          <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]} moduleName="Timetable"><FacultyTimetable /></PermissionRoute>} />
-          <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]} moduleName="My Classes"><FacultyClasses /></PermissionRoute>} />
-          <Route path="attendance" element={<PermissionRoute permission={routePermissions["attendance"]} moduleName="Student Attendance"><FacultyStudentAttendance /></PermissionRoute>} />
-          <Route path="monthly-report" element={<PermissionRoute permission={routePermissions["monthly-report"]} moduleName="Attendance Monthly Report"><FacultyStudentAttendance initialView="monthly" /></PermissionRoute>} />
-          <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]} moduleName="Marks Entry"><FacultyMarks /></PermissionRoute>} />
-          <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]} moduleName="Exam Duties"><FacultyExamDuties /></PermissionRoute>} />
-          <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]} moduleName="My Attendance"><FacultyMyAttendance /></PermissionRoute>} />
-          <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]} moduleName="Staff Leave"><FacultyLeave /></PermissionRoute>} />
-          <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]} moduleName="Salary & Payslips"><FacultyPayslips /></PermissionRoute>} />
-          <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]} moduleName="Holidays"><FacultyHolidays /></PermissionRoute>} />
-          <Route path="settings" element={<PermissionRoute permission={routePermissions["settings"]} moduleName="Settings"><FacultySettings /></PermissionRoute>} />
-          <Route path="reimbursements" element={<PermissionRoute permission={routePermissions["reimbursements"]} moduleName="Reimbursements"><FacultyReimbursement /></PermissionRoute>} />
+          <Route path="timetable" element={<OnboardingRoute><PermissionRoute permission={routePermissions["timetable"]} moduleName="Timetable"><FacultyTimetable /></PermissionRoute></OnboardingRoute>} />
+          <Route path="classes" element={<OnboardingRoute><PermissionRoute permission={routePermissions["classes"]} moduleName="My Classes"><FacultyClasses /></PermissionRoute></OnboardingRoute>} />
+          <Route path="attendance" element={<OnboardingRoute><PermissionRoute permission={routePermissions["attendance"]} moduleName="Student Attendance"><FacultyStudentAttendance /></PermissionRoute></OnboardingRoute>} />
+          <Route path="monthly-report" element={<OnboardingRoute><PermissionRoute permission={routePermissions["monthly-report"]} moduleName="Attendance Monthly Report"><FacultyStudentAttendance initialView="monthly" /></PermissionRoute></OnboardingRoute>} />
+          <Route path="marks" element={<OnboardingRoute><PermissionRoute permission={routePermissions["marks"]} moduleName="Marks Entry"><FacultyMarks /></PermissionRoute></OnboardingRoute>} />
+          <Route path="exam-duties" element={<OnboardingRoute><PermissionRoute permission={routePermissions["exam-duties"]} moduleName="Exam Duties"><FacultyExamDuties /></PermissionRoute></OnboardingRoute>} />
+          <Route path="my-attendance" element={<OnboardingRoute><PermissionRoute permission={routePermissions["my-attendance"]} moduleName="My Attendance"><FacultyMyAttendance /></PermissionRoute></OnboardingRoute>} />
+          <Route path="leave" element={<OnboardingRoute><PermissionRoute permission={routePermissions["leave"]} moduleName="Staff Leave"><FacultyLeave /></PermissionRoute></OnboardingRoute>} />
+          <Route path="payslips" element={<OnboardingRoute><PermissionRoute permission={routePermissions["payslips"]} moduleName="Salary & Payslips"><FacultyPayslips /></PermissionRoute></OnboardingRoute>} />
+          <Route path="holidays" element={<OnboardingRoute><PermissionRoute permission={routePermissions["holidays"]} moduleName="Holidays"><FacultyHolidays /></PermissionRoute></OnboardingRoute>} />
+          <Route path="settings" element={<OnboardingRoute><PermissionRoute permission={routePermissions["settings"]} moduleName="Settings"><FacultySettings /></PermissionRoute></OnboardingRoute>} />
+          <Route path="reimbursements" element={<OnboardingRoute><PermissionRoute permission={routePermissions["reimbursements"]} moduleName="Reimbursements"><FacultyReimbursement /></PermissionRoute></OnboardingRoute>} />
           <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
         </Route>
       </Routes>

@@ -337,6 +337,7 @@ namespace CollegeManagement.API.Data
         // Multi-Campus / Multi-Board Staff Assignments
         public DbSet<StaffCampusAssignment> StaffCampusAssignments { get; set; }
         public DbSet<StaffBoardAssignment> StaffBoardAssignments { get; set; }
+        public DbSet<CollegeManagement.API.Models.Staff.StaffTransfer> StaffTransfers { get; set; }
 
         // Transport
         public DbSet<TransportAttendant> TransportAttendants { get; set; } = null!;
@@ -1964,7 +1965,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffCampusAssignment>(entity =>
             {
                 entity.ToTable("StaffCampusAssignments");
-                entity.HasIndex(e => new { e.StaffId, e.CampusId }).IsUnique();
+                entity.HasIndex(e => new { e.StaffId, e.CampusId });
                 entity.HasOne(e => e.Staff)
                     .WithMany(s => s.StaffCampusAssignments)
                     .HasForeignKey(e => e.StaffId)
@@ -1987,6 +1988,25 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 entity.HasOne(e => e.Board)
                     .WithMany()
                     .HasForeignKey(e => e.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Staff Transfers Configuration
+            modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffTransfer>(entity =>
+            {
+                entity.ToTable("StaffTransfers");
+                entity.HasIndex(e => e.TransferOrderNumber).IsUnique();
+                entity.HasOne(e => e.Staff)
+                    .WithMany()
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.FromCampus)
+                    .WithMany()
+                    .HasForeignKey(e => e.FromCampusId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.ToCampus)
+                    .WithMany()
+                    .HasForeignKey(e => e.ToCampusId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

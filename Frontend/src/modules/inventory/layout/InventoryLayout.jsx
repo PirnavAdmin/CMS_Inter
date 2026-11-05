@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -112,13 +113,7 @@ export default function InventoryLayout({ children }) {
                 year: "numeric",
               })}
             </span>
-            <NavLink
-              to="/inventory-dashboard/notifications"
-              aria-label={`${unread} unread notifications`}
-            >
-              <Bell size={19} />
-              {unread > 0 && <b>{unread}</b>}
-            </NavLink>
+            <NotificationBell />
             <NavLink to="/inventory-dashboard/profile" className="ip-user">
               <span>IM</span>
               <div>

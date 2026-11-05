@@ -55,5 +55,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<List<StaffSubjectAllocationResponseDto>> GetStaffSubjectAllocationsAsync(int staffId);
         Task<StaffWorkloadResponseDto?> GetStaffWorkloadAsync(int staffId);
         Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id);
+        Task<(byte[] Bytes, string ContentType, string FileName)> GenerateOfferLetterPdfAsync(int id);
+        Task<StaffExperienceSummaryDto> GetStaffExperienceSummaryAsync(int id);
     }
 }

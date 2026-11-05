@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RotateCw, Camera, KeyRound, Upload, Download, Eye, EyeOff, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint } from "lucide-react";
+import { RotateCw, Camera, KeyRound, Upload, Download, Eye, EyeOff, FileText, LayoutGrid, List, Search, RefreshCw, FolderOpen, Trash2, UserRound, House, Landmark, GraduationCap, LockKeyhole, Pencil, Save, CalendarDays, Phone, Mail, MapPin, Building2, Globe, BookOpen, Users, Hash, Layers, Percent, Heart, Fingerprint, ChevronLeft, ChevronRight } from "lucide-react";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { ConfirmDialog, Modal, SkeletonPage, Toast } from "@/shared/components/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -53,6 +53,13 @@ const groups = [
   ["contact", "Contact & Address", House, ["address", "city", "district", "state", "pincode", "fatherMobile", "motherMobile", "guardianMobile", "parentGuardianEmail"]],
   ["previousSchool", "Previous School", Landmark, ["previousSchool", "previousHallTicketNumber", "previousBoard", "previousYearOfPassing", "previousPercentage"]],
 ];
+const profileSteps = [
+  ["personal", "Personal Details"],
+  ["contact", "Contact & Address"],
+  ["previousSchool", "Previous School"],
+  ["academic", "Academic Information"],
+  ["documents", "Documents"],
+];
 const documents = [
   ["Birth Certificate", "BirthCertificate", "birthCertificate"], ["Transfer Certificate", "TransferCertificate", "transferCertificate"],
   ["Study Certificate", "StudyCertificate", "studyCertificate"], ["Aadhaar Document", "AadhaarDocument", "aadhaarDocument"],
@@ -80,6 +87,36 @@ const names = new Set(["nationality", "religion", "city", "district", "state"]);
 const bloodGroups = new Set(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]);
 const display = (value, assignment = false) => value === null || value === undefined || value === "" ? (assignment ? "Not Assigned" : "Not Provided") : String(value);
 const dateDisplay = (value) => value ? new Date(value).toLocaleDateString("en-IN") : "Not Provided";
+const isValidEmail = (value) => {
+  const [localPart, ...domainParts] = value.split("@");
+  const domain = domainParts.length === 1 ? domainParts[0] : "";
+  return Boolean(
+    localPart &&
+    domain &&
+    !/\s/.test(value) &&
+    !localPart.startsWith(".") &&
+    !localPart.endsWith(".") &&
+    !localPart.includes("..") &&
+    /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(localPart) &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/.test(domain),
+  );
+};
+
+const sanitizeNumericField = (name, rawValue) => {
+  const value = String(rawValue ?? "");
+  if (mobiles.has(name)) return value.replace(/\D/g, "").slice(0, 10);
+  if (name === "aadhaarNumber") return value.replace(/\D/g, "").slice(0, 12);
+  if (name === "pincode") return value.replace(/\D/g, "").slice(0, 6);
+  if (name === "previousYearOfPassing") return value.replace(/\D/g, "").slice(0, 4);
+  if (name === "previousPercentage") {
+    const digitsAndDecimal = value.replace(/[^\d.]/g, "");
+    const decimalIndex = digitsAndDecimal.indexOf(".");
+    return decimalIndex < 0
+      ? digitsAndDecimal
+      : `${digitsAndDecimal.slice(0, decimalIndex)}.${digitsAndDecimal.slice(decimalIndex + 1).replace(/\./g, "")}`;
+  }
+  return value;
+};
 
 const validateField = (name, rawValue) => {
   const value = String(rawValue ?? "").trim();
@@ -87,7 +124,7 @@ const validateField = (name, rawValue) => {
   if (name === "bloodGroup" && !bloodGroups.has(value)) return "Select a valid blood group.";
   if (name === "aadhaarNumber" && !/^\d{12}$/.test(value)) return "Aadhaar number must contain exactly 12 digits.";
   if (mobiles.has(name) && !/^\d{10}$/.test(value)) return "Mobile number must contain exactly 10 digits.";
-  if (emails.has(name) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address.";
+  if (emails.has(name) && !isValidEmail(value)) return "Enter a valid email address.";
   if (names.has(name) && (!/^[A-Za-z ]+$/.test(value) || value.length > 60)) return "Use letters and spaces only (maximum 60 characters).";
   if (name === "pincode" && !/^\d{6}$/.test(value)) return "Pincode must contain exactly 6 digits.";
   if (name === "address" && value.length > 250) return "Address must not exceed 250 characters.";
@@ -105,10 +142,17 @@ export default function StudentProfile() {
   latestNavigation.current = navigationKey;
   const { profile, loading, error, refreshProfile, photoUrl, photoError, photoLoading, applyPhotoRemoval } = useStudentProfile();
   const [draft, setDraft] = useState({});
-  const [editingSection, setEditingSection] = studentRouteValue(navigation, "edit", null, (value) => groups.some(([id, , , keys]) => id === value && keys.some((key) => editableFields.includes(key))));
+  const requestedEditStep = navigation.params.get("edit");
+  const editingSection = profileSteps.some(([id]) => id === requestedEditStep) ? requestedEditStep : null;
+  const requestedTab = navigation.params.get("tab");
+  const activeTab = editingSection || (profileSteps.some(([id]) => id === requestedTab) ? requestedTab : "personal");
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ message: "", type: "success" });
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [pendingDocuments, setPendingDocuments] = useState([]);
+  const profileBaseline = useRef(null);
+  const saveRequestLock = useRef(false);
   const passwordOpen = navigation.params.get("action") === "password";
   const setPasswordOpen = (open) => navigation.update({ action: open ? "password" : null });
   const [passwords, setPasswords] = useState({ oldPassword: "", newPassword: "", confirmPassword: "" });
@@ -222,40 +266,136 @@ export default function StudentProfile() {
   const initials = useMemo(() => String(profile?.studentName || "Student").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase(), [profile]);
   const notify = (message, type = "success") => setToast({ message, type });
   const sectionFields = groups.find(([id]) => id === editingSection)?.[3].filter((key) => editableFields.includes(key)) ?? [];
+  const isDirty = useMemo(() => {
+    const baseline = profileBaseline.current;
+    return pendingDocuments.length > 0 || Boolean(baseline && editableFields.some((key) => String(draft[key] ?? "").trim() !== String(baseline[key] ?? "").trim()));
+  }, [draft, pendingDocuments]);
+  const editKey = String(profile?.studentId || "self");
   const beginEdit = (id) => {
-    if (editingSection || saving) return;
-    setDraft(Object.fromEntries(editableFields.map((key) => [key, profile?.[key] ?? ""])));
-    setErrors({}); setEditingSection(id);
+    if (editingSection || saving || !profile) return;
+    const initialDraft = Object.fromEntries(editableFields.map((key) => [key, profile?.[key] ?? ""]));
+    profileBaseline.current = { ...initialDraft };
+    initializedEdit.current = editKey;
+    setDraft(initialDraft);
+    setPendingDocuments([]);
+    setErrors({});
+    setDocumentError("");
+    navigation.update({ edit: id, tab: null });
   };
   useEffect(() => {
-    if (!editingSection) { initializedEdit.current = ""; return; }
+    if (!editingSection) {
+      initializedEdit.current = "";
+      return;
+    }
     if (loading || !profile) return;
-    const key = String(profile.studentId || "self") + ":" + editingSection;
-    if (initializedEdit.current === key) return;
-    initializedEdit.current = key;
-    setDraft(Object.fromEntries(editableFields.map((field) => [field, profile[field] ?? ""])));
+    if (initializedEdit.current === editKey) return;
+    initializedEdit.current = editKey;
+    const initialDraft = Object.fromEntries(editableFields.map((field) => [field, profile[field] ?? ""]));
+    profileBaseline.current = { ...initialDraft };
+    setDraft(initialDraft);
+    setPendingDocuments([]);
     setErrors({});
-  }, [editingSection, loading, profile]);
-  const cancelEdit = () => { if (!saving) { setDraft({}); setErrors({}); setEditingSection(null); } };
+  }, [editingSection, editKey, loading, profile]);
+  const discardEdit = () => {
+    setDraft({});
+    setPendingDocuments([]);
+    setErrors({});
+    setDocumentError("");
+    setCancelConfirmOpen(false);
+    profileBaseline.current = null;
+    initializedEdit.current = editKey;
+    navigation.update({ edit: null, tab: activeTab });
+  };
+  const cancelEdit = () => {
+    if (saving || saveRequestLock.current) return;
+    if (isDirty) setCancelConfirmOpen(true);
+    else discardEdit();
+  };
   const change = (key, value) => {
     setDraft((current) => ({ ...current, [key]: value }));
     if (errors[key]) setErrors((current) => ({ ...current, [key]: validateField(key, value) }));
   };
-  const save = async () => {
-    if (!editingSection || saving) return;
-    const nextErrors = Object.fromEntries(sectionFields.map((key) => [key, validateField(key, draft[key])]).filter(([, message]) => message));
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length) { notify("Please correct the highlighted profile fields.", "warning"); return; }
-    const payload = buildProfilePayload(profile, draft, sectionFields);
-    setSaving(true);
-    try {
-      await updateCurrentStudentProfile(payload);
-      setEditingSection(null); setDraft({}); setErrors({});
-      try { await refreshProfile(); notify("Profile updated successfully."); }
-      catch (requestError) { notify(`Changes saved, but the profile could not be refreshed. ${getApiErrorMessage(requestError)}`, "warning"); }
+  const validateFields = (fields) => {
+    const nextErrors = Object.fromEntries(fields.map((key) => [key, validateField(key, draft[key])]).filter(([, message]) => message));
+    setErrors((current) => {
+      const retained = Object.fromEntries(Object.entries(current).filter(([key]) => !fields.includes(key)));
+      return { ...retained, ...nextErrors };
+    });
+    if (Object.keys(nextErrors).length) {
+      notify("Please correct the highlighted profile fields.", "warning");
+      document.getElementById(`profile-${Object.keys(nextErrors)[0]}`)?.focus();
+      return nextErrors;
     }
-    catch (requestError) { notify(getApiErrorMessage(requestError), "error"); }
-    finally { setSaving(false); }
+    return null;
+  };
+  const moveToStep = (step) => navigation.update({ edit: step, tab: null });
+  const continueEdit = () => {
+    if (!editingSection || saving || validateFields(sectionFields)) return;
+    const index = profileSteps.findIndex(([id]) => id === editingSection);
+    if (index >= 0 && index < profileSteps.length - 1) moveToStep(profileSteps[index + 1][0]);
+  };
+  const previousStep = () => {
+    if (!editingSection || saving) return;
+    const index = profileSteps.findIndex(([id]) => id === editingSection);
+    if (index > 0) moveToStep(profileSteps[index - 1][0]);
+  };
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const warnBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDirty]);
+  const save = async () => {
+    if (!editingSection || saving || saveRequestLock.current) return;
+    const validationErrors = validateFields(editableFields);
+    if (validationErrors) {
+      const firstInvalidField = Object.keys(validationErrors)[0];
+      const invalidStep = groups.find(([, , , fields]) => fields.includes(firstInvalidField))?.[0] || "personal";
+      if (invalidStep !== editingSection) {
+        moveToStep(invalidStep);
+        window.requestAnimationFrame(() => document.getElementById(`profile-${firstInvalidField}`)?.focus());
+      }
+      return;
+    }
+    const invalidDocument = pendingDocuments.find(({ file }) =>
+      !file?.size || !/\.(pdf|jpe?g|png)$/i.test(file.name) || file.size > 10 * 1024 * 1024);
+    if (invalidDocument) {
+      setDocumentError("Check the selected documents. Only non-empty PDF, JPG, JPEG, and PNG files up to 10 MB are supported.");
+      moveToStep("documents");
+      return;
+    }
+    const baseline = profileBaseline.current || Object.fromEntries(editableFields.map((key) => [key, profile?.[key] ?? ""]));
+    const profileChanged = editableFields.some((key) => String(draft[key] ?? "").trim() !== String(baseline[key] ?? "").trim());
+    const documentsToUpload = [...pendingDocuments];
+    saveRequestLock.current = true;
+    setSaving(true);
+    let uploadedCount = 0;
+    try {
+      for (const document of documentsToUpload) {
+        await uploadCurrentStudentDocument(document.type, document.file);
+        uploadedCount += 1;
+        setPendingDocuments((current) => current.filter((entry) => entry.type !== document.type));
+      }
+      if (profileChanged) {
+        await updateCurrentStudentProfile(buildProfilePayload(baseline, draft, editableFields));
+      }
+      let refreshError = "";
+      try { await refreshProfile(); }
+      catch (requestError) { refreshError = getApiErrorMessage(requestError); }
+      discardEdit();
+      notify(refreshError ? `Changes saved, but the profile could not be refreshed. ${refreshError}` : "Profile updated successfully.", refreshError ? "warning" : "success");
+    } catch (requestError) {
+      const message = getApiErrorMessage(requestError);
+      notify(uploadedCount
+        ? `Some changes could not be saved. ${uploadedCount} document${uploadedCount === 1 ? "" : "s"} uploaded successfully; remaining changes are still pending. ${message}`
+        : message, "error");
+    } finally {
+      saveRequestLock.current = false;
+      setSaving(false);
+    }
   };
   const photoAvailable = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
   const openPhotoMenu = () => { setPhotoFlowError(""); setPhotoFile(null); setPhotoMode("menu"); };
@@ -315,10 +455,14 @@ export default function StudentProfile() {
     } finally { setPhotoBusy(false); }
   };
   const uploadDocument = async (type, file) => {
-    if (documentBusy) return;
+    if (documentBusy || saving) return;
     setDocumentError("");
     const validation = !file?.size ? "Select a valid, non-empty document." : !/\.(pdf|jpe?g|png)$/i.test(file.name) ? "Only PDF, JPG, JPEG, and PNG documents are supported." : file.size > 10 * 1024 * 1024 ? "Document file size cannot exceed 10 MB." : "";
     if (validation) { setDocumentError(validation); return; }
+    if (editingSection) {
+      setPendingDocuments((current) => [...current.filter((entry) => entry.type !== type), { type, file }]);
+      return;
+    }
     setDocumentBusy(type);
     try { await uploadCurrentStudentDocument(type, file); await refreshProfile(); notify("Document uploaded successfully."); }
     catch (requestError) { const message = getApiErrorMessage(requestError); setDocumentError(message); notify(message, "error"); }
@@ -395,11 +539,11 @@ export default function StudentProfile() {
   if (loading && !profile) return <div className="sp-page"><SkeletonPage variant="form" rows={8}/></div>;
   return <>
     <div className="sp-page sp-profile-page">
-      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={openPasswordModal}><KeyRound size={15}/> Change Password</button></div>}/>
-      <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div><h2>{profile?.studentName}</h2><p>Admission No: <strong>{display(profile?.admissionNo)}</strong><span aria-hidden="true"> &middot; </span>Roll No: {display(profile?.rollNo, true)}<span aria-hidden="true"> &middot; </span>{display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
+      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions">{!editingSection ? <button className="sp-btn" disabled={saving} onClick={() => beginEdit("personal")}><Pencil size={14}/> Edit Profile</button> : null}<button className="sp-btn" onClick={openPasswordModal}><KeyRound size={15}/> Change Password</button></div>}/>
+      <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div className="sp-profile-identity"><h2>{profile?.studentName}</h2><span className="sp-profile-roll-badge">Roll No: {display(profile?.rollNo, true)}</span><p>Admission No: <strong>{display(profile?.admissionNo)}</strong><span aria-hidden="true"> &middot; </span>{display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
       <nav className="sp-profile-tabs" aria-label="Profile sections">
-        {[["personal", "Personal Details", UserRound], ["contact", "Contact & Address", House], ["previousSchool", "Previous School", Landmark], ["academic", "Academic Information", GraduationCap], ["documents", "Documents", FileText]].map(([id, title], index) => <label key={id}>
-          <input type="radio" name="student-profile-section" value={id} defaultChecked={id === "personal"} disabled={Boolean(editingSection)} />
+        {profileSteps.map(([id, title], index) => <label key={id} className={editingSection && index < profileSteps.findIndex(([stepId]) => stepId === editingSection) ? "is-complete" : ""}>
+          <input type="radio" name="student-profile-section" value={id} checked={activeTab === id} disabled={Boolean(editingSection)} onChange={() => navigation.update({ tab: id })} />
           <span><b className="sp-student-step-number" aria-hidden="true">{index + 1}</b>{title}</span>
         </label>)}
       </nav>
@@ -411,36 +555,50 @@ export default function StudentProfile() {
             const permitted = editableFields.includes(key);
             const value = key === "dateOfBirth" ? dateDisplay(profile?.[key]) : key === "previousPercentage" && profile?.[key] != null ? `${profile[key]}%` : display(profile?.[key]);
             if (!active || !permitted) return <div className={`sp-profile-value ${key === "address" ? "is-address" : ""}`} key={key}><span className="sp-profile-field-icon"><Icon size={18}/></span><div><small>{labels[key]}{active && !permitted ? <LockKeyhole size={11} title="College managed"/> : null}</small><strong>{value}</strong></div></div>;
-            const inputProps = { id: `profile-${key}`, value: draft[key] ?? "", disabled: saving, className: errors[key] ? "is-invalid" : "", "aria-invalid": Boolean(errors[key]), "aria-describedby": errors[key] ? `profile-${key}-error` : undefined, onChange: (event) => change(key, event.target.value), onBlur: () => setErrors((current) => ({ ...current, [key]: validateField(key, draft[key]) })) };
-            return <label className={`sp-profile-input ${key === "address" ? "is-address" : ""}`} key={key}><span>{labels[key]}</span>{key === "bloodGroup" ? <select {...inputProps}><option value="">Not Provided</option>{[...bloodGroups].map((group) => <option key={group}>{group}</option>)}</select> : key === "address" ? <textarea {...inputProps} rows={2}/> : <input {...inputProps} type={emails.has(key) ? "email" : mobiles.has(key) ? "tel" : ["previousYearOfPassing", "previousPercentage"].includes(key) ? "number" : "text"} step={key === "previousPercentage" ? "any" : undefined} inputMode={mobiles.has(key) || ["pincode", "aadhaarNumber", "previousYearOfPassing"].includes(key) ? "numeric" : undefined}/>}{errors[key] ? <small className="sp-field-error" id={`profile-${key}-error`}>{errors[key]}</small> : null}</label>;
+            const inputProps = {
+              id: `profile-${key}`,
+              value: String(draft[key] ?? ""),
+              disabled: saving,
+              className: errors[key] ? "is-invalid" : "",
+              "aria-invalid": Boolean(errors[key]),
+              "aria-describedby": errors[key] ? `profile-${key}-error` : undefined,
+              onChange: (event) => change(key, sanitizeNumericField(key, event.target.value)),
+              onBlur: (event) => {
+                const value = emails.has(key) ? event.target.value.trim() : event.target.value;
+                if (value !== event.target.value) change(key, value);
+                setErrors((current) => ({ ...current, [key]: validateField(key, value) }));
+              },
+            };
+            const numericField = mobiles.has(key) || ["aadhaarNumber", "pincode", "previousYearOfPassing", "previousPercentage"].includes(key);
+            return <label className={`sp-profile-input ${key === "address" ? "is-address" : ""}`} key={key}><span>{labels[key]}</span>{key === "bloodGroup" ? <select {...inputProps}><option value="">Not Provided</option>{[...bloodGroups].map((group) => <option key={group}>{group}</option>)}</select> : key === "address" ? <textarea {...inputProps} rows={2}/> : <input {...inputProps} type={emails.has(key) ? "email" : mobiles.has(key) ? "tel" : "text"} maxLength={mobiles.has(key) ? 10 : key === "aadhaarNumber" ? 12 : key === "pincode" ? 6 : key === "previousYearOfPassing" ? 4 : undefined} inputMode={numericField ? key === "previousPercentage" ? "decimal" : "numeric" : undefined}/>}{errors[key] ? <small className="sp-field-error" id={`profile-${key}-error`}>{errors[key]}</small> : null}</label>;
           };
           const primaryFields = id === "contact" ? fields.slice(0, 5) : fields;
-          return <StudentCard key={id} className={`sp-profile-section section-${id} ${active ? "is-editing" : ""}`} title={<><SectionIcon size={20}/>{title}</>} action={active ? <div className="sp-actions"><button className="sp-btn" disabled={saving} onClick={cancelEdit}>Cancel</button><button className="sp-btn primary" disabled={saving} onClick={save}><Save size={14}/>{saving ? "Saving..." : "Save Changes"}</button></div> : <button className="sp-profile-edit" disabled={Boolean(editingSection)} title={editingSection ? "Save or cancel the current section first" : `Edit ${title}`} aria-label={`Edit ${title}`} onClick={() => beginEdit(id)}><Pencil size={13}/> Edit</button>}>
+          return <StudentCard key={id} className={`sp-profile-section section-${id} ${active ? "is-editing" : ""}`} title={<><SectionIcon size={20}/>{title}</>} action={active ? <div className="sp-actions">{id === "personal" ? <button className="sp-btn" disabled={saving} onClick={cancelEdit}>Cancel</button> : <button className="sp-btn" disabled={saving} onClick={previousStep}><ChevronLeft size={14}/> Previous</button>}<button className="sp-btn primary" disabled={saving} onClick={continueEdit}><ChevronRight size={14}/>{saving ? "Saving..." : "Save & Next"}</button></div> : null}>
             <div className={`sp-profile-fields ${id === "contact" ? "sp-profile-address-fields" : ""} ${active ? "is-form" : ""}`}>{primaryFields.map(renderField)}</div>
             {id === "contact" ? <div className="sp-profile-parent"><h3>Parent / Guardian</h3><div className={`sp-profile-fields ${active ? "is-form" : ""}`}>{fields.slice(5).map(renderField)}</div></div> : null}
           </StudentCard>;
         })}
       </div>
-      <StudentCard className="sp-profile-academic" title={<><GraduationCap size={21}/>Academic Information</>} action={<span className="sp-college-managed"><LockKeyhole size={13}/> College Managed</span>}>
+      <StudentCard className="sp-profile-academic" title={<><GraduationCap size={21}/>Academic Information</>} action={editingSection === "academic" ? <div className="sp-actions"><button className="sp-btn" disabled={saving} onClick={previousStep}><ChevronLeft size={14}/> Previous</button><button className="sp-btn primary" disabled={saving} onClick={continueEdit}><ChevronRight size={14}/>{saving ? "Saving..." : "Save & Next"}</button></div> : <span className="sp-college-managed"><LockKeyhole size={13}/> College Managed</span>}>
         {academicRows.map((row, index) => <div className="sp-profile-academic-row" key={index}>{row.map(([label, key, Icon]) => <div className="sp-profile-value" key={key}><span className="sp-profile-field-icon"><Icon size={20}/></span><div><small>{label}</small><strong>{key === "admissionDate" ? dateDisplay(profile?.[key]) : display(profile?.[key], ["rollNo", "sectionName"].includes(key))}</strong></div></div>)}</div>)}
       </StudentCard>
-      <StudentCard className="sp-documents" title="Student Documents" subtitle="Upload or replace documents stored against your student record.">
+      <StudentCard className="sp-documents" title="Student Documents" subtitle="Upload or replace documents stored against your student record." action={editingSection === "documents" ? <div className="sp-actions"><button className="sp-btn" disabled={saving} onClick={previousStep}><ChevronLeft size={14}/> Previous</button><button className="sp-btn primary" disabled={saving} onClick={save}><Save size={14}/>{saving ? "Saving..." : "Save Changes"}</button></div> : null}>
         <input ref={documentInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) uploadDocument(uploadType, file); }}/>
         <div className="sp-doc-toolbar">
           <div className="sp-doc-filters" role="group" aria-label="Document categories">{["All", "Academic", "Identity", "Financial", "Other"].map((category) => <button key={category} aria-pressed={documentFilter === category} className={documentFilter === category ? "is-active" : ""} onClick={() => setDocumentFilter(category)}>{category} ({documents.filter(([, type]) => category === "All" || documentCategories[type] === category).length})</button>)}</div>
-          <div className="sp-doc-controls"><div className="sp-doc-view" role="group" aria-label="Document view">{[["grid", LayoutGrid], ["list", List]].map(([view, Icon]) => <button key={view} title={`${view} view`} aria-label={`${view} view`} aria-pressed={documentView === view} className={`sp-icon-action ${documentView === view ? "is-active" : ""}`} onClick={() => setDocumentView(view)}><Icon size={17}/></button>)}</div><label className="sp-doc-search"><Search size={17}/><input aria-label="Search documents" placeholder="Search documents..." value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)}/></label></div>
+          <div className="sp-doc-controls"><div className="sp-doc-view" role="group" aria-label="Document view">{[["grid", LayoutGrid], ["list", List]].map(([view, Icon]) => <button key={view} title={`${view} view`} aria-label={`${view} view`} aria-pressed={documentView === view} className={`sp-icon-action ${documentView === view ? "is-active" : ""}`} onClick={() => setDocumentView(view)}><Icon size={17}/></button>)}</div><label className="sp-doc-search"><Search size={17}/><input aria-label="Search documents" placeholder="Search documents..." value={String(documentSearch ?? "")} onChange={(event) => setDocumentSearch(event.target.value)}/></label></div>
         </div>
         {documentError || error ? <p className="sp-doc-error" role="alert">{documentError || error}</p> : null}
         <div className={`sp-doc-grid ${documentView === "list" ? "is-list" : ""}`} aria-busy={Boolean(documentBusy) || loading}>
           {documents.filter(([label, type]) => (documentFilter === "All" || documentCategories[type] === documentFilter) && `${label} ${type}`.toLowerCase().includes(documentSearch.trim().toLowerCase())).map(([label, type, key]) => {
-            const path = profile?.[key]; const url = getStudentDocumentUrl(path); const available = Boolean(path); const category = documentCategories[type];
-            const filename = documentFileName(url);
+            const path = profile?.[key]; const url = getStudentDocumentUrl(path); const pending = pendingDocuments.find((entry) => entry.type === type); const available = Boolean(path); const category = documentCategories[type];
+            const filename = pending?.file.name || documentFileName(url);
             return <article className={`sp-doc-card ${available ? "is-uploaded" : "is-missing"}`} key={type}>
               <div className="sp-doc-thumbnail"><FileText size={30}/>{url && /\.(png|jpe?g)(\?|$)/i.test(url) ? <img key={url} src={url} alt={`${label} thumbnail`} loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }}/> : null}</div>
-              <div className="sp-doc-info"><h3>{label}</h3><span className="sp-doc-category">{category}</span><p>{documentBusy === type ? "Processing..." : available ? "Available" : "Not Uploaded"}</p></div>
+              <div className="sp-doc-info"><h3>{label}</h3><span className="sp-doc-category">{category}</span><p>{documentBusy === type ? "Processing..." : pending ? "Pending final save" : available ? "Available" : "Not Uploaded"}</p></div>
               <div className="sp-doc-footer"><div className="sp-doc-filename">{filename ? <><FileText size={16}/><span title={filename}>{filename}</span></> : <span>{available ? "Document uploaded" : "Awaiting upload"}</span>}</div><div className="sp-doc-actions">
-                {available && url ? <><button className="sp-icon-action" title={`View ${label}`} aria-label={`View ${label}`} disabled={Boolean(documentBusy)} onClick={() => openDocument(label, type, path)}><Eye size={16}/></button><button className="sp-icon-action" title={`Download ${label}`} aria-label={`Download ${label}`} disabled={Boolean(documentBusy)} onClick={() => openDocument(label, type, path, true)}><Download size={16}/></button></> : null}
-                <button className="sp-icon-action" title={`${available ? "Replace" : "Upload"} ${label}`} aria-label={`${available ? "Replace" : "Upload"} ${label}`} disabled={Boolean(documentBusy)} onClick={() => chooseDocument(type)}>{available ? <RefreshCw size={15}/> : <Upload size={16}/>}</button>
+                {available && url ? <><button className="sp-icon-action" title={`View ${label}`} aria-label={`View ${label}`} disabled={saving || Boolean(documentBusy)} onClick={() => openDocument(label, type, path)}><Eye size={16}/></button><button className="sp-icon-action" title={`Download ${label}`} aria-label={`Download ${label}`} disabled={saving || Boolean(documentBusy)} onClick={() => openDocument(label, type, path, true)}><Download size={16}/></button></> : null}
+                <button className="sp-icon-action" title={`${available ? "Replace" : "Upload"} ${label}`} aria-label={`${available ? "Replace" : "Upload"} ${label}`} disabled={saving || Boolean(documentBusy)} onClick={() => chooseDocument(type)}>{available ? <RefreshCw size={15}/> : <Upload size={16}/>}</button>
               </div></div>
             </article>;
           })}
@@ -457,7 +615,7 @@ export default function StudentProfile() {
             <label htmlFor={id}>{label} <span aria-hidden="true">*</span></label>
             <div className="sp-password-input-wrap">
               <input id={id} name={`student-change-${key}`} type={passwordVisible[key] ? "text" : "password"} autoComplete={autoComplete}
-                value={passwords[key]} required disabled={passwordSaving} readOnly={!passwordEditable[key]}
+                value={String(passwords[key] ?? "")} required disabled={passwordSaving} readOnly={!passwordEditable[key]}
                 onFocus={() => setPasswordEditable((current) => ({ ...current, [key]: true }))}
                 onChange={(event) => {
                   setPasswords((current) => ({ ...current, [key]: event.target.value }));
@@ -504,6 +662,7 @@ export default function StudentProfile() {
       {photoFlowError || (photoMode === "menu" && photoError) ? <p className="sp-photo-error" role="alert">{photoFlowError || "The current photo could not be loaded. You can upload a replacement."}</p> : null}
     </Modal> : null}
     {removePhotoOpen ? <ConfirmDialog title="Remove profile photo?" message="Are you sure you want to remove your profile photo?" confirmLabel="Remove Photo" loadingLabel="Removing..." danger loading={photoBusy} onCancel={() => { if (!photoBusy) setRemovePhotoOpen(false); }} onConfirm={removePhoto}/> : null}
+    {cancelConfirmOpen ? <ConfirmDialog title="Discard profile changes?" message="Your unsaved profile changes and selected documents will be discarded." confirmLabel="Discard Changes" danger onCancel={() => setCancelConfirmOpen(false)} onConfirm={discardEdit}/> : null}
     <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "success" })}/>
   </>;
 }

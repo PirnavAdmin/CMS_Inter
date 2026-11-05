@@ -1,3 +1,4 @@
+import { useLocation, useSearchParams } from "react-router-dom";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Clock,
@@ -6,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Briefcase,
+  ShieldCheck,
   UserX,
   AlertCircle,
   RotateCw,
@@ -32,6 +34,28 @@ const parseTimeToMinutes = (timeStr) => {
   if (ampm === "PM" && hours < 12) hours += 12;
   if (ampm === "AM" && hours === 12) hours = 0;
   return hours * 60 + minutes;
+};
+
+const formatMinutesTo12h = (totalMins) => {
+  if (totalMins === null || totalMins === undefined || isNaN(totalMins)) return "04:30 PM";
+  let h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  if (h > 12) h -= 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+};
+
+const toInputTime = (value) => {
+  if (!value || value === "--") return "";
+  const match = String(value).replace(/[\u202F\u00A0]/g, " ").trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/i);
+  if (!match) return "";
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const ampm = match[3]?.toUpperCase();
+  if (ampm === "PM" && h < 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m}`;
 };
 
 const calculateDurationStr = (inTime, outTime, isActive = false) => {
@@ -62,32 +86,43 @@ const normalizeTodayData = (raw, timing) => {
   const inTime = raw.inTime || raw.InTime || null;
   const outTime = raw.outTime || raw.OutTime || null;
   const rawStatus = raw.status || raw.Status || "not_punched";
-  const rawTodayStatus = raw.todayStatus || raw.TodayStatus || "Absent";
+  const rawTodayStatus = raw.todayStatus || raw.TodayStatus || (inTime ? "Present" : "Absent");
+
+  const shiftStartTime = raw.shiftStartTime || raw.ShiftStartTime || (timing?.workStartTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workStartTime)) : "09:00 AM");
+  const shiftEndTime = raw.shiftEndTime || raw.ShiftEndTime || (timing?.workEndTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workEndTime)) : "04:30 PM");
+  const shiftName = raw.shiftName || raw.ShiftName || `Morning (${shiftStartTime} – ${shiftEndTime})`;
 
   const inMins = parseTimeToMinutes(inTime);
   const outMins = parseTimeToMinutes(outTime);
-  const lateThresholdStr = timing?.lateThreshold || "09:15";
-  const lateThreshMins = parseTimeToMinutes(lateThresholdStr) || (9 * 60 + 15);
+  const lateThreshMins = parseTimeToMinutes(timing?.lateThreshold || "09:15") || (9 * 60 + 15);
   const isLate = Boolean(raw.isLate ?? raw.IsLate) || (inMins !== null && inMins > lateThreshMins);
 
-  const shiftEndStr = raw.shiftEndTime || raw.ShiftEndTime || timing?.workEndTime || "03:20 PM";
-  const shiftEndMins = parseTimeToMinutes(shiftEndStr) || (16 * 60 + 30);
+  const shiftEndMins = parseTimeToMinutes(shiftEndTime) || (16 * 60 + 30);
   const graceMins = Number(timing?.gracePeriodMinutes ?? 15);
-  const checkoutCutoffMins = shiftEndMins + graceMins; // 04:45 PM
+  const checkoutCutoffMins = shiftEndMins + graceMins;
+
+  const markedByAdmin = Boolean(
+    raw.markedByAdmin ??
+    raw.MarkedByAdmin ??
+    raw.markedBy === "Admin" ??
+    raw.MarkedBy === "Admin" ??
+    (typeof raw.remarks === "string" && raw.remarks.toLowerCase().includes("admin") && !raw.remarks.toLowerCase().includes("driver portal")) ??
+    (typeof raw.deviceId === "string" && raw.deviceId.toLowerCase().includes("admin") && !raw.deviceId.toLowerCase().includes("driver-portal"))
+  );
 
   let status = rawStatus;
-  let todayStatus = rawTodayStatus;
+  let todayStatus = markedByAdmin ? "Present | Marked by Admin" : rawTodayStatus;
 
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
 
   if (outTime) {
-    if (outMins !== null && outMins > checkoutCutoffMins) {
+    if (rawStatus === "missed_checkout" || (outMins !== null && outMins > checkoutCutoffMins)) {
       status = "missed_checkout";
       todayStatus = "Missed Checkout";
     } else {
       status = "punched_out";
-      todayStatus = isLate ? "Late" : "Present";
+      todayStatus = isLate ? "Late" : (rawTodayStatus === "Absent" ? "Present" : rawTodayStatus);
     }
   } else if (inTime) {
     if (nowMins > checkoutCutoffMins) {
@@ -104,26 +139,40 @@ const normalizeTodayData = (raw, timing) => {
     todayStatus = "Present";
   }
 
-  const canRegularize = (todayStatus === "Late" || todayStatus === "Missed Checkout" || todayStatus === "Absent" || todayStatus === "Half Day")
-    && (!regState || regState.toLowerCase() !== "approved");
+  const canRegularize = Boolean(raw.canRegularize ?? raw.CanRegularize) || (
+    (todayStatus === "Late" || todayStatus === "Missed Checkout" || todayStatus === "Absent" || todayStatus === "Half Day")
+    && (!regState || regState.toLowerCase() !== "approved")
+  );
 
   return {
     status,
     inTime,
     outTime,
-    shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
-    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 03:20 PM)",
-    shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
-    shiftEndTime: shiftEndStr,
+    shiftDuration: raw.shiftDuration || raw.ShiftDuration || (inTime && outTime ? calculateDurationStr(inTime, outTime, false) : "--"),
+    shiftName,
+    shiftStartTime,
+    shiftEndTime,
     isLate,
     todayStatus,
     canRegularize,
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: regState,
+    markedByAdmin,
+    markedBy: markedByAdmin ? "Admin" : (raw.markedBy || raw.MarkedBy || null),
   };
 };
 
-export default function FacultyMyAttendance() {
+export default function FacultyMyAttendance({ adminRouting = false } = {}) {
+  const [routeParams, setRouteParams] = useSearchParams();
+  const { pathname } = useLocation();
+  const urlRouting = adminRouting || pathname.startsWith("/faculty-dashboard/my-attendance");
+  const regularizeDate = urlRouting ? routeParams.get("regularize") || "" : "";
+  const rangeParam = routeParams.get("range");
+  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : "week";
+  const restoredRegularization = useRef("");
+  const historyRequest = useRef(0);
+  const [historyRange, setHistoryRange] = useState("");
+
   const context = useFacultySafe();
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
@@ -135,14 +184,14 @@ export default function FacultyMyAttendance() {
     return () => clearInterval(timer);
   }, []);
 
-  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 - 15:20, Late after 09:15, Cutoff 15:35)
+  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 AM – 04:30 PM, Late after 09:15 AM, 15m Cutoff 04:45 PM)
   const [timingConfig, setTimingConfig] = useState({
     workStartTime: "09:00",
-    workEndTime: "15:20",
+    workEndTime: "16:30",
     lateThreshold: "09:15",
-    earlyCheckoutThreshold: "15:20",
+    earlyCheckoutThreshold: "16:30",
     gracePeriodMinutes: 15,
-    minWorkingHours: 6.33,
+    minWorkingHours: 7,
   });
 
   // Load timing configuration from admin settings
@@ -156,11 +205,11 @@ export default function FacultyMyAttendance() {
           if (cfg && isMounted) {
             setTimingConfig({
               workStartTime: cfg.workStartTime || "09:00",
-              workEndTime: cfg.workEndTime || "15:20",
+              workEndTime: cfg.workEndTime || "16:30",
               lateThreshold: cfg.lateThreshold || "09:15",
-              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "15:20",
+              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "16:30",
               gracePeriodMinutes: cfg.gracePeriodMinutes ?? 15,
-              minWorkingHours: cfg.minWorkingHours ?? 6.5,
+              minWorkingHours: cfg.minWorkingHours ?? 7,
             });
           }
         }
@@ -175,7 +224,17 @@ export default function FacultyMyAttendance() {
   }, []);
 
   // Filter State: "week" | "last_week" | "month" | "last_month"
-  const [activeFilter, setActiveFilter] = useState("week");
+  const [localFilter, setLocalFilter] = useState("week");
+  const activeFilter = urlRouting ? routedRange : localFilter;
+  const setActiveFilter = (range) => {
+    setLocalFilter(range);
+    if (urlRouting) {
+      const next = new URLSearchParams(routeParams);
+      if (adminRouting) next.set("tab", "my-attendance");
+      next.set("range", range);
+      setRouteParams(next);
+    }
+  };
 
   // Loading States
   const [loadingToday, setLoadingToday] = useState(true);
@@ -188,15 +247,18 @@ export default function FacultyMyAttendance() {
     inTime: null,
     outTime: null,
     shiftDuration: "--",
-    shiftName: "Morning (09:00 AM – 03:20 PM)",
+    shiftName: "Morning (09:00 AM – 04:30 PM)",
     shiftStartTime: "09:00 AM",
-    shiftEndTime: "03:20 PM",
+    shiftEndTime: "04:30 PM",
     isLate: false,
     todayStatus: "Absent",
     canRegularize: false,
     dateFormatted: new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: null,
   });
+
+  // Monthly KPI Summary state (keeps top 4 KPI cards aligned with current month HR metrics)
+  const [monthlyMetrics, setMonthlyMetrics] = useState(null);
 
   // Live History & Analytics Metrics
   const [historyData, setHistoryData] = useState({
@@ -214,13 +276,26 @@ export default function FacultyMyAttendance() {
   });
 
   // Regularization Modal State
-  const [regModalOpen, setRegModalOpen] = useState(false);
+  const [localRegModalOpen, setLocalRegModalOpen] = useState(false);
+  const regModalOpen = urlRouting
+    ? Boolean(regularizeDate && restoredRegularization.current === regularizeDate && localRegModalOpen)
+    : localRegModalOpen;
+
+  const closeRegularizeModal = () => {
+    setLocalRegModalOpen(false);
+    if (urlRouting) {
+      const next = new URLSearchParams(routeParams);
+      next.delete("regularize");
+      setRouteParams(next);
+    }
+  };
+
   const [regSubmitting, setRegSubmitting] = useState(false);
   const [regForm, setRegForm] = useState({
     rawDate: "",
     displayDate: "",
     requestedInTime: "09:00",
-    requestedOutTime: "15:20",
+    requestedOutTime: "16:30",
     reason: "",
   });
 
@@ -265,7 +340,7 @@ export default function FacultyMyAttendance() {
     []
   );
 
-  // Fetch Today's Attendance Status
+  // Fetch Today's Attendance Status from Swagger endpoint: /api/v1/staff-attendance/my-today
   const fetchTodayStatus = useCallback(async () => {
     try {
       setLoadingToday(true);
@@ -285,100 +360,78 @@ export default function FacultyMyAttendance() {
     }
   }, [syncGlobalPunchState, timingConfig]);
 
-  // Fetch Attendance History for selected filter
+  // Fetch Attendance History for selected filter from Swagger endpoint: /api/v1/staff-attendance/my-history
   const fetchHistory = useCallback(async (period) => {
+    const request = ++historyRequest.current;
+    if (urlRouting) setHistoryRange("");
     try {
       setLoadingHistory(true);
       const res = await attendanceService.getMyAttendanceHistory(period);
+      if (urlRouting && request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (!payload && urlRouting) setHistoryRange("error");
       if (payload) {
+        if (urlRouting) setHistoryRange(period);
         const rawLogs = payload.logs || payload.Logs || [];
         const rawMetrics = payload.metrics || payload.Metrics || {};
 
-        const lateThreshMins = parseTimeToMinutes(timingConfig.lateThreshold || "09:15") || (9 * 60 + 15);
-        const shiftEndMins = parseTimeToMinutes(timingConfig.workEndTime || "15:20") || (15 * 60 + 20);
-        const checkoutCutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
-
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-
-        const processedLogs = rawLogs.map((l, idx, arr) => {
+        const processedLogs = rawLogs.map((l) => {
           const inTime = l.inTime || l.InTime || "--";
           const outTime = l.outTime || l.OutTime || "--";
           const rawStatus = l.status || l.Status || "--";
           const isToday = Boolean(l.isToday ?? l.IsToday);
           const regState = l.regularizationState || l.RegularizationState || null;
-
-          const inMins = parseTimeToMinutes(inTime);
-          const outMins = parseTimeToMinutes(outTime);
-          const isLatePunch = inMins !== null && inMins > lateThreshMins;
+          const shift = l.shift || l.Shift || "09:00 AM – 03:20 PM";
+          const markedByAdmin = Boolean(
+            l.markedByAdmin ||
+            l.MarkedByAdmin ||
+            l.markedBy === "Admin" ||
+            l.MarkedBy === "Admin" ||
+            String(rawStatus).toLowerCase().includes("admin") ||
+            (typeof l.device === "string" && l.device.toLowerCase().includes("admin")) ||
+            (!isToday && rawStatus === "Present" && (inTime === "--" || !inTime || outTime === "--" || !outTime))
+          );
 
           let status = rawStatus;
-          let hours = l.hours || l.Hours || "--";
-          let isMissedCheckout = false;
-
-          if (inTime !== "--" && inMins !== null) {
-            if (outTime !== "--" && outMins !== null) {
-              // Punched out: check if punch out was past cutoff (e.g. Thursday 09:49 PM)
-              if (outMins > checkoutCutoffMins) {
-                isMissedCheckout = true;
-                status = "Missed Checkout";
-              } else {
-                status = isLatePunch ? "Late" : "Present";
-              }
-              hours = calculateDurationStr(inTime, outTime, false);
-            } else {
-              // Missing outTime
-              if (isToday) {
-                if (nowMins > checkoutCutoffMins) {
-                  isMissedCheckout = true;
-                  status = "Missed Checkout";
-                } else {
-                  status = isLatePunch ? "Late" : "Present";
-                }
-                hours = calculateDurationStr(inTime, null, true);
-              } else {
-                // Past day without punch out
-                isMissedCheckout = true;
-                status = "Missed Checkout";
-
-                // Calculate duration up to next check-in or shift end
-                const nextDayLog = arr.slice(idx + 1).find((next) => next.inTime && next.inTime !== "--");
-                if (nextDayLog && nextDayLog.inTime) {
-                  const nextInMins = parseTimeToMinutes(nextDayLog.inTime);
-                  if (nextInMins !== null) {
-                    const totalMins = (24 * 60 - inMins) + nextInMins;
-                    const h = Math.floor(totalMins / 60);
-                    const m = totalMins % 60;
-                    hours = `${h}h ${m}m`;
-                  } else {
-                    hours = calculateDurationStr(inTime, "03:20 PM", false);
-                  }
-                } else {
-                  hours = calculateDurationStr(inTime, "03:20 PM", false);
-                }
-              }
-            }
-          }
-
           if (regState?.toLowerCase() === "approved") {
             status = "Present";
+          } else if (markedByAdmin || status.toLowerCase().includes("admin")) {
+            status = "Present (Admin)";
           }
 
-          const canRegularize = (status === "Late" || status === "Missed Checkout" || status === "Absent" || status === "Half Day")
-            && (!regState || regState.toLowerCase() !== "approved");
+          // If marked Present by Admin or Present without check-in/out times:
+          // Fall back to configured shift start & end times
+          let finalInTime = inTime;
+          let finalOutTime = outTime;
+          if (!isToday && (status === "Present (Admin)" || (status === "Present" && (inTime === "--" || markedByAdmin)))) {
+            const shiftParts = String(shift || "").split(/[–-]/).map((s) => s.trim());
+            if (finalInTime === "--" || !finalInTime) finalInTime = shiftParts[0] || "09:00 AM";
+            if (finalOutTime === "--" || !finalOutTime) finalOutTime = shiftParts[1] || "03:20 PM";
+            status = "Present (Admin)";
+          }
+
+          let hours = l.hours || l.Hours || "--";
+          if ((hours === "--" || hours === "0h 0m") && finalInTime !== "--" && finalOutTime !== "--") {
+            hours = calculateDurationStr(finalInTime, finalOutTime, false);
+          }
+
+          const canRegularize = Boolean(l.canRegularize ?? l.CanRegularize) || (
+            (status === "Late" || status === "Missed Checkout" || status === "Absent" || status === "Half Day")
+            && (!regState || regState.toLowerCase() !== "approved")
+          );
 
           return {
-            id: l.id || l.Id,
-            day: l.day || l.Day,
-            date: l.date || l.Date,
-            rawDate: l.rawDate || l.RawDate,
-            shift: l.shift || l.Shift,
-            inTime,
-            outTime,
+            id: l.id || l.Id || `log-${l.rawDate || l.RawDate || Math.random()}`,
+            day: l.day || l.Day || "--",
+            date: l.date || l.Date || "--",
+            rawDate: l.rawDate || l.RawDate || "",
+            shift,
+            inTime: finalInTime,
+            outTime: finalOutTime,
             hours,
-            device: l.device || l.Device,
+            device: markedByAdmin ? "Admin Entry" : (l.device || l.Device || "--"),
             status,
+            markedByAdmin,
             canRegularize,
             isToday,
             regularizationState: regState,
@@ -386,30 +439,28 @@ export default function FacultyMyAttendance() {
           };
         });
 
-        // Compute late punch count dynamically
-        const lateCount = processedLogs.filter((l) => l.status === "Late").length;
-        const presentDaysCount = processedLogs.filter((l) => l.status === "Present" || l.status === "Late" || l.status === "Missed Checkout").length;
-
+        // Use backend metrics directly as returned by Swagger endpoint
         setHistoryData({
           logs: processedLogs,
           metrics: {
-            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "6 Days",
+            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || `${processedLogs.filter((l) => l.status !== "Weekly Off" && l.status !== "Holiday").length} Days`,
             workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
-            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || `${presentDaysCount} Days`,
-            presentDaysSub: lateCount > 0 ? `${lateCount} late punch logged` : (rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--"),
+            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || `${processedLogs.filter((l) => l.status === "Present" || l.status === "Late").length} Days`,
+            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "Biometric / Portal verified",
             leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
-            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
+            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "No leaves applied",
             absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
-            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
+            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "No absences",
           },
         });
       }
     } catch (err) {
       console.warn("Could not load attendance history from backend", err);
+      if (urlRouting && request === historyRequest.current) setHistoryRange("error");
     } finally {
-      setLoadingHistory(false);
+      if (!urlRouting || request === historyRequest.current) setLoadingHistory(false);
     }
-  }, [timingConfig]);
+  }, [urlRouting]);
 
   // Initial load once on mount
   useEffect(() => {
@@ -421,8 +472,71 @@ export default function FacultyMyAttendance() {
     fetchHistory(activeFilter);
   }, [activeFilter, fetchHistory]);
 
-  // Punch In Handler
+  // Fetch current month attendance overview for top 4 KPI cards
+  const fetchMonthlyMetrics = useCallback(async () => {
+    try {
+      const res = await attendanceService.getMyAttendanceHistory("month");
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const rawMetrics = payload.metrics || payload.Metrics || {};
+        setMonthlyMetrics(rawMetrics);
+      }
+    } catch (e) {
+      console.warn("Could not load monthly attendance metrics", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMonthlyMetrics();
+  }, [fetchMonthlyMetrics]);
+
+  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
+  const isMissedCheckout = useMemo(() => {
+    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
+    if (todayData.status === "punched_in" && !todayData.outTime) {
+      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM");
+      if (shiftEndMins !== null) {
+        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        return nowMins > cutoffMins;
+      }
+    }
+    return false;
+  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
+
+  // Shift check-in and check-out window validation
+  const isCheckInAllowed = useMemo(() => {
+    if (todayData.markedByAdmin || todayData.status !== "not_punched") return false;
+    const startMins = parseTimeToMinutes(todayData.shiftStartTime || timingConfig.workStartTime || "09:00 AM");
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
+    if (startMins === null || endMins === null) return false;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    return nowMins >= startMins && nowMins <= endMins;
+  }, [todayData.markedByAdmin, todayData.status, todayData.shiftStartTime, todayData.shiftEndTime, timingConfig.workStartTime, timingConfig.workEndTime, shiftUpdateTick]);
+
+  const isCheckOutAllowed = useMemo(() => {
+    if (todayData.markedByAdmin || todayData.status !== "punched_in" || isMissedCheckout) return false;
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
+    if (endMins === null) return true;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
+    const cutoffMins = endMins + grace;
+    return nowMins >= (endMins - 15) && nowMins <= cutoffMins;
+  }, [todayData.markedByAdmin, todayData.status, isMissedCheckout, todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes, shiftUpdateTick]);
+
+  // Punch In Handler: POST /api/v1/staff-attendance/punch-in
   const handlePunchIn = async () => {
+    if (todayData.markedByAdmin) {
+      notify("Attendance for today has already been officially recorded by Administration.", "error");
+      return;
+    }
+    if (!isCheckInAllowed) {
+      notify(`Check-in is permitted only during configured shift hours (${todayData.shiftStartTime} – ${todayData.shiftEndTime}).`, "error");
+      return;
+    }
     if (todayData.status !== "not_punched" || actionLoading) return;
     setActionLoading(true);
     try {
@@ -442,6 +556,7 @@ export default function FacultyMyAttendance() {
         }
         notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
+        fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
@@ -453,23 +568,14 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
-  const isMissedCheckout = useMemo(() => {
-    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
-    if (todayData.status === "punched_in" && !todayData.outTime) {
-      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime);
-      if (shiftEndMins !== null) {
-        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        return nowMins > cutoffMins;
-      }
-    }
-    return false;
-  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
 
-  // Punch Out Handler
+
+  // Punch Out Handler: POST /api/v1/staff-attendance/punch-out
   const handlePunchOut = async () => {
+    if (todayData.markedByAdmin) {
+      notify("Attendance for today has already been officially recorded by Administration.", "error");
+      return;
+    }
     if (todayData.status !== "punched_in" || actionLoading || isMissedCheckout) {
       if (isMissedCheckout) {
         notify("The 15-minute check-out window has expired. Marked as Missed Checkout. Please apply for attendance regularization.", "error");
@@ -494,6 +600,7 @@ export default function FacultyMyAttendance() {
         }
         notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
+        fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
@@ -505,19 +612,64 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  // Open Regularization Modal for a specific date
-  const openRegularizeModal = (log) => {
+  // URL synchronization for regularize query parameter
+  useEffect(() => {
+    if (!urlRouting) return;
+    if (!regularizeDate) {
+      restoredRegularization.current = "";
+      setLocalRegModalOpen(false);
+      return;
+    }
+    if (restoredRegularization.current === regularizeDate) return;
+    setLocalRegModalOpen(false);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(regularizeDate) || Number.isNaN(Date.parse(regularizeDate))) {
+      restoredRegularization.current = regularizeDate;
+      notify("Invalid attendance regularization date.", "error");
+      return;
+    }
+    if (loadingHistory || (historyRange !== activeFilter && historyRange !== "error")) return;
+    if (historyRange === "error") {
+      notify("Attendance history could not be loaded. Please retry.", "error");
+      return;
+    }
+    const log = historyData.logs.find((row) => String(row.rawDate || "").slice(0, 10) === regularizeDate);
+    if (!log || !log.canRegularize || ["pending", "approved", "rejected"].includes(String(log.regularizationState || "").toLowerCase())) {
+      restoredRegularization.current = regularizeDate;
+      notify("Attendance record is unavailable or cannot be regularized in this history range.", "error");
+      return;
+    }
     setRegForm({
-      rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
-      displayDate: log.date || log.Date || log.day || "Selected Date",
-      requestedInTime: "09:00",
-      requestedOutTime: "15:20",
+      rawDate: regularizeDate,
+      displayDate: log.date || log.day || "Selected Date",
+      requestedInTime: toInputTime(log.inTime) || "09:00",
+      requestedOutTime: toInputTime(log.outTime) || (todayData.shiftEndTime ? toInputTime(todayData.shiftEndTime) : "16:30"),
       reason: "",
     });
-    setRegModalOpen(true);
+    restoredRegularization.current = regularizeDate;
+    setLocalRegModalOpen(true);
+  }, [urlRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, todayData.shiftEndTime, notify]);
+
+  // Open Regularization Modal for a specific date
+  const openRegularizeModal = (log) => {
+    const targetDate = String(log.rawDate || log.RawDate || new Date().toISOString().split("T")[0]).slice(0, 10);
+    setRegForm({
+      rawDate: targetDate,
+      displayDate: log.date || log.Date || log.day || "Selected Date",
+      requestedInTime: toInputTime(log.inTime) || "09:00",
+      requestedOutTime: toInputTime(log.outTime) || (todayData.shiftEndTime ? toInputTime(todayData.shiftEndTime) : "16:30"),
+      reason: "",
+    });
+    setLocalRegModalOpen(true);
+    if (urlRouting) {
+      const next = new URLSearchParams(routeParams);
+      if (adminRouting) next.set("tab", "my-attendance");
+      next.set("range", historyData.logs.some((row) => String(row.rawDate || "").slice(0, 10) === targetDate) ? activeFilter : "week");
+      next.set("regularize", targetDate);
+      setRouteParams(next);
+    }
   };
 
-  // Submit Regularization Form
+  // Submit Regularization Form: POST /api/v1/staff-attendance/regularize
   const handleSubmitRegularization = async (e) => {
     e.preventDefault();
     if (!regForm.reason.trim()) {
@@ -529,8 +681,8 @@ export default function FacultyMyAttendance() {
     try {
       const payload = {
         attendanceDate: regForm.rawDate,
-        requestedInTime: regForm.requestedInTime ? `${regForm.requestedInTime}:00` : null,
-        requestedOutTime: regForm.requestedOutTime ? `${regForm.requestedOutTime}:00` : null,
+        requestedInTime: regForm.requestedInTime ? (regForm.requestedInTime.length === 5 ? `${regForm.requestedInTime}:00` : regForm.requestedInTime) : null,
+        requestedOutTime: regForm.requestedOutTime ? (regForm.requestedOutTime.length === 5 ? `${regForm.requestedOutTime}:00` : regForm.requestedOutTime) : null,
         reason: regForm.reason.trim(),
       };
 
@@ -538,7 +690,7 @@ export default function FacultyMyAttendance() {
       const isSuccess = Boolean(res?.status ?? res?.Status);
       if (isSuccess) {
         notify("Attendance regularization request submitted successfully. Pending Principal/Admin approval.", "success");
-        setRegModalOpen(false);
+        closeRegularizeModal();
         fetchTodayStatus();
         fetchHistory(activeFilter);
       } else {
@@ -552,19 +704,12 @@ export default function FacultyMyAttendance() {
     }
   };
 
-  // Real-time dynamic working hours display (reflects actual recorded duration, --:-- when not checked in)
-  // Formatted check-out cutoff time based on shift end + grace period
+  // Formatted check-out cutoff time based on shift end + grace period (04:30 PM + 15m = 04:45 PM)
   const formattedCutoffTime = useMemo(() => {
-    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "15:20");
-    if (shiftEndMins === null) return "04:45 PM";
+    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM") || (16 * 60 + 30);
     const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
     const cutoffMins = shiftEndMins + grace;
-    let h = Math.floor(cutoffMins / 60);
-    const m = cutoffMins % 60;
-    const ampm = h >= 12 ? "PM" : "AM";
-    if (h > 12) h -= 12;
-    if (h === 0) h = 12;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+    return formatMinutesTo12h(cutoffMins);
   }, [todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes]);
 
   const clockWorkingHours = useMemo(() => {
@@ -575,7 +720,7 @@ export default function FacultyMyAttendance() {
       return calculateDurationStr(todayData.inTime, null, true);
     }
     if (todayData.inTime && isMissedCheckout) {
-      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "03:20 PM", false);
+      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "04:30 PM", false);
     }
     return "--:--";
   }, [todayData, shiftUpdateTick, isMissedCheckout]);
@@ -583,6 +728,8 @@ export default function FacultyMyAttendance() {
   const getStatusBadgeClass = (status) => {
     switch (status) {
       case "Present":
+      case "Present (Admin)":
+      case "Present | Marked by Admin":
         return "present";
       case "Late":
         return "late";
@@ -623,26 +770,33 @@ export default function FacultyMyAttendance() {
             {/* Check Status Row - Centered in middle */}
             <div className="sp-summary-status-row">
               <span className="sp-summary-label">Check Status:</span>
-              <span
-                className={`sp-check-status-badge ${
-                  todayData.status === "punched_in" && !isMissedCheckout
-                    ? (todayData.isLate ? "late" : "in")
+              {todayData.markedByAdmin ? (
+                <span className="sp-check-status-badge in" style={{ background: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" }}>
+                  <ShieldCheck size={14} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                  Present | Marked by Admin ({todayData.inTime || "Verified"})
+                </span>
+              ) : (
+                <span
+                  className={`sp-check-status-badge ${
+                    todayData.status === "punched_in" && !isMissedCheckout
+                      ? (todayData.isLate ? "late" : "in")
+                      : todayData.status === "punched_out"
+                      ? "completed"
+                      : isMissedCheckout
+                      ? "missed"
+                      : "not-checked"
+                  }`}
+                >
+                  <span className="sp-status-bullet">•</span>
+                  {todayData.status === "punched_in" && !isMissedCheckout
+                    ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
                     : todayData.status === "punched_out"
-                    ? "completed"
+                    ? `Completed (${todayData.outTime || "--"})`
                     : isMissedCheckout
-                    ? "missed"
-                    : "not-checked"
-                }`}
-              >
-                <span className="sp-status-bullet">•</span>
-                {todayData.status === "punched_in" && !isMissedCheckout
-                  ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
-                  : todayData.status === "punched_out"
-                  ? `Completed (${todayData.outTime || "--"})`
-                  : isMissedCheckout
-                  ? "Missed Checkout (Cutoff Passed)"
-                  : "Not Checked In"}
-              </span>
+                    ? "Missed Checkout (Cutoff Passed)"
+                    : "Not Checked In"}
+                </span>
+              )}
             </div>
 
             {/* 3 Metric Columns: CHECK IN, CHECK OUT, WORKING HOURS */}
@@ -692,30 +846,77 @@ export default function FacultyMyAttendance() {
           </div>
 
           <div className="sp-punch-twin-grid">
-            {/* Check In Panel */}
-            <div className="sp-twin-panel checkin-panel">
-              {/* Check In Button */}
-              <button
-                type="button"
-                className={`sp-punch-pill-btn checkin ${
-                  todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
-                }`}
-                disabled={todayData.status !== "not_punched" || actionLoading}
-                onClick={handlePunchIn}
-              >
-                {actionLoading && todayData.status === "not_punched" ? (
-                  <Loader2 size={15} className="sp-spin" />
-                ) : (
-                  <LogIn size={15} />
-                )}
-                <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
-              </button>
+            {todayData.markedByAdmin ? (
+              <>
+                <div className="sp-twin-panel checkin-panel" style={{ opacity: 0.95 }}>
+                  <button
+                    type="button"
+                    className="sp-punch-pill-btn checkin inactive"
+                    disabled
+                    style={{ background: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46", cursor: "not-allowed" }}
+                    title="Attendance officially recorded by Administration."
+                  >
+                    <ShieldCheck size={15} />
+                    <span>Present | Marked by Admin</span>
+                  </button>
+                  <div className="sp-punch-foot-hint" style={{ color: "#059669", fontWeight: 600 }}>
+                    In: {todayData.inTime || "--:--"} (Admin Recorded)
+                  </div>
+                </div>
 
-              <div className="sp-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
-            </div>
+                <div className="sp-twin-panel checkout-panel" style={{ opacity: 0.95 }}>
+                  <button
+                    type="button"
+                    className="sp-punch-pill-btn checkout inactive"
+                    disabled
+                    style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#64748b", cursor: "not-allowed" }}
+                    title="Attendance officially recorded by Administration."
+                  >
+                    <ShieldCheck size={15} />
+                    <span>{todayData.outTime ? "Checked Out by Admin" : "Check Out (Admin Locked)"}</span>
+                  </button>
+                  <div className="sp-punch-foot-hint" style={{ color: "#64748b" }}>
+                    Out: {todayData.outTime || "--:--"} (Admin Managed)
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Check In Panel */}
+                <div className="sp-twin-panel checkin-panel">
+                  {/* Check In Button */}
+                  <button
+                    type="button"
+                    className={`sp-punch-pill-btn checkin ${
+                      isCheckInAllowed && todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
+                    }`}
+                    disabled={!isCheckInAllowed || todayData.status !== "not_punched" || actionLoading}
+                    onClick={handlePunchIn}
+                    title={
+                      !isCheckInAllowed
+                        ? `Check-in allowed only during configured shift hours: ${todayData.shiftStartTime} – ${todayData.shiftEndTime}`
+                        : "Click to Check In"
+                    }
+                  >
+                    {actionLoading && todayData.status === "not_punched" ? (
+                      <Loader2 size={15} className="sp-spin" />
+                    ) : (
+                      <LogIn size={15} />
+                    )}
+                    <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
+                  </button>
 
-            {/* Check Out Panel */}
-            <div className="sp-twin-panel checkout-panel">
+                  <div
+                    className="sp-punch-foot-hint"
+                    style={{ color: !isCheckInAllowed && todayData.status === "not_punched" ? "#dc2626" : undefined, fontWeight: !isCheckInAllowed && todayData.status === "not_punched" ? 600 : undefined }}
+                  >
+                    Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}
+                    {!isCheckInAllowed && todayData.status === "not_punched" ? " (Shift Closed)" : ""}
+                  </div>
+                </div>
+
+                {/* Check Out Panel */}
+                <div className="sp-twin-panel checkout-panel">
               {/* Check Out Button */}
               {isMissedCheckout ? (
                 <>
@@ -749,10 +950,15 @@ export default function FacultyMyAttendance() {
                   <button
                     type="button"
                     className={`sp-punch-pill-btn checkout ${
-                      todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                      isCheckOutAllowed && todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
                     }`}
-                    disabled={todayData.status !== "punched_in" || actionLoading}
+                    disabled={!isCheckOutAllowed || todayData.status !== "punched_in" || actionLoading}
                     onClick={handlePunchOut}
+                    title={
+                      !isCheckOutAllowed && todayData.status === "punched_in"
+                        ? `Check-out allowed around shift end (${todayData.shiftEndTime} – ${formattedCutoffTime})`
+                        : "Click to Check Out"
+                    }
                   >
                     {actionLoading && todayData.status === "punched_in" ? (
                       <Loader2 size={15} className="sp-spin" />
@@ -762,12 +968,21 @@ export default function FacultyMyAttendance() {
                     <span>{todayData.status === "punched_out" ? "Checked Out" : "Check Out"}</span>
                   </button>
 
-                  <div className="sp-punch-foot-hint">
+                  <div
+                    className="sp-punch-foot-hint"
+                    style={{
+                      color: !isCheckOutAllowed && todayData.status === "punched_in" ? "#dc2626" : undefined,
+                      fontWeight: !isCheckOutAllowed && todayData.status === "punched_in" ? 600 : undefined
+                    }}
+                  >
                     Allowed: 15-minute window after shift end ({todayData.shiftEndTime} – {formattedCutoffTime})
+                    {!isCheckOutAllowed && todayData.status === "punched_in" ? " (Shift In Progress)" : ""}
                   </div>
                 </>
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -788,8 +1003,8 @@ export default function FacultyMyAttendance() {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.workingDays || (monthlyMetrics || historyData.metrics)?.WorkingDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.workingDaysSub || (monthlyMetrics || historyData.metrics)?.WorkingDaysSub || "Current Month (Month-to-Date)"}</div>
               </>
             )}
           </div>
@@ -809,8 +1024,8 @@ export default function FacultyMyAttendance() {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+                <div className="sp-kpi-value green-val">{(monthlyMetrics || historyData.metrics)?.presentDays || (monthlyMetrics || historyData.metrics)?.PresentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.presentDaysSub || (monthlyMetrics || historyData.metrics)?.PresentDaysSub || "--"}</div>
               </>
             )}
           </div>
@@ -830,20 +1045,20 @@ export default function FacultyMyAttendance() {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.leaves || (monthlyMetrics || historyData.metrics)?.Leaves || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.leavesSub || (monthlyMetrics || historyData.metrics)?.LeavesSub || "--"}</div>
               </>
             )}
           </div>
         </div>
 
-        {/* Card 4: Absent Days */}
+        {/* Card 4: Absent & LOP Days */}
         <div className="cms-card sp-metric-kpi-card">
           <div className="sp-kpi-icon-box red">
             <UserX size={20} />
           </div>
           <div className="sp-kpi-content">
-            <div className="sp-kpi-label">Absent Days</div>
+            <div className="sp-kpi-label">Absent &amp; LOP Days</div>
             {loadingHistory ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
@@ -851,8 +1066,17 @@ export default function FacultyMyAttendance() {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+                <div className="sp-kpi-value red-val">
+                  {(monthlyMetrics || historyData.metrics)?.absentDays || (monthlyMetrics || historyData.metrics)?.AbsentDays || "0 Days"}
+                  {(monthlyMetrics || historyData.metrics)?.lopDays && (monthlyMetrics || historyData.metrics)?.lopDays !== "0 Days" && (
+                    <span style={{ fontSize: "11px", marginLeft: "6px", color: "#dc2626", fontWeight: 700 }}>
+                      ({(monthlyMetrics || historyData.metrics).lopDays} LOP)
+                    </span>
+                  )}
+                </div>
+                <div className="sp-kpi-sub" title={(monthlyMetrics || historyData.metrics)?.lopDaysSub || ""}>
+                  {(monthlyMetrics || historyData.metrics)?.absentDaysSub || (monthlyMetrics || historyData.metrics)?.AbsentDaysSub || "--"}
+                </div>
               </>
             )}
           </div>
@@ -952,94 +1176,94 @@ export default function FacultyMyAttendance() {
                   </tr>
                 ))
               ) : historyData.logs && historyData.logs.length > 0 ? (
-                  historyData.logs.map((log) => {
-                    const id = log.id || log.Id;
-                    const day = log.day || log.Day;
-                    const date = log.date || log.Date;
-                    const shift = log.shift || log.Shift;
-                    const inTime = log.inTime || log.InTime || "--";
-                    const outTime = log.outTime || log.OutTime || "--";
-                    const hours = log.hours || log.Hours || "--";
-                    const status = log.status || log.Status || "--";
-                    const canReg = log.canRegularize ?? log.CanRegularize;
-                    const regState = log.regularizationState || log.RegularizationState;
-                    const holidayName = log.holidayName || log.HolidayName;
-                    const isUpcoming = status === "-" || status === "--";
+                historyData.logs.map((log) => {
+                  const id = log.id || log.Id;
+                  const day = log.day || log.Day;
+                  const date = log.date || log.Date;
+                  const shift = log.shift || log.Shift;
+                  const inTime = log.inTime || log.InTime || "--";
+                  const outTime = log.outTime || log.OutTime || "--";
+                  const hours = log.hours || log.Hours || "--";
+                  const status = log.status || log.Status || "--";
+                  const canReg = log.canRegularize ?? log.CanRegularize;
+                  const regState = log.regularizationState || log.RegularizationState;
+                  const holidayName = log.holidayName || log.HolidayName;
+                  const isUpcoming = status === "-" || status === "--";
 
-                    return (
-                      <tr key={id}>
-                        <td>
-                          <div className="sp-day-name">{day}</div>
-                          <div className="sp-day-date">{date}</div>
-                        </td>
-                        <td>
-                          <span className="sp-shift-text">{shift}</span>
-                        </td>
-                        <td>
-                          <span className={`sp-time-text ${inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
-                            {inTime}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="sp-time-text">{outTime}</span>
-                        </td>
-                        <td>
-                          <span className="sp-hours-text">{hours}</span>
-                        </td>
-                        <td style={{ textAlign: "center" }}>
-                          {isUpcoming ? (
-                            <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
-                          ) : (
-                            <div className="sp-status-cell">
-                              <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
-                                {status}
+                  return (
+                    <tr key={id}>
+                      <td>
+                        <div className="sp-day-name">{day}</div>
+                        <div className="sp-day-date">{date}</div>
+                      </td>
+                      <td>
+                        <span className="sp-shift-text">{shift}</span>
+                      </td>
+                      <td>
+                        <span className={`sp-time-text ${inTime !== "--" && !isUpcoming ? "highlight" : ""}`}>
+                          {inTime}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="sp-time-text">{outTime}</span>
+                      </td>
+                      <td>
+                        <span className="sp-hours-text">{hours}</span>
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {isUpcoming ? (
+                          <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
+                        ) : (
+                          <div className="sp-status-cell">
+                            <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
+                              {status}
+                            </span>
+                            {holidayName && (
+                              <span className="sp-holiday-name-subtext" title={holidayName}>
+                                {holidayName}
                               </span>
-                              {holidayName && (
-                                <span className="sp-holiday-name-subtext" title={holidayName}>
-                                  {holidayName}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ textAlign: "center" }}>
-                          {regState === "pending" ? (
-                            <span className="sp-reg-badge pending">Pending</span>
-                          ) : regState === "approved" ? (
-                            <span className="sp-reg-badge approved">Approved</span>
-                          ) : regState === "rejected" ? (
-                            <span className="sp-reg-badge rejected">Rejected</span>
-                          ) : canReg ? (
-                            <button
-                              type="button"
-                              className="sp-btn-regularize"
-                              onClick={() => openRegularizeModal(log)}
-                            >
-                              <FileText size={12} />
-                              <span>Regularize</span>
-                            </button>
-                          ) : (
-                            <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>--</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
-                      No attendance logs recorded for this period.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        {regState === "pending" ? (
+                          <span className="sp-reg-badge pending">Pending</span>
+                        ) : regState === "approved" ? (
+                          <span className="sp-reg-badge approved">Approved</span>
+                        ) : regState === "rejected" ? (
+                          <span className="sp-reg-badge rejected">Rejected</span>
+                        ) : canReg ? (
+                          <button
+                            type="button"
+                            className="sp-btn-regularize"
+                            onClick={() => openRegularizeModal(log)}
+                          >
+                            <FileText size={12} />
+                            <span>Regularize</span>
+                          </button>
+                        ) : (
+                          <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>--</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
+                    No attendance logs recorded for this period.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {/* Attendance Regularization Modal */}
       {regModalOpen && (
-        <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && setRegModalOpen(false)}>
+        <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && closeRegularizeModal()}>
           <div className="sp-reg-modal" onClick={(e) => e.stopPropagation()}>
             <div className="sp-reg-modal-header">
               <h3 className="sp-reg-modal-title">Attendance Regularization Request</h3>
@@ -1047,7 +1271,7 @@ export default function FacultyMyAttendance() {
                 type="button"
                 className="sp-reg-modal-close"
                 disabled={regSubmitting}
-                onClick={() => setRegModalOpen(false)}
+                onClick={closeRegularizeModal}
               >
                 <X size={18} />
               </button>
@@ -1126,7 +1350,7 @@ export default function FacultyMyAttendance() {
                   type="button"
                   className="sp-reg-cancel-btn"
                   disabled={regSubmitting}
-                  onClick={() => setRegModalOpen(false)}
+                  onClick={closeRegularizeModal}
                 >
                   Cancel
                 </button>

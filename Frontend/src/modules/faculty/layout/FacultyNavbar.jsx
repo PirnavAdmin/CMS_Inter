@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronDown, User, LogOut, CheckCircle2, Building2, Lock, Palette } from "lucide-react";
@@ -899,16 +900,160 @@ export default function FacultyNavbar() {
         </div>
       </div>
 
-      {/* Scoped Responsive Styles for Faculty Academic Selectors */}
+      {/* Scoped Responsive Styles for Faculty Navbar */}
       <style>{`
-        @media (min-width: 1121px) {
-          .cms-academic-responsive-wrapper { display: none !important; }
-          .cms-academic-selectors-desktop { display: flex !important; }
+        /* Enable Container Queries for exact width responsiveness */
+        .cms-topbar {
+          container-type: inline-size;
+          container-name: topbar;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+          overflow-x: clip !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          transition: padding 0.2s ease, gap 0.2s ease;
         }
-        @media (max-width: 1120px) {
+
+        .cms-topbar .cms-search-wrap {
+          flex: 1 1 180px !important;
+          min-width: 0 !important;
+          max-width: 320px !important;
+          transition: max-width 0.2s ease, flex 0.2s ease;
+        }
+
+        .cms-topbar .cms-top-actions {
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          margin-left: auto !important;
+          flex-shrink: 1 !important;
+          min-width: 0 !important;
+        }
+
+        .cms-topbar .cms-academic-btn {
+          max-width: clamp(120px, 15vw, 200px) !important;
+          min-width: 85px !important;
+        }
+
+        .cms-topbar .cms-profile-btn {
+          display: flex !important;
+          align-items: center !important;
+          gap: 7px !important;
+          flex-shrink: 0 !important;
+          min-width: 0 !important;
+          max-width: 200px !important;
+          transition: all 0.2s ease;
+        }
+
+        .cms-topbar .cms-profile-meta {
+          display: flex !important;
+          flex-direction: column !important;
+          min-width: 0 !important;
+          max-width: 120px !important;
+          text-align: left !important;
+        }
+
+        .cms-topbar .cms-profile-meta strong,
+        .cms-topbar .cms-profile-meta span {
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+
+        /* Default: Wide Desktop (≥ 1361px viewport) */
+        .cms-academic-responsive-wrapper { display: none !important; }
+        .cms-academic-selectors-desktop { display: flex !important; }
+
+        /* Media Query Baseline: Switch to compact selector below 1360px */
+        @media (max-width: 1360px) {
           .cms-academic-selectors-desktop { display: none !important; }
           .cms-academic-responsive-wrapper { display: block !important; position: relative; }
         }
+
+        /* Container Query: Switch when actual topbar width is < 1120px (e.g. sidebar or DevTools open) */
+        @container topbar (max-width: 1120px) {
+          .cms-academic-selectors-desktop { display: none !important; }
+          .cms-academic-responsive-wrapper { display: block !important; position: relative; }
+        }
+
+        /* Medium width: Hide text in user profile pill to save 120px */
+        @media (max-width: 1180px) {
+          .cms-topbar .cms-profile-meta { display: none !important; }
+          .cms-topbar .cms-search-wrap { max-width: 220px !important; }
+        }
+
+        @container topbar (max-width: 950px) {
+          .cms-topbar .cms-profile-meta { display: none !important; }
+          .cms-topbar .cms-search-wrap { max-width: 220px !important; }
+        }
+
+        /* Compact width: Mobile / constrained widths */
+        @media (max-width: 768px) {
+          .cms-topbar {
+            padding: 8px 12px !important;
+            gap: 8px !important;
+          }
+          .cms-topbar .cms-search-wrap {
+            max-width: 140px !important;
+            flex-shrink: 1 !important;
+          }
+          .cms-topbar .cms-top-actions {
+            gap: 6px !important;
+          }
+          .cms-topbar .cms-icon-btn {
+            width: 34px !important;
+            height: 34px !important;
+          }
+          .cms-topbar .cms-profile-btn {
+            padding: 2px 4px !important;
+          }
+          .cms-topbar .cms-profile-btn > svg {
+            display: none !important;
+          }
+        }
+
+        @container topbar (max-width: 680px) {
+          .cms-topbar {
+            padding: 8px 12px !important;
+            gap: 8px !important;
+          }
+          .cms-topbar .cms-search-wrap {
+            max-width: 140px !important;
+            flex-shrink: 1 !important;
+          }
+          .cms-topbar .cms-top-actions {
+            gap: 6px !important;
+          }
+          .cms-topbar .cms-icon-btn {
+            width: 34px !important;
+            height: 34px !important;
+          }
+          .cms-topbar .cms-profile-btn {
+            padding: 2px 4px !important;
+          }
+          .cms-topbar .cms-profile-btn > svg {
+            display: none !important;
+          }
+        }
+
+        @container topbar (max-width: 480px) {
+          .cms-topbar .cms-search-wrap {
+            max-width: 100px !important;
+          }
+          .cms-academic-btn-text .cms-academic-btn-label {
+            display: none !important;
+          }
+        }
+
+        .cms-dropdown,
+        .cms-academic-dropdown-panel,
+        .cms-academic-responsive-panel {
+          right: 0 !important;
+          left: auto !important;
+          max-width: min(340px, calc(100vw - 20px)) !important;
+        }
+
         .cms-academic-btn.is-readonly {
           cursor: default !important;
           user-select: none;

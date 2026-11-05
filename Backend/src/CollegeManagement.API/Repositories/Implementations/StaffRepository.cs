@@ -30,6 +30,34 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             try
             {
+                var staff = await _context.Staffs
+                    .Include(s => s.DepartmentRef)
+                    .Include(s => s.DesignationRef)
+                    .Include(s => s.BoardRef)
+                    .Include(s => s.StaffSubjectAllocations)
+                        .ThenInclude(ssa => ssa.Subject)
+                    .Include(s => s.StaffCampusAssignments)
+                        .ThenInclude(sca => sca.Campus)
+                    .Include(s => s.StaffBoardAssignments)
+                        .ThenInclude(sba => sba.Board)
+                    .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+
+                if (staff != null)
+                {
+                    if (staff.BoardRef != null && string.IsNullOrWhiteSpace(staff.BoardName))
+                    {
+                        staff.BoardName = staff.BoardRef.BoardName;
+                    }
+                    return staff;
+                }
+            }
+            catch
+            {
+                // Fallback to Dapper SP if EF Core experiences issues
+            }
+
+            try
+            {
                 using var multi = await Connection.QueryMultipleAsync(
                     "sp_GetStaffById",
                     new { p_Id = id },
@@ -48,26 +76,42 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
-                // Fallback to EF Core if SP is not available
             }
 
-            return await _context.Staffs
-                .Include(s => s.DepartmentRef)
-                .Include(s => s.DesignationRef)
-                .Include(s => s.BoardRef)
-                .Include(s => s.StaffSubjectAllocations)
-                    .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
-                .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+            return null;
         }
 
         public async Task<Staff?> GetByEmployeeIdAsync(string employeeId)
         {
             if (string.IsNullOrWhiteSpace(employeeId)) return null;
             var cleanEmpId = employeeId.Trim();
+
+            try
+            {
+                var staff = await _context.Staffs
+                    .Include(s => s.DepartmentRef)
+                    .Include(s => s.DesignationRef)
+                    .Include(s => s.BoardRef)
+                    .Include(s => s.StaffSubjectAllocations)
+                        .ThenInclude(ssa => ssa.Subject)
+                    .Include(s => s.StaffCampusAssignments)
+                        .ThenInclude(sca => sca.Campus)
+                    .Include(s => s.StaffBoardAssignments)
+                        .ThenInclude(sba => sba.Board)
+                    .FirstOrDefaultAsync(s => s.EmployeeId == cleanEmpId && !s.IsDeleted);
+
+                if (staff != null)
+                {
+                    if (staff.BoardRef != null && string.IsNullOrWhiteSpace(staff.BoardName))
+                    {
+                        staff.BoardName = staff.BoardRef.BoardName;
+                    }
+                    return staff;
+                }
+            }
+            catch
+            {
+            }
 
             try
             {
@@ -82,23 +126,40 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
             }
 
-            return await _context.Staffs
-                .Include(s => s.DepartmentRef)
-                .Include(s => s.DesignationRef)
-                .Include(s => s.BoardRef)
-                .Include(s => s.StaffSubjectAllocations)
-                    .ThenInclude(ssa => ssa.Subject)
-                .Include(s => s.StaffCampusAssignments)
-                    .ThenInclude(sca => sca.Campus)
-                .Include(s => s.StaffBoardAssignments)
-                    .ThenInclude(sba => sba.Board)
-                .FirstOrDefaultAsync(s => s.EmployeeId == cleanEmpId && !s.IsDeleted);
+            return null;
         }
 
         public async Task<Staff?> GetByEmailAsync(string email)
         {
             if (string.IsNullOrWhiteSpace(email)) return null;
             var cleanEmail = email.Trim();
+
+            try
+            {
+                var staff = await _context.Staffs
+                    .Include(s => s.DepartmentRef)
+                    .Include(s => s.DesignationRef)
+                    .Include(s => s.BoardRef)
+                    .Include(s => s.StaffSubjectAllocations)
+                        .ThenInclude(ssa => ssa.Subject)
+                    .Include(s => s.StaffCampusAssignments)
+                        .ThenInclude(sca => sca.Campus)
+                    .Include(s => s.StaffBoardAssignments)
+                        .ThenInclude(sba => sba.Board)
+                    .FirstOrDefaultAsync(s => s.Email == cleanEmail && !s.IsDeleted);
+
+                if (staff != null)
+                {
+                    if (staff.BoardRef != null && string.IsNullOrWhiteSpace(staff.BoardName))
+                    {
+                        staff.BoardName = staff.BoardRef.BoardName;
+                    }
+                    return staff;
+                }
+            }
+            catch
+            {
+            }
 
             try
             {
@@ -113,13 +174,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
             }
 
-            return await _context.Staffs
-                .Include(s => s.DepartmentRef)
-                .Include(s => s.DesignationRef)
-                .Include(s => s.BoardRef)
-                .Include(s => s.StaffSubjectAllocations)
-                    .ThenInclude(ssa => ssa.Subject)
-                .FirstOrDefaultAsync(s => s.Email == cleanEmail && !s.IsDeleted);
+            return null;
         }
 
         public async Task<Staff?> GetByMobileAsync(string mobile)
@@ -144,6 +199,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
+                .Include(s => s.StaffCampusAssignments)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
                 .FirstOrDefaultAsync(s => s.Mobile == cleanMobile && !s.IsDeleted);
@@ -423,10 +479,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.BoardRef != null && (s.BoardRef.BoardName == bName || s.BoardRef.BoardCode == bName));
             }
 
-            // 4.1 Campus filter
+            // 4.1 Campus filter - Include currently assigned staff as well as past assigned staff
             if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
             {
-                query = query.Where(s => s.CampusId == queryParams.CampusId.Value);
+                var cid = queryParams.CampusId.Value;
+                query = query.Where(s => 
+                    s.CampusId == cid ||
+                    s.StaffCampusAssignments.Any(a => a.CampusId == cid));
             }
 
             // 5. Staff Type filter

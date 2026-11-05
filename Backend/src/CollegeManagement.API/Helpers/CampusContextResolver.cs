@@ -28,21 +28,28 @@ public static class CampusContextResolver
 
         if (!isPrivilegedAdmin)
         {
-            if (userCampusId <= 0)
+            // Gather all authorized campus IDs for this user
+            var authorizedCampuses = user.Claims
+                .Where(c => c.Type == "AssignedCampusId" || c.Type == "AssignedCampusIds" || c.Type == "assigned_campus_id")
+                .Select(c => int.TryParse(c.Value, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToHashSet();
+
+            if (userCampusId > 0)
             {
-                if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+                authorizedCampuses.Add(userCampusId);
+            }
+
+            if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+            {
+                if (authorizedCampuses.Count > 0 && !authorizedCampuses.Contains(requestedCampusId.Value))
                 {
-                    return requestedCampusId.Value;
+                    throw new ForbiddenException($"Cross-campus access is forbidden. Caller is not authorized for requested campus ID {requestedCampusId.Value}.");
                 }
-                return 1;
+                return requestedCampusId.Value;
             }
 
-            if (requestedCampusId.HasValue && requestedCampusId.Value > 0 && requestedCampusId.Value != userCampusId)
-            {
-                throw new ForbiddenException($"Cross-campus inspection is forbidden. Caller is bound to campus ID {userCampusId}, but requested campus ID {requestedCampusId.Value}.");
-            }
-
-            return userCampusId;
+            return userCampusId > 0 ? userCampusId : 1;
         }
 
         if (requestedCampusId.HasValue && requestedCampusId.Value > 0)

@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import apiClient from "../../api/apiClient.js";
 import { getDashboard, getProfile, getRoute } from "../../api/transportDriverApi.js";
 import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
@@ -155,8 +155,11 @@ export function DriverDataProvider({ children }) {
     await Promise.all(notifications.filter((item) => !item.isRead && item.id != null).map((item) => markRead(item.id)));
   };
 
-  const driverProfile = getDriverIdentity(assignmentProfile(dashboard, { ...profile, ...dashboard.driverProfile }));
-  return <DriverDataContext.Provider value={{ dashboard, driverProfile, routeDetails, routeError, connectionStatus, notifications, loading, error, notificationError, refresh, markAllRead, markRead, applySavedPreferences }}>
+  const driverProfile = useMemo(() => getDriverIdentity(assignmentProfile(dashboard, { ...profile, ...dashboard.driverProfile })), [dashboard, profile]);
+  const contextValue = useMemo(() => ({
+    dashboard, driverProfile, routeDetails, routeError, connectionStatus, notifications, loading, error, notificationError, refresh, markAllRead, markRead, applySavedPreferences
+  }), [dashboard, driverProfile, routeDetails, routeError, connectionStatus, notifications, loading, error, notificationError, refresh, applySavedPreferences]);
+  return <DriverDataContext.Provider value={contextValue}>
     {liveMessage && <div className="dp-floating-toast" role="status" aria-live="polite">{liveMessage}</div>}
     {children}
   </DriverDataContext.Provider>;

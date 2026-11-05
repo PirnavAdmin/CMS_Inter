@@ -1111,3 +1111,26 @@
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+
+/* Inline preview editing styles (Zero layout-shift) */
+.sp-inline-input,
+.sp-inline-select {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #1e293b);
+  background: #ffffff;
+  border: 1px solid var(--cms-primary-border, #a7f3d0);
+  border-radius: 6px;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.sp-inline-input:focus,
+.sp-inline-select:focus {
+  border-color: var(--cms-primary, #355e3b);
+  box-shadow: 0 0 0 2px rgba(53, 94, 59, 0.15);
+}

@@ -43,7 +43,7 @@ import {
   fetchClaims as apiFetchClaims,
   fetchMyClaims as apiFetchMyClaims,
 } from "@/services/reimbursementService.js";
-import "./FacultyReimbursement.css";
+import "../styles/FacultyReimbursement.css";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
@@ -218,7 +218,7 @@ export default function FacultyReimbursement() {
       let strictlyMyClaims = (myClaimsList || []).filter(isClaimOwnedByFaculty);
 
       // If my-claims endpoint returned nothing, check if any claims matching this faculty exist in the general list
-      if (strictlyMyClaims.length === 0) {
+      if (strictlyMyClaims.length === 0 && isFinanceUser) {
         try {
           const all = await apiFetchClaims({
             facultyId: defaultFacultyId,
@@ -232,12 +232,16 @@ export default function FacultyReimbursement() {
 
       setClaims(strictlyMyClaims);
 
-      // Fetch Account entries for the ledger pill
-      try {
-        const acc = await reimbursementService.fetchAccountEntries();
-        setAccountEntries(acc || []);
-      } catch (e) {
-        // Silently handle if account entries endpoint is unavailable
+      // Fetch Account entries for the ledger pill (Only for Finance / Admin users)
+      if (isFinanceUser) {
+        try {
+          const acc = await reimbursementService.fetchAccountEntries();
+          setAccountEntries(acc || []);
+        } catch (e) {
+          // Silently handle if account entries endpoint is unavailable
+        }
+      } else {
+        setAccountEntries([]);
       }
     } catch (err) {
       console.warn("[FacultyReimbursement] Failed to load data:", err?.message || err);
@@ -245,7 +249,7 @@ export default function FacultyReimbursement() {
     } finally {
       setIsLoadingClaims(false);
     }
-  }, [defaultFacultyId, defaultFacultyName, authUser.employeeId, isClaimOwnedByFaculty]);
+  }, [defaultFacultyId, defaultFacultyName, authUser.employeeId, isClaimOwnedByFaculty, isFinanceUser]);
 
   // Load data on mount
   useEffect(() => {
@@ -526,11 +530,7 @@ export default function FacultyReimbursement() {
       const parsedStaffId = Number.parseInt(String(rawStaffId).replace(/\D/g, ""), 10) || 0;
 
       // Resolve campus ID
-      let resolvedCampusId = 1;
-      try {
-        const storedCampus = localStorage.getItem("cms_selected_campus_id");
-        if (storedCampus && Number(storedCampus)) resolvedCampusId = Number(storedCampus);
-      } catch {}
+      const resolvedCampusId = Number(authUser?.campusId || profileData?.campusId || 1);
 
       // Format ISO date (YYYY-MM-DD)
       const formattedDate = formData.expenseDate
@@ -857,15 +857,17 @@ export default function FacultyReimbursement() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            type="button"
-            className="reimb-sync-pill"
-            onClick={() => setViewAccountsDrawerOpen(true)}
-            title="Click to view integrated payables in Account section"
-            style={{ cursor: "pointer" }}
-          >
-            <CheckCircle2 size={14} /> Account Ledger: {accountEntries.length} Integrated Payables
-          </button>
+          {isFinanceUser && (
+            <button
+              type="button"
+              className="reimb-sync-pill"
+              onClick={() => setViewAccountsDrawerOpen(true)}
+              title="Click to view integrated payables in Account section"
+              style={{ cursor: "pointer" }}
+            >
+              <CheckCircle2 size={14} /> Account Ledger: {accountEntries.length} Integrated Payables
+            </button>
+          )}
           <button
             type="button"
             className="reimb-btn-icon"
@@ -932,7 +934,7 @@ export default function FacultyReimbursement() {
           <div className="reimb-form-header">
             <div className="reimb-form-title-group">
               <h2>
-                <ReceiptIndianRupee size={18} style={{ color: "#6F8400" }} />
+                <ReceiptIndianRupee size={18} style={{ color: "var(--cms-primary, #6F8400)" }} />
                 Submit Reimbursement Claim
               </h2>
               <p>Complete the three sections below and attach supporting receipts or invoices.</p>
@@ -1227,7 +1229,7 @@ export default function FacultyReimbursement() {
                   ) : (
                     <div className="reimb-file-badge">
                       <div className="reimb-file-info">
-                        <Paperclip size={18} style={{ color: "#6F8400", flexShrink: 0 }} />
+                        <Paperclip size={18} style={{ color: "var(--cms-primary, #6F8400)", flexShrink: 0 }} />
                         <div style={{ overflow: "hidden" }}>
                           <div className="reimb-file-name" title={uploadedFile.name}>{uploadedFile.name}</div>
                           <div className="reimb-file-size">
@@ -1593,7 +1595,7 @@ export default function FacultyReimbursement() {
                                 setPreviewDocModalOpen(true);
                               }}
                             >
-                              <Paperclip size={14} style={{ color: "#6F8400" }} />
+                              <Paperclip size={14} style={{ color: "var(--cms-primary, #6F8400)" }} />
                             </button>
                           )}
                         </div>
@@ -1688,7 +1690,7 @@ export default function FacultyReimbursement() {
               </div>
               <div className="reimb-modal-prop">
                 <span className="reimb-modal-label">Claimed Amount</span>
-                <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 16 }}>
+                <span className="reimb-modal-value" style={{ color: "var(--cms-primary, #6F8400)", fontSize: 16 }}>
                   {formatINR(selectedClaim.amount)}
                 </span>
               </div>
@@ -1746,7 +1748,7 @@ export default function FacultyReimbursement() {
                 <span className="reimb-modal-label">Supporting Document</span>
                 <div className="reimb-doc-preview-card">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <Paperclip size={16} style={{ color: "#6F8400" }} />
+                    <Paperclip size={16} style={{ color: "var(--cms-primary, #6F8400)" }} />
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedClaim.proof.name}</span>
                     <span style={{ fontSize: 11, color: "#64748b" }}>
                       ({(selectedClaim.proof.size / 1024).toFixed(1)} KB)
@@ -1785,12 +1787,12 @@ export default function FacultyReimbursement() {
                 {/* Step 2: Under Review */}
                 <div
                   className={`reimb-timeline-step ${selectedClaim.status === CLAIM_STATUSES.UNDER_REVIEW
-                      ? "active"
-                      : selectedClaim.status === CLAIM_STATUSES.APPROVED ||
-                        selectedClaim.status === CLAIM_STATUSES.PAID ||
-                        selectedClaim.status === CLAIM_STATUSES.REJECTED
-                        ? "completed"
-                        : ""
+                    ? "active"
+                    : selectedClaim.status === CLAIM_STATUSES.APPROVED ||
+                      selectedClaim.status === CLAIM_STATUSES.PAID ||
+                      selectedClaim.status === CLAIM_STATUSES.REJECTED
+                      ? "completed"
+                      : ""
                     }`}
                 >
                   <div className="reimb-timeline-node">
@@ -1824,10 +1826,10 @@ export default function FacultyReimbursement() {
                 {/* Step 3: Decision */}
                 <div
                   className={`reimb-timeline-step ${selectedClaim.status === CLAIM_STATUSES.APPROVED || selectedClaim.status === CLAIM_STATUSES.PAID
-                      ? "completed"
-                      : selectedClaim.status === CLAIM_STATUSES.REJECTED
-                        ? "rejected"
-                        : ""
+                    ? "completed"
+                    : selectedClaim.status === CLAIM_STATUSES.REJECTED
+                      ? "rejected"
+                      : ""
                     }`}
                 >
                   <div className="reimb-timeline-node">
@@ -1859,10 +1861,10 @@ export default function FacultyReimbursement() {
                 {/* Step 4: Disbursed (Paid) */}
                 <div
                   className={`reimb-timeline-step ${selectedClaim.status === CLAIM_STATUSES.PAID
-                      ? "completed"
-                      : selectedClaim.status === CLAIM_STATUSES.APPROVED
-                        ? "active"
-                        : ""
+                    ? "completed"
+                    : selectedClaim.status === CLAIM_STATUSES.APPROVED
+                      ? "active"
+                      : ""
                     }`}
                 >
                   <div className="reimb-timeline-node">
@@ -1979,7 +1981,7 @@ export default function FacultyReimbursement() {
               />
             ) : (
               <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
+                <FileText size={48} style={{ color: "var(--cms-primary, #6F8400)", margin: "0 auto 12px" }} />
                 <h4 style={{ margin: "0 0 6px" }}>{selectedClaim.proof.name}</h4>
                 <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                   File size: {(selectedClaim.proof.size / 1024).toFixed(1)} KB • Type: {selectedClaim.proof.type || "Document"}
@@ -2114,8 +2116,8 @@ export default function FacultyReimbursement() {
                   width: 34,
                   height: 34,
                   borderRadius: "50%",
-                  background: "#f1f4e2",
-                  color: "#6F8400",
+                  background: "var(--cms-primary-soft, #f1f4e2)",
+                  color: "var(--cms-primary, #6F8400)",
                   display: "grid",
                   placeItems: "center",
                   flexShrink: 0,
@@ -2167,7 +2169,7 @@ export default function FacultyReimbursement() {
 
               <div className="reimb-modal-prop">
                 <span className="reimb-modal-label">Claimed Amount</span>
-                <span className="reimb-modal-value" style={{ color: "#6F8400", fontSize: 17, fontWeight: 700 }}>
+                <span className="reimb-modal-value" style={{ color: "var(--cms-primary, #6F8400)", fontSize: 17, fontWeight: 700 }}>
                   {formatINR(Number(formData.amount) || 0)}
                 </span>
               </div>
@@ -2206,7 +2208,7 @@ export default function FacultyReimbursement() {
               {uploadedFile ? (
                 <div className="reimb-doc-preview-card">
                   <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
-                    <Paperclip size={16} style={{ color: "#6F8400", flexShrink: 0 }} />
+                    <Paperclip size={16} style={{ color: "var(--cms-primary, #6F8400)", flexShrink: 0 }} />
                     <span style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {uploadedFile.name}
                     </span>
@@ -2298,7 +2300,7 @@ export default function FacultyReimbursement() {
               />
             ) : (
               <div style={{ padding: 30, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <FileText size={48} style={{ color: "#6F8400", margin: "0 auto 12px" }} />
+                <FileText size={48} style={{ color: "var(--cms-primary, #6F8400)", margin: "0 auto 12px" }} />
                 <h4 style={{ margin: "0 0 6px" }}>{uploadedFile.name}</h4>
                 <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>
                   File size: {(uploadedFile.size / 1024).toFixed(1)} KB • Type: {uploadedFile.type || "Document"}

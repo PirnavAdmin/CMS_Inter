@@ -58,6 +58,27 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
             if (int.TryParse(staffClaim, out int sId) && sId > 0) return sId;
+
+            // Fallback 1: Resolve by Email claim
+            var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+            if (!string.IsNullOrWhiteSpace(emailClaim))
+            {
+                var staff = _staffRepository.GetByEmailAsync(emailClaim.Trim()).GetAwaiter().GetResult();
+                if (staff != null && staff.Id > 0) return staff.Id;
+            }
+
+            // Fallback 2: Resolve by UserId claim
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdClaim, out int uid) && uid > 0)
+            {
+                var userRepo = HttpContext.RequestServices.GetService<CollegeManagement.API.Repositories.Interfaces.IUserRepository>();
+                if (userRepo != null)
+                {
+                    var u = userRepo.GetByIdAsync(uid).GetAwaiter().GetResult();
+                    if (u?.StaffId.HasValue == true && u.StaffId.Value > 0) return u.StaffId.Value;
+                }
+            }
+
             return null;
         }
 
@@ -514,6 +535,7 @@ namespace CollegeManagement.API.Controllers.V1
             if (!IsAdminOrPrincipal())
             {
                 var callerId = GetCallerStaffId();
+                if (id <= 0 && callerId.HasValue) id = callerId.Value;
                 if (!callerId.HasValue || callerId.Value != id) return Forbid();
             }
 
@@ -545,6 +567,7 @@ namespace CollegeManagement.API.Controllers.V1
             if (!IsAdminOrPrincipal())
             {
                 var callerId = GetCallerStaffId();
+                if (id <= 0 && callerId.HasValue) id = callerId.Value;
                 if (!callerId.HasValue || callerId.Value != id) return Forbid();
             }
 
@@ -650,6 +673,27 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        [HttpGet("{id:int}/offer-letter-pdf")]
+        public async Task<IActionResult> DownloadOfferLetterPdf(int id)
+        {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
+            var (bytes, contentType, fileName) = await _staffService.GenerateOfferLetterPdfAsync(id);
+            return File(bytes, contentType, fileName);
+        }
+
+        [HttpGet("{id:int}/experience-summary")]
+        [BypassPermission]
+        public async Task<IActionResult> GetStaffExperienceSummary(int id)
+        {
+            var summary = await _staffService.GetStaffExperienceSummaryAsync(id);
+            return Ok(summary);
+        }
+
         /// 21. POST /api/v1/staff/{id}/documents/upload
         /// Uploads an individual document for a staff member.
         /// </summary>

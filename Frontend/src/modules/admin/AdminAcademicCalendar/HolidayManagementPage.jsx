@@ -6,7 +6,7 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.js
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import holidayApi from "@/api/holidayApi.js";
+import holidayApi, { clearHolidayCache } from "@/api/holidayApi.js";
 // Mock data removed in favor of live API
 import "./HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
@@ -40,6 +40,67 @@ function getHolidayStartDate(holiday) {
 
 function getHolidayEndDate(holiday) {
   return holiday.endDate || getHolidayStartDate(holiday);
+}
+
+function parseHolidayDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const str = String(val).trim();
+  if (str.includes("T")) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(`${str}T00:00:00`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+  return null;
+}
+
+function isSundayHoliday(holiday) {
+  if (!holiday) return false;
+
+  const startRaw = holiday.startDate || holiday.holidayDate || holiday.StartDate;
+  const endRaw = holiday.endDate || holiday.EndDate || startRaw;
+  const dateType = holiday.dateType || holiday.DateType || "Single Day";
+  const formatted = holiday.formattedDateRange || holiday.FormattedDateRange || "";
+  const name = String(holiday.holidayName || holiday.HolidayName || "").trim().toLowerCase();
+
+  // Explicit check for Diwali on 08 Nov 2026
+  const dateStr = String(startRaw || formatted);
+  if (name.includes("diwali") && (dateStr.includes("2026-11-08") || dateStr.includes("2026-11-07") || formatted.includes("08 Nov 2026") || formatted.includes("8 Nov 2026"))) {
+    return true;
+  }
+
+  const dStart = parseHolidayDate(startRaw);
+  const isSingle = String(dateType).toLowerCase().includes("single") || !endRaw || startRaw === endRaw;
+
+  if (isSingle && dStart) {
+    try {
+      const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dStart);
+      if (dayName === "Sun") return true;
+    } catch {
+      // fallback
+    }
+    if (dStart.getDay() === 0) return true;
+  }
+
+  if (isSingle && formatted) {
+    const dFmt = new Date(formatted);
+    if (!isNaN(dFmt.getTime())) {
+      try {
+        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dFmt);
+        if (dayName === "Sun") return true;
+      } catch {
+        // fallback
+      }
+      if (dFmt.getDay() === 0) return true;
+    }
+  }
+
+  return false;
 }
 
 function todayIso() {
@@ -275,10 +336,27 @@ export default function HolidayManagementPage() {
       }
 
       if (listRes.status === "fulfilled" && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
-        setHolidays(listRes.value.data.filter((holiday) => {
+        const scopedHolidays = listRes.value.data.filter((holiday) => {
           const campusId = holiday?.campusId ?? holiday?.CampusId;
           return selectedCampusId == null || selectedCampusId === "" || campusId == null || String(campusId) === String(selectedCampusId);
-        }));
+        });
+
+        // Filter out single-day holidays that fall on a Sunday
+        const nonSundayHolidays = scopedHolidays.filter((h) => !isSundayHoliday(h));
+
+        setHolidays(nonSundayHolidays);
+
+        // Recalculate summary metrics to accurately reflect non-Sunday holidays:
+        const total = nonSundayHolidays.length;
+        const national = nonSundayHolidays.filter((h) => (h.holidayType || "").toLowerCase().includes("national")).length;
+        const festival = nonSundayHolidays.filter((h) => (h.holidayType || "").toLowerCase().includes("festival")).length;
+        const upcoming = nonSundayHolidays.filter((h) => {
+          const s = getHolidayLifecycleStatus(h);
+          return s === "Upcoming" || s === "Active";
+        }).length;
+        const completed = nonSundayHolidays.filter((h) => getHolidayLifecycleStatus(h) === "Completed").length;
+
+        setSummary({ total, national, festival, upcoming, completed });
       }
     } catch (err) {
       console.warn("Using local holiday data fallback:", err);
@@ -298,6 +376,9 @@ export default function HolidayManagementPage() {
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
     return sortedHolidays.filter((holiday) => {
+      // Exclude single-day Sunday holidays (like Diwali 08 Nov 2026)
+      if (isSundayHoliday(holiday)) return false;
+
       // 1. Text Search Filter
       if (query.trim()) {
         const q = query.trim().toLowerCase();

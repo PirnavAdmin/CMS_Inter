@@ -132,6 +132,8 @@ public class CertificateService : ICertificateService
         if (student == null)
             throw new InvalidOperationException($"Student with AdmissionNo '{request.AdmissionNo}' not found.");
 
+        request.CampusId ??= student.CampusId;
+
         if (string.IsNullOrWhiteSpace(request.CertificateNo))
         {
             var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 

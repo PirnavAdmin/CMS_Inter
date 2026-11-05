@@ -19,4 +19,6 @@ public class GenerateCertificateRequestDto
     public string? Remarks { get; set; }
 
     public string? CertificateNo { get; set; }
+
+    public int? CampusId { get; set; }
 }

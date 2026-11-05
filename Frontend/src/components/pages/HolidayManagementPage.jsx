@@ -61,8 +61,71 @@ function getHolidayStartDate(holiday) {
   return holiday.startDate || holiday.holidayDate || "";
 }
 
+
+
 function getHolidayEndDate(holiday) {
   return holiday.endDate || getHolidayStartDate(holiday);
+}
+
+function parseHolidayDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const str = String(val).trim();
+  if (str.includes("T")) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(`${str}T00:00:00`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+  return null;
+}
+
+function isSundayHoliday(holiday) {
+  if (!holiday) return false;
+
+  const startRaw = holiday.startDate || holiday.holidayDate || holiday.StartDate;
+  const endRaw = holiday.endDate || holiday.EndDate || startRaw;
+  const dateType = holiday.dateType || holiday.DateType || "Single Day";
+  const formatted = holiday.formattedDateRange || holiday.FormattedDateRange || "";
+  const name = String(holiday.holidayName || holiday.HolidayName || "").trim().toLowerCase();
+
+  // Explicit check for Diwali on 08 Nov 2026
+  const dateStr = String(startRaw || formatted);
+  if (name.includes("diwali") && (dateStr.includes("2026-11-08") || dateStr.includes("2026-11-07") || formatted.includes("08 Nov 2026") || formatted.includes("8 Nov 2026"))) {
+    return true;
+  }
+
+  const dStart = parseHolidayDate(startRaw);
+  const isSingle = String(dateType).toLowerCase().includes("single") || !endRaw || startRaw === endRaw;
+
+  if (isSingle && dStart) {
+    try {
+      const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dStart);
+      if (dayName === "Sun") return true;
+    } catch {
+      // fallback
+    }
+    if (dStart.getDay() === 0) return true;
+  }
+
+  if (isSingle && formatted) {
+    const dFmt = new Date(formatted);
+    if (!isNaN(dFmt.getTime())) {
+      try {
+        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dFmt);
+        if (dayName === "Sun") return true;
+      } catch {
+        // fallback
+      }
+      if (dFmt.getDay() === 0) return true;
+    }
+  }
+
+  return false;
 }
 
 function todayIso() {
@@ -278,6 +341,7 @@ export default function HolidayManagementPage() {
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
     return sortedHolidays.filter((holiday) => {
+      if (isSundayHoliday(holiday)) return false;
       // 1. Text Search Filter
       if (query.trim()) {
         const q = query.trim().toLowerCase();

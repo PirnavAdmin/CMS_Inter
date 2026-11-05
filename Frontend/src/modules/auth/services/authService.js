@@ -826,6 +826,34 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     payload.user?.photo ||
     "";
 
+  const rawProfileStatus =
+    data.ProfileStatus ||
+    data.profileStatus ||
+    payload.ProfileStatus ||
+    payload.profileStatus ||
+    jwtClaims.ProfileStatus ||
+    jwtClaims.profileStatus ||
+    data.user?.profileStatus ||
+    payload.user?.profileStatus;
+  const profileStatus = rawProfileStatus ? String(rawProfileStatus).trim() : (isFaculty ? "PendingLink" : "Completed");
+  const profileCompletionPercentage = Number(
+    data.ProfileCompletionPercentage ||
+    data.profileCompletionPercentage ||
+    payload.ProfileCompletionPercentage ||
+    payload.profileCompletionPercentage ||
+    data.user?.profileCompletionPercentage ||
+    payload.user?.profileCompletionPercentage ||
+    0
+  );
+  const rawIsOnboarded = data.IsOnboarded ?? data.isOnboarded ?? payload.IsOnboarded ?? payload.isOnboarded ?? data.user?.isOnboarded ?? payload.user?.isOnboarded;
+  const isCompleted =
+    String(profileStatus || "").toLowerCase() === "completed" ||
+    String(profileStatus || "").toLowerCase() === "approved" ||
+    String(profileStatus || "").toLowerCase() === "submitted" ||
+    profileCompletionPercentage >= 50 ||
+    rawIsOnboarded === true;
+  const isOnboarded = isCompleted || isAdmin;
+
   const user = {
     id: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || data.AdminId || data.adminId || data.id || data.Id || payload.AdminId || payload.adminId || payload.id || payload.Id,
     userId: data.UserId || data.userId || payload.UserId || payload.userId || data.user?.userId || payload.user?.userId || (isTransportManager ? 928 : null),
@@ -837,8 +865,12 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     email: userEmail,
     role: Array.isArray(role) ? role[0] : role,
     roles: [...new Set(roleNames)],
-    designation,
+    designation: data.Designation || data.designation || payload.Designation || payload.designation || designation,
+    designationId: data.DesignationId || data.designationId || payload.DesignationId || payload.designationId || null,
     department: data.Department || data.department || payload.Department || payload.department || (isTransportManager ? "Transport" : ""),
+    departmentId: data.DepartmentId || data.departmentId || payload.DepartmentId || payload.departmentId || null,
+    allocatedSubjects: Array.isArray(data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) ? (data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) : [],
+    subjects: Array.isArray(data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) ? (data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) : [],
     campusId: data.CampusId || data.campusId || payload.CampusId || payload.campusId || (assignedCampusIds[0] || (isTransportManager ? 1 : null)),
     boardId: data.BoardId || data.boardId || payload.BoardId || payload.boardId || (assignedBoardIds[0] || (isTransportManager ? 1 : null)),
     isAdmin,
@@ -848,6 +880,9 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     photoPath: photoUrl || null,
     profilePhoto: photoUrl || null,
     photo: photoUrl || null,
+    profileStatus,
+    isOnboarded,
+    profileCompletionPercentage: data.ProfileCompletionPercentage || data.profileCompletionPercentage || payload.ProfileCompletionPercentage || payload.profileCompletionPercentage || 0,
   };
 
 

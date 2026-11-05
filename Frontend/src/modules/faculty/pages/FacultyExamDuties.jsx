@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import "../styles/FacultyExamDuties.css";
+import FacultySearchableSelect from "../components/FacultySearchableSelect.jsx";
 import { useFacultySafe } from "../FacultyContext.jsx";
 import apiClient from "@/api/axios.js";
 import { getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
@@ -491,20 +492,21 @@ export default function FacultyExamDuties() {
           </div>
 
           {/* Category Filter */}
-          <div className="fed-search-filters">
-            <select
-              className="fed-select"
+          <div className="fed-search-filters" style={{ minWidth: 200 }}>
+            <FacultySearchableSelect
               value={examTypeFilter}
+              options={[
+                { id: "all", name: "All Exam Categories" },
+                { id: "board", name: "Board Theory / IPE" },
+                { id: "practical", name: "Practical Labs" },
+                { id: "internal", name: "Pre-Final / Internal" },
+              ]}
               onChange={(e) => {
                 setExamTypeFilter(e.target.value);
                 setCurrentPage(1);
               }}
-            >
-              <option value="all">All Exam Categories</option>
-              <option value="board">Board Theory / IPE</option>
-              <option value="practical">Practical Labs</option>
-              <option value="internal">Pre-Final / Internal</option>
-            </select>
+              style={{ minWidth: 200 }}
+            />
           </div>
         </div>
       </div>

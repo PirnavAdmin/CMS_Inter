@@ -33,16 +33,30 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool? status,
             int pageNumber,
             int pageSize,
-            int? campusId = null)
+            int? campusId = null,
+            int? boardId = null)
         {
             var query = _context.AcademicYears
                 .Include(x => x.Board)
                 .AsNoTracking()
                 .AsQueryable();
 
-            if (campusId.HasValue)
+            if (boardId.HasValue && boardId.Value > 0)
             {
-                query = query.Where(x => x.CampusId == campusId.Value);
+                query = query.Where(x => x.BoardId == boardId.Value);
+            }
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                // If there are academic years specifically assigned to this campus (matching board if specified), filter to it.
+                // Otherwise fall back to institutional/global academic years so campus transfer and dependent modules have access to academic years.
+                bool hasCampusYears = await _context.AcademicYears
+                    .AnyAsync(x => x.CampusId == campusId.Value && (!boardId.HasValue || boardId.Value <= 0 || x.BoardId == boardId.Value));
+
+                if (hasCampusYears)
+                {
+                    query = query.Where(x => x.CampusId == campusId.Value);
+                }
             }
 
             if (status.HasValue)
@@ -78,9 +92,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .AsNoTracking()
                 .AsQueryable();
 
-            if (campusId.HasValue)
+            if (campusId.HasValue && campusId.Value > 0)
             {
-                query = query.Where(x => x.CampusId == campusId.Value);
+                bool hasCampusYears = await _context.AcademicYears
+                    .AnyAsync(x => x.CampusId == campusId.Value);
+
+                if (hasCampusYears)
+                {
+                    query = query.Where(x => x.CampusId == campusId.Value);
+                }
             }
 
             if (status.HasValue)

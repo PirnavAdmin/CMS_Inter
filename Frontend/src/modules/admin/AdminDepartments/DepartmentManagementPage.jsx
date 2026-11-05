@@ -96,7 +96,7 @@ export const NON_TEACHING_DESIGNATIONS_SET = new Set([
   "data entry operator",
   "deo",
   "driver",
-  "bus driver",
+  "driver",
   "electrician",
   "plumber",
   "carpenter",

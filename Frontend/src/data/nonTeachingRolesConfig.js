@@ -179,8 +179,7 @@ export const NON_TEACHING_ROLE_CONFIG = {
     ],
     roles: [
       "Driver",
-      "Bus Driver",
-      "Van Driver",
+            "Van Driver",
       "Bus Attendant / Attender",
       "Mechanic",
       "Transport Coordinator",
@@ -192,7 +191,7 @@ export const NON_TEACHING_ROLE_CONFIG = {
     roleConfigs: {
       DRIVER: {
         title: "Transport Details (Driver)",
-        roleLabel: "Driver / Bus Driver / Van Driver",
+        roleLabel: "Driver / Van Driver",
         docList: [
           { key: "drivingLicenseDoc", label: "Driving License", required: true },
           { key: "transportBadgeDoc", label: "Transport Badge", required: false },

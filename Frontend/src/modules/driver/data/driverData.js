@@ -4,6 +4,23 @@ export function unwrapDriverData(response) {
   return payload.data ?? payload;
 }
 
+export function formatTime12Hour(timeStr) {
+  if (!timeStr || typeof timeStr !== "string") return timeStr || "";
+  const trimmed = timeStr.trim();
+  if (trimmed.toLowerCase().includes("am") || trimmed.toLowerCase().includes("pm")) return trimmed;
+  const parts = trimmed.split(":");
+  if (parts.length >= 2) {
+    let h = parseInt(parts[0], 10);
+    const m = parts[1].padStart(2, "0");
+    if (isNaN(h)) return trimmed;
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    h = h ? h : 12;
+    return `${String(h).padStart(2, "0")}:${m} ${ampm}`;
+  }
+  return trimmed;
+}
+
 export function assignmentProfile(data = {}, profile = {}) {
   if (Object.hasOwn(data, "assignedVehicle") || Object.hasOwn(data, "vehicle")) {
     const vehicle = Object.hasOwn(data, "assignedVehicle") ? data.assignedVehicle : data.vehicle;

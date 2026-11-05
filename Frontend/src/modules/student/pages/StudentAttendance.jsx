@@ -85,7 +85,7 @@ export default function StudentAttendance() {
         const selectedMonthNumber = Number(selectedMonth.slice(5, 7));
         const lastDay = String(new Date(selectedYear, selectedMonthNumber, 0).getDate()).padStart(2, "0");
         const monthEnd = `${selectedMonth}-${lastDay}`;
-        const toDate = view === "monthly" ? monthEnd : new Date().toISOString().slice(0, 10);
+        const toDate = view === "monthly" ? monthEnd : todayKey();
         const response = await getStudentAttendance(student.studentId, fromDate, toDate);
         if (active) { setPayload(response); }
       } catch (requestError) {
