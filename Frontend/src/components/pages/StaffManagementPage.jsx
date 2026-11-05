@@ -299,8 +299,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -713,8 +713,7 @@ export const NON_TEACHING_ROLE_NAMES = [
   "Library / Librarian",
   "Hostel Warden",
   "Placement Officer",
-  "Bus Driver",
-  "Attendant",
+    "Attendant",
 ];
 
 const teachingFields = [

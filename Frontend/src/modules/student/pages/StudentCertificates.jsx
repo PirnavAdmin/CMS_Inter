@@ -8,10 +8,11 @@ import StudentDataTable from "../components/StudentDataTable.jsx";
 import StudentEmptyState from "../components/StudentEmptyState.jsx";
 import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentStatusBadge from "../components/StudentStatusBadge.jsx";
-import { useStudentProfile, useStudentNavigation } from "../context/StudentProfileContext.jsx";
+import { useStudentProfile, useStudentNavigation, studentRouteValue, validStudentPage } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
 
 const unwrap = (data) => data?.data?.data ?? data?.data ?? data?.Data ?? data ?? {};
+const PAGE_SIZE = 5;
 const read = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
 const list = (data, keys) => { const value = unwrap(data); if (Array.isArray(value)) return value; for (const key of keys) if (Array.isArray(value?.[key])) return value[key]; return []; };
 const date = (value) => value ? new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -40,6 +41,7 @@ const DEFAULT_FALLBACK_TYPES = [
 
 export default function StudentCertificates() {
   const navigation = useStudentNavigation();
+  const [page, setPage] = studentRouteValue(navigation, "page", 1, validStudentPage);
   const location = useLocation();
   const navigate = useNavigate();
   const consumedRequest = useRef(null);
@@ -243,6 +245,11 @@ export default function StudentCertificates() {
     });
   }, [location, navigate, profileLoading, loading, defaultCertificateType, openRequestCertificate]);
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const visibleRows = rows.slice(pageStart, pageStart + PAGE_SIZE);
+
   if (profileLoading || loading) return <div className="sp-page"><SkeletonPage variant="table" columns={5} rows={5}/></div>;
 
   return (
@@ -252,7 +259,7 @@ export default function StudentCertificates() {
       {!templatesReady.length && !error ? <div className="sp-api-state">No admin-created certificate types are available for your academic context. Please contact the college administrator.</div> : null}
       {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
       <StudentCard title="Certificate Requests" subtitle={`${rows.length} certificate request${rows.length === 1 ? "" : "s"}`}>
-        {!rows.length && !error ? <StudentEmptyState title="No certificate requests" text="Your certificate requests and issued certificates will appear here."/> : <StudentDataTable columns={["Certificate No.", "Certificate Type", "Requested Date", "Purpose", "Status", "Action"]} rows={rows} empty="No certificate requests found for this student." renderCell={(value, row, column, index) => {
+        {!rows.length && !error ? <StudentEmptyState title="No certificate requests" text="Your certificate requests and issued certificates will appear here."/> : <StudentDataTable columns={["Certificate No.", "Certificate Type", "Requested Date", "Purpose", "Status", "Action"]} rows={visibleRows} empty="No certificate requests found for this student." renderCell={(value, row, column, index) => {
           if (index === 0) return read(row, "certificateNumber", "CertificateNumber") || "—";
           if (index === 1) return read(row, "certificateType", "CertificateType", "templateTitle", "TemplateTitle") || "—";
           if (index === 2) return date(read(row, "requestDate", "RequestDate", "generatedAt", "GeneratedAt"));
@@ -262,6 +269,14 @@ export default function StudentCertificates() {
           const id = String(read(row, "certificateId", "CertificateId", "id", "Id") || "");
           return <button type="button" className="sp-icon-action" title={issued ? "Download certificate" : "Certificate is not issued yet"} aria-label="Download certificate" disabled={!issued || downloading === id} onClick={() => download(row)}><Download size={16}/></button>;
         }}/>}
+        {rows.length > 0 ? <footer className="sp-pagination">
+          <span>Showing {pageStart + 1}-{Math.min(pageStart + PAGE_SIZE, rows.length)} of {rows.length} certificate requests</span>
+          <div>
+            <button type="button" className="sp-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
+            <strong>Page {currentPage} of {totalPages}</strong>
+            <button type="button" className="sp-btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
+          </div>
+        </footer> : null}
       </StudentCard>
       {open ? (
         <div className="sp-modal-backdrop">

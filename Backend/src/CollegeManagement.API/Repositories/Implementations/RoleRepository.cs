@@ -19,9 +19,33 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await _context.Roles.FindAsync(id);
         }
 
-        public async Task<List<Role>> GetAllAsync()
+        public async Task<List<Role>> GetAllAsync(string? staffType = null, bool includeInactive = false)
         {
-            return await _context.Roles.ToListAsync();
+            var query = _context.Roles.AsQueryable();
+
+            if (!includeInactive)
+            {
+                query = query.Where(r => r.IsActive);
+            }
+
+            if (!string.IsNullOrWhiteSpace(staffType))
+            {
+                var norm = staffType.Trim();
+                if (norm.Equals("Teaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(r => r.StaffType == "Teaching" || r.StaffType == "Both");
+                }
+                else if (norm.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) || norm.Equals("NonTeaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(r => r.StaffType == "Non-Teaching" || r.StaffType == "NonTeaching" || r.StaffType == "Both");
+                }
+                else
+                {
+                    query = query.Where(r => r.StaffType == norm || r.StaffType == "Both");
+                }
+            }
+
+            return await query.OrderBy(r => r.RoleId).ToListAsync();
         }
 
         public async Task AddAsync(Role role)

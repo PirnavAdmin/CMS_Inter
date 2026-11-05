@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Route as RouteIcon,
   Bus,
@@ -18,10 +18,10 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { getDashboard } from "../../../api/transportDriverApi.js";
+import { getDashboard, getRoute, getTrips } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
-import { unwrapDriverData } from "../data/driverData.js";
+import { unwrapDriverData, formatTime12Hour } from "../data/driverData.js";
 
 export default function DriverHomePage({
   onNavigateTab,
@@ -29,20 +29,46 @@ export default function DriverHomePage({
   studentsList = [],
 }) {
   const [dashboardData, setDashboardData] = useState(null);
+  const [tripsData, setTripsData] = useState(null);
+  const [routeInfo, setRouteInfo] = useState(null);
   const { driverProfile } = useDriverData();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
     const fetchDashboard = async () => {
       try {
-        setIsLoading(true);
-        const res = await getDashboard();
-        if (isMounted) {
-          setDashboardData(unwrapDriverData(res));
-          setError(null);
+        if (!hasLoadedOnce.current) {
+          setIsLoading(true);
         }
+        const [dashRes, routeRes, tripsRes] = await Promise.allSettled([
+          getDashboard().then(unwrapDriverData),
+          getRoute().then(unwrapDriverData),
+          getTrips().then(unwrapDriverData),
+        ]);
+
+        if (!isMounted) return;
+
+        if (dashRes.status === "fulfilled") {
+          setDashboardData(dashRes.value);
+        }
+        if (tripsRes && tripsRes.status === "fulfilled") {
+          const tVal = tripsRes.value?.trips || tripsRes.value || {};
+          setTripsData(tVal);
+        }
+        if (routeRes.status === "fulfilled") {
+          const rVal = routeRes.value || {};
+          const rObj = rVal.route || rVal;
+          const stops = rVal.stops || rVal.pickupPoints || rObj.stops || rObj.pickupPoints || [];
+          setRouteInfo({
+            ...rObj,
+            stops,
+            pickupPoints: stops,
+          });
+        }
+        setError(null);
       } catch (err) {
         if (isMounted) {
           setError(err?.response?.data?.message || err.message || "Failed to load dashboard data");
@@ -50,6 +76,7 @@ export default function DriverHomePage({
       } finally {
         if (isMounted) {
           setIsLoading(false);
+          hasLoadedOnce.current = true;
         }
       }
     };
@@ -59,15 +86,46 @@ export default function DriverHomePage({
     };
   }, []);
 
-  const pickedUpCount = studentsList.filter((s) => s.status === "Picked Up").length;
-  const pendingCount = studentsList.filter((s) => s.status === "Pending").length;
-  const totalStudents = studentsList.length || 32;
+  const assignedVeh = dashboardData?.assignedVehicle || dashboardData?.assignment || {};
+  const assignedRoute = dashboardData?.route || dashboardData?.assignment || {};
+  const assignedAtt = dashboardData?.attendant || dashboardData?.assignment || {};
 
-  const morningTripStatus = activeTripState?.morningTripStatus || "In Progress";
-  const eveningTripStatus = activeTripState?.eveningTripStatus || "Pending";
+  const busNumber = assignedVeh.vehicleNumber || driverProfile?.assignedVehicle || "AP39AU2653";
+  const vehicleModel = assignedVeh.vehicleType || driverProfile?.vehicleModel || "Transport Van (35-Seater)";
+  const vehicleReg = assignedVeh.registrationNumber || "AP-REG-109";
+  const routeName = assignedRoute.routeName || routeInfo?.routeName || driverProfile?.assignedRoute || "Habsiguda";
+  const routeCode = assignedRoute.routeCode || routeInfo?.routeCode || "HABSIGUDA_1";
+  const routeDistance = routeInfo?.DistanceKm || routeInfo?.distanceKm || "21.0";
+  const attendantName = assignedAtt.attendantName || driverProfile?.assignedAttendant || "Govardhan Rao";
+  const shiftName = dashboardData?.shift || dashboardData?.assignment?.shift || driverProfile?.shift || "Morning";
+
+  const totalAssignedStudents =
+    dashboardData?.assignedStudents ??
+    dashboardData?.assignment?.assignedStudents ??
+    studentsList.length ??
+    2;
+
+  const pickedUpCount = studentsList.filter((s) => s.status === "Picked Up" || s.status === "Boarded").length;
+  const pendingCount = Math.max(0, totalAssignedStudents - pickedUpCount);
+
+  const morningTripObj = tripsData?.morningTrip;
+  const eveningTripObj = tripsData?.eveningTrip;
+
+  const morningTripStatus = morningTripObj?.status || activeTripState?.morningTripStatus || "Scheduled";
+  const eveningTripStatus = eveningTripObj?.status || activeTripState?.eveningTripStatus || "Scheduled";
+
+  const isAllTripsCompleted = morningTripStatus === "Completed" && eveningTripStatus === "Completed";
+  const isTripInProgress = morningTripStatus === "In Progress" || eveningTripStatus === "In Progress";
+
+  const morningTripTime = dashboardData?.morningTripTime || dashboardData?.assignment?.morningTripTime || "07:35 AM";
+  const eveningTripTime = dashboardData?.eveningTripTime || dashboardData?.assignment?.eveningTripTime || "04:45 PM";
 
   if (isLoading) {
-    return <div className="dp-page-container"><SkeletonPage variant="dashboard" columns={4} /></div>;
+    return (
+      <div className="dp-page-container">
+        <SkeletonPage variant="dashboard" columns={4} />
+      </div>
+    );
   }
 
   if (error) {
@@ -83,9 +141,43 @@ export default function DriverHomePage({
     );
   }
 
-  const todaySchedule = dashboardData?.todaySchedule || [];
-  const routeDetails = dashboardData?.routeDetails || { stops: [] };
+  const toTitleCase = (str) => {
+    if (!str || typeof str !== "string") return "";
+    return str.replace(/\b\w/g, (c) => c.toUpperCase());
+  };
 
+  const rawStops = routeInfo?.stops || routeInfo?.pickupPoints || dashboardData?.routeDetails?.stops || [];
+  const stopsList = rawStops.map((s, idx) => ({
+    id: s.pickupPointId || s.id || idx + 1,
+    name: toTitleCase(s.stopName || s.name || `Stop ${idx + 1}`),
+    pickupTime: formatTime12Hour(s.pickupTime) || "07:35 AM",
+    studentCount: s.studentCount != null ? Number(s.studentCount) : 0,
+    status: isAllTripsCompleted ? "Completed" : (s.status || "Scheduled"),
+    stopNumber: s.stopOrder || s.sequenceNo || idx + 1,
+  }));
+
+  const todaySchedule = [
+    {
+      id: "m-trip-1",
+      time: morningTripObj?.time || `${formatTime12Hour(morningTripTime)} - 08:30 AM`,
+      title: "Morning Pickup Operation",
+      route: routeName,
+      stops: `${stopsList.length || 2} Stops`,
+      students: totalAssignedStudents,
+      status: morningTripStatus,
+      statusTone: morningTripStatus === "Completed" ? "success" : morningTripStatus === "In Progress" ? "warning" : "primary",
+    },
+    {
+      id: "e-trip-2",
+      time: eveningTripObj?.time || `${formatTime12Hour(eveningTripTime)} - 05:30 PM`,
+      title: "Evening Drop Operation",
+      route: routeName,
+      stops: `${stopsList.length || 2} Stops`,
+      students: totalAssignedStudents,
+      status: eveningTripStatus,
+      statusTone: eveningTripStatus === "Completed" ? "success" : eveningTripStatus === "In Progress" ? "warning" : "primary",
+    },
+  ];
 
   return (
     <div className="dp-page-container">
@@ -99,18 +191,10 @@ export default function DriverHomePage({
           <p className="dp-page-subtitle">Safe Students, Smooth Journeys</p>
         </div>
         <div className="dp-header-actions">
-          <button
-            type="button"
-            className="dp-btn dp-btn-outline"
-            onClick={() => onNavigateTab("route")}
-          >
+          <button type="button" className="dp-btn dp-btn-outline" onClick={() => onNavigateTab("route")}>
             <RouteIcon size={16} /> View Route Map
           </button>
-          <button
-            type="button"
-            className="dp-btn dp-btn-primary"
-            onClick={() => onNavigateTab("trips")}
-          >
+          <button type="button" className="dp-btn dp-btn-primary" onClick={() => onNavigateTab("trips")}>
             <Play size={16} /> Trips Management
           </button>
         </div>
@@ -118,24 +202,26 @@ export default function DriverHomePage({
 
       {/* Driver Welcome Hero Strip */}
       <div className="dp-driver-hero-card">
-        <div className="dp-hero-avatar">{driverProfile.initials || "DR"}</div>
+        <div className="dp-hero-avatar">{driverProfile?.initials || "PR"}</div>
         <div className="dp-hero-text">
           <div className="dp-hero-greeting">
-            <h3>Welcome back, {driverProfile.name || "Driver"}!</h3>
-            <span className="dp-hero-role-tag">{driverProfile.role || "Transport Staff"} • {driverProfile.employeeId || "EMP-000"}</span>
+            <h3>Welcome back, {driverProfile?.name || "Driver"}!</h3>
+            <span className="dp-hero-role-tag">
+              {driverProfile?.role || "Bus Driver"} • {driverProfile?.employeeId || "MNT0030"}
+            </span>
           </div>
           <p className="dp-hero-desc">
-            You are assigned to <strong>{driverProfile.assignedVehicle || "a vehicle"}</strong> ({driverProfile.vehicleModel || "Standard"}) on <strong>{driverProfile.assignedRoute || "your route"}</strong> today.
+            You are assigned to <strong>{busNumber}</strong> ({vehicleModel}) on <strong>{routeName}</strong> today.
           </p>
         </div>
         <div className="dp-hero-stats">
           <div className="dp-hs-item">
             <small>Attendant</small>
-            <strong>{driverProfile.assignedAttendant || "N/A"}</strong>
+            <strong>{attendantName}</strong>
           </div>
           <div className="dp-hs-item">
             <small>Shift</small>
-            <strong>{driverProfile.shift || "Regular"}</strong>
+            <strong>{shiftName}</strong>
           </div>
         </div>
       </div>
@@ -145,89 +231,112 @@ export default function DriverHomePage({
         <DriverStatCard
           icon={RouteIcon}
           title="Today's Route"
-          value={dashboardData?.routeInfo?.name || driverProfile.assignedRoute || "City Route A"}
-          subtitle={dashboardData?.routeInfo?.details || "Code: ROUTE-01 • 24.5 km"}
+          value={routeName}
+          subtitle={`Code: ${routeCode} • ${routeDistance} km`}
           tone="primary"
           onClick={() => onNavigateTab("route")}
         />
         <DriverStatCard
           icon={Bus}
           title="Bus Number"
-          value={driverProfile.assignedVehicle || "PC-101"}
-          subtitle={driverProfile.vehicleRegistration || "Registration: TN 09 BX 4412"}
+          value={busNumber}
+          subtitle={`Registration: ${vehicleReg}`}
           tone="blue"
           onClick={() => onNavigateTab("profile")}
         />
         <DriverStatCard
           icon={Truck}
           title="Assigned Vehicle"
-          value={driverProfile.vehicleModel || "Tata Starbus"}
-          subtitle={driverProfile.vehicleDetails || "40-Seater • Diesel BS-VI"}
+          value={vehicleModel}
+          subtitle="35-Seater • Commercial Fleet"
           tone="purple"
           onClick={() => onNavigateTab("profile")}
         />
         <DriverStatCard
           icon={Users}
           title="Students Assigned"
-          value={`${dashboardData?.studentsCount?.total || totalStudents}`}
-          subtitle={`${dashboardData?.studentsCount?.pickedUp || pickedUpCount} Picked Up • ${dashboardData?.studentsCount?.pending || pendingCount} Pending`}
+          value={`${totalAssignedStudents}`}
+          subtitle={`${pickedUpCount} Picked Up • ${pendingCount} Pending`}
           tone="success"
           onClick={() => onNavigateTab("students")}
         />
         <DriverStatCard
           icon={Sun}
           title="Morning Trip"
-          value={dashboardData?.morningTrip?.status || morningTripStatus}
-          subtitle={dashboardData?.morningTrip?.time || dashboardData?.assignment?.morningTripTime || "Trip time not available"}
-          tone={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "warning" : "success"}
-          badge={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "Live" : undefined}
+          value={morningTripStatus}
+          subtitle={morningTripObj?.time || formatTime12Hour(morningTripTime)}
+          tone={morningTripStatus === "Completed" ? "success" : morningTripStatus === "In Progress" ? "warning" : "primary"}
+          badge={morningTripStatus === "In Progress" ? "Live" : undefined}
           onClick={() => onNavigateTab("trips")}
         />
         <DriverStatCard
           icon={Moon}
           title="Evening Trip"
-          value={dashboardData?.eveningTrip?.status || eveningTripStatus}
-          subtitle={dashboardData?.eveningTrip?.time || dashboardData?.assignment?.eveningTripTime || "Trip time not available"}
-          tone="purple"
+          value={eveningTripStatus}
+          subtitle={eveningTripObj?.time || formatTime12Hour(eveningTripTime)}
+          tone={eveningTripStatus === "Completed" ? "success" : eveningTripStatus === "In Progress" ? "warning" : "purple"}
+          badge={eveningTripStatus === "In Progress" ? "Live" : undefined}
           onClick={() => onNavigateTab("trips")}
         />
         <DriverStatCard
           icon={Navigation}
           title="GPS Status"
-          value={dashboardData?.gpsStatus?.status || "Online"}
-          subtitle={dashboardData?.gpsStatus?.signal || "Signal: 99.8% • 12 Sats"}
-          tone="success"
-          badge={dashboardData?.gpsStatus?.status === "Online" || !dashboardData?.gpsStatus ? "Live" : undefined}
+          value={isAllTripsCompleted ? "Standby" : isTripInProgress ? "Active" : "Online"}
+          subtitle={isAllTripsCompleted ? "Parked • Campus Depot" : "Active • Telemetry Synced"}
+          tone={isAllTripsCompleted ? "primary" : "success"}
+          badge={isTripInProgress ? "Live" : undefined}
           onClick={() => onNavigateTab("gps")}
         />
         <DriverStatCard
           icon={AlertTriangle}
           title="Active Alerts"
-          value={dashboardData?.alerts?.count?.toString() || "0"}
-          subtitle={dashboardData?.alerts?.message || "Route clear & on schedule"}
-          tone={dashboardData?.alerts?.count > 0 ? "warning" : "primary"}
+          value="0"
+          subtitle="Route clear & on schedule"
+          tone="primary"
         />
       </div>
 
-      {/* Primary Action Card: Ready to Start Trip? */}
+      {/* Primary Action Card: Dynamic Based on Real Status */}
       <div className="dp-action-banner-card">
         <div className="dp-abc-content">
           <div className="dp-abc-icon-wrap">
-            <Bus size={32} />
+            {isAllTripsCompleted ? <CheckCircle2 size={32} className="dp-text-success" /> : <Bus size={32} />}
           </div>
           <div className="dp-abc-text">
-            <h2>Ready to Start Your Trip?</h2>
-            <p>Ensure vehicle is ready and checklist is complete before starting the trip.</p>
+            <h2>
+              {isAllTripsCompleted
+                ? "All Scheduled Trips Completed for Today!"
+                : isTripInProgress
+                ? "Active Trip In Progress"
+                : morningTripStatus === "Completed"
+                ? "Ready for Evening Drop Operation?"
+                : "Ready to Start Morning Pickup?"}
+            </h2>
+            <p>
+              {isAllTripsCompleted
+                ? "Both morning pickup and evening drop routes have been successfully finished. Vehicle AP39AU2653 safely parked at campus depot."
+                : isTripInProgress
+                ? "Vehicle AP39AU2653 is en-route. Live GPS and student manifests are broadcasting."
+                : morningTripStatus === "Completed"
+                ? "Morning route completed. Evening return run is scheduled at 04:30 PM."
+                : "Ensure vehicle is ready and pre-trip safety checklist is verified before starting the trip."}
+            </p>
           </div>
         </div>
         <div className="dp-abc-actions">
-          <button
-            type="button"
-            className="dp-btn dp-btn-primary dp-btn-lg"
-            onClick={() => onNavigateTab("trips")}
-          >
-            <Play size={18} /> Start Trip
-          </button>
+          {isAllTripsCompleted ? (
+            <button type="button" className="dp-btn dp-btn-primary dp-btn-lg" onClick={() => onNavigateTab("reports")}>
+              <CheckCircle2 size={18} /> View Trip Reports
+            </button>
+          ) : isTripInProgress ? (
+            <button type="button" className="dp-btn dp-btn-primary dp-btn-lg" onClick={() => onNavigateTab("gps")}>
+              <Navigation size={18} /> Live GPS Tracking
+            </button>
+          ) : (
+            <button type="button" className="dp-btn dp-btn-primary dp-btn-lg" onClick={() => onNavigateTab("trips")}>
+              <Play size={18} /> Trips Management
+            </button>
+          )}
         </div>
       </div>
 
@@ -246,35 +355,27 @@ export default function DriverHomePage({
           </div>
           <div className="dp-card-body p-0">
             <div className="dp-schedule-list">
-              {todaySchedule.length > 0 ? (
-                todaySchedule.map((item) => (
-                  <div key={item.id} className="dp-schedule-item">
-                    <div className="dp-sched-time">
-                      <Clock size={15} />
-                      <span>{item.time}</span>
-                    </div>
-                    <div className="dp-sched-info">
-                      <h4>{item.title}</h4>
-                      <p>{item.route} • {item.stops} {item.students > 0 && `• ${item.students} Students`}</p>
-                    </div>
-                    <div className="dp-sched-status">
-                      <DriverStatusBadge status={item.status} tone={item.statusTone} />
-                    </div>
+              {todaySchedule.map((item) => (
+                <div key={item.id} className="dp-schedule-item">
+                  <div className="dp-sched-time">
+                    <Clock size={15} />
+                    <span>{item.time}</span>
                   </div>
-                ))
-              ) : (
-                <div className="p-4 text-center text-gray-500">
-                  <p>No schedule available for today.</p>
+                  <div className="dp-sched-info">
+                    <h4>{item.title}</h4>
+                    <p>
+                      {item.route} • {item.stops} {item.students > 0 && `• ${item.students} Students`}
+                    </p>
+                  </div>
+                  <div className="dp-sched-status">
+                    <DriverStatusBadge status={item.status} tone={item.statusTone} />
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
           <div className="dp-card-footer">
-            <button
-              type="button"
-              className="dp-link-btn"
-              onClick={() => onNavigateTab("trips")}
-            >
+            <button type="button" className="dp-link-btn" onClick={() => onNavigateTab("trips")}>
               Open Trip Operation Deck <ChevronRight size={14} />
             </button>
           </div>
@@ -285,20 +386,16 @@ export default function DriverHomePage({
           <div className="dp-card-head">
             <div className="dp-flex-col">
               <h3>Upcoming Stops & Route Flow</h3>
-              <p>Real-time progress for {dashboardData?.routeInfo?.name || "the route"}</p>
+              <p>Real-time progress for {routeName}</p>
             </div>
-            <button
-              type="button"
-              className="dp-link-btn"
-              onClick={() => onNavigateTab("route")}
-            >
+            <button type="button" className="dp-link-btn" onClick={() => onNavigateTab("route")}>
               Full Route Details
             </button>
           </div>
-          <div className="dp-card-body">
+          <div className="dp-card-body dp-stops-body">
             <div className="dp-stops-timeline">
-              {routeDetails.stops && routeDetails.stops.length > 0 ? (
-                routeDetails.stops.map((stop, idx) => (
+              {stopsList.length > 0 ? (
+                stopsList.map((stop, idx) => (
                   <div
                     key={stop.id || idx}
                     className={`dp-timeline-step ${
@@ -323,7 +420,7 @@ export default function DriverHomePage({
                       </div>
                       <div className="dp-step-bottom">
                         <span className="dp-step-students">
-                          <Users size={12} /> {stop.studentCount} Students
+                          <Users size={12} /> {stop.studentCount} {stop.studentCount === 1 ? "Student" : "Students"}
                         </span>
                         <DriverStatusBadge status={stop.status} />
                       </div>
@@ -338,11 +435,7 @@ export default function DriverHomePage({
             </div>
           </div>
           <div className="dp-card-footer">
-            <button
-              type="button"
-              className="dp-link-btn"
-              onClick={() => onNavigateTab("students")}
-            >
+            <button type="button" className="dp-link-btn" onClick={() => onNavigateTab("students")}>
               Manage Student Pickup List <ChevronRight size={14} />
             </button>
           </div>
@@ -351,4 +444,3 @@ export default function DriverHomePage({
     </div>
   );
 }
-

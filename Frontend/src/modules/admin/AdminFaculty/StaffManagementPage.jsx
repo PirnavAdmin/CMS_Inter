@@ -6,6 +6,7 @@ import {
   ArrowRightLeft,
   Building2,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +15,7 @@ import {
   Eye,
   FileSpreadsheet,
   GraduationCap,
+  Loader2,
   Mail,
   Pencil,
   Plus,
@@ -32,6 +34,9 @@ import {
   UserCheck,
   Lock,
   KeyRound,
+  Calendar,
+  MapPin,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -144,7 +149,7 @@ export const NON_TEACHING_DESIGNATIONS_SET = new Set([
   "data entry operator",
   "deo",
   "driver",
-  "bus driver",
+  "driver",
   "electrician",
   "plumber",
   "carpenter",
@@ -299,8 +304,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -690,28 +695,19 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
 
   if (targetId == null && !targetName && !targetCode) return true;
 
-  // Active assigned campuses list (supports multi-campus or transferred staff)
+  // Active or past assigned campuses list (supports multi-campus or transferred staff)
   const assignments = staffRecord.assignedCampuses || staffRecord.staffCampusAssignments || staffRecord.StaffCampusAssignments;
   if (Array.isArray(assignments) && assignments.length > 0) {
-    const activeAssignments = assignments.filter(
-      (c) => c && c.isActive !== false && c.status !== "Inactive" && c.status !== "Transferred"
-    );
-    if (activeAssignments.length > 0) {
-      return activeAssignments.some((c) => {
-        const cId = c.campusId ?? c.id ?? c.Id;
-        const cCode = c.campusCode ?? c.code ?? c.Code;
-        const cName = c.campusName ?? c.name ?? c.Name;
-        if (targetId != null && cId != null) return String(cId) === String(targetId);
-        if (targetCode && cCode) return String(cCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
-        if (targetName && cName) return String(targetName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
-        return false;
-      });
-    }
-  }
-
-  // If staff is marked Transferred or Inactive overall, do not match legacy campus
-  if (staffRecord.status === "Transferred" || staffRecord.status === "Inactive") {
-    return false;
+    const matchesAssignment = assignments.some((c) => {
+      const cId = c.campusId ?? c.id ?? c.Id;
+      const cCode = c.campusCode ?? c.code ?? c.Code;
+      const cName = c.campusName ?? c.name ?? c.Name;
+      if (targetId != null && cId != null) return String(cId) === String(targetId);
+      if (targetCode && cCode) return String(cCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+      if (targetName && cName) return String(targetName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+      return false;
+    });
+    if (matchesAssignment) return true;
   }
 
   const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
@@ -737,10 +733,8 @@ export const NON_TEACHING_ROLE_NAMES = [
   "Accountant",
   "Inventory Manager",
   "Examination Cell",
-  "Library / Librarian",
   "Hostel Warden",
-  "Placement Officer",
-  "Bus Driver",
+  "Driver",
   "Attendant",
 ];
 
@@ -2194,7 +2188,7 @@ function useStaffTypeOptions(staffType) {
     async function loadOptions() {
       setLoading(true);
       const isTeaching = staffType === "Teaching";
-      const apiStaffType = staffType === "Non-Teaching" ? "NonTeaching" : staffType;
+      const apiStaffType = staffType;
       const targetNorm = String(staffType).toLowerCase().replace(/[-_\s]/g, "");
 
       let deptOpts = [];
@@ -2379,29 +2373,38 @@ function useStaffRoles(staffType) {
     let isMounted = true;
     async function loadRoles() {
       try {
-        const res = await apiClient.get(apiEndpoints.roles?.list || "/api/v1/roles");
+        const queryStaffType = isTeaching ? "Teaching" : "Non-Teaching";
+        const res = await apiClient.get(apiEndpoints.roles?.list || "/api/v1/roles", {
+          params: { staffType: queryStaffType },
+        });
         const data = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
         if (Array.isArray(data) && data.length > 0) {
-          const targetNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
-          const targetNorms = targetNames.map((n) => n.toLowerCase().replace(/[-_\s]/g, ""));
-
-          const matched = data.filter((r) => {
-            const rName = (typeof r === "object" ? r.roleName || r.name : String(r)).toLowerCase().replace(/[-_\s]/g, "");
-            return targetNorms.includes(rName);
+          // Filter only active roles matching requested category
+          const activeRoles = data.filter((r) => {
+            if (!r) return false;
+            if (r.isActive === false || r.status === "Inactive") return false;
+            const st = String(r.staffType || r.StaffType || "").trim().toLowerCase();
+            if (st) {
+              if (isTeaching) {
+                return st === "teaching" || st === "both" || st === "all";
+              } else {
+                return st === "non-teaching" || st === "nonteaching" || st === "both" || st === "all";
+              }
+            }
+            return true;
           });
 
-          if (isMounted && matched.length > 0) {
-            setRoleObjects(matched);
-            const names = matched.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
-            const sortedNames = targetNames.filter((tn) =>
-              names.some((n) => n.toLowerCase().replace(/[-_\s]/g, "") === tn.toLowerCase().replace(/[-_\s]/g, ""))
-            );
-            setRoles(sortedNames.length > 0 ? sortedNames : names);
+          if (isMounted && activeRoles.length > 0) {
+            setRoleObjects(activeRoles);
+            const names = activeRoles
+              .map((r) => (typeof r === "object" ? r.roleName || r.name : String(r)))
+              .filter(Boolean);
+            setRoles(Array.from(new Set(names)));
             return;
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch roles from API, using default role list:", err);
+        console.warn("Failed to fetch roles dynamically from API, falling back to default list:", err);
       }
       if (isMounted) {
         setRoles(defaultList);
@@ -2411,7 +2414,7 @@ function useStaffRoles(staffType) {
     return () => {
       isMounted = false;
     };
-  }, [staffType]);
+  }, [staffType, isTeaching]);
 
   return { roles, roleObjects };
 }
@@ -2713,8 +2716,7 @@ function Field({
     if (name === "role") {
       if (Array.isArray(roleOptions) && roleOptions.length > 0) {
         const liveRoleNames = roleOptions.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
-        const configuredRoleNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
-        return Array.from(new Set([...liveRoleNames, ...configuredRoleNames]));
+        return Array.from(new Set(liveRoleNames));
       }
       return isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
     }
@@ -3233,9 +3235,17 @@ function Badge({ value }) {
   if (!value) return null;
   const isCompleted = value === "Completed" || value === "Active" || value === "Teaching";
   const isPending = value === "Pending" || value === "Link Sent" || value === "In Progress";
+  const isTransferred = String(value).toLowerCase().includes("transfer");
   const isInactive = value === "Inactive";
-  const cls = isCompleted ? "status-badge is-active" : isPending ? "status-badge is-warning" : isInactive ? "status-badge is-inactive" : "status-badge";
-  return <span className={`status-badge ${cls}`}>{value}</span>;
+  const cls = isCompleted ? "status-badge is-active" : isTransferred ? "status-badge is-transferred" : isPending ? "status-badge is-warning" : isInactive ? "status-badge is-inactive" : "status-badge";
+  return (
+    <span
+      className={`status-badge ${cls}`}
+      style={isTransferred ? { background: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", fontSize: "11px" } : undefined}
+    >
+      {value}
+    </span>
+  );
 }
 
 // ----------------------------------------------------------------------
@@ -3898,7 +3908,8 @@ function StaffList({ records = [], setRecords, forced }) {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [page, setPage] = useState(1);
-  const [size] = useState(5);
+  const [size, setSize] = useState(5);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState(null);
   const [remove, setRemove] = useState(null);
   const [listTransferTarget, setListTransferTarget] = useState(null);
@@ -3936,6 +3947,8 @@ function StaffList({ records = [], setRecords, forced }) {
         const params = {
           PageNumber: page,
           PageSize: size,
+          SortBy: "Id",
+          SortOrder: "DESC",
           SearchTerm: debouncedQ || undefined,
           Department: departmentFilter || undefined,
           Designation: designationFilter || undefined,
@@ -3966,7 +3979,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, debouncedQ, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
+  }, [page, size, debouncedQ, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus, refreshKey]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {
@@ -4882,7 +4895,7 @@ function StaffList({ records = [], setRecords, forced }) {
       return [staffFullName, r.firstName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
         String(v || "").toLowerCase().includes((q || "").toLowerCase()),
       );
-    });
+    }).sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
   }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
@@ -5021,7 +5034,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
-      return apiItems.filter((r) => isStaffMatchingCampus(r, selectedCampus)).map((r) => {
+      return apiItems.map((r) => {
         let empId = r.employeeId;
         if (!empId || typeof empId === "object" || empId === "[object Object]") {
           empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
@@ -5034,9 +5047,9 @@ function StaffList({ records = [], setRecords, forced }) {
       });
     }
     return rows.slice((page - 1) * size, page * size);
-  }, [apiItems, rows, page, size, selectedCampus]);
+  }, [apiItems, rows, page, size]);
 
-  const totalRowsCount = apiItems !== null ? (selectedCampus && shown.length === 0 ? 0 : totalApiCount) : rows.length;
+  const totalRowsCount = apiItems !== null ? totalApiCount : rows.length;
 
   return (
     <DashboardLayout
@@ -5267,17 +5280,90 @@ function StaffList({ records = [], setRecords, forced }) {
             </table>
           </div>
           <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+            <div className="staff-pagination-info">
+              <span>
+                Showing {totalRowsCount > 0 ? (page - 1) * size + 1 : 0} to{" "}
+                {Math.min(page * size, totalRowsCount)} of {totalRowsCount} entries
+              </span>
+              <div className="staff-pagination-size-selector">
+                <label htmlFor="staff-page-size-select">Rows per page:</label>
+                <select
+                  id="staff-page-size-select"
+                  value={size}
+                  onChange={(e) => {
+                    const newSize = Number(e.target.value);
+                    setSize(newSize);
+                    setPage(1);
+                  }}
+                  className="staff-page-size-dropdown"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            <div className="staff-pagination-controls">
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage(1)}
+                title="First Page"
+                className="staff-page-nav-btn"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                title="Previous Page"
+                className="staff-page-nav-btn"
+              >
                 Prev
               </button>
-              <strong>{page}</strong>
-              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(totalRowsCount / size));
+                const pageNumbers = [];
+                const maxButtons = 5;
+                let startPage = Math.max(1, page - 2);
+                let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                if (endPage - startPage < maxButtons - 1) {
+                  startPage = Math.max(1, endPage - maxButtons + 1);
+                }
+                for (let i = startPage; i <= endPage; i++) {
+                  pageNumbers.push(i);
+                }
+                return pageNumbers.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPage(p)}
+                    className={`staff-page-number-btn ${page === p ? "is-active" : ""}`}
+                  >
+                    {p}
+                  </button>
+                ));
+              })()}
+              <button
+                type="button"
+                disabled={page * size >= totalRowsCount}
+                onClick={() => setPage((p) => p + 1)}
+                title="Next Page"
+                className="staff-page-nav-btn"
+              >
                 Next
+              </button>
+              <button
+                type="button"
+                disabled={page * size >= totalRowsCount}
+                onClick={() => setPage(Math.max(1, Math.ceil(totalRowsCount / size)))}
+                title="Last Page"
+                className="staff-page-nav-btn"
+              >
+                »
               </button>
             </div>
           </footer>
@@ -5306,6 +5392,7 @@ function StaffList({ records = [], setRecords, forced }) {
         onSuccess={(msg) => {
           setToast(msg || "Campus transfer executed successfully.");
           setPage(1);
+          setRefreshKey((k) => k + 1);
         }}
       />
     </DashboardLayout>
@@ -6967,8 +7054,8 @@ function StaffTransferHistory({ staffId, refreshKey }) {
                     borderRadius: "12px",
                     fontSize: "11px",
                     fontWeight: "600",
-                    background: t.status === "Approved" ? "#dcfce7" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
-                    color: t.status === "Approved" ? "#15803d" : t.status === "Pending" ? "#b45309" : "#b91c1c"
+                    background: (t.status === "Approved" || t.status === "Completed") ? "#dcfce7" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                    color: (t.status === "Approved" || t.status === "Completed") ? "#15803d" : t.status === "Pending" ? "#b45309" : "#b91c1c"
                   }}>
                     {t.status}
                   </span>
@@ -6995,10 +7082,23 @@ function StaffTransferHistory({ staffId, refreshKey }) {
 // ----------------------------------------------------------------------
 // STAFF TRANSFER MODAL COMPONENT
 // ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// STAFF TRANSFER MODAL COMPONENT (Hierarchical Dependencies & Active Filters)
+// ----------------------------------------------------------------------
 function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
   const [step, setStep] = useState(1); // 1 = Configure, 2 = Confirmation Summary
+  const modalScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  }, [step, isOpen]);
+
   const [toCampusId, setToCampusId] = useState("");
-  const [transferType, setTransferType] = useState(""); // Starts empty for explicit user selection
+  const [postingCategory, setPostingCategory] = useState("");
+  const [customPostingType, setCustomPostingType] = useState("");
+  const [transferType, setTransferType] = useState("");
   const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [relievingDate, setRelievingDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [reason, setReason] = useState("");
@@ -7052,51 +7152,269 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
     return unique;
   }, [subjectsList]);
 
-  // Baseline Lookups (Academic Years, Departments, Designations)
+  const currentCampusId = staff?.campusId || staff?.CampusId || staff?.primaryCampusId || 1;
+  const currentCampusName = staff?.campusName || "Main Campus (HQ)";
+
+  // Retrieve ONLY active campuses, excluding current campus
+  const availableCampuses = useMemo(() => {
+    return (campuses || []).filter((c) => {
+      if (!c) return false;
+      if (c.isActive === false) return false;
+      const s = String(c.status || "").trim().toLowerCase();
+      if (s === "inactive") return false;
+      const cid = Number(c.id ?? c.campusId);
+      return cid > 0 && cid !== Number(currentCampusId);
+    });
+  }, [campuses, currentCampusId]);
+
+  const selectedDestCampus = useMemo(() => {
+    return (campuses || []).find((c) => String(c.id ?? c.campusId) === String(toCampusId));
+  }, [campuses, toCampusId]);
+
+  const destCampusDisplayName = useMemo(() => {
+    if (!selectedDestCampus) return toCampusId ? `Campus #${toCampusId}` : "Destination Campus";
+    const cName = (selectedDestCampus.campusName || selectedDestCampus.name || "").trim();
+    const cCode = (selectedDestCampus.campusCode || selectedDestCampus.code || "").trim();
+    if (!cName || cName.toLowerCase() === "string") {
+      return cCode && cCode.toLowerCase() !== "string" ? cCode : `Campus #${toCampusId}`;
+    }
+    return cCode && cCode.toLowerCase() !== "string" ? `${cName} (${cCode})` : cName;
+  }, [selectedDestCampus, toCampusId]);
+
+  // Handle Posting Category & Custom Option
+  const handlePostingCategoryChange = (e) => {
+    const cat = e.target.value;
+    setPostingCategory(cat);
+    if (cat === "Custom") {
+      setTransferType(customPostingType.trim());
+    } else {
+      setTransferType(cat);
+    }
+  };
+
+  const handleCustomPostingTypeChange = (e) => {
+    const val = e.target.value;
+    setCustomPostingType(val);
+    setTransferType(val);
+  };
+
+  // Reset form when modal opens
   useEffect(() => {
-    if (!isOpen) return;
+    if (isOpen && staff) {
+      setStep(1);
+      setToCampusId("");
+      setPostingCategory("");
+      setCustomPostingType("");
+      setTransferType("");
+      setEffectiveDate(new Date().toISOString().split("T")[0]);
+      setRelievingDate(new Date().toISOString().split("T")[0]);
+      setReason("");
+      setApprovalRemarks("");
+      setConfirmedWarning(false);
+      setErrorMsg("");
+
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+
+      setToDepartmentId("");
+      setToDepartmentName("");
+      setToDesignationId("");
+      setToDesignationName("");
+      setToRole("");
+      setReportingManager("");
+
+      setBoardsList([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      setDeptList([]);
+      setDesigList([]);
+    }
+  }, [isOpen, staff]);
+
+  // 1. Destination Campus Dependency -> Reset downstream & Load Affiliated Boards or Departments
+  useEffect(() => {
+    if (!isOpen || !toCampusId) {
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setBoardsList([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+
+      setToDepartmentId("");
+      setToDepartmentName("");
+      setToDesignationId("");
+      setToDesignationName("");
+      setDeptList([]);
+      setDesigList([]);
+      return;
+    }
+
     let active = true;
 
-    async function loadBaselineLookups() {
+    if (isTeaching) {
+      async function loadCampusBoards() {
+        try {
+          setLoadingLookups(true);
+          let boards = [];
+          try {
+            const res = await apiClient.get(`/api/v1/campuses/${toCampusId}/boards`);
+            const raw = res.data?.data || res.data || [];
+            if (Array.isArray(raw) && raw.length > 0) boards = raw;
+          } catch {}
+
+          if (boards.length === 0) {
+            const fallbackRes = await apiClient.get(apiEndpoints.boards?.list || "/api/v1/boards");
+            const rawFallback = fallbackRes.data?.data || fallbackRes.data || [];
+            if (Array.isArray(rawFallback)) boards = rawFallback;
+          }
+
+          if (active) {
+            const activeBoards = boards.filter((b) => b && b.isActive !== false && String(b.status || "").toLowerCase() !== "inactive");
+            setBoardsList(activeBoards);
+          }
+        } catch (err) {
+          console.warn("Failed to load campus boards:", err);
+        } finally {
+          if (active) setLoadingLookups(false);
+        }
+      }
+      loadCampusBoards();
+    } else {
+      async function loadCampusDepartments() {
+        try {
+          setLoadingLookups(true);
+          const res = await apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments", {
+            params: { staffType: "Non-Teaching", includeInactive: false, campusId: toCampusId }
+          });
+          const raw = res.data?.data || res.data || [];
+          if (active && Array.isArray(raw)) {
+            const seen = new Set();
+            const uniqueDepts = [];
+            for (const d of raw) {
+              const dName = (d.departmentName || d.name || "").trim();
+              if (dName && !seen.has(dName.toLowerCase())) {
+                seen.add(dName.toLowerCase());
+                uniqueDepts.push({ id: d.id || d.departmentId, name: dName, ...d });
+              }
+            }
+            setDeptList(uniqueDepts);
+          }
+        } catch (err) {
+          console.warn("Failed to load campus departments:", err);
+        } finally {
+          if (active) setLoadingLookups(false);
+        }
+      }
+      loadCampusDepartments();
+    }
+
+    return () => { active = false; };
+  }, [isOpen, toCampusId, isTeaching]);
+
+  // 2. Affiliated Board Dependency -> Reset downstream & Load Academic Years for this Campus & Board
+  useEffect(() => {
+    if (!isOpen || !toBoardId) {
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadAcademicYears() {
       try {
         setLoadingLookups(true);
-        const [yearsRes, deptRes, desigRes] = await Promise.allSettled([
-          apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years"),
-          apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments"),
-          apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations"),
-        ]);
+        let rawYears = [];
+
+        // Attempt 1: Fetch by boardId and campusId
+        try {
+          const res = await apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years", {
+            params: { boardId: toBoardId, campusId: toCampusId, status: true, pageSize: 50 }
+          });
+          const list = res.data?.data || res.data?.items || res.data || [];
+          if (Array.isArray(list) && list.length > 0) {
+            rawYears = list;
+          }
+        } catch (e) {
+          console.warn("Direct academic years fetch error", e);
+        }
+
+        // Attempt 2: If campus returned 0, fetch by boardId alone (how other modules fetch master academic years)
+        if (!rawYears || rawYears.length === 0) {
+          try {
+            const boardRes = await apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years", {
+              params: { boardId: toBoardId, status: true, pageSize: 50 }
+            });
+            const bList = boardRes.data?.data || boardRes.data?.items || boardRes.data || [];
+            if (Array.isArray(bList) && bList.length > 0) {
+              rawYears = bList;
+            }
+          } catch {}
+        }
+
+        // Attempt 3: Fallback to active academic years endpoint
+        if (!rawYears || rawYears.length === 0) {
+          try {
+            const fallbackRes = await apiClient.get(apiEndpoints.academicYears?.active || "/api/v1/academic-years/active");
+            const fbList = fallbackRes.data?.data || fallbackRes.data || [];
+            if (Array.isArray(fbList) && fbList.length > 0) {
+              const matching = fbList.filter(y => !toBoardId || !y.boardId || String(y.boardId) === String(toBoardId));
+              rawYears = matching.length > 0 ? matching : fbList;
+            }
+          } catch {}
+        }
 
         if (active) {
-          if (yearsRes.status === "fulfilled" && yearsRes.value?.data) {
-            const raw = yearsRes.value.data.data || yearsRes.value.data || [];
-            setAcademicYearsList(Array.isArray(raw) ? raw : []);
+          const seen = new Set();
+          const uniqueYears = [];
+          for (const y of rawYears) {
+            if (y && y.isActive !== false && String(y.status || "").toLowerCase() !== "inactive") {
+              const yName = (y.academicYearName || y.year || y.name || y.code || "").trim();
+              if (yName && !seen.has(yName.toLowerCase())) {
+                seen.add(yName.toLowerCase());
+                uniqueYears.push({ id: y.id || y.academicYearId || yName, name: yName, ...y });
+              }
+            }
           }
-          if (deptRes.status === "fulfilled" && deptRes.value?.data) {
-            const raw = deptRes.value.data.data || deptRes.value.data || [];
-            setDeptList(Array.isArray(raw) ? raw : []);
-          }
-          if (desigRes.status === "fulfilled" && desigRes.value?.data) {
-            const raw = desigRes.value.data.data || desigRes.value.data || [];
-            setDesigList(Array.isArray(raw) ? raw : []);
-          }
+          setAcademicYearsList(uniqueYears);
         }
-      } catch (e) {
-        console.warn("Baseline lookup error in StaffTransferModal:", e);
+      } catch (err) {
+        console.warn("Failed to load academic years:", err);
       } finally {
         if (active) setLoadingLookups(false);
       }
     }
 
-    loadBaselineLookups();
+    loadAcademicYears();
     return () => { active = false; };
-  }, [isOpen]);
+  }, [isOpen, toBoardId, toCampusId]);
 
-  // 1. Hierarchical Destination Campus Selection -> Load affiliated Boards
+  // 3. Academic Year Dependency -> Reset downstream & Load Academic Levels
   useEffect(() => {
-    if (!isOpen || !toCampusId) {
-      setBoardsList([]);
-      setToBoardId("");
-      setToBoardName("");
+    if (!isOpen || !academicYear || !toBoardId) {
       setAcademicLevel("");
       setAcademicGroup("");
       setAcademicSection("");
@@ -7109,89 +7427,124 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
     }
 
     let active = true;
-    async function loadCampusBoards() {
+    async function loadAcademicLevels() {
       try {
-        let boards = [];
+        let raw = [];
         try {
-          const res = await apiClient.get(`/api/v1/campuses/${toCampusId}/boards`);
-          const raw = res.data?.data || res.data || [];
-          if (Array.isArray(raw) && raw.length > 0) boards = raw;
+          const res = await apiClient.get(`/api/v1/academic-levels?boardId=${toBoardId}`);
+          raw = res.data?.data || res.data || [];
+        } catch {
+          const fb = await apiClient.get(`/api/v1/academic-levels`);
+          raw = fb.data?.data || fb.data || [];
+        }
+
+        if (active && Array.isArray(raw)) {
+          const seen = new Set();
+          const uniqueLevels = [];
+          for (const l of raw) {
+            if (l && l.isActive !== false && String(l.status || "").toLowerCase() !== "inactive") {
+              const lName = (l.levelName || l.name || l.academicLevelName || "").trim();
+              if (lName && !seen.has(lName.toLowerCase())) {
+                seen.add(lName.toLowerCase());
+                uniqueLevels.push({ id: l.id || l.levelId || l.academicLevelId || lName, name: lName, ...l });
+              }
+            }
+          }
+          setAcademicLevelsList(uniqueLevels);
+        }
+      } catch (err) {
+        console.warn("Failed to load academic levels:", err);
+      }
+    }
+
+    loadAcademicLevels();
+    return () => { active = false; };
+  }, [isOpen, academicYear, toBoardId, toCampusId]);
+
+  // 4. Academic Level Dependency -> Reset downstream & Load Course Groups
+  useEffect(() => {
+    if (!isOpen || !academicLevel || !toBoardId) {
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadCourseGroups() {
+      try {
+        let rawGroups = [];
+        const selectedLvl = academicLevelsList.find(l => (l.name || l.levelName) === academicLevel || String(l.id || l.levelId) === String(academicLevel));
+        const levelId = selectedLvl?.id || selectedLvl?.levelId || selectedLvl?.academicLevelId;
+        const selectedYr = academicYearsList.find(y => (y.name || y.academicYearName) === academicYear || String(y.id || y.academicYearId) === String(academicYear));
+        const yearId = selectedYr?.id || selectedYr?.academicYearId;
+
+        // Try dropdown with levelId and yearId
+        try {
+          const res = await apiClient.get(`/api/v1/groups/dropdown`, {
+            params: {
+              boardId: toBoardId,
+              ...(levelId ? { academicLevelId: levelId } : {}),
+              ...(yearId ? { academicYearId: yearId } : {})
+            }
+          });
+          rawGroups = res.data?.data || res.data || [];
         } catch {}
 
-        if (boards.length === 0) {
-          const fallbackRes = await apiClient.get(apiEndpoints.boards?.list || "/api/v1/boards");
-          const rawFallback = fallbackRes.data?.data || fallbackRes.data || [];
-          if (Array.isArray(rawFallback)) boards = rawFallback;
+        // Fallback: dropdown with boardId only
+        if (!Array.isArray(rawGroups) || rawGroups.length === 0) {
+          try {
+            const res2 = await apiClient.get(`/api/v1/groups/dropdown?boardId=${toBoardId}`);
+            rawGroups = res2.data?.data || res2.data || [];
+          } catch {}
         }
 
-        if (active) {
-          setBoardsList(boards);
+        // Fallback: groups by board route
+        if (!Array.isArray(rawGroups) || rawGroups.length === 0) {
+          try {
+            const fb = await apiClient.get(`/api/v1/groups/board/${toBoardId}`);
+            rawGroups = fb.data?.data || fb.data || [];
+          } catch {}
+        }
+
+        if (active && Array.isArray(rawGroups)) {
+          const seen = new Set();
+          const uniqueGroups = [];
+          for (const g of rawGroups) {
+            if (g && g.isActive !== false && String(g.status || "").toLowerCase() !== "inactive") {
+              const gName = (g.groupName || g.name || g.masterGroupName || "").trim();
+              if (gName && !seen.has(gName.toLowerCase())) {
+                seen.add(gName.toLowerCase());
+                uniqueGroups.push({ id: g.id || g.groupId, name: gName, ...g });
+              }
+            }
+          }
+          setGroupsList(uniqueGroups);
         }
       } catch (err) {
-        console.warn("Failed to load campus boards:", err);
+        console.warn("Failed to load course groups:", err);
       }
     }
 
-    loadCampusBoards();
+    loadCourseGroups();
     return () => { active = false; };
-  }, [isOpen, toCampusId]);
+  }, [isOpen, academicLevel, toBoardId, toCampusId, academicLevelsList, academicYearsList]);
 
-  // 2. Hierarchical Destination Board Selection -> Load Academic Levels, Course Groups, and Subjects
-  useEffect(() => {
-    if (!isOpen || !toBoardId) {
-      setAcademicLevel("");
-      setAcademicGroup("");
-      setAcademicSection("");
-      setSelectedSubjects([]);
-      setAcademicLevelsList([]);
-      setGroupsList([]);
-      setSectionsList([]);
-      setSubjectsList([]);
-      return;
-    }
-
-    let active = true;
-    async function loadBoardDependencies() {
-      try {
-        const [levelsRes, groupsRes, subjectsRes] = await Promise.allSettled([
-          apiClient.get(`/api/v1/academic-levels?boardId=${toBoardId}`),
-          apiClient.get(`/api/v1/groups/dropdown?boardId=${toBoardId}`),
-          apiClient.get(`/api/v1/subjects/board/${toBoardId}`),
-        ]);
-
-        if (active) {
-          if (levelsRes.status === "fulfilled" && levelsRes.value?.data) {
-            const raw = levelsRes.value.data.data || levelsRes.value.data || [];
-            setAcademicLevelsList(Array.isArray(raw) ? raw : []);
-          }
-          if (groupsRes.status === "fulfilled" && groupsRes.value?.data) {
-            const raw = groupsRes.value.data.data || groupsRes.value.data || [];
-            setGroupsList(Array.isArray(raw) ? raw : []);
-          }
-          if (subjectsRes.status === "fulfilled" && subjectsRes.value?.data) {
-            const raw = subjectsRes.value.data.data || subjectsRes.value.data || [];
-            setSubjectsList(Array.isArray(raw) ? raw : []);
-          }
-        }
-      } catch (err) {
-        console.warn("Failed to load board dependencies:", err);
-      }
-    }
-
-    loadBoardDependencies();
-    return () => { active = false; };
-  }, [isOpen, toBoardId]);
-
-  // 3. Hierarchical Course Group Selection -> Load Sections and Group-Specific Subjects
+  // 5. Course Group Dependency -> Reset downstream & Load Sections and Subjects
   useEffect(() => {
     if (!isOpen || !academicGroup) {
       setAcademicSection("");
+      setSelectedSubjects([]);
       setSectionsList([]);
+      setSubjectsList([]);
       return;
     }
 
     const selectedGrp = groupsList.find(
-      (g) => (g.groupName || g.name || g.masterGroupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup)
+      (g) => (g.name || g.groupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup)
     );
     const groupId = selectedGrp?.id || selectedGrp?.groupId;
 
@@ -7208,13 +7561,37 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
         if (active) {
           if (secRes.status === "fulfilled" && secRes.value?.data) {
             const raw = secRes.value.data.data || secRes.value.data || [];
-            setSectionsList(Array.isArray(raw) ? raw : []);
+            const rawList = Array.isArray(raw) ? raw : [];
+            const campusSecs = rawList.filter(s => String(s.campusId || s.CampusId) === String(toCampusId));
+            const listToUse = campusSecs.length > 0 ? campusSecs : rawList;
+
+            const seen = new Set();
+            const uniqueSec = [];
+            for (const s of listToUse) {
+              const sName = (s.sectionName || s.name || "").trim();
+              if (sName && !seen.has(sName.toLowerCase())) {
+                seen.add(sName.toLowerCase());
+                uniqueSec.push({ id: s.id || s.sectionId, name: sName, ...s });
+              }
+            }
+            setSectionsList(uniqueSec);
           }
+
+          let subjectsLoaded = false;
           if (subRes.status === "fulfilled" && subRes.value?.data) {
             const raw = subRes.value.data.data || subRes.value.data || [];
             if (Array.isArray(raw) && raw.length > 0) {
               setSubjectsList(raw);
+              subjectsLoaded = true;
             }
+          }
+
+          if (!subjectsLoaded && toBoardId) {
+            try {
+              const fbSub = await apiClient.get(`/api/v1/subjects/board/${toBoardId}`);
+              const fbRaw = fbSub.data?.data || fbSub.data || [];
+              if (Array.isArray(fbRaw)) setSubjectsList(fbRaw);
+            } catch {}
           }
         }
       } catch (err) {
@@ -7224,40 +7601,46 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
 
     loadGroupDependencies();
     return () => { active = false; };
-  }, [isOpen, academicGroup, groupsList]);
+  }, [isOpen, academicGroup, groupsList, toBoardId, toCampusId]);
 
-  // Reset form with empty user-selectable fields whenever modal opens
+  // Non-Teaching Department Dependency -> Load Designations for this Dept & Campus
   useEffect(() => {
-    if (isOpen && staff) {
-      setStep(1);
-      setToCampusId("");
-      setTransferType(""); // User explicitly selects posting type
-      setEffectiveDate(new Date().toISOString().split("T")[0]);
-      setRelievingDate(new Date().toISOString().split("T")[0]);
-      setReason("");
-      setApprovalRemarks("");
-      setConfirmedWarning(false);
-      setErrorMsg("");
-
-      // Destination allocations start empty
-      setToBoardId("");
-      setToBoardName("");
-      setAcademicYear("");
-      setAcademicLevel("");
-      setAcademicGroup("");
-      setAcademicSection("");
-      setSelectedSubjects([]);
-
-      setToDepartmentId("");
-      setToDepartmentName("");
+    if (!isOpen || isTeaching || !toDepartmentId) {
       setToDesignationId("");
       setToDesignationName("");
-      setToRole("");
-      setReportingManager("");
+      setDesigList([]);
+      return;
     }
-  }, [isOpen, staff]);
 
-  // Run Preflight Check on Target Campus selection
+    let active = true;
+    async function loadDepartmentDesignations() {
+      try {
+        const res = await apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations", {
+          params: { includeInactive: false, staffType: "Non-Teaching", departmentId: toDepartmentId, campusId: toCampusId }
+        });
+        const raw = res.data?.data || res.data || [];
+        if (active && Array.isArray(raw)) {
+          const seen = new Set();
+          const uniqueDesigs = [];
+          for (const dg of raw) {
+            const dgName = (dg.designationName || dg.name || "").trim();
+            if (dgName && !seen.has(dgName.toLowerCase())) {
+              seen.add(dgName.toLowerCase());
+              uniqueDesigs.push({ id: dg.id || dg.designationId, name: dgName, ...dg });
+            }
+          }
+          setDesigList(uniqueDesigs);
+        }
+      } catch (err) {
+        console.warn("Failed to load department designations:", err);
+      }
+    }
+
+    loadDepartmentDesignations();
+    return () => { active = false; };
+  }, [isOpen, isTeaching, toDepartmentId, toCampusId]);
+
+  // Preflight audit check
   useEffect(() => {
     if (isOpen && staff?.id && toCampusId) {
       let active = true;
@@ -7279,11 +7662,6 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
   }, [isOpen, staff?.id, toCampusId]);
 
   if (!isOpen || !staff) return null;
-
-  const currentCampusId = staff.campusId || staff.CampusId || staff.primaryCampusId || 1;
-  const currentCampusName = staff.campusName || "Main Campus (HQ)";
-  const availableCampuses = (campuses || []).filter(c => Number(c.id ?? c.campusId) !== Number(currentCampusId));
-  const selectedDestCampus = (campuses || []).find(c => String(c.id ?? c.campusId) === String(toCampusId));
 
   const toggleSubject = (subName) => {
     setSelectedSubjects(prev =>
@@ -7313,29 +7691,32 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
       setErrorMsg("Destination campus must be different from the current source campus.");
       return;
     }
-    if (!transferType) {
-      setErrorMsg("Please select a Transfer Posting Type.");
+    if (!transferType || !transferType.trim()) {
+      setErrorMsg("Please select or specify a Transfer Posting Type.");
       return;
     }
     if (!reason.trim()) {
       setErrorMsg("Please specify a reason or administrative remarks for the campus transfer.");
       return;
     }
-    if (isTeaching && !toBoardId) {
-      setErrorMsg("Please select an affiliated destination board for teaching allocation.");
-      return;
-    }
-    if (isTeaching && selectedSubjects.length === 0) {
-      setErrorMsg("Please assign at least one teaching subject for the destination campus.");
-      return;
-    }
-    if (!isTeaching && !toDepartmentId) {
-      setErrorMsg("Please select a destination department for non-teaching staff.");
-      return;
-    }
-    if (!isTeaching && !toDesignationId) {
-      setErrorMsg("Please select a destination designation for non-teaching staff.");
-      return;
+    if (isTeaching) {
+      if (!toBoardId) {
+        setErrorMsg("Please select an affiliated destination board for teaching allocation.");
+        return;
+      }
+      if (selectedSubjects.length === 0) {
+        setErrorMsg("Please assign at least one teaching subject for the destination campus.");
+        return;
+      }
+    } else {
+      if (!toDepartmentId) {
+        setErrorMsg("Please select a destination department for non-teaching staff.");
+        return;
+      }
+      if (!toDesignationId) {
+        setErrorMsg("Please select a destination designation for non-teaching staff.");
+        return;
+      }
     }
 
     setStep(2);
@@ -7350,6 +7731,12 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
     try {
       setSubmitting(true);
       setErrorMsg("");
+
+      const selYear = academicYearsList.find(y => (y.name || y.academicYearName) === academicYear || String(y.id || y.academicYearId) === String(academicYear));
+      const selLevel = academicLevelsList.find(l => (l.name || l.levelName) === academicLevel || String(l.id || l.levelId) === String(academicLevel));
+      const selGroup = groupsList.find(g => (g.name || g.groupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup));
+      const selSection = sectionsList.find(s => (s.name || s.sectionName) === academicSection || String(s.id || s.sectionId) === String(academicSection));
+      const selSubjectObjs = subjectsList.filter(s => selectedSubjects.includes(s.name || s.subjectName));
 
       const payload = {
         staffId: staff.id,
@@ -7366,10 +7753,15 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
         relievingDate: relievingDate || null,
         joiningDate: effectiveDate,
         approvalRemarks: approvalRemarks.trim() || reason.trim(),
+        academicYearId: isTeaching && selYear ? (Number(selYear.id || selYear.academicYearId) || null) : null,
         academicYearName: isTeaching ? academicYear : null,
+        academicLevelId: isTeaching && selLevel ? (Number(selLevel.id || selLevel.levelId) || null) : null,
         academicLevelName: isTeaching ? academicLevel : null,
+        groupId: isTeaching && selGroup ? (Number(selGroup.id || selGroup.groupId) || null) : null,
         groupName: isTeaching ? academicGroup : null,
+        sectionId: isTeaching && selSection ? (Number(selSection.id || selSection.sectionId) || null) : null,
         sectionName: isTeaching ? academicSection : null,
+        allocatedSubjectIds: isTeaching ? selSubjectObjs.map(s => Number(s.id || s.subjectId)).filter(Boolean) : null,
         allocatedSubjectNames: isTeaching ? selectedSubjects : null,
         roleName: !isTeaching ? (toRole || "Staff") : "Faculty",
         autoApprove: true
@@ -7392,225 +7784,257 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
   };
 
   return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      background: "rgba(15, 23, 42, 0.65)", zIndex: 9999,
-      display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
-      backdropFilter: "blur(3px)"
-    }}>
-      <div style={{
-        background: "#ffffff", borderRadius: "14px", width: "100%", maxWidth: "780px",
-        maxHeight: "92vh", overflowY: "auto", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)",
-        border: "1px solid #cbd5e1"
-      }}>
-        {/* MODAL HEADER */}
-        <div style={{
-          padding: "16px 24px", borderBottom: "1px solid #e2e8f0",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          background: "linear-gradient(to right, #f8fafc, #f1f5f9)"
-        }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                width: "28px", height: "28px", borderRadius: "6px",
-                background: "var(--cms-primary, #355e3b)", color: "#fff"
-              }}>
-                <ArrowRightLeft size={16} />
-              </span>
-              <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "700", color: "#1e293b" }}>
-                Staff Campus Transfer &amp; Posting Relocation
-              </h3>
+    <div className="staff-transfer-overlay">
+      <div className="staff-transfer-dialog">
+        {/* MODAL HEADER - Fixed Top */}
+        <div className="staff-transfer-header">
+          <div className="staff-transfer-header-left">
+            <div className="staff-transfer-header-icon">
+              <ArrowRightLeft size={16} />
             </div>
-            <p style={{ margin: "4px 0 0 36px", fontSize: "12px", color: "#64748b" }}>
-              Official inter-campus transfer preserving identity, service history, and accumulated experience.
-            </p>
+            <div className="staff-transfer-header-text">
+              <h3 className="staff-transfer-header-title">Staff Campus Transfer &amp; Posting Relocation</h3>
+              <span className="staff-transfer-header-sub">Inter-campus transfer preserving service history &amp; archives</span>
+            </div>
           </div>
-          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: "4px" }}>
-            <X size={20} />
+          <button type="button" onClick={onClose} className="staff-transfer-close-btn" title="Close">
+            <X size={15} />
           </button>
         </div>
 
-        {/* CURRENT STAFF PROFILE BANNER */}
-        <div style={{ padding: "14px 24px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", fontSize: "12px" }}>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Staff Member:</span>
-              <strong style={{ color: "#1e293b" }}>{staff.fullName || `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || staff.employeeId}</strong>
+        {/* CURRENT STAFF PROFILE BANNER - Fixed Top */}
+        <div className="staff-transfer-profile-banner">
+          <div className="staff-transfer-profile-grid">
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon user-icon">
+                <UserRound size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Staff Member</span>
+                <strong className="staff-transfer-info-value">{staff.fullName || `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || staff.employeeId}</strong>
+              </div>
             </div>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Employee ID:</span>
-              <span style={{ fontFamily: "monospace", fontWeight: "700", color: "var(--cms-primary, #355e3b)" }}>{staff.employeeId}</span>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon id-icon">
+                <KeyRound size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Employee ID</span>
+                <strong className="staff-transfer-info-value emp-id">{staff.employeeId}</strong>
+              </div>
             </div>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Staff Type:</span>
-              <span style={{
-                padding: "1px 8px", borderRadius: "10px", fontSize: "11px", fontWeight: "700",
-                background: isTeaching ? "#e0f2fe" : "#fef3c7",
-                color: isTeaching ? "#0369a1" : "#b45309"
-              }}>
-                {isTeaching ? "Teaching Faculty" : "Non-Teaching Staff"}
-              </span>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon type-icon">
+                <GraduationCap size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Staff Type</span>
+                <span className={`staff-transfer-type-badge ${isTeaching ? "teaching" : "non-teaching"}`}>
+                  {isTeaching ? "Teaching Faculty" : "Non-Teaching Staff"}
+                </span>
+              </div>
             </div>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Current Campus:</span>
-              <strong style={{ color: "#b91c1c" }}>📍 {currentCampusName}</strong>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon campus-icon">
+                <MapPin size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Campus</span>
+                <span className="staff-transfer-campus-badge">
+                  📍 {currentCampusName}
+                </span>
+              </div>
             </div>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Current Designation:</span>
-              <span style={{ color: "#334155" }}>{staff.designation || "—"}</span>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon role-icon">
+                <UserCheck size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Designation</span>
+                <strong className="staff-transfer-info-value">{staff.designation || "—"}</strong>
+              </div>
             </div>
-            <div>
-              <span style={{ color: "#64748b", display: "block" }}>Current Department:</span>
-              <span style={{ color: "#334155" }}>{staff.department || "—"}</span>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon dept-icon">
+                <Building2 size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Department</span>
+                <strong className="staff-transfer-info-value">{staff.department || "—"}</strong>
+              </div>
             </div>
           </div>
         </div>
 
         {/* STEP TABS */}
-        <div style={{ display: "flex", borderBottom: "1px solid #e2e8f0", background: "#fff" }}>
+        <div className="staff-transfer-tabs-wrap">
           <button
             type="button"
             onClick={() => setStep(1)}
-            style={{
-              flex: 1, padding: "10px", fontSize: "13px", fontWeight: "600", border: "none",
-              borderBottom: step === 1 ? "2px solid var(--cms-primary, #355e3b)" : "2px solid transparent",
-              background: step === 1 ? "#fff" : "#f8fafc",
-              color: step === 1 ? "var(--cms-primary, #355e3b)" : "#64748b", cursor: "pointer"
-            }}
+            className={`staff-transfer-tab-btn ${step === 1 ? "is-active" : ""}`}
           >
-            1. Configure Destination Allocations
+            <span className="staff-transfer-step-pill">1</span>
+            <span>Configure Destination Allocations</span>
           </button>
           <button
             type="button"
             onClick={() => { if (toCampusId && transferType && reason.trim()) setStep(2); }}
-            style={{
-              flex: 1, padding: "10px", fontSize: "13px", fontWeight: "600", border: "none",
-              borderBottom: step === 2 ? "2px solid var(--cms-primary, #355e3b)" : "2px solid transparent",
-              background: step === 2 ? "#fff" : "#f8fafc",
-              color: step === 2 ? "var(--cms-primary, #355e3b)" : "#64748b", cursor: (toCampusId && transferType) ? "pointer" : "not-allowed"
-            }}
+            className={`staff-transfer-tab-btn ${step === 2 ? "is-active" : ""}`}
+            disabled={!toCampusId || !transferType}
           >
-            2. Confirmation &amp; Relocation Authorization
+            <span className="staff-transfer-step-pill">2</span>
+            <span>Confirmation &amp; Relocation Authorization</span>
           </button>
         </div>
 
-        {/* FORM CONTENT */}
-        <div style={{ padding: "20px 24px" }}>
+        {/* SCROLLABLE FORM CONTENT */}
+        <div ref={modalScrollRef} className="staff-transfer-body">
           {errorMsg && (
-            <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", color: "#b91c1c", fontSize: "13px" }}>
-              {errorMsg}
+            <div className="staff-transfer-error-alert">
+              <AlertCircle size={16} />
+              <span>{errorMsg}</span>
             </div>
           )}
 
           {/* PREFLIGHT ADVISORY BANNER */}
           {preflight && (preflight.activeTimetableSlotsCount > 0 || (preflight.warnings && preflight.warnings.length > 0)) && (
-            <div style={{ marginBottom: "16px", padding: "12px 16px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", color: "#92400e", fontSize: "12px" }}>
-              <div style={{ fontWeight: "700", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>⚠️ Relieving Campus Audit Advisory</span>
+            <div className="staff-transfer-preflight-alert">
+              <div className="preflight-header">
+                <AlertCircle size={15} />
+                <span>Relieving Campus Audit Advisory</span>
               </div>
               {preflight.activeTimetableSlotsCount > 0 && (
-                <div style={{ marginTop: "4px" }}>
+                <p>
                   Staff member currently holds <strong>{preflight.activeTimetableSlotsCount} active weekly timetable slots</strong> at {currentCampusName}. These will be gracefully unassigned without affecting historical attendance records.
-                </div>
+                </p>
               )}
               {preflight.warnings && preflight.warnings.map((w, idx) => (
-                <div key={idx} style={{ marginTop: "2px" }}>• {w}</div>
+                <div key={idx} className="preflight-item">• {w}</div>
               ))}
             </div>
           )}
 
           {step === 1 ? (
-            <form onSubmit={handleProceedToConfirmation}>
-              {/* TARGET CAMPUS & DATES */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    Destination Campus *
-                  </label>
-                  <select
-                    value={toCampusId}
-                    onChange={(e) => setToCampusId(e.target.value)}
-                    required
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
-                  >
-                    <option value="">Select Destination Campus *...</option>
-                    {availableCampuses.map((c) => (
-                      <option key={c.id ?? c.campusId} value={c.id ?? c.campusId}>
-                        {c.campusName || c.name} ({c.campusCode || c.code || `ID: ${c.id ?? c.campusId}`})
-                      </option>
-                    ))}
-                  </select>
+            <form onSubmit={handleProceedToConfirmation} className="staff-transfer-form">
+              {/* TARGET CAMPUS & DATES CARD */}
+              <div className="staff-transfer-card">
+                <div className="staff-transfer-card-header">
+                  <div className="staff-transfer-card-title">
+                    <Building2 size={16} />
+                    <span>Destination Campus &amp; Transfer Dates</span>
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    Transfer Posting Type *
-                  </label>
-                  <select
-                    value={transferType}
-                    onChange={(e) => setTransferType(e.target.value)}
-                    required
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
-                  >
-                    <option value="">Select Posting Type *...</option>
-                    <option value="Permanent">Permanent Relocation</option>
-                    <option value="VisitingFaculty">Visiting Faculty Allocation</option>
-                    <option value="Deputation">Deputation / Temporary Posting</option>
-                  </select>
-                </div>
-              </div>
+                <div className="staff-transfer-form-grid-2">
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Building2 size={13} />
+                      <span>Destination Campus <strong className="required-star">*</strong></span>
+                    </label>
+                    <select
+                      value={toCampusId}
+                      onChange={(e) => setToCampusId(e.target.value)}
+                      required
+                      className="staff-transfer-select"
+                    >
+                      <option value="">Select Destination Campus *...</option>
+                      {availableCampuses.map((c) => (
+                        <option key={c.id ?? c.campusId} value={c.id ?? c.campusId}>
+                          {c.campusName || c.name} ({c.campusCode || c.code || `ID: ${c.id ?? c.campusId}`})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    Effective Transfer Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={effectiveDate}
-                    onChange={(e) => setEffectiveDate(e.target.value)}
-                    required
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
-                  />
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <ArrowRightLeft size={13} />
+                      <span>Transfer Posting Type <strong className="required-star">*</strong></span>
+                    </label>
+                    <select
+                      value={postingCategory}
+                      onChange={handlePostingCategoryChange}
+                      required
+                      className="staff-transfer-select"
+                    >
+                      <option value="">Select Posting Type *...</option>
+                      <option value="Permanent">Permanent Relocation</option>
+                      <option value="VisitingFaculty">Visiting Faculty Allocation</option>
+                      <option value="Deputation">Deputation / Temporary Posting</option>
+                      <option value="Custom">Other / Custom Posting Type...</option>
+                    </select>
+                    {postingCategory === "Custom" && (
+                      <input
+                        type="text"
+                        value={customPostingType}
+                        onChange={handleCustomPostingTypeChange}
+                        placeholder="Specify custom posting type (e.g. Sabbatical Relocation)*"
+                        required
+                        className="staff-transfer-input custom-input"
+                      />
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                    Relieving Date from {currentCampusName}
-                  </label>
-                  <input
-                    type="date"
-                    value={relievingDate}
-                    onChange={(e) => setRelievingDate(e.target.value)}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
-                  />
+                <div className="staff-transfer-form-grid-2">
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Calendar size={13} />
+                      <span>Effective Transfer Date <strong className="required-star">*</strong></span>
+                    </label>
+                    <input
+                      type="date"
+                      value={effectiveDate}
+                      onChange={(e) => setEffectiveDate(e.target.value)}
+                      required
+                      className="staff-transfer-input"
+                    />
+                  </div>
+
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Clock3 size={13} />
+                      <span>Relieving Date from {currentCampusName}</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={relievingDate}
+                      onChange={(e) => setRelievingDate(e.target.value)}
+                      className="staff-transfer-input"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* TEACHING STAFF ALLOCATIONS CONTAINER - DYNAMIC & HIERARCHICAL */}
               {isTeaching && (
-                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "var(--cms-primary, #355e3b)", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span>🎓 Destination Academic &amp; Subject Allocations (Teaching)</span>
-                    </h4>
+                <div className="staff-transfer-card teaching-card">
+                  <div className="staff-transfer-card-header">
+                    <div className="staff-transfer-card-title">
+                      <GraduationCap size={16} />
+                      <span>Destination Academic &amp; Subject Allocations (Teaching)</span>
+                    </div>
                     {staff.allocatedSubjects && staff.allocatedSubjects.length > 0 && (
                       <button
                         type="button"
-                        className="cms-btn cms-btn-ghost"
+                        className="staff-transfer-subtle-btn"
                         onClick={handleKeepCurrentSubjects}
-                        style={{ fontSize: "11px", padding: "3px 8px" }}
                       >
-                        ↺ Keep Current Subjects
+                        <RefreshCw size={12} />
+                        <span>Keep Current Subjects</span>
                       </button>
                     )}
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Affiliated Educational Board *
+                  <div className="staff-transfer-form-grid-2">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Affiliated Educational Board <strong className="required-star">*</strong></span>
                       </label>
                       <select
                         value={toBoardId}
@@ -7622,7 +8046,7 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                         }}
                         disabled={!toCampusId}
                         required
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toCampusId ? "#f1f5f9" : "#fff" }}
+                        className="staff-transfer-select"
                       >
                         <option value="">{!toCampusId ? "Select Destination Campus first..." : "Select Affiliated Board *..."}</option>
                         {boardsList.map(b => (
@@ -7633,49 +8057,44 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Academic Year
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Academic Year <strong className="required-star">*</strong></span>
                       </label>
                       <select
                         value={academicYear}
                         onChange={(e) => setAcademicYear(e.target.value)}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                        disabled={!toBoardId}
+                        required
+                        className="staff-transfer-select"
                       >
-                        <option value="">Select Academic Year...</option>
-                        {academicYearsList.length > 0 ? (
-                          academicYearsList.map(y => {
-                            const yName = y.year || y.academicYearName || y.name || y.code;
-                            return (
-                              <option key={y.id || y.academicYearId || yName} value={yName}>
-                                {yName}
-                              </option>
-                            );
-                          })
-                        ) : (
-                          <>
-                            <option value="2026-2027">2026-2027</option>
-                            <option value="2025-2026">2025-2026</option>
-                          </>
-                        )}
+                        <option value="">{!toBoardId ? "Select Board first..." : "Select Academic Year *..."}</option>
+                        {academicYearsList.map(y => {
+                          const yName = y.name || y.academicYearName || y.year || y.code;
+                          return (
+                            <option key={y.id || y.academicYearId || yName} value={yName}>
+                              {yName}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "14px" }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Academic Level
+                  <div className="staff-transfer-form-grid-3">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Academic Level</span>
                       </label>
                       <select
                         value={academicLevel}
                         onChange={(e) => setAcademicLevel(e.target.value)}
-                        disabled={!toBoardId}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toBoardId ? "#f1f5f9" : "#fff" }}
+                        disabled={!academicYear}
+                        className="staff-transfer-select"
                       >
-                        <option value="">{!toBoardId ? "Select Board first..." : "Select Academic Level..."}</option>
+                        <option value="">{!academicYear ? "Select Academic Year first..." : "Select Academic Level..."}</option>
                         {academicLevelsList.map(l => {
-                          const lName = l.levelName || l.name || l.academicLevelName;
+                          const lName = l.name || l.levelName || l.academicLevelName;
                           return (
                             <option key={l.id || l.levelId || lName} value={lName}>
                               {lName}
@@ -7685,19 +8104,19 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Course Group / Stream
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Course Group / Stream</span>
                       </label>
                       <select
                         value={academicGroup}
                         onChange={(e) => setAcademicGroup(e.target.value)}
-                        disabled={!toBoardId}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !toBoardId ? "#f1f5f9" : "#fff" }}
+                        disabled={!academicLevel}
+                        className="staff-transfer-select"
                       >
-                        <option value="">{!toBoardId ? "Select Board first..." : "Select Course Group..."}</option>
+                        <option value="">{!academicLevel ? "Select Academic Level first..." : "Select Course Group..."}</option>
                         {groupsList.map(g => {
-                          const gName = g.groupName || g.name || g.masterGroupName;
+                          const gName = g.name || g.groupName || g.masterGroupName;
                           return (
                             <option key={g.id || g.groupId || gName} value={gName}>
                               {gName}
@@ -7707,19 +8126,19 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Section Allocation
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Section Allocation</span>
                       </label>
                       <select
                         value={academicSection}
                         onChange={(e) => setAcademicSection(e.target.value)}
                         disabled={!academicGroup}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px", background: !academicGroup ? "#f1f5f9" : "#fff" }}
+                        className="staff-transfer-select"
                       >
                         <option value="">{!academicGroup ? "Select Group first..." : "Select Section Allocation..."}</option>
                         {sectionsList.map(s => {
-                          const sName = s.sectionName || s.name;
+                          const sName = s.name || s.sectionName;
                           return (
                             <option key={s.id || s.sectionId || sName} value={sName}>
                               {sName}
@@ -7731,13 +8150,14 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                   </div>
 
                   {/* DEDUPLICATED SUBJECT PILLS */}
-                  <div>
-                    <label style={{ display: "block", fontSize: "11px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                      Assign Destination Subjects * (Select one or more)
+                  <div className="staff-transfer-subjects-container">
+                    <label className="staff-transfer-label">
+                      <FileText size={13} />
+                      <span>Assign Destination Subjects <strong className="required-star">*</strong> (Select one or more)</span>
                     </label>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", maxHeight: "150px", overflowY: "auto", padding: "4px 0" }}>
+                    <div className="staff-transfer-subjects-wrap">
                       {!toBoardId ? (
-                        <span style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", padding: "6px 0" }}>
+                        <span className="staff-transfer-helper-text">
                           Please select an Affiliated Educational Board above to view and assign destination subjects.
                         </span>
                       ) : deduplicatedSubjects.length > 0 ? (
@@ -7749,20 +8169,15 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                               key={s.id || subName}
                               type="button"
                               onClick={() => toggleSubject(subName)}
-                              style={{
-                                padding: "4px 10px", borderRadius: "14px", fontSize: "11px", fontWeight: "600",
-                                border: isSelected ? "1px solid var(--cms-primary, #355e3b)" : "1px solid #cbd5e1",
-                                background: isSelected ? "rgba(53, 94, 59, 0.12)" : "#ffffff",
-                                color: isSelected ? "var(--cms-primary, #355e3b)" : "#475569",
-                                cursor: "pointer", transition: "all 0.15s ease"
-                              }}
+                              className={`staff-transfer-subject-chip ${isSelected ? "is-selected" : ""}`}
                             >
-                              {isSelected ? "✓ " : "+ "}{subName}
+                              {isSelected ? <Check size={13} /> : <Plus size={13} />}
+                              <span>{subName}</span>
                             </button>
                           );
                         })
                       ) : (
-                        <span style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic", padding: "6px 0" }}>
+                        <span className="staff-transfer-helper-text">
                           No subjects configured for the selected board/group.
                         </span>
                       )}
@@ -7773,14 +8188,17 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
 
               {/* NON-TEACHING SPECIFIC CONTAINER - POPULATED DYNAMICALLY */}
               {!isTeaching && (
-                <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                  <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "700", color: "#b45309", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <span>🏢 Destination Department &amp; Operational Role (Non-Teaching)</span>
-                  </h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Destination Department *
+                <div className="staff-transfer-card non-teaching-card">
+                  <div className="staff-transfer-card-header">
+                    <div className="staff-transfer-card-title non-teaching-title">
+                      <Building2 size={16} />
+                      <span>Destination Department &amp; Operational Role (Non-Teaching)</span>
+                    </div>
+                  </div>
+                  <div className="staff-transfer-form-grid-3">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Destination Department <strong className="required-star">*</strong></span>
                       </label>
                       <select
                         value={toDepartmentId}
@@ -7790,10 +8208,11 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                           const d = deptList.find(x => String(x.id || x.departmentId) === String(val));
                           setToDepartmentName(d?.departmentName || d?.name || "");
                         }}
+                        disabled={!toCampusId}
                         required
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                        className="staff-transfer-select"
                       >
-                        <option value="">Select Department *...</option>
+                        <option value="">{!toCampusId ? "Select Destination Campus first..." : "Select Department *..."}</option>
                         {deptList.map(d => (
                           <option key={d.id || d.departmentId} value={d.id || d.departmentId}>
                             {d.departmentName || d.name}
@@ -7802,9 +8221,9 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Destination Designation *
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Destination Designation <strong className="required-star">*</strong></span>
                       </label>
                       <select
                         value={toDesignationId}
@@ -7814,10 +8233,11 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                           const dg = desigList.find(x => String(x.id || x.designationId) === String(val));
                           setToDesignationName(dg?.designationName || dg?.name || "");
                         }}
+                        disabled={!toDepartmentId}
                         required
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                        className="staff-transfer-select"
                       >
-                        <option value="">Select Designation *...</option>
+                        <option value="">{!toDepartmentId ? "Select Department first..." : "Select Designation *..."}</option>
                         {desigList.map(dg => (
                           <option key={dg.id || dg.designationId} value={dg.id || dg.designationId}>
                             {dg.designationName || dg.name}
@@ -7826,14 +8246,14 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                       </select>
                     </div>
 
-                    <div>
-                      <label style={{ display: "block", fontSize: "11px", fontWeight: "600", color: "#475569", marginBottom: "4px" }}>
-                        Role &amp; Security Context
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Role &amp; Security Context</span>
                       </label>
                       <select
                         value={toRole}
                         onChange={(e) => setToRole(e.target.value)}
-                        style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #cbd5e1", fontSize: "12px" }}
+                        className="staff-transfer-select"
                       >
                         <option value="">Select Role...</option>
                         <option value="Staff">Staff</option>
@@ -7847,89 +8267,109 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
                 </div>
               )}
 
-              {/* REASON FOR TRANSFER */}
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                  Reason for Transfer &amp; Official Justification *
-                </label>
+              {/* REASON FOR TRANSFER CARD */}
+              <div className="staff-transfer-card">
+                <div className="staff-transfer-card-header">
+                  <div className="staff-transfer-card-title">
+                    <Pencil size={15} />
+                    <span>Official Justification &amp; Administrative Reason <strong className="required-star">*</strong></span>
+                  </div>
+                </div>
                 <textarea
                   rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="e.g. Administrative relocation to meet intermediate batch requirements at destination campus; approved by Governing Board."
                   required
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px", resize: "vertical" }}
+                  className="staff-transfer-textarea"
                 />
               </div>
 
               {/* BUTTONS STEP 1 */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", paddingTop: "14px", borderTop: "1px solid #f1f5f9" }}>
+              <div className="staff-transfer-foot">
                 <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>
                   Cancel
                 </button>
-                <button type="submit" className="cms-btn cms-btn-primary" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                <button type="submit" className="cms-btn cms-btn-primary">
                   <span>Review Transfer &amp; Summary</span>
-                  <ArrowRightLeft size={14} />
+                  <ChevronRight size={15} />
                 </button>
               </div>
             </form>
           ) : (
             /* STEP 2: CONFIRMATION SUMMARY & WARNING */
-            <div>
-              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", marginBottom: "16px" }}>
-                <h4 style={{ margin: "0 0 14px", fontSize: "15px", fontWeight: "700", color: "#1e293b", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
-                  📋 Confirm Staff Campus Transfer Summary
-                </h4>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", fontSize: "13px" }}>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Staff Name:</span>
-                    <strong style={{ display: "block", color: "#1e293b" }}>{staff.fullName || staff.employeeId}</strong>
+            <div className="staff-transfer-step2-content">
+              {/* SUMMARY CARD */}
+              <div className="staff-transfer-summary-card">
+                <div className="staff-transfer-summary-card-head">
+                  <div className="staff-transfer-summary-title">
+                    <FileText size={17} />
+                    <span>Confirm Staff Campus Transfer Summary</span>
                   </div>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Staff ID:</span>
-                    <strong style={{ display: "block", color: "var(--cms-primary, #355e3b)" }}>{staff.employeeId}</strong>
+                  <span className="staff-transfer-badge-preview">Verification Step</span>
+                </div>
+
+                <div className="staff-transfer-summary-grid">
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><UserRound size={13} /> Staff Member</span>
+                    <strong className="cell-value">{staff.fullName || staff.employeeId}</strong>
                   </div>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Relieving From:</span>
-                    <strong style={{ display: "block", color: "#b91c1c" }}>{currentCampusName}</strong>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><KeyRound size={13} /> Employee ID</span>
+                    <strong className="cell-value emp-id">{staff.employeeId}</strong>
                   </div>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Posting Destination:</span>
-                    <strong style={{ display: "block", color: "var(--cms-primary, #355e3b)" }}>
-                      {selectedDestCampus?.campusName || selectedDestCampus?.name || `Campus #${toCampusId}`}
-                    </strong>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Building2 size={13} /> Relieving From</span>
+                    <strong className="cell-value relieving-text">📍 {currentCampusName}</strong>
                   </div>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Posting Type:</span>
-                    <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{transferType}</span>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Building2 size={13} /> Destination Campus</span>
+                    <strong className="cell-value destination-text">📍 {destCampusDisplayName}</strong>
                   </div>
-                  <div>
-                    <span style={{ color: "#64748b" }}>Effective Relocation Date:</span>
-                    <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{effectiveDate}</span>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><ArrowRightLeft size={13} /> Posting Type</span>
+                    <span className="cell-badge">{transferType}</span>
                   </div>
-                  {isTeaching && (
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Calendar size={13} /> Effective Date</span>
+                    <strong className="cell-value">{effectiveDate}</strong>
+                  </div>
+
+                  {isTeaching ? (
                     <>
-                      <div>
-                        <span style={{ color: "#64748b" }}>Assigned Board:</span>
-                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toBoardName || "—"}</span>
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><GraduationCap size={13} /> Assigned Board</span>
+                        <strong className="cell-value">{toBoardName || "—"}</strong>
                       </div>
-                      <div>
-                        <span style={{ color: "#64748b" }}>Assigned Subjects:</span>
-                        <span style={{ display: "block", fontWeight: "600", color: "var(--cms-primary, #355e3b)" }}>
-                          {selectedSubjects.join(", ") || "—"}
-                        </span>
+
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><FileText size={13} /> Assigned Subjects</span>
+                        <div className="cell-subjects-wrap">
+                          {selectedSubjects.length > 0 ? (
+                            selectedSubjects.map((sub) => (
+                              <span key={sub} className="summary-subject-tag">{sub}</span>
+                            ))
+                          ) : (
+                            <span className="cell-value">—</span>
+                          )}
+                        </div>
                       </div>
                     </>
-                  )}
-                  {!isTeaching && (
+                  ) : (
                     <>
-                      <div>
-                        <span style={{ color: "#64748b" }}>Destination Dept:</span>
-                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toDepartmentName || "—"}</span>
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><Building2 size={13} /> Destination Department</span>
+                        <strong className="cell-value">{toDepartmentName || "—"}</strong>
                       </div>
-                      <div>
-                        <span style={{ color: "#64748b" }}>Destination Designation:</span>
-                        <span style={{ display: "block", fontWeight: "600", color: "#334155" }}>{toDesignationName || "—"}</span>
+
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><UserCheck size={13} /> Destination Designation</span>
+                        <strong className="cell-value">{toDesignationName || "—"}</strong>
                       </div>
                     </>
                   )}
@@ -7937,61 +8377,61 @@ function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
               </div>
 
               {/* LIFECYCLE & HISTORICAL DATA PRESERVATION GUARANTEE */}
-              <div style={{ marginBottom: "16px", padding: "14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", color: "#166534", fontSize: "12px" }}>
-                <div style={{ fontWeight: "700", marginBottom: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span>🛡️ Campus Lifecycle &amp; Service Continuity Policy</span>
+              <div className="staff-transfer-policy-box">
+                <div className="policy-header">
+                  <ShieldCheck size={18} />
+                  <span>Campus Lifecycle &amp; Service Continuity Policy</span>
                 </div>
-                <div>
-                  Transferring this staff member will mark them as <strong>Transferred / Relieved</strong> in {currentCampusName} while securely retaining all past attendance logs, payroll history, and timetable archives in the database. Their profile, credentials, and cumulative experience will transition active to {selectedDestCampus?.campusName || "Destination Campus"}.
-                </div>
+                <p className="policy-body">
+                  Transferring this staff member will mark them as <strong>Transferred / Relieved</strong> in {currentCampusName} while securely retaining all past attendance logs, payroll history, and timetable archives in the database. Their profile, credentials, and cumulative experience will transition active to <strong>{destCampusDisplayName}</strong>.
+                </p>
               </div>
 
               {/* APPROVAL REMARKS */}
-              <div style={{ marginBottom: "16px" }}>
-                <label style={{ display: "block", fontSize: "12px", fontWeight: "700", color: "#334155", marginBottom: "6px" }}>
-                  Governing Authority Remarks / Approval Note (Optional)
+              <div className="staff-transfer-form-group approval-remarks-group">
+                <label className="staff-transfer-label">
+                  <Pencil size={13} />
+                  <span>Governing Authority Remarks / Approval Note (Optional)</span>
                 </label>
                 <input
                   type="text"
                   value={approvalRemarks}
                   onChange={(e) => setApprovalRemarks(e.target.value)}
                   placeholder="e.g. Sanctioned as per Board Order No. TR-2026/04."
-                  style={{ width: "100%", padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13px" }}
+                  className="staff-transfer-input"
                 />
               </div>
 
               {/* CONFIRMATION CHECKBOX */}
-              <div style={{ marginBottom: "18px" }}>
-                <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", cursor: "pointer", fontSize: "13px", color: "#1e293b" }}>
-                  <input
-                    type="checkbox"
-                    checked={confirmedWarning}
-                    onChange={(e) => setConfirmedWarning(e.target.checked)}
-                    style={{ marginTop: "3px" }}
-                  />
-                  <span>
-                    I confirm this official inter-campus transfer. I understand that the staff member will be relieved from {currentCampusName} and inducted into {selectedDestCampus?.campusName || "Destination Campus"} with an official Transfer Order generated.
-                  </span>
-                </label>
-              </div>
+              <label className="staff-transfer-confirm-box">
+                <input
+                  type="checkbox"
+                  checked={confirmedWarning}
+                  onChange={(e) => setConfirmedWarning(e.target.checked)}
+                  className="staff-transfer-checkbox"
+                />
+                <span className="confirm-text">
+                  I confirm this official inter-campus transfer. I understand that the staff member will be relieved from <strong>{currentCampusName}</strong> and inducted into <strong>{destCampusDisplayName}</strong> with an official Transfer Order generated.
+                </span>
+              </label>
 
               {/* BUTTONS STEP 2 */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "14px", borderTop: "1px solid #f1f5f9" }}>
+              <div className="staff-transfer-foot step2-foot">
                 <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(1)} disabled={submitting}>
-                  ← Back to Allocations
+                  <ArrowLeft size={14} />
+                  <span>Back to Allocations</span>
                 </button>
-                <div style={{ display: "flex", gap: "10px" }}>
+                <div className="step2-right-btns">
                   <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={submitting}>
                     Cancel
                   </button>
                   <button
                     type="button"
-                    className="cms-btn cms-btn-primary"
+                    className="cms-btn cms-btn-primary execute-transfer-btn"
                     onClick={handleExecuteTransfer}
                     disabled={submitting || !confirmedWarning}
-                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                   >
-                    {submitting ? <Loader2 size={14} className="sp-spin" /> : <CheckCircle2 size={14} />}
+                    {submitting ? <Loader2 size={15} className="sp-spin" /> : <CheckCircle2 size={15} />}
                     <span>{submitting ? "Executing Transfer..." : "Execute & Dispatch Transfer Order"}</span>
                   </button>
                 </div>
@@ -8220,14 +8660,25 @@ function Details({ record, records, setRecords, id }) {
       subtitle="View complete staff record and profile activity."
       breadcrumb={["People", "Staff Management"]}
       actions={
-        activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <button
-            className="cms-btn cms-btn-secondary"
-            onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            onClick={() => setShowTransferModal(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer" }}
+            title="Transfer staff member to another campus"
           >
-            Review Submission
+            <ArrowRightLeft size={14} /> Transfer Campus
           </button>
-        ) : null
+          {activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
+            <button
+              className="cms-btn cms-btn-secondary"
+              onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
+            >
+              Review Submission
+            </button>
+          ) : null}
+        </div>
       }
     >
       <main className="staff-mock-page">
@@ -8305,6 +8756,22 @@ function Details({ record, records, setRecords, id }) {
         <section className="staff-panel">
           <Summary record={activeRecord} onSave={handleSaveCard} />
         </section>
+        <section className="staff-panel" style={{ marginTop: "16px" }}>
+          <StaffTransferHistory staffId={activeRecord.id} refreshKey={transferRefreshKey} />
+        </section>
+        <StaffTransferModal
+          staff={activeRecord}
+          campuses={campuses}
+          isOpen={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+          onSuccess={(msg) => {
+            setToast(msg || "Campus transfer executed successfully.");
+            setTransferRefreshKey((k) => k + 1);
+            if (typeof setRecords === "function") {
+              setRecords((prev) => (Array.isArray(prev) ? prev.map((r) => r.id === activeRecord.id ? { ...r, status: "Transferred" } : r) : []));
+            }
+          }}
+        />
       </main>
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </DashboardLayout>

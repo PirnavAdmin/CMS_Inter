@@ -479,13 +479,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.BoardRef != null && (s.BoardRef.BoardName == bName || s.BoardRef.BoardCode == bName));
             }
 
-            // 4.1 Campus filter - Strictly isolate by active campus
+            // 4.1 Campus filter - Include currently assigned staff as well as past assigned staff
             if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
             {
                 var cid = queryParams.CampusId.Value;
                 query = query.Where(s => 
-                    (s.CampusId == cid && s.Status != "Transferred" && s.Status != "Inactive") ||
-                    s.StaffCampusAssignments.Any(a => a.CampusId == cid && a.IsActive && a.Status == "Active"));
+                    s.CampusId == cid ||
+                    s.StaffCampusAssignments.Any(a => a.CampusId == cid));
             }
 
             // 5. Staff Type filter

@@ -114,7 +114,7 @@ namespace CollegeManagement.API.Services.Implementations
                         var assignment = st.StaffCampusAssignments?.FirstOrDefault(a => a.CampusId == targetCid);
                         if (assignment != null && (assignment.Status == "TransferredOut" || !assignment.IsActive))
                         {
-                            dto.Status = "Transferred Out";
+                            dto.Status = "Transferred";
                         }
                     }
                 }
@@ -992,6 +992,18 @@ namespace CollegeManagement.API.Services.Implementations
                 if (updatedRole != null)
                 {
                     await _userRepository.UpdateRoleByStaffIdAsync(id, updatedRole.RoleId, connection, dbTransaction);
+                }
+
+                if (!string.IsNullOrWhiteSpace(resolvedDesignationName))
+                {
+                    try
+                    {
+                        await connection.ExecuteAsync(
+                            "UPDATE Users SET Designation = @Designation WHERE StaffId = @StaffId",
+                            new { Designation = resolvedDesignationName, StaffId = id },
+                            dbTransaction);
+                    }
+                    catch { }
                 }
 
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
@@ -2476,14 +2488,36 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null) throw new NotFoundException($"Staff with ID {staffId} not found.");
 
             var allocations = await _allocationRepository.GetByStaffIdAsync(staffId);
+            var subjectCount = allocations.Count;
+            if (subjectCount == 0 && !string.IsNullOrWhiteSpace(staff.DepartmentSpecificJson))
+            {
+                try
+                {
+                    using var jsonDoc = JsonDocument.Parse(staff.DepartmentSpecificJson);
+                    if (jsonDoc.RootElement.ValueKind == JsonValueKind.Object &&
+                        (jsonDoc.RootElement.TryGetProperty("allocatedSubjects", out var allocEl) || jsonDoc.RootElement.TryGetProperty("subjects", out allocEl)))
+                    {
+                        if (allocEl.ValueKind == JsonValueKind.Array)
+                        {
+                            subjectCount = allocEl.GetArrayLength();
+                        }
+                    }
+                }
+                catch { }
+            }
+
             return new StaffWorkloadResponseDto
             {
                 StaffId = staff.Id,
                 StaffName = $"{staff.FirstName} {staff.LastName}".Trim(),
                 EmployeeId = staff.EmployeeId,
-                TotalAllocatedSubjects = allocations.Count,
-                TotalAllocatedWeeklyHours = allocations.Count * 4,
-                Status = "Normal"
+                Department = staff.DepartmentRef?.DepartmentName ?? staff.Department ?? string.Empty,
+                Designation = staff.DesignationRef?.Name ?? staff.Designation ?? string.Empty,
+                TotalAllocatedSubjects = subjectCount,
+                TotalAssignedSubjects = subjectCount,
+                TotalAllocatedWeeklyHours = subjectCount * 4,
+                Status = "Normal",
+                Allocations = _mapper.Map<List<StaffSubjectAllocationResponseDto>>(allocations)
             };
         }
 

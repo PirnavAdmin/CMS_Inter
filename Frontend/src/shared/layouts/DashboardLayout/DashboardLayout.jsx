@@ -1109,6 +1109,7 @@ export default function DashboardLayout({
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
+    if (basePath === "/accountant-dashboard/payroll") return pathname === basePath || pathname === `${basePath}/`;
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
     if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";

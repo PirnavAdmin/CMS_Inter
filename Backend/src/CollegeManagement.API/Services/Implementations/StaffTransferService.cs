@@ -184,169 +184,188 @@ namespace CollegeManagement.API.Services.Implementations
             transfer.Status = "Completed";
             transfer.UpdatedAt = DateTime.UtcNow;
 
-            using var transaction = await _db.Database.BeginTransactionAsync();
-            try
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                var staff = await _db.Staffs
-                    .Include(s => s.StaffCampusAssignments)
-                    .Include(s => s.StaffBoardAssignments)
-                    .Include(s => s.StaffSubjectAllocations)
-                    .FirstOrDefaultAsync(s => s.Id == transfer.StaffId);
-
-                if (staff != null)
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    // 1. Close active assignment at Source Campus
-                    var sourceAssignments = await _db.StaffCampusAssignments
-                        .Where(a => a.StaffId == transfer.StaffId && a.CampusId == transfer.FromCampusId && a.IsActive)
-                        .ToListAsync();
+                    var staff = await _db.Staffs
+                        .Include(s => s.StaffCampusAssignments)
+                        .Include(s => s.StaffBoardAssignments)
+                        .Include(s => s.StaffSubjectAllocations)
+                        .FirstOrDefaultAsync(s => s.Id == transfer.StaffId);
 
-                    foreach (var sa in sourceAssignments)
+                    if (staff != null)
                     {
-                        sa.IsActive = false;
-                        sa.IsPrimary = false;
-                        sa.Status = "TransferredOut";
-                        sa.EndDate = effectiveDate;
-                        sa.UpdatedAt = DateTime.UtcNow;
-                    }
+                        // 1. Close active assignment at Source Campus
+                        var sourceAssignments = await _db.StaffCampusAssignments
+                            .Where(a => a.StaffId == transfer.StaffId && a.CampusId == transfer.FromCampusId && a.IsActive)
+                            .ToListAsync();
 
-                    // 2. Insert or reactivate assignment at Destination Campus
-                    var existingDestAssignment = await _db.StaffCampusAssignments
-                        .FirstOrDefaultAsync(a => a.StaffId == transfer.StaffId && a.CampusId == transfer.ToCampusId);
-
-                    if (existingDestAssignment != null)
-                    {
-                        existingDestAssignment.IsActive = true;
-                        existingDestAssignment.IsPrimary = true;
-                        existingDestAssignment.Status = "Active";
-                        existingDestAssignment.AssignmentType = transfer.TransferType;
-                        existingDestAssignment.DepartmentId = transfer.ToDepartmentId;
-                        existingDestAssignment.DesignationId = transfer.ToDesignationId;
-                        existingDestAssignment.StartDate = effectiveDate;
-                        existingDestAssignment.EndDate = null;
-                        existingDestAssignment.TransferId = transfer.Id;
-                        existingDestAssignment.UpdatedAt = DateTime.UtcNow;
-                    }
-                    else
-                    {
-                        var destAssignment = new StaffCampusAssignment
+                        foreach (var sa in sourceAssignments)
                         {
-                            StaffId = transfer.StaffId,
-                            CampusId = transfer.ToCampusId,
-                            AssignmentType = transfer.TransferType,
-                            DepartmentId = transfer.ToDepartmentId,
-                            DesignationId = transfer.ToDesignationId,
-                            IsPrimary = true,
-                            StartDate = effectiveDate,
-                            IsActive = true,
-                            Status = "Active",
-                            TransferId = transfer.Id,
-                            AssignedDate = DateTime.UtcNow,
-                            CreatedAt = DateTime.UtcNow
-                        };
-                        _db.StaffCampusAssignments.Add(destAssignment);
-                    }
+                            sa.IsActive = false;
+                            sa.IsPrimary = false;
+                            sa.Status = "TransferredOut";
+                            sa.EndDate = effectiveDate;
+                            sa.UpdatedAt = DateTime.UtcNow;
+                        }
 
-                    // 3. Update staff primary master record
-                    staff.CampusId = transfer.ToCampusId;
-                    staff.Status = "Active";
+                        // 2. Insert or reactivate assignment at Destination Campus
+                        var existingDestAssignment = await _db.StaffCampusAssignments
+                            .FirstOrDefaultAsync(a => a.StaffId == transfer.StaffId && a.CampusId == transfer.ToCampusId);
 
-                    if (transfer.ToDepartmentId.HasValue && transfer.ToDepartmentId.Value > 0)
-                        staff.DepartmentId = transfer.ToDepartmentId.Value;
-                    if (transfer.ToDesignationId.HasValue && transfer.ToDesignationId.Value > 0)
-                        staff.DesignationId = transfer.ToDesignationId.Value;
-
-                    // 4. Update Board if provided
-                    if (createDto != null && createDto.ToBoardId.HasValue && createDto.ToBoardId.Value > 0)
-                    {
-                        staff.BoardId = createDto.ToBoardId.Value;
-                        var hasBoard = await _db.StaffBoardAssignments
-                            .AnyAsync(b => b.StaffId == staff.Id && b.BoardId == createDto.ToBoardId.Value);
-                        if (!hasBoard)
+                        if (existingDestAssignment != null)
                         {
-                            _db.StaffBoardAssignments.Add(new StaffBoardAssignment
+                            existingDestAssignment.IsActive = true;
+                            existingDestAssignment.IsPrimary = true;
+                            existingDestAssignment.Status = "Active";
+                            existingDestAssignment.AssignmentType = transfer.TransferType;
+                            existingDestAssignment.DepartmentId = transfer.ToDepartmentId;
+                            existingDestAssignment.DesignationId = transfer.ToDesignationId;
+                            existingDestAssignment.StartDate = effectiveDate;
+                            existingDestAssignment.EndDate = null;
+                            existingDestAssignment.TransferId = transfer.Id;
+                            existingDestAssignment.UpdatedAt = DateTime.UtcNow;
+                        }
+                        else
+                        {
+                            var destAssignment = new StaffCampusAssignment
                             {
-                                StaffId = staff.Id,
-                                BoardId = createDto.ToBoardId.Value,
+                                StaffId = transfer.StaffId,
+                                CampusId = transfer.ToCampusId,
+                                AssignmentType = transfer.TransferType,
+                                DepartmentId = transfer.ToDepartmentId,
+                                DesignationId = transfer.ToDesignationId,
+                                IsPrimary = true,
+                                StartDate = effectiveDate,
+                                IsActive = true,
+                                Status = "Active",
+                                TransferId = transfer.Id,
+                                AssignedDate = DateTime.UtcNow,
                                 CreatedAt = DateTime.UtcNow
-                            });
+                            };
+                            _db.StaffCampusAssignments.Add(destAssignment);
                         }
-                    }
 
-                    // 5. Subject Allocations for Teaching Staff
-                    if (createDto != null && (staff.StaffType == "Teaching" || string.Equals(staff.StaffType, "Teaching", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        var targetSubjectIds = new HashSet<int>();
-                        if (createDto.AllocatedSubjectIds != null && createDto.AllocatedSubjectIds.Any())
+                        // 3. Update staff primary master record
+                        staff.CampusId = transfer.ToCampusId;
+                        staff.Status = "Active";
+
+                        if (transfer.ToDepartmentId.HasValue && transfer.ToDepartmentId.Value > 0)
                         {
-                            foreach (var sid in createDto.AllocatedSubjectIds.Where(x => x > 0))
-                                targetSubjectIds.Add(sid);
+                            staff.DepartmentId = transfer.ToDepartmentId.Value;
+                            var dept = await _db.Departments.FindAsync(transfer.ToDepartmentId.Value);
+                            if (dept != null) staff.Department = dept.DepartmentName;
                         }
-                        if (createDto.AllocatedSubjectNames != null && createDto.AllocatedSubjectNames.Any())
+                        if (transfer.ToDesignationId.HasValue && transfer.ToDesignationId.Value > 0)
                         {
-                            var allSubjects = await _db.Subjects.AsNoTracking().ToListAsync();
-                            foreach (var name in createDto.AllocatedSubjectNames)
+                            staff.DesignationId = transfer.ToDesignationId.Value;
+                            var desig = await _db.Designations.FindAsync(transfer.ToDesignationId.Value);
+                            if (desig != null)
                             {
-                                var clean = name?.Trim();
-                                if (string.IsNullOrEmpty(clean)) continue;
-                                var match = allSubjects.FirstOrDefault(s =>
-                                    string.Equals(s.SubjectName.Trim(), clean, StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(s.SubjectCode.Trim(), clean, StringComparison.OrdinalIgnoreCase));
-                                if (match != null) targetSubjectIds.Add(match.SubjectId);
+                                staff.Designation = desig.Name;
+                                var user = await _db.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                                if (user != null) user.Designation = desig.Name;
                             }
                         }
 
-                        if (targetSubjectIds.Any())
+                        // 4. Update Board if provided
+                        if (createDto != null && createDto.ToBoardId.HasValue && createDto.ToBoardId.Value > 0)
                         {
-                            var existingAllocations = await _db.StaffSubjectAllocations
-                                .Where(a => a.StaffId == staff.Id)
-                                .ToListAsync();
-
-                            foreach (var sid in targetSubjectIds)
+                            staff.BoardId = createDto.ToBoardId.Value;
+                            var board = await _db.Boards.FindAsync(createDto.ToBoardId.Value);
+                            if (board != null) staff.BoardName = board.BoardName;
+                            var hasBoard = await _db.StaffBoardAssignments
+                                .AnyAsync(b => b.StaffId == staff.Id && b.BoardId == createDto.ToBoardId.Value);
+                            if (!hasBoard)
                             {
-                                if (!existingAllocations.Any(a => a.SubjectId == sid))
+                                _db.StaffBoardAssignments.Add(new StaffBoardAssignment
                                 {
-                                    _db.StaffSubjectAllocations.Add(new StaffSubjectAllocation
+                                    StaffId = staff.Id,
+                                    BoardId = createDto.ToBoardId.Value,
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                            }
+                        }
+
+                        // 5. Subject Allocations for Teaching Staff
+                        if (createDto != null && (staff.StaffType == "Teaching" || string.Equals(staff.StaffType, "Teaching", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var targetSubjectIds = new HashSet<int>();
+                            if (createDto.AllocatedSubjectIds != null && createDto.AllocatedSubjectIds.Any())
+                            {
+                                foreach (var sid in createDto.AllocatedSubjectIds.Where(x => x > 0))
+                                    targetSubjectIds.Add(sid);
+                            }
+                            if (createDto.AllocatedSubjectNames != null && createDto.AllocatedSubjectNames.Any())
+                            {
+                                var allSubjects = await _db.Subjects.AsNoTracking().ToListAsync();
+                                foreach (var name in createDto.AllocatedSubjectNames)
+                                {
+                                    var clean = name?.Trim();
+                                    if (string.IsNullOrEmpty(clean)) continue;
+                                    var match = allSubjects.FirstOrDefault(s =>
+                                        string.Equals(s.SubjectName.Trim(), clean, StringComparison.OrdinalIgnoreCase) ||
+                                        string.Equals(s.SubjectCode.Trim(), clean, StringComparison.OrdinalIgnoreCase));
+                                    if (match != null) targetSubjectIds.Add(match.SubjectId);
+                                }
+                            }
+
+                            if (targetSubjectIds.Any())
+                            {
+                                var existingAllocations = await _db.StaffSubjectAllocations
+                                    .Where(a => a.StaffId == staff.Id)
+                                    .ToListAsync();
+
+                                foreach (var sid in targetSubjectIds)
+                                {
+                                    if (!existingAllocations.Any(a => a.SubjectId == sid))
                                     {
-                                        StaffId = staff.Id,
-                                        SubjectId = sid,
-                                        CreatedAt = DateTime.UtcNow
-                                    });
+                                        _db.StaffSubjectAllocations.Add(new StaffSubjectAllocation
+                                        {
+                                            StaffId = staff.Id,
+                                            SubjectId = sid,
+                                            CreatedAt = DateTime.UtcNow
+                                        });
+                                    }
                                 }
                             }
                         }
+
+                        // 6. Role Update for Non-Teaching Staff
+                        if (createDto != null && createDto.RoleId.HasValue && createDto.RoleId.Value > 0)
+                        {
+                            var user = await _db.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                            if (user != null)
+                            {
+                                user.RoleId = createDto.RoleId.Value;
+                                user.UpdatedAt = DateTime.UtcNow;
+                            }
+                        }
+                        else
+                        {
+                            var user = await _db.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
+                            if (user != null)
+                            {
+                                user.UpdatedAt = DateTime.UtcNow;
+                            }
+                        }
+
+                        staff.UpdatedAt = DateTime.UtcNow;
                     }
 
-                    // 6. Role Update for Non-Teaching Staff
-                    if (createDto != null && createDto.RoleId.HasValue && createDto.RoleId.Value > 0)
-                    {
-                        var user = await _db.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
-                        if (user != null)
-                        {
-                            user.RoleId = createDto.RoleId.Value;
-                            user.UpdatedAt = DateTime.UtcNow;
-                        }
-                    }
-                    else
-                    {
-                        var user = await _db.Users.FirstOrDefaultAsync(u => u.StaffId == staff.Id);
-                        if (user != null)
-                        {
-                            user.UpdatedAt = DateTime.UtcNow;
-                        }
-                    }
-
-                    staff.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
                 }
-
-                await _db.SaveChangesAsync();
-                await transaction.CommitAsync();
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Failed to execute atomic transfer for StaffTransfer ID {Id}", transfer.Id);
-                throw;
-            }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogError(ex, "Failed to execute atomic transfer for StaffTransfer ID {Id}", transfer.Id);
+                    throw;
+                }
+            });
 
             // Recalculate experience
             try

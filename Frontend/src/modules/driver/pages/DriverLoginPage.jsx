@@ -1,46 +1,61 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Lock, Mail, Bus, ShieldCheck, AlertCircle, Eye, EyeOff, KeyRound, Sparkles } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
+import { loginUser } from "@/modules/auth/authService.js";
+import { saveAuthSession, clearAuthSession } from "@/modules/auth/authStorage.js";
 
 export default function DriverLoginPage({ onLoginSuccess }) {
-  const [email, setEmail] = useState("Driver@CMS.com");
-  const [password, setPassword] = useState("Driver@123");
+  const [email, setEmail] = useState("penetirajesh123@gmail.com");
+  const [password, setPassword] = useState("Password@123");
   const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
 
     const cleanEmail = email.trim();
     const cleanPassword = password.trim();
 
-    if (cleanEmail === "Driver@CMS.com" && cleanPassword === "Driver@123") {
-      const sessionData = {
-        email: cleanEmail,
-        role: "Driver",
-        name: "Ramesh Kumar",
-        employeeId: "EMP001",
-        busNumber: "PC-101",
-        loginTime: new Date().toISOString(),
-      };
-      sessionStorage.setItem("pjc-driver-session", JSON.stringify(sessionData));
-      if (rememberMe) {
-        localStorage.setItem("pjc-driver-remember", "true");
+    if (!cleanEmail || !cleanPassword) {
+      setErrorMessage("Please enter both email and password.");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      clearAuthSession();
+      const result = await loginUser({ emailOrMobile: cleanEmail, password: cleanPassword });
+      if (!result?.token) {
+        throw new Error("Authentication succeeded but no access token was returned.");
       }
+
+      saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, rememberMe);
+
       if (onLoginSuccess) {
-        onLoginSuccess(sessionData);
+        onLoginSuccess(result);
+      } else {
+        navigate("/driver", { replace: true });
       }
-    } else {
-      setErrorMessage("Invalid driver credentials. Please check your email and password.");
+    } catch (err) {
+      console.error("Driver login error:", err);
+      setErrorMessage(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Invalid credentials. Please verify your email and password."
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const fillDemoCredentials = () => {
-    setEmail("Driver@CMS.com");
-    setPassword("Driver@123");
+    setEmail("penetirajesh123@gmail.com");
+    setPassword("Password@123");
     setErrorMessage("");
   };
 
@@ -64,7 +79,7 @@ export default function DriverLoginPage({ onLoginSuccess }) {
           </div>
           <h1 className="dp-login-title">Driver Portal</h1>
           <p className="dp-login-subtitle">
-            Sign in to access your transport dashboard.
+            Sign in with your transport staff credentials to access your dashboard.
           </p>
         </div>
 
@@ -80,17 +95,17 @@ export default function DriverLoginPage({ onLoginSuccess }) {
           <form onSubmit={handleSubmit} className="dp-login-form">
             <div className="dp-form-field">
               <label htmlFor="driver-email">
-                <span>Email Address</span>
+                <span>Email Address / Mobile</span>
               </label>
               <div className="dp-input-icon-wrap">
                 <Mail size={16} className="dp-field-icon" />
                 <input
                   id="driver-email"
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. Driver@CMS.com"
+                  placeholder="e.g. penetirajesh123@gmail.com"
                   className="dp-input-field"
                   autoComplete="username"
                 />
@@ -98,17 +113,8 @@ export default function DriverLoginPage({ onLoginSuccess }) {
             </div>
 
             <div className="dp-form-field">
-              <div className="dp-field-label-row">
-                <label htmlFor="driver-password">
-                  <span>Password</span>
-                </label>
-                <button
-                  type="button"
-                  className="dp-forgot-link"
-                  onClick={() => alert("Please contact the Transport Department Office to reset your password.")}
-                >
-                  Forgot Password?
-                </button>
+              <div className="dp-form-field-header">
+                <label htmlFor="driver-password">Password</label>
               </div>
               <div className="dp-input-icon-wrap">
                 <Lock size={16} className="dp-field-icon" />
@@ -118,15 +124,14 @@ export default function DriverLoginPage({ onLoginSuccess }) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="Enter your account password"
                   className="dp-input-field"
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
-                  className="dp-password-toggle"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  tabIndex={-1}
+                  className="dp-input-toggle-btn"
+                  onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -134,70 +139,50 @@ export default function DriverLoginPage({ onLoginSuccess }) {
               </div>
             </div>
 
-            <div className="dp-form-options">
+            <div className="dp-form-row">
               <label className="dp-checkbox-label">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
                 />
-                <span>Remember Me</span>
+                <span>Remember this terminal</span>
               </label>
             </div>
 
             <button
               type="submit"
-              className="dp-btn dp-btn-primary dp-btn-lg dp-btn-full"
               disabled={isLoading}
+              className="dp-btn dp-btn-primary dp-btn-block dp-btn-submit"
             >
               {isLoading ? (
-                <span>Signing in...</span>
+                <span>Authenticating terminal...</span>
               ) : (
                 <>
-                  <KeyRound size={17} />
-                  <span>Login to Driver Portal</span>
+                  <KeyRound size={16} /> Sign In to Transport Portal
                 </>
               )}
             </button>
           </form>
 
-          {/* Demo Credentials Box */}
-          <div className="dp-demo-creds-box">
-            <div className="dp-demo-creds-head">
-              <div className="dp-flex-row gap-1">
-                <Sparkles size={14} className="dp-text-primary" />
-                <strong>Driver Demo Credentials</strong>
-              </div>
-              <button
-                type="button"
-                className="dp-demo-autofill-btn"
-                onClick={fillDemoCredentials}
-              >
-                Auto-fill
-              </button>
-            </div>
-            <div className="dp-demo-creds-grid">
-              <div className="dp-demo-row">
-                <small>Email:</small>
-                <code>Driver@CMS.com</code>
-              </div>
-              <div className="dp-demo-row">
-                <small>Password:</small>
-                <code>Driver@123</code>
-              </div>
-            </div>
-            <p className="dp-demo-note">
-              <ShieldCheck size={12} /> These demo credentials allow full testing of the Driver transport module.
-            </p>
+          {/* Quick Demo Fill button */}
+          <div className="dp-demo-pill-wrap">
+            <button
+              type="button"
+              className="dp-demo-pill"
+              onClick={fillDemoCredentials}
+            >
+              <Sparkles size={13} /> Fill Demo Driver Credentials
+            </button>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Security badge footer */}
         <div className="dp-login-footer">
-          <p>© {new Date().getFullYear()} Pirnav College Transport Management System</p>
+          <ShieldCheck size={14} />
+          <span>Pirnav College Unified Campus Access • Transport Security Protocol</span>
         </div>
       </div>
     </div>
   );
 }
-

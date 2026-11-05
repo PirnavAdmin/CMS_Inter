@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Services.Interfaces
     public interface IRoleManagementService
     {
         // Existing Role CRUD
-        Task<List<RoleResponse>> GetAllRolesAsync();
+        Task<List<RoleResponse>> GetAllRolesAsync(string? staffType = null, bool includeInactive = false);
         Task<RoleResponse?> GetRoleByIdAsync(int id);
         Task<RoleResponse> CreateRoleAsync(CreateRoleRequest request);
         Task<RoleResponse?> UpdateRoleAsync(int id, UpdateRoleRequest request);

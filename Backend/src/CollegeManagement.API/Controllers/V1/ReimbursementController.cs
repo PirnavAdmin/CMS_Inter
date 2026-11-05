@@ -195,11 +195,10 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 2. Get All Claims (Finance & Admin Review table)
+        /// 2. Get All Claims (Finance & Admin Review table / Fallback for Personal Claims)
         /// </summary>
         [HttpGet]
-        [RequirePermission("staff-reimbursement")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAllClaims(
             [FromQuery] int? campusId,
@@ -210,7 +209,7 @@ namespace CollegeManagement.API.Controllers.V1
             var resolvedCampus = ResolveCampusId(campusId);
             if (!IsAdminOrFinance())
             {
-                var staffId = ResolveStaffId();
+                var staffId = await ResolveStaffIdAsync();
                 if (!staffId.HasValue || staffId.Value <= 0)
                 {
                     return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
@@ -246,12 +245,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Get Reimbursement Summary KPIs
         /// </summary>
         [HttpGet("summary")]
-        [RequirePermission("staff-reimbursement")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSummary([FromQuery] int? campusId)
         {
             var resolvedCampus = ResolveCampusId(campusId);
+            if (!IsAdminOrFinance())
+            {
+                return Ok(new { Status = true, Message = "Summary KPIs retrieved successfully.", Data = new { TotalClaims = 0 } });
+            }
             var result = await _service.GetSummaryAsync(resolvedCampus);
             return Ok(new { Status = true, Message = "Summary KPIs retrieved successfully.", Data = result });
         }
@@ -260,12 +262,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// 5. Get Account Ledger Entries (For Account Ledger Modal)
         /// </summary>
         [HttpGet("account-entries")]
-        [RequirePermission("staff-reimbursement")]
-        [Authorize(Roles = "Admin,Super Admin,Accountant,Principal,Transport Manager")]
+        [BypassPermission]
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAccountEntries([FromQuery] int? campusId)
         {
             var resolvedCampus = ResolveCampusId(campusId);
+            if (!IsAdminOrFinance())
+            {
+                return Ok(new { Status = true, Message = "Account ledger entries retrieved successfully.", Data = Array.Empty<object>() });
+            }
             var result = await _service.GetAccountEntriesAsync(resolvedCampus);
             return Ok(new { Status = true, Message = "Account ledger entries retrieved successfully.", Data = result });
         }
