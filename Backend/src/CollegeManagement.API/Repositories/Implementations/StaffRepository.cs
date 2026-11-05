@@ -811,6 +811,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 p.Add("p_DocumentsJson", staff.DocumentsJson);
                 p.Add("p_BankDetailsJson", staff.BankDetailsJson);
                 p.Add("p_EmergencyContactJson", staff.EmergencyContactJson);
+                p.Add("p_CampusId", staff.CampusId);
+                p.Add("p_IsDriver", staff.IsDriver ? (byte)1 : (byte)0);
+                p.Add("p_DrivingLicenseNumber", staff.DrivingLicenseNumber);
+                p.Add("p_DrivingLicenseExpiryDate", staff.DrivingLicenseExpiryDate);
+                p.Add("p_DrivingExperienceYears", staff.DrivingExperienceYears);
                 p.Add("p_Id", dbType: DbType.Int32, direction: ParameterDirection.Output);
 
                 await Connection.ExecuteAsync("sp_CreateStaff", p, commandType: CommandType.StoredProcedure);
@@ -844,7 +849,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_JoiningDate = staff.JoiningDate,
                         p_Experience = staff.Experience,
                         p_Status = staff.Status,
-                        p_PhotoPath = staff.PhotoPath
+                        p_PhotoPath = staff.PhotoPath,
+                        p_CampusId = staff.CampusId,
+                        p_IsDriver = staff.IsDriver ? (byte)1 : (byte)0,
+                        p_DrivingLicenseNumber = staff.DrivingLicenseNumber,
+                        p_DrivingLicenseExpiryDate = staff.DrivingLicenseExpiryDate,
+                        p_DrivingExperienceYears = staff.DrivingExperienceYears
                     }, commandType: CommandType.StoredProcedure);
 
                     if (id > 0)
@@ -925,6 +935,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 p.Add("p_DocumentsJson", staff.DocumentsJson);
                 p.Add("p_BankDetailsJson", staff.BankDetailsJson);
                 p.Add("p_EmergencyContactJson", staff.EmergencyContactJson);
+                p.Add("p_CampusId", staff.CampusId);
+                p.Add("p_IsDriver", staff.IsDriver ? (byte)1 : (byte)0);
+                p.Add("p_DrivingLicenseNumber", staff.DrivingLicenseNumber);
+                p.Add("p_DrivingLicenseExpiryDate", staff.DrivingLicenseExpiryDate);
+                p.Add("p_DrivingExperienceYears", staff.DrivingExperienceYears);
 
                 await Connection.ExecuteAsync("sp_UpdateStaff", p, commandType: CommandType.StoredProcedure);
                 return;
@@ -953,7 +968,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_JoiningDate = staff.JoiningDate,
                         p_Experience = staff.Experience,
                         p_Status = staff.Status,
-                        p_PhotoPath = staff.PhotoPath
+                        p_PhotoPath = staff.PhotoPath,
+                        p_CampusId = staff.CampusId,
+                        p_IsDriver = staff.IsDriver ? (byte)1 : (byte)0,
+                        p_DrivingLicenseNumber = staff.DrivingLicenseNumber,
+                        p_DrivingLicenseExpiryDate = staff.DrivingLicenseExpiryDate,
+                        p_DrivingExperienceYears = staff.DrivingExperienceYears
                     }, commandType: CommandType.StoredProcedure);
                     return;
                 }

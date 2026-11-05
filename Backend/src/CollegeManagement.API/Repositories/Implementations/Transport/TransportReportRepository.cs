@@ -154,12 +154,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 DriverName = (string)(x.DriverName ?? ""),
                 MobileNumber = (string)(x.MobileNumber ?? ""),
                 LicenseNumber = (string)(x.LicenseNumber ?? ""),
-                LicenseExpiry = x.LicenseExpiryDate != null ? (x.LicenseExpiryDate is DateTime dt ? dt.ToString("yyyy-MM-dd") : x.LicenseExpiryDate.ToString()) : "N/A",
-                CurrentBus = "Assigned Bus",
-                CurrentRoute = "Assigned Route",
-                BusAttendant = "Attendant",
-                AssignmentStatus = "Assigned",
-                ExperienceYears = 5,
+                LicenseExpiry = x.LicenseExpiryDate != null ? (x.LicenseExpiryDate is DateTime dt ? dt.ToString("yyyy-MM-dd") : x.LicenseExpiryDate.ToString()) : null,
+                CurrentBus = (string?)x.CurrentBus,
+                CurrentRoute = (string?)x.CurrentRoute,
+                BusAttendant = (string?)x.BusAttendant,
+                AssignmentStatus = (string?)(x.AssignmentStatus ?? "Unassigned"),
+                ExperienceYears = x.ExperienceYears != null ? Convert.ToInt32(x.ExperienceYears) : (int?)null,
                 Status = (string)(x.Status ?? "Active")
             }).ToList();
         }

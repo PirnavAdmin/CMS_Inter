@@ -457,12 +457,9 @@ namespace CollegeManagement.API.Services.Implementations
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
-            // Driver & Transport specific details
-            var isDriver = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
-                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
-                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
-
-            staff.IsDriver = isDriver;
+            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
+            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+            staff.IsDriver = isDriverRole;
             if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
             {
                 staff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
@@ -547,6 +544,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 2. Insert Staff domain record via EF Core inside this transaction
+                staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
                 await _staffRepository.AddAsync(staff);
 
                 // 3. Subject Allocations
@@ -571,6 +569,29 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     await transaction.RollbackAsync();
                     throw new ValidationException(provResult.ErrorMessage ?? "Failed to provision centralized user account for staff member.");
+                }
+
+                // 4b. Transactionally provision transport driver profile if role is Driver
+                bool effectiveIsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                if (effectiveIsDriver)
+                {
+                    await connection.ExecuteAsync(
+                        "sp_SyncTransportDriverFromStaff",
+                        new { p_StaffId = staff.Id, p_IsDriverRole = (byte)1 },
+                        transaction: dbTransaction,
+                        commandType: CommandType.StoredProcedure);
+                }
+
+                // 4c. Transactionally provision transport attendant profile if role is Attendant / Bus Attendant
+                bool effectiveIsAttendant = string.Equals(assignedRole?.RoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                if (effectiveIsAttendant)
+                {
+                    await connection.ExecuteAsync(
+                        "sp_SyncTransportAttendantFromStaff",
+                        new { p_StaffId = staff.Id, p_IsAttendantRole = (byte)1 },
+                        transaction: dbTransaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 // 5. Commit both Staff and User creation atomically
@@ -821,12 +842,7 @@ namespace CollegeManagement.API.Services.Implementations
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
 
-            // Driver & Transport specific details
-            var isDriver = existingStaff.IsDriver || !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
-                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
-                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
-
-            existingStaff.IsDriver = isDriver;
+            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
             if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
             {
                 existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
@@ -903,6 +919,33 @@ namespace CollegeManagement.API.Services.Implementations
                 if (updatedRole != null)
                 {
                     await _userRepository.UpdateRoleByStaffIdAsync(id, updatedRole.RoleId, connection, dbTransaction);
+                }
+                else
+                {
+                    // If role wasn't explicitly updated in DTO, sync updated profile details if current role is Driver
+                    var currentRoleName = await connection.QueryFirstOrDefaultAsync<string>(
+                        @"SELECT r.RoleName 
+                          FROM Users u 
+                          INNER JOIN Roles r ON u.RoleId = r.RoleId 
+                          WHERE u.StaffId = @StaffId 
+                          LIMIT 1;",
+                        new { StaffId = id },
+                        transaction: dbTransaction);
+                    bool isDriver = string.Equals(currentRoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                    existingStaff.IsDriver = isDriver;
+                    await connection.ExecuteAsync(
+                        "sp_SyncTransportDriverFromStaff",
+                        new { p_StaffId = id, p_IsDriverRole = isDriver ? (byte)1 : (byte)0 },
+                        transaction: dbTransaction,
+                        commandType: CommandType.StoredProcedure);
+
+                    bool isAttendant = string.Equals(currentRoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(currentRoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                    await connection.ExecuteAsync(
+                        "sp_SyncTransportAttendantFromStaff",
+                        new { p_StaffId = id, p_IsAttendantRole = isAttendant ? (byte)1 : (byte)0 },
+                        transaction: dbTransaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;

@@ -23,8 +23,22 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
+                var resolvedCampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveAndValidateCampusId(User, filter.CampusId);
+                if (filter.CampusId.HasValue && filter.CampusId.Value > 0)
+                {
+                    filter.CampusId = resolvedCampusId;
+                }
+                else if (resolvedCampusId > 0)
+                {
+                    filter.CampusId = resolvedCampusId;
+                }
+
                 var result = await _service.GetAllAsync(filter);
                 return Ok(result);
+            }
+            catch (CollegeManagement.API.Exceptions.ForbiddenException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
             }
             catch (Exception)
             {
@@ -135,4 +149,3 @@ namespace CollegeManagement.API.Controllers
         }
     }
 }
-

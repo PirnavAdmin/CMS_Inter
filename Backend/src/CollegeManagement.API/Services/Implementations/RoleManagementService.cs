@@ -269,7 +269,12 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new KeyNotFoundException($"Role with ID {resolvedRoleId} was not found.");
             }
 
-            return await _permissionRepository.AssignUserRoleAsync(userId, resolvedRoleId);
+            var assigned = await _permissionRepository.AssignUserRoleAsync(userId, resolvedRoleId);
+            if (assigned && user.StaffId.HasValue && user.StaffId.Value > 0)
+            {
+                await _userRepository.UpdateRoleByStaffIdAsync(user.StaffId.Value, resolvedRoleId);
+            }
+            return assigned;
         }
 
         public async Task<bool> RemoveUserRoleAsync(int userId, string? roleCode = null)
