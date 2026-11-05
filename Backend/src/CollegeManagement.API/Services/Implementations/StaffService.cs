@@ -53,6 +53,8 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IUserRepository _userRepository;
         private readonly ILogger<StaffService> _logger;
         private readonly INumberSeriesService _numberSeriesService;
+        private readonly INotificationService _notificationService;
+        private readonly IAuditLoggingService _auditLogger;
 
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -76,7 +78,9 @@ namespace CollegeManagement.API.Services.Implementations
             IUserProvisioningService userProvisioningService,
             IUserRepository userRepository,
             ILogger<StaffService> logger,
-            INumberSeriesService numberSeriesService)
+            INumberSeriesService numberSeriesService,
+            INotificationService notificationService,
+            IAuditLoggingService auditLogger)
         {
             _staffRepository = staffRepository;
             _allocationRepository = allocationRepository;
@@ -94,6 +98,8 @@ namespace CollegeManagement.API.Services.Implementations
             _userRepository = userRepository;
             _logger = logger;
             _numberSeriesService = numberSeriesService;
+            _notificationService = notificationService;
+            _auditLogger = auditLogger;
         }
 
         public async Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams)
@@ -1264,6 +1270,49 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException($"Profile completion must be at least 50% to submit. Current completion is {percentage}%.");
             }
 
+            var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
+            bool requiresAdminApproval = string.Equals(workflowConfig.WorkflowPreference, "AdminApproval", StringComparison.OrdinalIgnoreCase) || !workflowConfig.AutoSendOnSubmission;
+
+            if (requiresAdminApproval)
+            {
+                // Workflow 2: Admin Approval Required Before Offer Letter Generation
+                staff.ProfileStatus = "PendingApproval";
+                if (!staff.SubmittedAt.HasValue)
+                {
+                    staff.SubmittedAt = DateTime.UtcNow;
+                }
+                staff.ProfileCompletionPercentage = Math.Max(percentage, staff.ProfileCompletionPercentage);
+                staff.ProfileLinkToken = null; // Invalidate single-use token upon submission
+                await _staffRepository.UpdateAsync(staff);
+
+                // Staff-to-Admin Notification using existing notification infrastructure
+                try
+                {
+                    string staffName = $"{staff.FirstName} {staff.LastName}".Trim();
+                    string notifTitle = "Offer Letter Approval";
+                    string notifMsg = $"{staffName} ({staff.EmployeeId}) has submitted onboarding details and is waiting for offer letter approval.";
+                    string deepLink = $"/dashboard/settings/offer-letter-configuration?tab=automation&staffId={staff.Id}";
+
+                    // Dispatch to Admin and Principal roles
+                    await _notificationService.SendToRoleAsync("Admin", staff.CampusId, notifTitle, notifMsg, "OfferLetter", staff.Id, deepLink);
+                    await _notificationService.SendToRoleAsync("Principal", staff.CampusId, notifTitle, notifMsg, "OfferLetter", staff.Id, deepLink);
+                    _logger.LogInformation("Admin notification created for pending offer letter approval: staff #{StaffId}", staff.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to dispatch Admin notification for staff onboarding #{StaffId}", staff.Id);
+                }
+
+                try
+                {
+                    await _auditLogger.LogAsync("SubmitProfile", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", "Staff submitted onboarding details. Status set to Pending Admin Approval.");
+                }
+                catch { }
+
+                return MapToFullProfileDto(staff);
+            }
+
+            // Workflow 1: Automatic Offer Letter Generation
             bool alreadyCompleted = string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) && staff.SubmittedAt.HasValue;
 
             staff.ProfileStatus = "Completed";
@@ -1288,18 +1337,32 @@ namespace CollegeManagement.API.Services.Implementations
                     var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
                     if (!string.IsNullOrWhiteSpace(staff.Email))
                     {
-                        string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                        string body = $@"
+                        string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                        string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                        subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                        string body = workflowConfig.EmailBody ?? $@"
                             <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
                                 <h2>Welcome to Pirnav Educational Society</h2>
-                                <p>Dear {staff.FirstName} {staff.LastName},</p>
+                                <p>Dear {staffFullName},</p>
                                 <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
                                 <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
                                 <p>Your full access to the faculty portal and academic management modules is now active.</p>
                                 <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
                             </div>";
+                        body = body.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
 
                         await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                        if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                        {
+                            try
+                            {
+                                await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                            }
+                            catch { }
+                        }
+
                         _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
                     }
                 }
@@ -1307,7 +1370,23 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
                 }
+
+                // Staff Portal Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Generated", "Your official offer letter has been generated and sent to your registered email.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deliver offer letter generated notification to staff #{StaffId}", staff.Id);
+                }
             }
+
+            try
+            {
+                await _auditLogger.LogAsync("SubmitProfile", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", "Staff submitted onboarding details. Auto-generated and dispatched Offer Letter.");
+            }
+            catch { }
 
             return MapToFullProfileDto(staff);
         }
@@ -3566,6 +3645,348 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return false;
+        }
+
+        public async Task<OfferLetterWorkflowConfigDto> GetOfferLetterWorkflowConfigAsync()
+        {
+            try
+            {
+                var template = await _context.Templates.AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG");
+                if (template != null && !string.IsNullOrWhiteSpace(template.ContentBody))
+                {
+                    var config = JsonSerializer.Deserialize<OfferLetterWorkflowConfigDto>(template.ContentBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (config != null) return config;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize offer letter workflow config from database, using defaults.");
+            }
+            return new OfferLetterWorkflowConfigDto();
+        }
+
+        public async Task<OfferLetterWorkflowConfigDto> SaveOfferLetterWorkflowConfigAsync(OfferLetterWorkflowConfigDto dto)
+        {
+            if (dto == null) throw new ValidationException("Workflow configuration payload cannot be null.");
+
+            dto.WorkflowPreference = string.Equals(dto.WorkflowPreference, "AdminApproval", StringComparison.OrdinalIgnoreCase)
+                ? "AdminApproval" : "Automatic";
+
+            var template = await _context.Templates
+                .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG");
+
+            string json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+
+            if (template == null)
+            {
+                template = new CollegeManagement.API.Models.Settings.Template
+                {
+                    TemplateCode = "OFFER_LETTER_AUTOMATION_CONFIG",
+                    Title = "Offer Letter Automation & Workflow Preference",
+                    Category = "OfferLetterConfig",
+                    ContentBody = json,
+                    PlaceholdersJson = "[]",
+                    IsActive = true,
+                    Version = "1",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                await _context.Templates.AddAsync(template);
+            }
+            else
+            {
+                template.ContentBody = json;
+                template.UpdatedAt = DateTime.UtcNow;
+                template.IsActive = true;
+            }
+
+            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _auditLogger.LogAsync("SaveWorkflowConfig", "OfferLetterSettings", "OFFER_LETTER_AUTOMATION_CONFIG", "Info", "Success", $"Updated workflow preference to: {dto.WorkflowPreference}");
+            }
+            catch { }
+
+            return dto;
+        }
+
+        public async Task<List<StaffOnboardingRequestDto>> GetOfferLetterOnboardingRequestsAsync(string? status, int? campusId)
+        {
+            var query = _context.Staffs.AsNoTracking()
+                .Include(s => s.DepartmentRef)
+                .Include(s => s.DesignationRef)
+                .Include(s => s.Campus)
+                .Include(s => s.BoardRef)
+                .Where(s => !s.IsDeleted);
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == campusId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                var st = status.Trim().ToLowerInvariant();
+                if (st == "pending")
+                {
+                    query = query.Where(s => s.ProfileStatus == "PendingApproval" || s.ProfileStatus == "UnderVerification" || s.ProfileStatus == "Submitted" || s.ProfileStatus == "Changes Required" || s.ProfileStatus == "NeedsCorrection");
+                }
+                else
+                {
+                    query = query.Where(s => s.ProfileStatus.ToLower() == st);
+                }
+            }
+
+            var list = await query
+                .OrderByDescending(s => s.SubmittedAt ?? s.UpdatedAt ?? s.CreatedAt)
+                .Take(100)
+                .ToListAsync();
+
+            return list.Select(s => new StaffOnboardingRequestDto
+            {
+                StaffId = s.Id,
+                EmployeeId = s.EmployeeId,
+                StaffName = $"{s.FirstName} {s.LastName}".Trim(),
+                FirstName = s.FirstName,
+                LastName = s.LastName,
+                Department = s.DepartmentRef?.DepartmentName ?? s.Department ?? string.Empty,
+                Designation = s.DesignationRef?.Name ?? s.Designation ?? string.Empty,
+                CampusName = s.Campus?.CampusName ?? s.CampusName,
+                CampusId = s.CampusId,
+                BoardName = s.BoardRef?.BoardName ?? s.BoardName,
+                ProfileStatus = s.ProfileStatus,
+                ProfileCompletionPercentage = s.ProfileCompletionPercentage,
+                SubmittedAt = s.SubmittedAt,
+                ApprovedAt = s.ApprovedAt,
+                CorrectionRequestedAt = s.CorrectionRequestedAt,
+                CorrectionNotes = s.CorrectionNotes,
+                JoiningDate = s.JoiningDate,
+                PhotoPath = s.PhotoPath,
+                Email = s.Email,
+                Mobile = s.Mobile,
+                Status = s.Status,
+                HasOfferLetter = string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+            }).ToList();
+        }
+
+        public async Task<StaffResponseDto> VerifyStaffOnboardingAsync(int staffId, VerifyStaffOnboardingDto dto, int adminUserId)
+        {
+            var staff = await _staffRepository.GetByIdAsync(staffId);
+            if (staff == null) throw new NotFoundException($"Staff #{staffId} not found.");
+
+            staff.ProfileStatus = "UnderVerification";
+            if (!string.IsNullOrWhiteSpace(dto?.VerificationNotes))
+            {
+                staff.CorrectionNotes = dto.VerificationNotes.Trim();
+            }
+            await _staffRepository.UpdateAsync(staff);
+
+            try
+            {
+                await _auditLogger.LogAsync("VerifyStaffOnboarding", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", $"Admin (User #{adminUserId}) verified onboarding details. Notes: {dto?.VerificationNotes}");
+            }
+            catch { }
+
+            return _mapper.Map<StaffResponseDto>(staff);
+        }
+
+        public async Task<StaffResponseDto> ApproveStaffOfferLetterAsync(int staffId, ApproveStaffOfferLetterDto dto, int adminUserId)
+        {
+            var staff = await _staffRepository.GetByIdAsync(staffId);
+            if (staff == null) throw new NotFoundException($"Staff #{staffId} not found.");
+
+            staff.ProfileStatus = "Completed";
+            staff.ApprovedAt = DateTime.UtcNow;
+            staff.CorrectionNotes = null;
+            staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
+            await _staffRepository.UpdateAsync(staff);
+            await EnsureStaffPayrollStructureProvisionedAsync(staff);
+
+            var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
+
+            // Generate Offer Letter PDF and dispatch via Email
+            try
+            {
+                var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                if (!string.IsNullOrWhiteSpace(staff.Email))
+                {
+                    string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                    string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                    subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                    string portalUrl = _configuration["App:ClientUrl"] ?? "http://localhost:5173/login";
+                    if (!portalUrl.EndsWith("/login") && !portalUrl.Contains("login"))
+                    {
+                        portalUrl = portalUrl.TrimEnd('/') + "/login";
+                    }
+
+                    string body = $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
+                            <div style='background: #355e3b; padding: 24px; text-align: center; color: #ffffff;'>
+                                <h2 style='margin: 0; font-size: 20px;'>Pirnav Educational Society</h2>
+                                <p style='margin: 4px 0 0; opacity: 0.9; font-size: 13px;'>Official Appointment &amp; Offer Letter</p>
+                            </div>
+                            <div style='padding: 28px; background: #ffffff;'>
+                                <p>Dear <strong>{staffFullName}</strong>,</p>
+                                <p>Your onboarding request has been reviewed and approved by Central Administration, and your offer letter has been generated successfully.</p>
+                                <p>You can now access the Staff Portal to view and download your offer letter.</p>
+                                <div style='margin: 30px 0; text-align: center;'>
+                                    <a href='{portalUrl}' style='background: #355e3b; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(53, 94, 59, 0.25);'>Access Your Staff Portal &rarr;</a>
+                                </div>
+                                <p style='font-size: 13px; color: #64748b; margin-top: 24px;'>Please find attached your official signed QuestPDF document for your personal records.</p>
+                                <p style='font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;'>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                            </div>
+                        </div>";
+
+                    await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                    if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                    {
+                        try
+                        {
+                            await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                        }
+                        catch { }
+                    }
+                    _logger.LogInformation("Offer Letter approval email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Notice: Offer Letter approval email delivery failure for {Email}: {Msg}", staff.Email, ex.Message);
+            }
+
+            // Staff Portal Notification via existing notification infrastructure
+            try
+            {
+                await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Available", "Your onboarding request has been approved and your official offer letter is now available in your portal.", "OfferLetter", staff.Id, "/faculty-dashboard/profile?tab=offerletter");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deliver approval notification to staff #{StaffId}", staff.Id);
+            }
+
+            try
+            {
+                await _auditLogger.LogAsync("ApproveStaffOfferLetter", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", $"Admin (User #{adminUserId}) approved offer letter for staff #{staff.Id}. Remarks: {dto?.Remarks}");
+            }
+            catch { }
+
+            return _mapper.Map<StaffResponseDto>(staff);
+        }
+
+        public async Task<StaffResponseDto> RejectStaffOfferLetterAsync(int staffId, RejectStaffOfferLetterDto dto, int adminUserId)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.RejectionReason))
+                throw new ValidationException("Rejection reason is mandatory.");
+
+            var staff = await _staffRepository.GetByIdAsync(staffId);
+            if (staff == null) throw new NotFoundException($"Staff #{staffId} not found.");
+
+            string reason = dto.RejectionReason.Trim();
+            string scenario = dto.Scenario?.Trim() ?? "Correction";
+            string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+
+            if (string.Equals(scenario, "DateChange", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!dto.RevisedOnboardingDate.HasValue)
+                    throw new ValidationException("Revised onboarding date is required for Date Change scenario.");
+
+                staff.JoiningDate = dto.RevisedOnboardingDate.Value;
+                staff.CorrectionNotes = $"[Date Rescheduled to {dto.RevisedOnboardingDate.Value:dd MMM yyyy}]: {reason}";
+                await _staffRepository.UpdateAsync(staff);
+
+                // Email
+                if (!string.IsNullOrWhiteSpace(staff.Email))
+                {
+                    string subject = $"Onboarding Date Rescheduled - {staff.EmployeeId}";
+                    string body = $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                            <h2>Onboarding Rescheduled</h2>
+                            <p>Dear {staffFullName},</p>
+                            <p>Your official onboarding date has been revised to <strong>{dto.RevisedOnboardingDate.Value:dd MMMM yyyy}</strong>.</p>
+                            <p><strong>Reason:</strong> {reason}</p>
+                            <p>Best regards,<br/><strong>Central HR Administration</strong></p>
+                        </div>";
+                    try { await _emailService.SendEmailAsync(staff.Email, subject, body); } catch { }
+                }
+
+                // Staff Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Onboarding Date Rescheduled", $"Your onboarding date has been revised to {dto.RevisedOnboardingDate.Value:dd MMM yyyy}. Reason: {reason}", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                }
+                catch { }
+            }
+            else if (string.Equals(scenario, "Discontinue", StringComparison.OrdinalIgnoreCase))
+            {
+                staff.ProfileStatus = "Onboarding Discontinued";
+                staff.Status = "Discontinued";
+                staff.CorrectionNotes = $"[Onboarding Discontinued]: {reason}";
+                await _staffRepository.UpdateAsync(staff);
+
+                // Email
+                if (!string.IsNullOrWhiteSpace(staff.Email))
+                {
+                    string subject = $"Onboarding Status Notice - {staff.EmployeeId}";
+                    string body = $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                            <h2>Onboarding Discontinued</h2>
+                            <p>Dear {staffFullName},</p>
+                            <p>We regret to inform you that your onboarding process has been discontinued by the institution.</p>
+                            <p><strong>Reason:</strong> {reason}</p>
+                            <p>Best regards,<br/><strong>Central HR Administration</strong></p>
+                        </div>";
+                    try { await _emailService.SendEmailAsync(staff.Email, subject, body); } catch { }
+                }
+
+                // Staff Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Onboarding Discontinued", $"Your onboarding process has been discontinued. Reason: {reason}", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                }
+                catch { }
+            }
+            else // Default: "Correction" / "Changes Required"
+            {
+                staff.ProfileStatus = "Changes Required";
+                staff.CorrectionRequestedAt = DateTime.UtcNow;
+                staff.CorrectionNotes = reason;
+                await _staffRepository.UpdateAsync(staff);
+
+                // Email
+                if (!string.IsNullOrWhiteSpace(staff.Email))
+                {
+                    string subject = $"Onboarding Details Require Correction - {staff.EmployeeId}";
+                    string body = $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                            <h2>Profile Correction Required</h2>
+                            <p>Dear {staffFullName},</p>
+                            <p>Your onboarding request has been reviewed by the Admin and requires corrections before approval.</p>
+                            <p><strong>Reason / Requested Changes:</strong><br/>{reason}</p>
+                            <p>Please log in to your Staff Portal, update the required details, and submit your profile again.</p>
+                            <p>Best regards,<br/><strong>Central HR Administration</strong></p>
+                        </div>";
+                    try { await _emailService.SendEmailAsync(staff.Email, subject, body); } catch { }
+                }
+
+                // Staff Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Onboarding Details Require Correction", $"HR requested corrections: {reason}. Please update your details and resubmit.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                }
+                catch { }
+            }
+
+            try
+            {
+                await _auditLogger.LogAsync("RejectStaffOfferLetter", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Warning", "Success", $"Admin (User #{adminUserId}) processed rejection [{scenario}]. Reason: {reason}");
+            }
+            catch { }
+
+            return _mapper.Map<StaffResponseDto>(staff);
         }
     }
 }

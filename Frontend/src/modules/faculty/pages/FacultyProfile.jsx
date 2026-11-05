@@ -24,6 +24,9 @@ import {
   ArrowRight,
   Sparkles,
   AlertTriangle,
+  Clock,
+  ShieldCheck,
+  FileSignature,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
@@ -305,6 +308,8 @@ export default function FacultyProfile() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showPendingApprovalModal, setShowPendingApprovalModal] = useState(false);
+  const [isDownloadingOfferLetter, setIsDownloadingOfferLetter] = useState(false);
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
   const [editPersonal, setEditPersonal] = useState({});
@@ -1300,14 +1305,18 @@ export default function FacultyProfile() {
 
     try {
       const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId;
+      let res = null;
       if (staffTargetId) {
-        await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        res = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
       }
+      const newStatus = res?.data?.profileStatus || res?.data?.data?.profileStatus || "PendingApproval";
+      const isCompleted = String(newStatus).toLowerCase() === "completed" || String(newStatus).toLowerCase() === "approved";
+
       const updated = {
         ...profileData,
-        profileStatus: "Completed",
-        status: "Active",
-        isOnboarded: true,
+        profileStatus: newStatus,
+        status: isCompleted ? "Active" : profileData.status,
+        isOnboarded: isCompleted,
       };
       setProfileData(updated);
       persistStaffProfile(updated);
@@ -1316,13 +1325,48 @@ export default function FacultyProfile() {
       } catch { }
       setIsSavingProfile(false);
       setIsEditingProfile(false);
-      setShowSuccessModal(true);
-      notify("Complete staff profile updated and verified successfully!");
+
+      if (!isCompleted) {
+        setShowPendingApprovalModal(true);
+        notify("Profile submitted successfully. Sent to Admin for offer letter approval.");
+      } else {
+        setShowSuccessModal(true);
+        notify("Complete staff profile updated and verified successfully!");
+      }
     } catch (e) {
       console.error("Failed to submit profile:", e);
       const msg = e?.response?.data?.message || e?.response?.data?.Message || "Failed to submit profile to server";
       notify(msg, "error");
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleDownloadOfferLetter = async () => {
+    const sId = profileData.id || profileData.facultyId || profileData.staffId;
+    if (!sId) {
+      notify("Staff identifier not found for downloading offer letter.", "error");
+      return;
+    }
+    setIsDownloadingOfferLetter(true);
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterPdf(sId), {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Offer_Letter_${profileData.employeeId || sId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      notify("Official Offer Letter downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to download offer letter:", err);
+      notify(err?.response?.data?.message || "Failed to download offer letter PDF. Offer letter may not be generated yet.", "error");
+    } finally {
+      setIsDownloadingOfferLetter(false);
     }
   };
 
@@ -1350,6 +1394,35 @@ export default function FacultyProfile() {
           >
             {profileCompletion}% Profile Completed
           </span>
+
+          {(String(profileData?.profileStatus || "").toLowerCase() === "completed" || String(profileData?.profileStatus || "").toLowerCase() === "approved") && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={handleDownloadOfferLetter}
+              disabled={isDownloadingOfferLetter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                boxShadow: "0 2px 8px rgba(53, 94, 59, 0.2)",
+              }}
+              title="Download Official Offer Letter PDF"
+            >
+              {isDownloadingOfferLetter ? (
+                <>
+                  <Loader2 size={14} className="spin" /> Preparing...
+                </>
+              ) : (
+                <>
+                  <FileSignature size={14} /> Download Offer Letter
+                </>
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             className="cms-btn cms-btn-secondary"
@@ -1377,6 +1450,119 @@ export default function FacultyProfile() {
           </button>
         </div>
       </div>
+
+      {/* Workflow Status Banners */}
+      {String(profileData?.profileStatus || "").toLowerCase() === "pendingapproval" && (
+        <div style={{
+          background: "#fffbeb",
+          border: "1px solid #fde68a",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#fef3c7", color: "#b45309", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Clock size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#92400e" }}>
+              Onboarding Submitted — Awaiting Admin Offer Letter Approval
+            </div>
+            <div style={{ fontSize: "13px", color: "#b45309", marginTop: "2px", lineHeight: "1.5" }}>
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "underverification" && (
+        <div style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#dbeafe", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <ShieldCheck size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#1e40af" }}>
+              Under Administrative Verification
+            </div>
+            <div style={{ fontSize: "13px", color: "#1d4ed8", marginTop: "2px", lineHeight: "1.5" }}>
+              Your submitted credentials, bank details, and identity documents are actively undergoing verification by HR Administration.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(String(profileData?.profileStatus || "").toLowerCase() === "changes required" || String(profileData?.profileStatus || "").toLowerCase() === "needscorrection") && (
+        <div style={{
+          background: "#fff1f2",
+          border: "1px solid #fecdd3",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#ffe4e6", color: "#e11d48", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <AlertTriangle size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#9f1239" }}>
+              Corrections Requested by Administration
+            </div>
+            <div style={{ fontSize: "13px", color: "#be123c", marginTop: "2px", lineHeight: "1.5" }}>
+              <strong>Admin Reason:</strong> {profileData.correctionNotes || authUser?.correctionNotes || "Please review and update requested sections."}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={() => { setIsEditingProfile(true); setProfileStep(1); }}
+            style={{ fontSize: "13px", padding: "8px 16px", background: "#e11d48", border: "none", color: "#fff" }}
+          >
+            Update Details
+          </button>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "onboarding discontinued" && (
+        <div style={{
+          background: "#f8fafc",
+          border: "1px solid #cbd5e1",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <X size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155" }}>
+              Onboarding Process Discontinued
+            </div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px", lineHeight: "1.5" }}>
+              {profileData.correctionNotes || authUser?.correctionNotes || "This onboarding request is discontinued. Please contact HR Administration."}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Staff Identity Strip with Profile Photo Edit - Compact Single-Line Layout */}
       <div className="cms-card sp-profile-summary-card">
@@ -3535,6 +3721,94 @@ export default function FacultyProfile() {
             >
               <span>Go to Login &amp; Access Portal</span>
               <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Submission Sent for Admin Approval Modal */}
+      {showPendingApprovalModal && (
+        <div
+          className="sp-modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: "20px"
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              padding: "36px 30px",
+              maxWidth: "480px",
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              animation: "fadeIn 0.2s ease-out"
+            }}
+          >
+            <div
+              style={{
+                width: "60px",
+                height: "60px",
+                borderRadius: "50%",
+                background: "#fef3c7",
+                color: "#d97706",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <Clock size={36} strokeWidth={2.2} />
+            </div>
+            <h3 style={{ margin: "0 0 10px", fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>
+              Submitted for Admin Approval
+            </h3>
+
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                color: "#334155",
+                padding: "16px",
+                borderRadius: "12px",
+                fontSize: "14px",
+                lineHeight: "1.6",
+                textAlign: "left",
+                margin: "0 0 24px"
+              }}
+            >
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{
+                width: "100%",
+                padding: "12px 20px",
+                fontSize: "15px",
+                fontWeight: 600,
+                borderRadius: "10px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer"
+              }}
+              onClick={() => setShowPendingApprovalModal(false)}
+            >
+              Acknowledge &amp; Return to Profile
             </button>
           </div>
         </div>

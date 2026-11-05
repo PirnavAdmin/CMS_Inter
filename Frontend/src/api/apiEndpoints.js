@@ -90,6 +90,11 @@ export const apiEndpoints = {
     changePassword: "/api/v1/staff/settings/change-password",
     offerLetterPdf: (id) => `/api/v1/staff/${id}/offer-letter-pdf`,
     experienceSummary: (id) => `/api/v1/staff/${id}/experience-summary`,
+    offerLetterWorkflowConfig: "/api/v1/staff/offer-letter-workflow/config",
+    offerLetterWorkflowRequests: "/api/v1/staff/offer-letter-workflow/requests",
+    offerLetterWorkflowVerify: (id) => `/api/v1/staff/${id}/offer-letter-workflow/verify`,
+    offerLetterWorkflowApprove: (id) => `/api/v1/staff/${id}/offer-letter-workflow/approve`,
+    offerLetterWorkflowReject: (id) => `/api/v1/staff/${id}/offer-letter-workflow/reject`,
   },
   staffTransfers: {
     create: "/api/v1/staff-transfers",

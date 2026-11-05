@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   FileText,
   FileSignature,
@@ -26,6 +26,13 @@ import {
   FileSpreadsheet,
   FileCode,
   Hash,
+  Clock,
+  AlertTriangle,
+  Calendar,
+  UserCheck,
+  RefreshCw,
+  Search,
+  Filter,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -269,8 +276,84 @@ export default function OfferLetterConfigurationPage() {
         "Dear {{StaffName}},\n\nCongratulations! Your staff onboarding profile has been processed.\nAttached is your official Letter of Appointment and Offer Letter.\n\nWelcome to Pirnav Educational Society.",
       ccHrEmail: "hr@pirnav.edu.in",
       attachPdfFilenamePattern: "Offer_Letter_{{EmployeeId}}.pdf",
+      workflowPreference: "Automatic",
     };
   });
+
+  const [searchParams] = useSearchParams();
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [requestsSearch, setRequestsSearch] = useState("");
+  const [requestsStatusFilter, setRequestsStatusFilter] = useState("all");
+  const [highlightedStaffId, setHighlightedStaffId] = useState(null);
+
+  // Decision Modal / Drawer States
+  const [activeVerifyRequest, setActiveVerifyRequest] = useState(null);
+  const [activeApproveRequest, setActiveApproveRequest] = useState(null);
+  const [activeRejectRequest, setActiveRejectRequest] = useState(null);
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
+
+  // Rejection Form
+  const [rejectionScenario, setRejectionScenario] = useState("Correction");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [revisedDate, setRevisedDate] = useState("");
+  const [additionalInstructions, setAdditionalInstructions] = useState("");
+
+  // Verification & Approval forms
+  const [verificationNotes, setVerificationNotes] = useState("");
+  const [approvalRemarks, setApprovalRemarks] = useState("");
+
+  const loadWorkflowConfig = async () => {
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterWorkflowConfig);
+      if (res?.data) {
+        setAutomationSettings((prev) => ({
+          ...prev,
+          ...res.data,
+          workflowPreference: res.data.workflowPreference || (res.data.autoSendOnSubmission ? "Automatic" : "AdminApproval"),
+        }));
+      }
+    } catch (e) {
+      console.warn("Using cached offer letter workflow config:", e);
+    }
+  };
+
+  const loadRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterWorkflowRequests);
+      if (Array.isArray(res?.data)) {
+        setRequests(res.data);
+      }
+    } catch (e) {
+      console.warn("Could not load onboarding requests:", e);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWorkflowConfig();
+    loadRequests();
+  }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const staffId = searchParams.get("staffId");
+    if (tab === "automation" || staffId) {
+      setActiveTab("automation");
+    }
+    if (staffId) {
+      const idNum = Number(staffId);
+      setHighlightedStaffId(idNum);
+      setTimeout(() => {
+        const el = document.getElementById(`staff-row-${idNum}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 500);
+    }
+  }, [searchParams]);
 
   // Current active template or new draft being edited
   const activeTemplate = useMemo(() => {
@@ -587,12 +670,113 @@ export default function OfferLetterConfigurationPage() {
     notify("Template deleted successfully.");
   };
 
-  const handleSaveAutomation = () => {
+  const handleSaveAutomation = async () => {
     try {
+      const pref = automationSettings.workflowPreference || (automationSettings.autoSendOnSubmission ? "Automatic" : "AdminApproval");
+      const payload = {
+        workflowPreference: pref,
+        autoSendOnSubmission: pref === "Automatic",
+        autoSendOnApproval: true,
+        ccHrEmail: automationSettings.ccHrEmail || "",
+        emailSubject: automationSettings.emailSubject || "",
+        emailBody: automationSettings.emailBody || "",
+        attachPdfFilenamePattern: automationSettings.attachPdfFilenamePattern || "Offer_Letter_{{EmployeeId}}.pdf",
+      };
+      await apiClient.post(apiEndpoints.staff.offerLetterWorkflowConfig, payload);
+      localStorage.setItem("cms_offer_letter_automation", JSON.stringify(payload));
+      setAutomationSettings((prev) => ({ ...prev, ...payload }));
+      notify("Offer letter workflow and automation preferences saved successfully!");
+    } catch (err) {
+      console.error("Save automation failed:", err);
       localStorage.setItem("cms_offer_letter_automation", JSON.stringify(automationSettings));
-      notify("Offer letter automation settings saved successfully!");
-    } catch {
-      notify("Could not persist automation settings.", "error");
+      notify("Saved locally. Could not synchronize to server.", "error");
+    }
+  };
+
+  const handleConfirmVerify = async () => {
+    if (!activeVerifyRequest) return;
+    setIsSubmittingDecision(true);
+    try {
+      await apiClient.post(apiEndpoints.staff.offerLetterWorkflowVerify(activeVerifyRequest.staffId), {
+        verificationNotes: verificationNotes.trim()
+      });
+      notify(`Staff #${activeVerifyRequest.employeeId} onboarding marked as Under Verification.`);
+      setActiveVerifyRequest(null);
+      setVerificationNotes("");
+      loadRequests();
+    } catch (err) {
+      notify(err?.response?.data?.message || "Failed to record verification.", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!activeApproveRequest) return;
+    setIsSubmittingDecision(true);
+    try {
+      await apiClient.post(apiEndpoints.staff.offerLetterWorkflowApprove(activeApproveRequest.staffId), {
+        remarks: approvalRemarks.trim()
+      });
+      notify(`Offer letter approved and emailed to ${activeApproveRequest.staffName}!`);
+      setActiveApproveRequest(null);
+      setApprovalRemarks("");
+      loadRequests();
+    } catch (err) {
+      notify(err?.response?.data?.message || "Failed to approve offer letter.", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!activeRejectRequest) return;
+    if (!rejectionReason.trim()) {
+      notify("Rejection reason is mandatory.", "error");
+      return;
+    }
+    if (rejectionScenario === "DateChange" && !revisedDate) {
+      notify("Revised onboarding date is mandatory for Date Change scenario.", "error");
+      return;
+    }
+    setIsSubmittingDecision(true);
+    try {
+      await apiClient.post(apiEndpoints.staff.offerLetterWorkflowReject(activeRejectRequest.staffId), {
+        rejectionReason: rejectionReason.trim(),
+        scenario: rejectionScenario,
+        revisedOnboardingDate: revisedDate ? new Date(revisedDate).toISOString() : null,
+        additionalInstructions: additionalInstructions.trim()
+      });
+      notify(`Rejection processed [${rejectionScenario}] for ${activeRejectRequest.staffName}. Notification and email dispatched.`);
+      setActiveRejectRequest(null);
+      setRejectionReason("");
+      setRevisedDate("");
+      setAdditionalInstructions("");
+      loadRequests();
+    } catch (err) {
+      notify(err?.response?.data?.message || "Failed to process rejection.", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
+  const handleDownloadStaffOfferPdf = async (staffId, empId) => {
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterPdf(staffId), {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Offer_Letter_${empId || staffId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      notify("Offer letter downloaded.");
+    } catch (err) {
+      notify("Failed to download offer letter PDF.", "error");
     }
   };
 
@@ -1779,116 +1963,706 @@ export default function OfferLetterConfigurationPage() {
         {/* TAB 3: AUTOMATION & EMAIL DELIVERY */}
         {/* ------------------------------------------------------------------------- */}
         {activeTab === "automation" && (
-          <div className="olc-card">
-            <div className="olc-card-head">
-              <h3 className="olc-card-title">
-                <Send size={18} style={{ color: "var(--cms-primary, #355e3b)" }} />
-                Automated Offer Letter Release &amp; Email Delivery Triggers
-              </h3>
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={handleSaveAutomation}
-                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-              >
-                <Save size={14} /> Save Automation Triggers
-              </button>
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            {/* Top Card: Workflow Preference Selection */}
+            <div className="olc-card">
+              <div className="olc-card-head" style={{ borderBottom: "1px solid var(--cms-border, #e2e8f0)", paddingBottom: "16px" }}>
+                <div>
+                  <h3 className="olc-card-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <SlidersHorizontal size={20} style={{ color: "var(--cms-primary, #355e3b)" }} />
+                    Offer Letter Workflow Preference
+                  </h3>
+                  <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                    Choose how staff offer letters are generated and released when onboarding profiles are submitted.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  onClick={handleSaveAutomation}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Save size={15} /> Save Configuration
+                </button>
+              </div>
 
-            <div className="olc-automation-grid">
-              {/* Event Triggers */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <h4 style={{ margin: "0 0 6px", fontSize: "13px", color: "#334155" }}>Dispatch Trigger Events</h4>
-
-                <div className="olc-toggle-row">
-                  <div className="olc-toggle-label">
-                    <strong>Auto-generate on Staff Profile Final Submit</strong>
-                    <span>
-                      Trigger QuestPDF generation and email dispatch when employee reaches 50%+ completion and submits.
+              {/* 2 Mutually Exclusive Workflow Option Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px", marginTop: "16px" }}>
+                {/* Workflow 1: Automatic */}
+                <div
+                  onClick={() => setAutomationSettings((prev) => ({ ...prev, workflowPreference: "Automatic", autoSendOnSubmission: true }))}
+                  style={{
+                    border: `2px solid ${(automationSettings.workflowPreference || "Automatic") === "Automatic" ? "var(--cms-primary, #355e3b)" : "var(--cms-border, #e2e8f0)"}`,
+                    background: (automationSettings.workflowPreference || "Automatic") === "Automatic" ? "rgba(53, 94, 59, 0.04)" : "#ffffff",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    cursor: "pointer",
+                    position: "relative",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <input
+                        type="radio"
+                        name="workflowPreference"
+                        checked={(automationSettings.workflowPreference || "Automatic") === "Automatic"}
+                        onChange={() => setAutomationSettings((prev) => ({ ...prev, workflowPreference: "Automatic", autoSendOnSubmission: true }))}
+                        style={{ width: "18px", height: "18px", accentColor: "var(--cms-primary, #355e3b)", cursor: "pointer" }}
+                      />
+                      <strong style={{ fontSize: "15px", color: "#0f172a" }}>Workflow 1: Automatic Generation</strong>
+                    </div>
+                    <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 8px", borderRadius: "12px", background: "#ecfdf5", color: "#059669", border: "1px solid #a7f3d0" }}>
+                      Instant Release
                     </span>
                   </div>
-                  <label className="olc-switch">
-                    <input
-                      type="checkbox"
-                      checked={automationSettings.autoSendOnSubmission}
-                      onChange={(e) =>
-                        setAutomationSettings({ ...automationSettings, autoSendOnSubmission: e.target.checked })
-                      }
-                    />
-                    <span className="olc-slider" />
-                  </label>
+                  <p style={{ fontSize: "13px", color: "#475569", lineHeight: "1.5", margin: 0 }}>
+                    When a staff member finishes onboarding (&ge; 50%) and clicks Final Submit, the backend <strong>automatically generates the offer letter</strong> and sends it immediately to their registered email address. No Admin approval is required.
+                  </p>
                 </div>
 
-                <div className="olc-toggle-row">
-                  <div className="olc-toggle-label">
-                    <strong>Dispatch Confirmation on Central HR Approval</strong>
-                    <span>
-                      Send countersigned appointment docket when Campus Principal or Central Admin verifies credentials.
+                {/* Workflow 2: Admin Approval Required */}
+                <div
+                  onClick={() => setAutomationSettings((prev) => ({ ...prev, workflowPreference: "AdminApproval", autoSendOnSubmission: false }))}
+                  style={{
+                    border: `2px solid ${(automationSettings.workflowPreference || "Automatic") === "AdminApproval" ? "var(--cms-primary, #355e3b)" : "var(--cms-border, #e2e8f0)"}`,
+                    background: (automationSettings.workflowPreference || "Automatic") === "AdminApproval" ? "rgba(53, 94, 59, 0.04)" : "#ffffff",
+                    borderRadius: "12px",
+                    padding: "20px",
+                    cursor: "pointer",
+                    position: "relative",
+                    transition: "all 0.2s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <input
+                        type="radio"
+                        name="workflowPreference"
+                        checked={(automationSettings.workflowPreference || "Automatic") === "AdminApproval"}
+                        onChange={() => setAutomationSettings((prev) => ({ ...prev, workflowPreference: "AdminApproval", autoSendOnSubmission: false }))}
+                        style={{ width: "18px", height: "18px", accentColor: "var(--cms-primary, #355e3b)", cursor: "pointer" }}
+                      />
+                      <strong style={{ fontSize: "15px", color: "#0f172a" }}>Workflow 2: Admin Approval Required</strong>
+                    </div>
+                    <span style={{ fontSize: "11px", fontWeight: 700, padding: "3px 8px", borderRadius: "12px", background: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                      HR Verification Required
                     </span>
                   </div>
-                  <label className="olc-switch">
-                    <input
-                      type="checkbox"
-                      checked={automationSettings.autoSendOnApproval}
-                      onChange={(e) =>
-                        setAutomationSettings({ ...automationSettings, autoSendOnApproval: e.target.checked })
-                      }
-                    />
-                    <span className="olc-slider" />
-                  </label>
-                </div>
-
-                <div className="olc-form-group">
-                  <label>Notification CC (HR &amp; Campus Accounts)</label>
-                  <input
-                    type="email"
-                    className="olc-input"
-                    value={automationSettings.ccHrEmail || ""}
-                    onChange={(e) => setAutomationSettings({ ...automationSettings, ccHrEmail: e.target.value })}
-                  />
-                  <small style={{ color: "#64748b", fontSize: "11px" }}>
-                    Audit copy will be carbon-copied to this institutional email address.
-                  </small>
+                  <p style={{ fontSize: "13px", color: "#475569", lineHeight: "1.5", margin: 0 }}>
+                    When a staff member submits details, the offer letter is <strong>NOT generated immediately</strong>. The request transitions to <em>Pending Admin Approval</em> and alerts Admin. Admin reviews the staff details to <strong>Verify, Approve, or Reject</strong> with a mandatory reason.
+                  </p>
                 </div>
               </div>
 
-              {/* Email Content */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <h4 style={{ margin: "0 0 6px", fontSize: "13px", color: "#334155" }}>Automated Dispatch Template</h4>
+              {/* Email Delivery Template Settings Grid */}
+              <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid var(--cms-border, #e2e8f0)" }}>
+                <h4 style={{ margin: "0 0 14px", fontSize: "14px", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <Mail size={16} /> Automated Email Delivery Settings
+                </h4>
+                <div className="olc-automation-grid">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="olc-form-group">
+                      <label>Notification CC (HR &amp; Campus Accounts)</label>
+                      <input
+                        type="email"
+                        className="olc-input"
+                        value={automationSettings.ccHrEmail || ""}
+                        onChange={(e) => setAutomationSettings({ ...automationSettings, ccHrEmail: e.target.value })}
+                        placeholder="hr@pirnav.edu.in"
+                      />
+                      <small style={{ color: "#64748b", fontSize: "11px" }}>
+                        An institutional audit copy of released offer letters will be carbon-copied here.
+                      </small>
+                    </div>
 
-                <div className="olc-form-group">
-                  <label>Email Subject</label>
-                  <input
-                    type="text"
-                    className="olc-input"
-                    value={automationSettings.emailSubject || ""}
-                    onChange={(e) => setAutomationSettings({ ...automationSettings, emailSubject: e.target.value })}
-                  />
-                </div>
+                    <div className="olc-form-group">
+                      <label>Attached PDF Filename Pattern</label>
+                      <input
+                        type="text"
+                        className="olc-input"
+                        value={automationSettings.attachPdfFilenamePattern || "Offer_Letter_{{EmployeeId}}.pdf"}
+                        onChange={(e) => setAutomationSettings({ ...automationSettings, attachPdfFilenamePattern: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-                <div className="olc-form-group">
-                  <label>Email Body Message</label>
-                  <textarea
-                    className="olc-textarea"
-                    rows={5}
-                    value={automationSettings.emailBody || ""}
-                    onChange={(e) => setAutomationSettings({ ...automationSettings, emailBody: e.target.value })}
-                  />
-                </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                    <div className="olc-form-group">
+                      <label>Email Subject</label>
+                      <input
+                        type="text"
+                        className="olc-input"
+                        value={automationSettings.emailSubject || ""}
+                        onChange={(e) => setAutomationSettings({ ...automationSettings, emailSubject: e.target.value })}
+                      />
+                    </div>
 
-                <div className="olc-form-group">
-                  <label>Attached PDF Filename Pattern</label>
-                  <input
-                    type="text"
-                    className="olc-input"
-                    value={automationSettings.attachPdfFilenamePattern || "Offer_Letter_{{EmployeeId}}.pdf"}
-                    onChange={(e) =>
-                      setAutomationSettings({ ...automationSettings, attachPdfFilenamePattern: e.target.value })
-                    }
-                  />
+                    <div className="olc-form-group">
+                      <label>Email Body Message</label>
+                      <textarea
+                        className="olc-textarea"
+                        rows={4}
+                        value={automationSettings.emailBody || ""}
+                        onChange={(e) => setAutomationSettings({ ...automationSettings, emailBody: e.target.value })}
+                      />
+                      <small style={{ color: "#64748b", fontSize: "11px" }}>
+                        Supports dynamic tokens like {'{{StaffName}}'}, {'{{EmployeeId}}'}, {'{{Designation}}'}.
+                      </small>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Pending Staff Onboarding & Offer Letter Queue */}
+            <div className="olc-card">
+              <div className="olc-card-head" style={{ flexWrap: "wrap", gap: "14px", borderBottom: "1px solid var(--cms-border, #e2e8f0)", paddingBottom: "16px" }}>
+                <div>
+                  <h3 className="olc-card-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <UserCheck size={20} style={{ color: "var(--cms-primary, #355e3b)" }} />
+                    Staff Onboarding &amp; Offer Letter Queue
+                  </h3>
+                  <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#64748b" }}>
+                    Review, verify credentials, approve offer letter releases, or request corrections from applicants.
+                  </p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-secondary"
+                    onClick={loadRequests}
+                    disabled={loadingRequests}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                  >
+                    <RefreshCw size={14} className={loadingRequests ? "spin" : ""} /> Refresh Queue
+                  </button>
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginTop: "16px" }}>
+                {/* Status Tabs */}
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {[
+                    { key: "all", label: "All Requests" },
+                    { key: "pending", label: "Pending Approval" },
+                    { key: "UnderVerification", label: "Under Verification" },
+                    { key: "Changes Required", label: "Changes Required" },
+                    { key: "Completed", label: "Approved" },
+                    { key: "Onboarding Discontinued", label: "Discontinued" },
+                  ].map((tab) => {
+                    const count = requests.filter((r) => {
+                      if (tab.key === "all") return true;
+                      if (tab.key === "pending") return ["pendingapproval", "submitted"].includes(String(r.profileStatus || "").toLowerCase());
+                      return String(r.profileStatus || "").toLowerCase() === tab.key.toLowerCase();
+                    }).length;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setRequestsStatusFilter(tab.key)}
+                        style={{
+                          padding: "6px 14px",
+                          borderRadius: "20px",
+                          fontSize: "12.5px",
+                          fontWeight: 600,
+                          border: requestsStatusFilter === tab.key ? "1px solid var(--cms-primary, #355e3b)" : "1px solid #e2e8f0",
+                          background: requestsStatusFilter === tab.key ? "var(--cms-primary, #355e3b)" : "#f8fafc",
+                          color: requestsStatusFilter === tab.key ? "#ffffff" : "#475569",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          transition: "all 0.15s ease"
+                        }}
+                      >
+                        {tab.label} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Search Bar */}
+                <div style={{ position: "relative", minWidth: "260px" }}>
+                  <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                  <input
+                    type="text"
+                    className="olc-input"
+                    value={requestsSearch}
+                    onChange={(e) => setRequestsSearch(e.target.value)}
+                    placeholder="Search by name, ID, department..."
+                    style={{ paddingLeft: "32px", fontSize: "13px" }}
+                  />
+                </div>
+              </div>
+
+              {/* Requests Table */}
+              <div style={{ marginTop: "16px", overflowX: "auto" }}>
+                {loadingRequests ? (
+                  <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
+                    <RefreshCw size={24} className="spin" style={{ margin: "0 auto 10px" }} />
+                    <p>Loading staff onboarding queue...</p>
+                  </div>
+                ) : requests.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px", background: "#f8fafc", borderRadius: "10px", border: "1px dashed #cbd5e1" }}>
+                    <UserCheck size={36} style={{ color: "#94a3b8", margin: "0 auto 8px" }} />
+                    <h4 style={{ margin: "0 0 4px", color: "#334155" }}>No onboarding requests found</h4>
+                    <p style={{ margin: 0, fontSize: "13px", color: "#64748b" }}>
+                      Staff profile submissions will appear here for verification and offer letter approval.
+                    </p>
+                  </div>
+                ) : (
+                  <table className="olc-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0", textAlign: "left", fontSize: "12px", color: "#475569" }}>
+                        <th style={{ padding: "12px" }}>STAFF MEMBER</th>
+                        <th style={{ padding: "12px" }}>DEPARTMENT &amp; DESIGNATION</th>
+                        <th style={{ padding: "12px" }}>CAMPUS</th>
+                        <th style={{ padding: "12px" }}>COMPLETION</th>
+                        <th style={{ padding: "12px" }}>SUBMITTED</th>
+                        <th style={{ padding: "12px" }}>STATUS</th>
+                        <th style={{ padding: "12px", textAlign: "right" }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {requests
+                        .filter((r) => {
+                          if (requestsStatusFilter === "pending") {
+                            return ["pendingapproval", "submitted"].includes(String(r.profileStatus || "").toLowerCase());
+                          }
+                          if (requestsStatusFilter !== "all") {
+                            return String(r.profileStatus || "").toLowerCase() === requestsStatusFilter.toLowerCase();
+                          }
+                          return true;
+                        })
+                        .filter((r) => {
+                          if (!requestsSearch.trim()) return true;
+                          const q = requestsSearch.toLowerCase();
+                          return (
+                            (r.staffName || "").toLowerCase().includes(q) ||
+                            (r.employeeId || "").toLowerCase().includes(q) ||
+                            (r.department || "").toLowerCase().includes(q) ||
+                            (r.designation || "").toLowerCase().includes(q)
+                          );
+                        })
+                        .map((req) => {
+                          const isHighlighted = highlightedStaffId === req.staffId;
+                          const statusClean = String(req.profileStatus || "").toLowerCase();
+                          const isApproved = statusClean === "completed" || statusClean === "approved";
+                          const isUnderVerif = statusClean === "underverification";
+                          const isChangesReq = statusClean === "changes required" || statusClean === "needscorrection";
+                          const isDiscontinued = statusClean === "onboarding discontinued" || statusClean === "discontinued";
+                          const isPending = !isApproved && !isUnderVerif && !isChangesReq && !isDiscontinued;
+
+                          return (
+                            <tr
+                              key={req.staffId}
+                              id={`staff-row-${req.staffId}`}
+                              style={{
+                                borderBottom: "1px solid #e2e8f0",
+                                background: isHighlighted ? "#f0fdf4" : "#ffffff",
+                                outline: isHighlighted ? "2px solid #22c55e" : "none",
+                                transition: "background 0.2s"
+                              }}
+                            >
+                              {/* Staff Member Info */}
+                              <td style={{ padding: "14px 12px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#e2e8f0", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                    {req.photoPath ? (
+                                      <img src={req.photoPath} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    ) : (
+                                      <span style={{ fontSize: "13px", fontWeight: 700, color: "#64748b" }}>
+                                        {req.staffName?.charAt(0) || "S"}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 700, fontSize: "13.5px", color: "#0f172a" }}>
+                                      {req.staffName}
+                                      {isHighlighted && (
+                                        <span style={{ marginLeft: "8px", fontSize: "10px", background: "#22c55e", color: "#fff", padding: "1px 6px", borderRadius: "10px" }}>
+                                          Notification Target
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: "11.5px", color: "#64748b" }}>
+                                      {req.employeeId} &bull; {req.email || "No email"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Department & Designation */}
+                              <td style={{ padding: "14px 12px" }}>
+                                <div style={{ fontWeight: 600, fontSize: "13px", color: "#1e293b" }}>{req.designation || "Faculty"}</div>
+                                <div style={{ fontSize: "11.5px", color: "#64748b" }}>{req.department || "General"}</div>
+                              </td>
+
+                              {/* Campus */}
+                              <td style={{ padding: "14px 12px", fontSize: "12.5px", color: "#475569" }}>
+                                {req.campusName || "Main Campus (HQ)"}
+                              </td>
+
+                              {/* Completion % */}
+                              <td style={{ padding: "14px 12px" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <div style={{ width: "60px", height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                                    <div style={{ width: `${req.profileCompletionPercentage || 0}%`, height: "100%", background: (req.profileCompletionPercentage || 0) >= 50 ? "#16a34a" : "#f59e0b" }} />
+                                  </div>
+                                  <span style={{ fontSize: "12px", fontWeight: 600, color: "#334155" }}>
+                                    {req.profileCompletionPercentage || 0}%
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Submitted Date */}
+                              <td style={{ padding: "14px 12px", fontSize: "12px", color: "#64748b" }}>
+                                {req.submittedAt ? new Date(req.submittedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                              </td>
+
+                              {/* Status Badge */}
+                              <td style={{ padding: "14px 12px" }}>
+                                {isApproved && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 9px", borderRadius: "12px", background: "#ecfdf5", color: "#059669", fontSize: "11px", fontWeight: 700, border: "1px solid #a7f3d0" }}>
+                                    <CheckCircle2 size={12} /> Approved
+                                  </span>
+                                )}
+                                {isUnderVerif && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 9px", borderRadius: "12px", background: "#eff6ff", color: "#1d4ed8", fontSize: "11px", fontWeight: 700, border: "1px solid #bfdbfe" }}>
+                                    <ShieldCheck size={12} /> Under Verification
+                                  </span>
+                                )}
+                                {isChangesReq && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 9px", borderRadius: "12px", background: "#fff1f2", color: "#e11d48", fontSize: "11px", fontWeight: 700, border: "1px solid #fecdd3" }} title={req.correctionNotes}>
+                                    <AlertTriangle size={12} /> Changes Required
+                                  </span>
+                                )}
+                                {isDiscontinued && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 9px", borderRadius: "12px", background: "#f1f5f9", color: "#64748b", fontSize: "11px", fontWeight: 700, border: "1px solid #cbd5e1" }}>
+                                    <X size={12} /> Discontinued
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 9px", borderRadius: "12px", background: "#fef3c7", color: "#b45309", fontSize: "11px", fontWeight: 700, border: "1px solid #fde68a" }}>
+                                    <Clock size={12} /> Pending Approval
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td style={{ padding: "14px 12px", textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                  {/* Verify Action */}
+                                  <button
+                                    type="button"
+                                    className="cms-btn cms-btn-secondary"
+                                    onClick={() => {
+                                      setActiveVerifyRequest(req);
+                                      setVerificationNotes(req.correctionNotes || "");
+                                    }}
+                                    style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                    title="Verify submitted details"
+                                  >
+                                    <Eye size={13} /> Verify
+                                  </button>
+
+                                  {/* Approve Action */}
+                                  {!isApproved && !isDiscontinued && (
+                                    <button
+                                      type="button"
+                                      className="cms-btn cms-btn-primary"
+                                      onClick={() => {
+                                        setActiveApproveRequest(req);
+                                        setApprovalRemarks("");
+                                      }}
+                                      style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px", background: "#16a34a", color: "#ffffff", border: "none" }}
+                                      title="Approve onboarding and release Offer Letter"
+                                    >
+                                      <Check size={13} /> Approve
+                                    </button>
+                                  )}
+
+                                  {/* Reject Action */}
+                                  {!isApproved && !isDiscontinued && (
+                                    <button
+                                      type="button"
+                                      className="cms-btn"
+                                      onClick={() => {
+                                        setActiveRejectRequest(req);
+                                        setRejectionScenario("Correction");
+                                        setRejectionReason("");
+                                        setRevisedDate(req.joiningDate ? req.joiningDate.slice(0, 10) : "");
+                                      }}
+                                      style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px", background: "#fff1f2", color: "#e11d48", border: "1px solid #fecdd3" }}
+                                      title="Reject, reschedule date, or request corrections"
+                                    >
+                                      <X size={13} /> Reject
+                                    </button>
+                                  )}
+
+                                  {/* Download Offer Letter (if approved) */}
+                                  {isApproved && (
+                                    <button
+                                      type="button"
+                                      className="cms-btn cms-btn-secondary"
+                                      onClick={() => handleDownloadStaffOfferPdf(req.staffId, req.employeeId)}
+                                      style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                      title="Download QuestPDF Offer Letter"
+                                    >
+                                      <Download size={13} /> Offer PDF
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* VERIFY MODAL / DRAWER */}
+            {activeVerifyRequest && (
+              <div className="olc-modal-backdrop" onClick={() => setActiveVerifyRequest(null)}>
+                <div className="olc-modal-sheet" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
+                  <div className="olc-modal-header">
+                    <div className="olc-modal-title-group">
+                      <div className="olc-header-icon-wrap" style={{ width: 36, height: 36, background: "#eff6ff", color: "#1d4ed8" }}>
+                        <ShieldCheck size={18} />
+                      </div>
+                      <div>
+                        <h4 className="olc-modal-title">Verify Staff Onboarding Credentials</h4>
+                        <span style={{ fontSize: "12px", color: "#64748b" }}>
+                          {activeVerifyRequest.staffName} ({activeVerifyRequest.employeeId}) &bull; {activeVerifyRequest.department}
+                        </span>
+                      </div>
+                    </div>
+                    <button type="button" className="olc-modal-close-btn" onClick={() => setActiveVerifyRequest(null)}>
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="olc-modal-body" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", background: "#f8fafc", padding: "14px", borderRadius: "10px", marginBottom: "16px", fontSize: "13px" }}>
+                      <div><strong>Designation:</strong> {activeVerifyRequest.designation || "Faculty"}</div>
+                      <div><strong>Campus:</strong> {activeVerifyRequest.campusName || "Main Campus"}</div>
+                      <div><strong>Joining Date:</strong> {activeVerifyRequest.joiningDate ? new Date(activeVerifyRequest.joiningDate).toLocaleDateString("en-GB") : "—"}</div>
+                      <div><strong>Completion:</strong> {activeVerifyRequest.profileCompletionPercentage}%</div>
+                      <div><strong>Email:</strong> {activeVerifyRequest.email || "—"}</div>
+                      <div><strong>Mobile:</strong> {activeVerifyRequest.mobile || "—"}</div>
+                    </div>
+
+                    <div className="olc-form-group">
+                      <label>Verification Notes / Observations (Saved to Audit Log)</label>
+                      <textarea
+                        className="olc-textarea"
+                        rows={3}
+                        value={verificationNotes}
+                        onChange={(e) => setVerificationNotes(e.target.value)}
+                        placeholder="e.g. Identity and degrees verified against institutional archives; all mandatory documents accounted for."
+                      />
+                    </div>
+
+                    <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", padding: "12px", borderRadius: "8px", fontSize: "12px", color: "#1e40af", lineHeight: "1.5" }}>
+                      <strong>Note:</strong> Verification confirms credential correctness without automatically generating or releasing the offer letter. To dispatch the offer letter, click Approve.
+                    </div>
+                  </div>
+
+                  <div className="olc-modal-footer">
+                    <button type="button" className="cms-btn cms-btn-secondary" onClick={() => setActiveVerifyRequest(null)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      onClick={handleConfirmVerify}
+                      disabled={isSubmittingDecision}
+                      style={{ background: "#1d4ed8", color: "#ffffff" }}
+                    >
+                      {isSubmittingDecision ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />} Mark as Verified
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* APPROVE MODAL */}
+            {activeApproveRequest && (
+              <div className="olc-modal-backdrop" onClick={() => setActiveApproveRequest(null)}>
+                <div className="olc-modal-sheet" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+                  <div className="olc-modal-header">
+                    <div className="olc-modal-title-group">
+                      <div className="olc-header-icon-wrap" style={{ width: 36, height: 36, background: "#ecfdf5", color: "#059669" }}>
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div>
+                        <h4 className="olc-modal-title">Approve Offer Letter Release</h4>
+                        <span style={{ fontSize: "12px", color: "#64748b" }}>
+                          Generate QuestPDF and email to {activeApproveRequest.staffName}
+                        </span>
+                      </div>
+                    </div>
+                    <button type="button" className="olc-modal-close-btn" onClick={() => setActiveApproveRequest(null)}>
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="olc-modal-body">
+                    <p style={{ fontSize: "13.5px", color: "#334155", lineHeight: "1.6", margin: "0 0 16px" }}>
+                      Upon confirmation, the system will:
+                    </p>
+                    <ul style={{ margin: "0 0 16px 20px", padding: 0, fontSize: "13px", color: "#475569", lineHeight: "1.6" }}>
+                      <li>Generate the official signed <strong>QuestPDF Offer Letter</strong> using the configured template.</li>
+                      <li>Send an approval email to <strong>{activeApproveRequest.email || "registered email"}</strong> with the PDF attached and a clickable <strong>"Access Your Staff Portal"</strong> action button.</li>
+                      <li>Deliver an instant notification to the staff member's Staff Portal Notification Center.</li>
+                      <li>Unlock the employee's full Staff Portal access.</li>
+                    </ul>
+
+                    <div className="olc-form-group">
+                      <label>Administrative Remarks (Optional Audit Log)</label>
+                      <input
+                        type="text"
+                        className="olc-input"
+                        value={approvalRemarks}
+                        onChange={(e) => setApprovalRemarks(e.target.value)}
+                        placeholder="e.g. Approved by Central HR Committee."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="olc-modal-footer">
+                    <button type="button" className="cms-btn cms-btn-secondary" onClick={() => setActiveApproveRequest(null)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      onClick={handleConfirmApprove}
+                      disabled={isSubmittingDecision}
+                      style={{ background: "#16a34a", color: "#ffffff", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      {isSubmittingDecision ? <RefreshCw size={14} className="spin" /> : <Check size={14} />} Confirm Approval &amp; Release Offer Letter
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* REJECT MODAL (3 Scenarios) */}
+            {activeRejectRequest && (
+              <div className="olc-modal-backdrop" onClick={() => setActiveRejectRequest(null)}>
+                <div className="olc-modal-sheet" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
+                  <div className="olc-modal-header">
+                    <div className="olc-modal-title-group">
+                      <div className="olc-header-icon-wrap" style={{ width: 36, height: 36, background: "#fff1f2", color: "#e11d48" }}>
+                        <AlertTriangle size={18} />
+                      </div>
+                      <div>
+                        <h4 className="olc-modal-title">Reject Onboarding / Request Corrections</h4>
+                        <span style={{ fontSize: "12px", color: "#64748b" }}>
+                          Applicant: {activeRejectRequest.staffName} ({activeRejectRequest.employeeId})
+                        </span>
+                      </div>
+                    </div>
+                    <button type="button" className="olc-modal-close-btn" onClick={() => setActiveRejectRequest(null)}>
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="olc-modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    {/* Scenario Radio Tabs */}
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: 700, color: "#334155", marginBottom: "8px" }}>
+                        Select Rejection Scenario *
+                      </label>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                        {[
+                          { key: "Correction", label: "Details Correction", sub: "Staff can edit & resubmit" },
+                          { key: "DateChange", label: "Date Changed", sub: "Reschedule joining date" },
+                          { key: "Discontinue", label: "Discontinue", sub: "Permanent cancellation" },
+                        ].map((sc) => (
+                          <div
+                            key={sc.key}
+                            onClick={() => setRejectionScenario(sc.key)}
+                            style={{
+                              border: `1.5px solid ${rejectionScenario === sc.key ? "#e11d48" : "#e2e8f0"}`,
+                              background: rejectionScenario === sc.key ? "#fff1f2" : "#ffffff",
+                              borderRadius: "8px",
+                              padding: "10px",
+                              cursor: "pointer",
+                              textAlign: "center"
+                            }}
+                          >
+                            <div style={{ fontWeight: 700, fontSize: "12px", color: rejectionScenario === sc.key ? "#9f1239" : "#334155" }}>
+                              {sc.label}
+                            </div>
+                            <div style={{ fontSize: "10.5px", color: "#64748b", marginTop: "2px" }}>
+                              {sc.sub}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Scenario 1: Date Changed Fields */}
+                    {rejectionScenario === "DateChange" && (
+                      <div className="olc-form-group">
+                        <label>Revised Onboarding / Joining Date *</label>
+                        <input
+                          type="date"
+                          className="olc-input"
+                          value={revisedDate}
+                          onChange={(e) => setRevisedDate(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    {/* Mandatory Reason Field */}
+                    <div className="olc-form-group">
+                      <label>
+                        Reason for Rejection / Modification *
+                        <span style={{ color: "#e11d48", marginLeft: "4px" }}>(Mandatory)</span>
+                      </label>
+                      <textarea
+                        className="olc-textarea"
+                        rows={4}
+                        value={rejectionReason}
+                        onChange={(e) => setRejectionReason(e.target.value)}
+                        placeholder={
+                          rejectionScenario === "DateChange"
+                            ? "Explain why the onboarding date has been rescheduled..."
+                            : rejectionScenario === "Discontinue"
+                            ? "Provide official explanation for discontinuation of onboarding..."
+                            : "Specify exactly which fields or documents the staff member must correct..."
+                        }
+                      />
+                      <small style={{ color: "#64748b", fontSize: "11px" }}>
+                        This explanation will be included in the email and Staff Portal notification dispatched to the employee.
+                      </small>
+                    </div>
+                  </div>
+
+                  <div className="olc-modal-footer">
+                    <button type="button" className="cms-btn cms-btn-secondary" onClick={() => setActiveRejectRequest(null)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      onClick={handleConfirmReject}
+                      disabled={isSubmittingDecision}
+                      style={{ background: "#e11d48", color: "#ffffff", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      {isSubmittingDecision ? <RefreshCw size={14} className="spin" /> : <X size={14} />} Confirm Decision &amp; Dispatch Notice
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
