@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,11 +24,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IPromotionService _service;
         private readonly IFeeService _feeService;
+        private readonly INotificationService? _notificationService;
 
-        public PromotionsController(IPromotionService service, IFeeService feeService)
+        public PromotionsController(
+            IPromotionService service,
+            IFeeService feeService,
+            INotificationService? notificationService = null)
         {
             _service = service;
             _feeService = feeService;
+            _notificationService = notificationService;
         }
 
         private string GetCurrentUserName()
@@ -70,7 +77,35 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> Promote(
             [FromBody] PromoteStudentsRequest request,
             CancellationToken cancellationToken = default)
-            => Ok(await _service.PromoteStudentsAsync(request, GetCurrentUserName(), cancellationToken));
+        {
+            var result = await _service.PromoteStudentsAsync(request, GetCurrentUserName(), cancellationToken);
+
+            if (_notificationService != null && request.StudentIds != null && request.StudentIds.Any())
+            {
+                try
+                {
+                    await _notificationService.SendToStudentsAsync(
+                        request.StudentIds,
+                        "Academic Promotion Confirmed",
+                        "Congratulations! Your academic promotion to the next semester / year has been processed and confirmed.",
+                        "Promotion",
+                        null,
+                        "/student/profile");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent", "Teacher" },
+                        null,
+                        "Academic Promotion Completed",
+                        $"{request.StudentIds.Count} students promoted successfully.",
+                        "Promotion",
+                        null,
+                        "/dashboard/promotions");
+                }
+                catch { }
+            }
+
+            return Ok(result);
+        }
 
         [HttpGet("history")]
         public async Task<IActionResult> History(
@@ -89,7 +124,26 @@ namespace CollegeManagement.API.Controllers.V1
             int studentId,
             [FromBody] PromoteSingleStudentRequest request,
             CancellationToken cancellationToken = default)
-            => Ok(await _service.PromoteSingleStudentAsync(studentId, request, GetCurrentUserName(), cancellationToken));
+        {
+            var result = await _service.PromoteSingleStudentAsync(studentId, request, GetCurrentUserName(), cancellationToken);
+
+            if (_notificationService != null && studentId > 0)
+            {
+                try
+                {
+                    await _notificationService.SendToStudentAsync(
+                        studentId,
+                        "Academic Promotion Confirmed",
+                        "Congratulations! Your academic promotion to the next academic level has been confirmed.",
+                        "Promotion",
+                        studentId,
+                        "/student/profile");
+                }
+                catch { }
+            }
+
+            return Ok(result);
+        }
 
         [HttpPatch("group-allocation")]
         public async Task<IActionResult> GroupAllocation(

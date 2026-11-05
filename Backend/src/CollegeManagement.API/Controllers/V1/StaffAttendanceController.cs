@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.StaffAttendance.Requests;
@@ -23,13 +24,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffAttendanceService _service;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly INotificationService? _notificationService;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
+            INotificationService? notificationService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -292,6 +296,23 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _service.PunchInAsync(staffId, request, clientIp, userId);
+
+                if (_notificationService != null && result != null && (result.IsLate || string.Equals(result.TodayStatus, "Late", StringComparison.OrdinalIgnoreCase)))
+                {
+                    try
+                    {
+                        var punchTime = result.InTime ?? DateTime.Now.ToString("hh:mm tt");
+                        await _notificationService.SendToStaffAsync(
+                            staffId,
+                            "Late Arrival Notice",
+                            $"You punched in at {punchTime}, recorded as Late arrival.",
+                            "Attendance",
+                            null,
+                            "/staff/attendance");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { Status = true, Message = "Checked in successfully.", Data = result });
             }
             catch (InvalidOperationException ex)
@@ -357,6 +378,27 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var success = await _service.SubmitRegularizationAsync(staffId, request, userId);
+
+                if (success && _notificationService != null)
+                {
+                    try
+                    {
+                        var campusId = GetCurrentCampusId();
+                        var userName = GetCurrentUserName();
+                        var dateStr = request.AttendanceDate.ToString("yyyy-MM-dd");
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Admin", "Super Admin", "Principal", "HR" },
+                            campusId,
+                            "Staff Attendance Regularization Request",
+                            $"{userName} requested regularization for {dateStr} ({request.Reason}). Review and approve.",
+                            "Attendance",
+                            staffId,
+                            "/dashboard/staff-attendance/regularizations");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { Status = true, Message = "Attendance regularization submitted successfully and is pending approval.", Data = success });
             }
             catch (InvalidOperationException ex)
@@ -395,6 +437,28 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var success = await _service.ReviewRegularizationAsync(id, request, reviewerUserId);
+
+                if (success && _notificationService != null)
+                {
+                    try
+                    {
+                        var regs = await _service.GetRegularizationsAsync(null, null);
+                        var target = regs.FirstOrDefault(r => r.RegularizationId == id);
+                        var targetStaffId = target?.StaffId ?? target?.FacultyId ?? 0;
+                        if (targetStaffId > 0)
+                        {
+                            await _notificationService.SendToStaffAsync(
+                                targetStaffId,
+                                "Attendance Regularization Decision",
+                                $"Your attendance regularization request for {target?.AttendanceDate:yyyy-MM-dd} has been {request.Status}.",
+                                "Attendance",
+                                id,
+                                "/staff/attendance");
+                        }
+                    }
+                    catch { }
+                }
+
                 return Ok(new { Status = true, Message = $"Regularization {request.Status.ToLowerInvariant()} successfully.", Data = success });
             }
             catch (KeyNotFoundException ex)

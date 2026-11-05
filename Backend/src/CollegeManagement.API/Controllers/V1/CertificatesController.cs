@@ -24,15 +24,18 @@ public class CertificatesController : ControllerBase
     private readonly ICertificateService _service;
     private readonly ITemplateService _templateService;
     private readonly ICertificateExportService _exportService;
+    private readonly INotificationService _notificationService;
 
     public CertificatesController(
         ICertificateService service, 
         ITemplateService templateService,
-        ICertificateExportService exportService)
+        ICertificateExportService exportService,
+        INotificationService notificationService)
     {
         _service = service;
         _templateService = templateService;
         _exportService = exportService;
+        _notificationService = notificationService;
     }
 
     private int? GetCampusIdFromRequest(int? queryCampusId)
@@ -316,6 +319,22 @@ public class CertificatesController : ControllerBase
 
             await _service.MoveStatusAsync(result.CertificateId, "Requested", "Student Portal", ct);
             result.Status = "Requested";
+
+            try
+            {
+                var studentName = !string.IsNullOrWhiteSpace(result.StudentName) ? result.StudentName : request.AdmissionNo;
+                var notifTitle = "New Certificate Request";
+                var notifMessage = $"{studentName} ({request.AdmissionNo}) submitted a request for {request.CertificateType}.";
+                var actionUrl = "/dashboard/certificates";
+
+                await _notificationService.SendToRoleAsync("Admin", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
+                await _notificationService.SendToRoleAsync("Principal", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
+                await _notificationService.SendToRoleAsync("Exam Cell", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
+            }
+            catch
+            {
+                // Non-blocking notification dispatch
+            }
 
             return Ok(result);
         }

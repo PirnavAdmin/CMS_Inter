@@ -166,5 +166,61 @@ namespace CollegeManagement.API.Controllers.V1
                 });
             }
         }
+
+        public class SendNotificationRequestDto
+        {
+            public int? UserId { get; set; }
+            public string? Role { get; set; }
+            public int? CampusId { get; set; }
+            public string Title { get; set; } = string.Empty;
+            public string Message { get; set; } = string.Empty;
+            public string Type { get; set; } = "General";
+            public int? ReferenceId { get; set; }
+            public string? ActionUrl { get; set; }
+        }
+
+        /// <summary>
+        /// Dispatch a notification to a specific user, role, campus, or all active users.
+        /// </summary>
+        [HttpPost("send")]
+        public async Task<IActionResult> SendNotification([FromBody] SendNotificationRequestDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Message))
+            {
+                return BadRequest(new { success = false, message = "Title and Message are required." });
+            }
+
+            try
+            {
+                if (dto.UserId.HasValue && dto.UserId.Value > 0)
+                {
+                    var notif = await _notificationService.SendToUserAsync(
+                        dto.UserId.Value, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                    return Ok(new { success = true, data = notif });
+                }
+                else if (!string.IsNullOrWhiteSpace(dto.Role))
+                {
+                    var count = await _notificationService.SendToRoleAsync(
+                        dto.Role, dto.CampusId, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                    return Ok(new { success = true, count });
+                }
+                else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+                {
+                    var count = await _notificationService.SendToCampusAsync(
+                        dto.CampusId.Value, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                    return Ok(new { success = true, count });
+                }
+                else
+                {
+                    var count = await _notificationService.SendGlobalAsync(
+                        dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                    return Ok(new { success = true, count });
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
     }
 }

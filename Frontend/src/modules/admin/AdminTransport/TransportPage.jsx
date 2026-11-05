@@ -1049,15 +1049,7 @@ function TransportContextPage({ navigation, onNavigate }) {
           });
         }
 
-        if (driversRes.status === "fulfilled") {
-        setDrivers(scoped(extractList(driversRes.value.data)).map((driver) => ({
-          ...normalizeDriver(driver),
-          staffId: driver.staffId ?? null,
-          driverId: driver.driverId ?? null,
-        })).filter((driver) => driver.id != null));
-      }
-
-      if (attendantsRes.status === "fulfilled") {
+        if (attendantsRes.status === "fulfilled") {
           console.log("Transport Bus Attendants Master API Response:", attendantsRes.value?.data);
           console.log("Transport Bus Attendants Master API Response Status:", attendantsRes.value?.status);
         } else {
@@ -1069,6 +1061,17 @@ function TransportContextPage({ navigation, onNavigate }) {
             error: attendantsRes.reason,
           });
         }
+      }
+
+      if (driversRes.status === "fulfilled") {
+        setDrivers(scoped(extractList(driversRes.value.data)).map((driver) => ({
+          ...normalizeDriver(driver),
+          // Assignment endpoints require the transport driver ID, not DTO id/staffId.
+          id: driver.driverId,
+          driverId: driver.driverId,
+          transportDriverId: driver.driverId,
+          staffId: driver.staffId ?? null,
+        })).filter((driver) => Number(driver.driverId) > 0));
       }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
@@ -2040,6 +2043,20 @@ function TransportContextPage({ navigation, onNavigate }) {
         deleteResponse = await apiClient.delete(apiEndpoints.transport.tripById(numericId));
       } else if (key === "maintenance") {
         deleteResponse = await apiClient.delete(apiEndpoints.transport.maintenanceById(numericId));
+      }
+      if (key === "trips") {
+        // Legacy trip DELETE can return success:false even after deleting the
+        // row. Verify the read-only list instead of trusting that flag/message.
+        const refreshedTrips = await getAllTransportPages(apiClient, apiEndpoints.transport.trips, { PageSize: 1000 });
+        const remainingTrips = extractList(refreshedTrips.data);
+        if (remainingTrips.some((trip) => String(transportValue(trip, "tripId", "id")) === String(numericId))) {
+          throw new Error("The trip is still present after the delete request. Please try again.");
+        }
+        setTrips((current) => current.filter((trip) => String(trip.id) !== String(numericId)));
+        if (scopedRecords.current) scopedRecords.current.trips = scopedRecords.current.trips.filter((trip) => String(transportValue(trip, "tripId", "id")) !== String(numericId));
+        setDeleteConfig(null);
+        showToast("Trip deleted successfully.");
+        return;
       }
       assertTransportDeleteSucceeded(deleteResponse);
       if (key === "studentAssignments") {

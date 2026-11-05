@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {  Award, BookOpenCheck, CalendarClock, CalendarDays, IndianRupee, CheckCircle2, GraduationCap, Users, FileText, X , Sun, Clock3, XCircle } from "lucide-react";
+import {  Award, CalendarDays, CheckCircle2, GraduationCap, Users, FileText, X , Sun, Clock3, XCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -287,20 +287,20 @@ export default function StudentDashboard() {
         ].map(([label, value, Icon]) => <div className="sp-student-detail" key={label}><span className="sp-dashboard-detail-icon"><Icon size={22} aria-hidden="true" /></span><div><small>{label}</small><strong>{value}</strong></div></div>)}
       </section>
       <section className="sp-summary-grid four">
-        <StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
-        <StudentSummaryCard icon={IndianRupee} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
+        <StudentSummaryCard icon={attendanceIcon} label="Overall Attendance" value={attendanceData ? `${attendance.percentage}%` : "—"} note={attendanceError ? "Unable to load" : `${attendance.present} present · ${attendance.absent} absent`} />
+        <StudentSummaryCard icon={feeIcon} label="Fee Due" value={feeValue("due")} note={feeError ? "Unable to load fee data" : `Due ${feeDate}`} tone="orange" />
 
-        <StudentSummaryCard icon={CalendarClock} label="Upcoming Exams" value={upcomingExams.length} note={upcomingExams[0] ? `Next on ${formatExamDate(upcomingExams[0].nextDate)}` : "No upcoming exams"} tone="purple" />
-        <StudentSummaryCard icon={Award} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="red" />
+        <StudentSummaryCard icon={examinationIcon} label="Upcoming Exams" value={upcomingExams.length} note={upcomingExams[0] ? `Next on ${formatExamDate(upcomingExams[0].nextDate)}` : "No upcoming exams"} tone="purple" />
+        <StudentSummaryCard icon={resultsIcon} label="Latest Result" value={resultPublished ? `${Number(read(latestResult, "percentage", "Percentage") || 0)}%` : "—"} note={resultError ? "Unable to load" : resultPublished ? `Grade ${read(latestResult, "overallGrade", "OverallGrade", "grade", "Grade") || "—"}` : "No published result"} tone="cyan" />
       </section>
       <StudentCard title="Quick Actions" className="sp-dashboard-quick-actions">
         <div className="sp-dashboard-action-grid">
           {[
-            ["My Profile", "View & update profile", "profile", profileIcon, "blue"],
-            ["My Timetable", "View class schedule", "timetable", timetableIcon, "blue"],
+            ["My Profile", "View & update profile", "profile", profileIcon, "green"],
+            ["My Timetable", "View class schedule", "timetable", timetableIcon, "cyan"],
             ["My Attendance", "Check attendance", "attendance", attendanceIcon, "green"],
-            ["Examinations", "View exam schedule", "examinations", examinationIcon, "red"],
-            ["Results", "View performance", "results", resultsIcon, "orange"],
+            ["Examinations", "View exam schedule", "examinations", examinationIcon, "orange"],
+            ["Results", "View performance", "results", resultsIcon, "purple"],
             ["Fees", "View fee details", "fees", feeIcon, "blue"],
             ["Request Certificate", "Request certificates", "certificates", certificateIcon, "purple"],
           ].map(([title, description, route, icon, tone]) => <Link key={route} className={`sp-dashboard-action tone-${tone}`} to={route === "certificates" ? "certificates?action=request" : route}><img src={icon} alt="" aria-hidden="true" /><strong>{title}</strong><small>{description}</small></Link>)}

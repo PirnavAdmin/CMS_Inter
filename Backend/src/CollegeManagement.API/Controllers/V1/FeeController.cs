@@ -19,7 +19,15 @@ namespace CollegeManagement.API.Controllers.V1;
 public class FeeController : ControllerBase
 {
     private readonly IFeeService _service;
-    public FeeController(IFeeService service) => _service = service;
+    private readonly INotificationService? _notificationService;
+
+    public FeeController(
+        IFeeService service,
+        INotificationService? notificationService = null)
+    {
+        _service = service;
+        _notificationService = notificationService;
+    }
 
     private bool IsPrivilegedStaff()
     {
@@ -119,7 +127,36 @@ public class FeeController : ControllerBase
     // ---------------- Student Fee ----------------
     /// <summary>Assign a configured fee structure to an approved student.</summary>
     [HttpPost("student-fees/assign")]
-    public async Task<IActionResult> AssignStudentFee(AssignStudentFeeRequest request) => Ok(await _service.AssignStudentFeeAsync(request));
+    public async Task<IActionResult> AssignStudentFee(AssignStudentFeeRequest request)
+    {
+        var result = await _service.AssignStudentFeeAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Structure Assigned",
+                    $"Fee demand generated for your account. Total Payable Amount: ₹{result.PayableAmount:N0}. Status: {result.Status}.",
+                    "Fee",
+                    result.StudentFeeId,
+                    "/student/fees");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    null,
+                    "Fee Structure Assigned",
+                    $"Fee demand generated for student #{request.StudentId}. Total Amount: ₹{result.PayableAmount:N0}.",
+                    "Fee",
+                    result.StudentFeeId,
+                    "/parent/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     /// <summary>Get the complete student fee details, breakdown, schedules and payment history.</summary>
     [HttpGet("student-fees/{id:int}")]
@@ -163,7 +200,27 @@ public class FeeController : ControllerBase
     // ---------------- Concession ----------------
     /// <summary>Apply a student-specific concession or scholarship after fee assignment.</summary>
     [HttpPost("concession")]
-    public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request) => Ok(await _service.ApplyFeeConcessionAsync(request));
+    public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request)
+    {
+        var result = await _service.ApplyFeeConcessionAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Concession Approved",
+                    $"Fee concession of ₹{result.DiscountAmount:N0} ({result.ScholarshipName ?? "Concession"}) has been approved for your fee account.",
+                    "Fee",
+                    result.FeeConcessionId,
+                    "/student/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     // ---------------- Collection ----------------
     /// <summary>List student accounts with payable, paid, balance, next due and status.</summary>
@@ -172,7 +229,39 @@ public class FeeController : ControllerBase
 
     /// <summary>Collect full or partial payment against a selected fee schedule.</summary>
     [HttpPost("collect")]
-    public async Task<IActionResult> Collect(CreateFeePaymentRequest request) => Ok(await _service.CreateFeePaymentAsync(request));
+    public async Task<IActionResult> Collect(CreateFeePaymentRequest request)
+    {
+        var result = await _service.CreateFeePaymentAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                var receiptNo = result.ReceiptNumber ?? "N/A";
+                var studentName = !string.IsNullOrWhiteSpace(result.StudentName) ? result.StudentName : $"Student #{request.StudentId}";
+
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Payment Received",
+                    $"Payment received: ₹{result.Amount:N0} received towards Receipt #{receiptNo} for {studentName}.",
+                    "Fee",
+                    result.FeePaymentId,
+                    $"/student/fees/receipt/{receiptNo}");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent", "Accountant" },
+                    null,
+                    "Fee Payment Received",
+                    $"Payment of ₹{result.Amount:N0} received for {studentName} (Receipt #{receiptNo}).",
+                    "Fee",
+                    result.FeePaymentId,
+                    $"/dashboard/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     // ---------------- Payment History / Receipt ----------------
     /// <summary>View payment history for one student. Enforces caller ID check to prevent IDOR.</summary>
