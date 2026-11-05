@@ -133,6 +133,23 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Creating examination: {ExamName}", request.ExamName);
             var result = await _examinationService.CreateExaminationAsync(request);
 
+            if (_notificationService != null && result != null)
+            {
+                try
+                {
+                    var campusId = result.CampusId ?? request.CampusId;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "New Examination Scheduled",
+                        $"New examination '{result.ExamName}' has been scheduled from {result.StartDate:yyyy-MM-dd} to {result.EndDate:yyyy-MM-dd}.",
+                        "Examination",
+                        result.ExaminationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return CreatedAtAction(
                 nameof(GetExaminationById),
                 new
@@ -282,6 +299,25 @@ namespace CollegeManagement.API.Controllers.V1
             var result = await _examinationService.CancelExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { success = false, message = "Examination not found." });
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var reasonText = !string.IsNullOrWhiteSpace(request?.Reason) ? $" Reason: {request.Reason}" : string.Empty;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Examination Cancelled",
+                        $"Notice: Examination '{result.Name ?? exam?.ExamName ?? "Examination"}' has been CANCELLED.{reasonText}",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 success = true,
@@ -308,6 +344,28 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Rescheduling examination ID: {Id}", examinationId);
             var result = await _examinationService.RescheduleExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { message = "Examination not found." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var dateRangeText = (request.NewStartDate.HasValue && request.NewEndDate.HasValue) 
+                        ? $" New dates: {request.NewStartDate.Value:yyyy-MM-dd} to {request.NewEndDate.Value:yyyy-MM-dd}." 
+                        : string.Empty;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Examination Rescheduled",
+                        $"Notice: Examination '{exam?.ExamName ?? "Examination"}' has been RESCHEDULED.{dateRangeText} Please check updated schedule.",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 

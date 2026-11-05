@@ -155,14 +155,36 @@ namespace CollegeManagement.API.Controllers.V1
                     try
                     {
                         var dateDisplay = !string.IsNullOrWhiteSpace(created.FormattedDateRange) ? created.FormattedDateRange : created.StartDate.ToString("yyyy-MM-dd");
+                        var campusId = (created.CampusId.HasValue && created.CampusId.Value > 0) ? created.CampusId.Value : (int?)null;
 
-                        await _notificationService.SendToCampusAsync(
-                            created.CampusId ?? 1,
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Teacher", "Faculty" },
+                            campusId,
                             "New Holiday Declared",
                             $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
                             "Holiday",
                             created.Id,
-                            "/dashboard/holidays");
+                            "/student/dashboard");
+
+                        if (campusId.HasValue)
+                        {
+                            await _notificationService.SendToCampusAsync(
+                                campusId.Value,
+                                "New Holiday Declared",
+                                $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                                "Holiday",
+                                created.Id,
+                                "/dashboard/holidays");
+                        }
+                        else
+                        {
+                            await _notificationService.SendGlobalAsync(
+                                "New Holiday Declared",
+                                $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                                "Holiday",
+                                created.Id,
+                                "/dashboard/holidays");
+                        }
                     }
                     catch { }
                 }
@@ -218,6 +240,25 @@ namespace CollegeManagement.API.Controllers.V1
                         success = false,
                         message = $"Holiday with ID {id} was not found."
                     });
+                }
+
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var dateDisplay = !string.IsNullOrWhiteSpace(updated.FormattedDateRange) ? updated.FormattedDateRange : updated.StartDate.ToString("yyyy-MM-dd");
+                        var campusId = (updated.CampusId.HasValue && updated.CampusId.Value > 0) ? updated.CampusId.Value : (int?)null;
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Teacher", "Faculty" },
+                            campusId,
+                            "Holiday Schedule Updated",
+                            $"Notice: Holiday schedule for '{updated.HolidayName}' has been updated to {dateDisplay}.",
+                            "Holiday",
+                            updated.Id,
+                            "/student/dashboard");
+                    }
+                    catch { }
                 }
 
                 return Ok(new

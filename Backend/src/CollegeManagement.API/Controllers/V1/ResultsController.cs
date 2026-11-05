@@ -33,16 +33,22 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IResultService _resultService;
         private readonly ILogger<ResultController> _logger;
+        private readonly INotificationService? _notificationService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ResultController"/> class.
         /// </summary>
         /// <param name="resultService">The result service instance handling calculation and business logic.</param>
         /// <param name="logger">The logger instance.</param>
-        public ResultController(IResultService resultService, ILogger<ResultController> logger)
+        /// <param name="notificationService">The notification service instance.</param>
+        public ResultController(
+            IResultService resultService,
+            ILogger<ResultController> logger,
+            INotificationService? notificationService = null)
         {
             _resultService = resultService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -179,6 +185,22 @@ namespace CollegeManagement.API.Controllers.V1
             var published = await _resultService.PublishSectionResultsAsync(effectiveSectionId, effectiveExamId, request?.PublishDate);
             if (published)
             {
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent" },
+                            null,
+                            "Examination Results Published",
+                            $"Results for Examination #{effectiveExamId} (Section #{effectiveSectionId}) have been published. Check your grades in student portal.",
+                            "Results",
+                            effectiveExamId,
+                            "/student/results");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { success = true, message = "Section results published successfully." });
             }
             return BadRequest(new { success = false, message = "Failed to publish section results." });
@@ -222,6 +244,24 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (published)
             {
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var targetExamId = effectiveExamId;
+                        var targetCampusId = request?.CampusId > 0 ? request.CampusId : (int?)null;
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent" },
+                            targetCampusId,
+                            "Examination Results Published",
+                            $"Results for Examination #{targetExamId} have been published. Check your grades in student portal.",
+                            "Results",
+                            targetExamId,
+                            "/student/results");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { success = true, message = "Results published successfully." });
             }
             return BadRequest(new { success = false, message = "Failed to publish results." });
