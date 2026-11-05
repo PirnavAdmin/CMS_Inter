@@ -11,8 +11,34 @@ export function scopeTransportRecords(records, context) {
     const actual = transportValue(row, key);
     return !context[key] || actual == null || id(actual) === id(context[key]);
   });
-  const routes = records.routes.filter(exactCampus);
-  const vehicles = records.vehicles.filter((row) => compatible(row, ['campusId']));
+  // Routes are fetched with CampusId. Some route list DTOs omit CampusId, so
+  // keep those API-scoped rows while still rejecting an explicit mismatch.
+  const routes = records.routes.filter((row) => compatible(row, ['campusId']));
+  // Resolve legacy vehicles through known route/assignment campus links.
+  // Never assume that a vehicle with no campus belongs to the selected campus.
+  const routeCampuses = new Map(records.routes.map((route) => [
+    id(transportValue(route, 'routeId', 'id')), id(transportValue(route, 'campusId')),
+  ]));
+  const linkedCampuses = new Map();
+  for (const assignment of records.assignments) {
+    const status = transportValue(assignment, 'status', 'isActive');
+    if (status != null && ![true, 1, 'true', '1', 'active', 'assigned'].includes(typeof status === 'string' ? status.toLowerCase() : status)) continue;
+    const vehicle = id(transportValue(assignment, 'vehicleId'));
+    const owner = id(transportValue(assignment, 'campusId')) || routeCampuses.get(id(transportValue(assignment, 'routeId')));
+    if (!vehicle || !owner) continue;
+    if (!linkedCampuses.has(vehicle)) linkedCampuses.set(vehicle, new Set());
+    linkedCampuses.get(vehicle).add(owner);
+  }
+  const vehicles = records.vehicles.filter((row) => {
+    if (!campus) return false;
+    const explicit = transportValue(row, 'campusId') ?? transportValue(transportValue(row, 'campus'), 'campusId', 'id');
+    if (explicit != null) return id(explicit) === campus;
+    const owners = new Set(linkedCampuses.get(id(transportValue(row, 'vehicleId', 'id'))) || []);
+    const routeCampus = routeCampuses.get(id(transportValue(row, 'routeId', 'assignedRouteId')));
+    if (routeCampus) owners.add(routeCampus);
+    // Conflicting relationships cannot establish a single owning campus.
+    return owners.size === 1 && owners.has(campus);
+  });
   const staff = records.staff.filter((row) => {
     const assignments = transportValue(row, 'assignedCampuses', 'staffCampusAssignments');
     if (Array.isArray(assignments) && assignments.length) return assignments.some((assignment) =>
@@ -72,9 +98,27 @@ export async function getAllTransportPages(client, url, params = {}, signal) {
     all.push(...batch);
     const total = data?.totalCount ?? data?.TotalCount ?? data?.total ?? response.data?.totalCount;
     const totalPages = data?.totalPages ?? data?.TotalPages ?? response.data?.totalPages;
-    if (!batch.length && Number(total) > all.length) throw new Error(`Transport API ${url} returned an empty page but reports ${total} records. The backend list response needs correction.`);
-    if (!batch.length || (total != null ? all.length >= Number(total) : totalPages != null ? page >= Number(totalPages) : batch.length < pageSize)) return { ...response, data: all };
-    previous = fingerprint;
+    const hasNextPage = data?.hasNextPage ?? data?.HasNextPage ?? response.data?.hasNextPage ?? response.data?.HasNextPage;
+    const hasMorePages = hasNextPage != null
+      ? Boolean(hasNextPage)
+      : totalPages != null
+        ? page < Number(totalPages)
+        : batch.length > 0 && (total != null ? all.length < Number(total) : batch.length >= pageSize);
+
+    if (hasMorePages && batch.length > 0) previous = fingerprint;
+    if (hasMorePages && batch.length === 0) {
+      previous = '';
+      continue;
+    }
+
+    if (!hasMorePages || !batch.length) {
+      // Preserve any rows fetched when the backend's totals exceed the actual
+      // rows it returned, while still following explicit next-page metadata.
+      if (total != null && all.length < Number(total)) {
+        return { ...response, data: all, paginationIncomplete: true, reportedTotal: Number(total) };
+      }
+      return { ...response, data: all };
+    }
   }
   throw new Error('Transport data exceeds the supported pagination limit.');
 }

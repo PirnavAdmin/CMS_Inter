@@ -34,6 +34,8 @@ import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
+import { getAllTransportPages } from "@/modules/admin/AdminTransport/transportContext.js";
+import { Calendar, Clock, Phone, Shield, X } from "lucide-react";
 import "@/modules/admin/AdminTransport/TransportPage.css";
 
 const setupTabs = [
@@ -925,7 +927,25 @@ function isDriverStaffRecord(staff) {
     customFields.designation,
     customFields.designationName,
   ];
-  return explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim()));
+  const status = staff?.status ?? staff?.Status ?? staff?.isActive ?? staff?.IsActive;
+  const active = status == null || status === true || status === 1 || ["active", "true", "1"].includes(String(status).toLowerCase());
+  return active && (explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim())));
+}
+
+function isAttendantStaffRecord(staff) {
+  const departmentSpecific = readDepartmentSpecific(staff);
+  const customFields = readCustomFields(staff);
+  const personal = staff?.personal && typeof staff.personal === "object" ? staff.personal : {};
+  const values = [
+    staff?.role, staff?.roleName, staff?.roleCode, staff?.designation, staff?.designationName,
+    personal.role, personal.roleName, personal.designation, personal.designationName,
+    departmentSpecific.role, departmentSpecific.roleName, departmentSpecific.designation,
+    departmentSpecific.designationName, customFields.role, customFields.roleName,
+    customFields.designation, customFields.designationName,
+  ];
+  const status = staff?.status ?? staff?.Status ?? staff?.isActive ?? staff?.IsActive;
+  const active = status == null || status === true || status === 1 || ["active", "true", "1"].includes(String(status).toLowerCase());
+  return active && values.some((value) => /\battendant\b/i.test(String(value || "").trim()));
 }
 
 function toTimeInputValue(value) {
@@ -1025,6 +1045,11 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [vehicleAssignments, setVehicleAssignments] = useState(() => tmContext?.assignments || []);
   const [studentAssignments, setStudentAssignments] = useState(() => tmContext?.studentAssignments || []);
   const [trips, setTrips] = useState(() => tmContext?.trips || []);
+  const [tripSearchQuery, setTripSearchQuery] = useState("");
+  const [tripRouteFilter, setTripRouteFilter] = useState("All");
+  const [selectedTripModal, setSelectedTripModal] = useState(null);
+  const [tripModalTab, setTripModalTab] = useState("overview");
+  const [tripStudentSearch, setTripStudentSearch] = useState("");
   const [maintenance, setMaintenance] = useState(() => tmContext?.maintenance || []);
   const [gpsSnapshots, setGpsSnapshots] = useState([]);
   const [dashboardMetrics, setDashboardMetrics] = useState(() => tmContext?.dashboardMetrics || null);
@@ -1142,9 +1167,14 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         apiClient.get(apiEndpoints.transport.pickupPoints, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.lookups.pickupPoints, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.vehicles, { params: commonParams }),
-        apiClient.get(apiEndpoints.faculty.list, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.drivers, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.attendants, { params: commonParams }),
+        getAllTransportPages(apiClient, apiEndpoints.faculty.list, { CampusId: Number(effectiveCampusId) }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, {
+          campusId: Number(effectiveCampusId),
+          boardId: Number(effectiveBoardId) || undefined,
+          academicYearId: Number(effectiveAcademicYearId) || undefined,
+          PageSize: 1000,
+        }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}),
         apiClient.get(apiEndpoints.transport.vehicleAssignments, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.trips, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.gps, { params: commonParams }),
@@ -1231,69 +1261,73 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
       if (staffRes.status === "fulfilled" && staffRes.value?.data) {
         const items = scoped(extractList(staffRes.value.data));
+        const attendantStaff = items.filter(isAttendantStaffRecord);
         setNonTeachingStaff(
-          items
-            .filter((staff) => {
-              const isNonTeaching = [staff.staffType, staff.facultyType].some((value) => /non[-\s]?teaching/i.test(String(value || "")));
-              const isBusAttendant = [staff.role, staff.roleName, staff.designation, staff.designationName]
-                .some((value) => String(value || "").trim().toLowerCase() === "bus attendant");
-              return isNonTeaching && isBusAttendant;
-            })
-            .map((staff) => ({
-              id: staff.staffId || staff.id || staff.facultyId,
-              name: staff.fullName || staff.staffName || [staff.firstName, staff.middleName, staff.lastName].filter(Boolean).join(" "),
-              employeeId: staff.employeeId || staff.empId || "",
-              mobileNumber: staff.mobile || staff.mobileNumber || staff.phone || "",
-              gender: staff.gender || "",
-            })),
+          attendantStaff.map((staff) => ({
+            id: transportValue(staff, "staffId", "id", "facultyId"),
+            name: transportValue(staff, "fullName", "staffName", "name") || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" "),
+            employeeId: transportValue(staff, "employeeId", "empId") || "",
+            mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+            gender: transportValue(staff, "gender") || "",
+          })),
         );
         const driverStaff = items.filter(isDriverStaffRecord);
-        setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [String(staff.staffId || staff.id || staff.facultyId), staff])));
+        setDriverStaffRecords(Object.fromEntries(driverStaff
+          .map((staff) => [String(transportValue(staff, "staffId", "id", "facultyId")), staff])
+          .filter(([id]) => id && id !== "undefined")));
       }
 
       if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
-        const items = scoped(extractList(attendantsRes.value.data));
+        const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
+        const eligibleStaff = staffItems.filter(isAttendantStaffRecord);
+        const eligibleStaffIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "staffId", "id", "facultyId"))));
+        const eligibleEmployeeIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()).filter(Boolean));
+        const linkedItems = scoped(extractList(attendantsRes.value.data)).filter((attendant) => {
+          const staffId = transportValue(attendant, "staffId");
+          const employeeId = String(transportValue(attendant, "employeeId", "attendantCode") || "").trim().toLowerCase();
+          return (staffId != null && eligibleStaffIds.has(String(staffId))) || (employeeId && eligibleEmployeeIds.has(employeeId));
+        });
+        const items = [...new Map(linkedItems.map((attendant) => [
+          String(transportValue(attendant, "staffId") ?? transportValue(attendant, "employeeId", "attendantCode") ?? transportValue(attendant, "attendantId", "id")), attendant,
+        ])).values()];
         setAttendants(
           items.map((a) => ({
-            id: a.attendantId || a.id,
-            attendantName: a.attendantName || a.attendantFullName || a.fullName || a.name || "",
-            employeeId: a.employeeId || a.attendantCode || "",
-            mobileNumber: a.mobileNumber || a.phone || "",
-            gender: a.gender || "Female",
-            branch: a.branchName || a.branch || "Main Campus",
-            status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
+            id: transportValue(a, "attendantId", "id"),
+            staffId: transportValue(a, "staffId"),
+            attendantName: transportValue(a, "attendantName", "attendantFullName", "fullName", "name") || "",
+            employeeId: transportValue(a, "employeeId", "attendantCode") || "",
+            mobileNumber: transportValue(a, "mobileNumber", "phone") || "",
+            gender: transportValue(a, "gender") || "Female",
+            branch: transportValue(a, "branchName", "branch") || "Main Campus",
+            status: [true, 1, "Active"].includes(transportValue(a, "status")) ? "Active" : "Inactive",
           }))
         );
       }
 
-      if (driversRes.status === "fulfilled" && driversRes.value?.data) {
-        const rawItems = extractList(driversRes.value.data);
+      if (driversRes.status === "fulfilled" || staffRes.status === "fulfilled") {
+        const rawItems = driversRes.status === "fulfilled" ? extractList(driversRes.value.data) : [];
         const items = scoped(rawItems);
-        const finalDrivers = items.length > 0 ? items : (rawItems.length > 0 ? rawItems : []);
-        setDrivers(
-          finalDrivers.map((driver) => {
-            const transportDriverId = Number(driver.driverId) > 0 ? driver.driverId : null;
-            const driverApiId = transportDriverId
-              || driver.licenceNumber
-              || driver.licenseNumber
-              || driver.employeeId
-              || driver.id;
-            return {
-              id: driverApiId,
-              driverApiId,
-              transportDriverId,
-              driverName: driver.driverName || driver.name || "",
-              employeeId: driver.employeeId || driver.empId || "",
-              mobileNumber: driver.mobileNumber || driver.phone || "",
-              email: driver.email || "",
-              licenseNumber: driver.licenceNumber || driver.licenseNumber || "",
-              licenseExpiryDate: String(driver.licenceExpiry || driver.licenseExpiryDate || "").split("T")[0],
-              address: driver.address || "",
-              experience: Number(driver.experience || 0),
-              status: driver.status === true || driver.status === 1 || driver.status === "Active" ? "Active" : "Inactive",
-            };
-          })
-        );
+        const finalDrivers = (items.length > 0 ? items : rawItems).map((driver) => {
+          const transportDriverId = Number(transportValue(driver, "driverId", "id")) > 0 ? transportValue(driver, "driverId", "id") : null;
+          const driverApiId = transportDriverId || transportValue(driver, "licenceNumber", "licenseNumber", "employeeId", "id");
+          return {
+            ...driver,
+            id: driverApiId,
+            driverApiId,
+            transportDriverId,
+            staffId: transportValue(driver, "staffId") ?? null,
+            driverName: transportValue(driver, "driverName", "name", "fullName") || "",
+            employeeId: transportValue(driver, "employeeId", "empId") || "",
+            mobileNumber: transportValue(driver, "mobileNumber", "phone") || "",
+            email: transportValue(driver, "email") || "",
+            licenseNumber: transportValue(driver, "licenceNumber", "licenseNumber") || "",
+            licenseExpiryDate: String(transportValue(driver, "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
+            address: transportValue(driver, "address") || "",
+            experience: Number(transportValue(driver, "experience") || 0),
+            status: [true, 1, "Active"].includes(transportValue(driver, "status")) ? "Active" : "Inactive",
+          };
+        }).filter((driver) => Number(driver.transportDriverId) > 0);
+        setDrivers(finalDrivers);
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1423,11 +1457,15 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   };
 
   useEffect(() => {
-    if (!tmContext || (!tmContext.vehicles?.length && !tmContext.routes?.length)) {
+    // Driver/attendant setup also needs the Staff Management roster, which the
+    // shared operational context does not load. Fetch it when either roster
+    // tab is opened even if fleet and route data already exist in context.
+    if (["drivers", "attendants"].includes(activeSetupTab)
+      || !tmContext || (!tmContext.vehicles?.length && !tmContext.routes?.length)) {
       fetchTransportData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, activeSetupTab]);
 
   // Report sync
   useEffect(() => {
@@ -1474,7 +1512,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
-  const driverOptions = drivers.map((driver) => ({ value: driver.id, label: driver.driverName }));
+  const driverOptions = drivers
+    .filter((driver) => Number(driver.transportDriverId ?? driver.driverId) > 0)
+    .map((driver) => ({ value: driver.transportDriverId ?? driver.driverId, label: driver.driverName }));
   const attendantOptions = attendants.map((attendant) => ({ value: attendant.id, label: attendant.attendantName }));
 
   const findRoute = (id) => routes.find((route) => String(route.id) === String(id));
@@ -1727,7 +1767,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       subtitle: "Track daily morning and evening trip movement.",
       rows: trips,
       fields: tripFields,
-      addLabel: "Add Trip",
+
       columns: [
         { key: "vehicleNumber", label: "VEHICLE", strong: true, value: (r) => r.vehicleNumber || r.busNumber || "-" },
         { key: "routeName", label: "ROUTE", value: (r) => r.routeName || r.route || "-" },
@@ -2050,9 +2090,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         }
       } else if (key === "drivers") {
         if (isEdit) {
-          const staffRecord = driverStaffRecords[String(record.id)]
+          const staffRecord = record.source === "staff" ? (driverStaffRecords[String(record.id)]
             ?? Object.values(driverStaffRecords).find((staff) => String(staff.employeeId || staff.empId || "").trim().toLowerCase()
-              === String(record.employeeId || values.employeeId || "").trim().toLowerCase());
+              === String(record.employeeId || values.employeeId || "").trim().toLowerCase())) : null;
           if (staffRecord) {
             const departmentSpecific = {
               ...readDepartmentSpecific(staffRecord),
@@ -2444,6 +2484,666 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => openRecordDetails(key, row, config.title)}
       />
+    );
+  };
+
+  const exportVehicleTripsCsv = () => {
+    const headers = [
+      "Vehicle Number",
+      "Registration Number",
+      "Route",
+      "Commercial Driver",
+      "Driver Phone",
+      "Bus Attendant",
+      "Attendant Phone",
+      "Morning Trip Time",
+      "Evening Trip Time",
+      "Assigned Students",
+      "Status",
+    ];
+    const rows = vehicleAssignments.map((va) => {
+      const v = findVehicle(va.vehicleId);
+      const d = findDriver(va.driverId);
+      const a = findAttendant(va.attendantId);
+      const students = studentAssignments.filter((s) => (
+        (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(va.id)) ||
+        (s.vehicleId && String(s.vehicleId) === String(va.vehicleId)) ||
+        (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(va.routeId))
+      ));
+      return [
+        va.vehicleNumber || "",
+        v?.registrationNumber || "",
+        va.routeName || "",
+        va.driverName || d?.driverName || "",
+        d?.mobileNumber || d?.phone || "",
+        va.attendantName || a?.attendantName || "",
+        a?.mobileNumber || a?.phone || "",
+        va.morningTripTime || "07:00 AM",
+        va.eveningTripTime || "03:45 PM",
+        students.length,
+        va.status || "Active",
+      ];
+    });
+    const csvContent = [headers.join(","), ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `vehicle-trips-${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const renderVehicleTripsView = () => {
+    const runningVehiclesCount = vehicleAssignments.filter((va) => va.status === "Active").length;
+    const completedTripsCount = trips.filter((t) => t.status === "Completed").length;
+    const delayedTripsCount = trips.filter((t) => ["Delayed", "Cancelled"].includes(t.status)).length;
+    const offlineGpsCount = vehicleAssignments.filter((va) => {
+      const v = findVehicle(va.vehicleId);
+      return !v?.gpsDeviceId;
+    }).length;
+    const activeMorningCount = vehicleAssignments.filter((va) => va.status === "Active" && Boolean(va.morningTripTime)).length;
+    const activeEveningCount = vehicleAssignments.filter((va) => va.status === "Active" && Boolean(va.eveningTripTime)).length;
+
+    const filteredAssignments = vehicleAssignments.filter((assignment) => {
+      if (tripRouteFilter !== "All" && String(assignment.routeId) !== String(tripRouteFilter)) return false;
+      if (!tripSearchQuery.trim()) return true;
+      const q = tripSearchQuery.toLowerCase();
+      const vehicle = findVehicle(assignment.vehicleId);
+      const driver = findDriver(assignment.driverId);
+      const attendant = findAttendant(assignment.attendantId);
+      return (
+        (assignment.vehicleNumber || "").toLowerCase().includes(q) ||
+        (assignment.routeName || "").toLowerCase().includes(q) ||
+        (assignment.driverName || driver?.driverName || "").toLowerCase().includes(q) ||
+        (assignment.attendantName || attendant?.attendantName || "").toLowerCase().includes(q) ||
+        (vehicle?.registrationNumber || "").toLowerCase().includes(q)
+      );
+    });
+
+    const modalVehicle = selectedTripModal ? findVehicle(selectedTripModal.vehicleId) : null;
+    const modalRoute = selectedTripModal ? findRoute(selectedTripModal.routeId) : null;
+    const modalDriver = selectedTripModal ? findDriver(selectedTripModal.driverId) : null;
+    const modalAttendant = selectedTripModal ? findAttendant(selectedTripModal.attendantId) : null;
+
+    const modalAssignedStudents = selectedTripModal
+      ? studentAssignments.filter((s) => (
+          (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(selectedTripModal.id)) ||
+          (s.vehicleId && String(s.vehicleId) === String(selectedTripModal.vehicleId)) ||
+          (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(selectedTripModal.routeId))
+        ))
+      : [];
+
+    const modalRouteStops = selectedTripModal
+      ? pickupPoints.filter((stop) => String(stop.routeId) === String(selectedTripModal.routeId))
+      : [];
+
+    const filteredModalStudents = modalAssignedStudents.filter((student) => {
+      if (!tripStudentSearch.trim()) return true;
+      const q = tripStudentSearch.toLowerCase();
+      return (
+        (student.studentName || "").toLowerCase().includes(q) ||
+        (student.admissionNo || "").toLowerCase().includes(q) ||
+        (student.pickupPointName || "").toLowerCase().includes(q)
+      );
+    });
+
+    const modalDriverName = selectedTripModal ? (selectedTripModal.driverName || modalDriver?.driverName || "Unassigned") : "";
+    const modalDriverPhone = modalDriver?.mobileNumber || modalDriver?.phone || "-";
+    const modalAttendantName = selectedTripModal ? (selectedTripModal.attendantName || modalAttendant?.attendantName || "Unassigned") : "";
+    const modalAttendantPhone = modalAttendant?.mobileNumber || modalAttendant?.phone || "-";
+
+    return (
+      <div className="cms-transport-trips-view">
+        <div className="cms-transport-trips-head">
+          <div className="cms-transport-trips-head-title">
+            <Bus size={26} color="var(--cms-primary, #5d7000)" />
+            <div>
+              <h2>Vehicle Trips</h2>
+              <p>Track daily morning and evening trip movement.</p>
+            </div>
+          </div>
+          <div className="cms-transport-trips-head-actions">
+            <span className="cms-transport-date-badge">
+              <Calendar size={14} />
+              {new Date().toLocaleDateString("en-GB")}
+            </span>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              onClick={exportVehicleTripsCsv}
+              title="Download vehicle trips as CSV"
+            >
+              <Download size={15} /> Download
+            </button>
+          </div>
+        </div>
+
+        <div className="cms-transport-trips-stat-grid">
+          <div className="cms-transport-trips-stat-card tone-green">
+            <small>Vehicles Running</small>
+            <strong>{runningVehiclesCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Trips Completed</small>
+            <strong>{completedTripsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-amber">
+            <small>Delayed Trips</small>
+            <strong>{delayedTripsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-red">
+            <small>Offline GPS Devices</small>
+            <strong>{offlineGpsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Active Morning Trips</small>
+            <strong>{activeMorningCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Active Evening Trips</small>
+            <strong>{activeEveningCount}</strong>
+          </div>
+        </div>
+
+        <div className="cms-transport-trips-toolbar">
+          <div className="cms-transport-trips-search">
+            <Search size={16} />
+            <input
+              placeholder="Search vehicle, route, driver..."
+              value={tripSearchQuery}
+              onChange={(e) => setTripSearchQuery(e.target.value)}
+            />
+          </div>
+          <select
+            className="cms-transport-trips-route-select"
+            value={tripRouteFilter}
+            onChange={(e) => setTripRouteFilter(e.target.value)}
+          >
+            <option value="All">All Routes</option>
+            {routes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.routeName} ({r.routeCode || "Route"})
+              </option>
+            ))}
+          </select>
+          {(tripSearchQuery || tripRouteFilter !== "All") && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost cms-btn-sm"
+              onClick={() => {
+                setTripSearchQuery("");
+                setTripRouteFilter("All");
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="cms-transport-trips-cards-grid">
+          {filteredAssignments.length === 0 ? (
+            <div className="cms-card cms-transport-trip-empty" style={{ gridColumn: "1 / -1" }}>
+              {vehicleAssignments.length === 0
+                ? "No vehicle assignments found. Vehicles and routes configured in Operations → Vehicle Assignment will appear here."
+                : "No vehicles matching your search or route filter."}
+            </div>
+          ) : (
+            filteredAssignments.map((assignment) => {
+              const vehicle = findVehicle(assignment.vehicleId);
+              const driver = findDriver(assignment.driverId);
+              const attendant = findAttendant(assignment.attendantId);
+              const students = studentAssignments.filter((s) => (
+                (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(assignment.id)) ||
+                (s.vehicleId && String(s.vehicleId) === String(assignment.vehicleId)) ||
+                (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(assignment.routeId))
+              ));
+              const hasGps = Boolean(vehicle?.gpsDeviceId);
+              const isRunning = assignment.status === "Active";
+              const regNo = vehicle?.registrationNumber || "-";
+              const driverName = assignment.driverName || driver?.driverName || "Unassigned";
+              const driverPhone = driver?.mobileNumber || driver?.phone || "-";
+              const attendantName = assignment.attendantName || attendant?.attendantName || "Unassigned";
+              const attendantPhone = attendant?.mobileNumber || attendant?.phone || "-";
+
+              return (
+                <div key={assignment.id} className="cms-transport-trip-card">
+                  <div className="cms-transport-trip-card-head">
+                    <div className="cms-transport-trip-veh-meta">
+                      <div className="cms-transport-trip-veh-row">
+                        <span className="cms-transport-trip-veh-tag">
+                          {assignment.vehicleNumber || "Vehicle"}
+                        </span>
+                        <h3 className="cms-transport-trip-route-name">
+                          {assignment.routeName || "Route"}
+                        </h3>
+                      </div>
+                      <span className="cms-transport-trip-reg">Reg: {regNo}</span>
+                    </div>
+                    <div className="cms-transport-trip-badges">
+                      <span className={`cms-transport-pill ${isRunning ? "pill-running" : "pill-inactive"}`}>
+                        {isRunning ? "Running" : "Inactive"}
+                      </span>
+                      <span className={`cms-transport-pill ${hasGps ? "pill-gps-active" : "pill-gps-offline"}`}>
+                        {hasGps ? "GPS Active" : "GPS Offline"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cms-transport-trip-crew-box">
+                    <div className="cms-transport-trip-crew-col">
+                      <span className="cms-transport-trip-crew-label">
+                        <Bus size={12} /> Commercial Driver
+                      </span>
+                      <span className="cms-transport-trip-crew-name" title={driverName}>
+                        {driverName}
+                      </span>
+                      <span className="cms-transport-trip-crew-phone">
+                        {driverPhone}
+                      </span>
+                    </div>
+                    <div className="cms-transport-trip-crew-col">
+                      <span className="cms-transport-trip-crew-label">
+                        <UserCheck size={12} /> Bus Attendant
+                      </span>
+                      <span className="cms-transport-trip-crew-name" title={attendantName}>
+                        {attendantName}
+                      </span>
+                      <span className="cms-transport-trip-crew-phone">
+                        {attendantPhone}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cms-transport-trip-card-foot">
+                    <span className="cms-transport-trip-student-pill">
+                      <Users size={14} /> {students.length} Student{students.length === 1 ? "" : "s"} Assigned
+                    </span>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary cms-btn-sm"
+                      onClick={() => {
+                        setSelectedTripModal(assignment);
+                        setTripModalTab("overview");
+                        setTripStudentSearch("");
+                      }}
+                    >
+                      <Eye size={14} /> View Details
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {selectedTripModal && (
+          <div
+            className="cms-transport-trip-modal-overlay"
+            onClick={() => setSelectedTripModal(null)}
+          >
+            <div
+              className="cms-transport-trip-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="cms-transport-trip-modal-banner">
+                <div className="cms-transport-trip-modal-banner-top">
+                  <div className="cms-transport-trip-modal-banner-veh">
+                    <span className="cms-transport-trip-modal-veh-pill">
+                      {selectedTripModal.vehicleNumber}
+                    </span>
+                    <span className="cms-transport-trip-modal-route-title">
+                      {selectedTripModal.routeName}
+                    </span>
+                    <span className="cms-transport-trip-modal-status">
+                      {selectedTripModal.status === "Active" ? "Running" : "Inactive"}
+                    </span>
+                    {selectedTripModal.effectiveFrom && (
+                      <span className="cms-transport-trip-modal-effective">
+                        Effective From: {selectedTripModal.effectiveFrom}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="cms-transport-trip-modal-close-btn"
+                    onClick={() => setSelectedTripModal(null)}
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="cms-transport-trip-modal-strip">
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Driver</small>
+                    <strong title={`${modalDriverName} (${modalDriverPhone})`}>
+                      {modalDriverName}
+                    </strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Bus Attendant</small>
+                    <strong title={`${modalAttendantName} (${modalAttendantPhone})`}>
+                      {modalAttendantName}
+                    </strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Morning Trip</small>
+                    <strong>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Evening Trip</small>
+                    <strong>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Capacity</small>
+                    <strong>{modalVehicle?.capacity || 40} Seats</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Assigned Students</small>
+                    <strong>{modalAssignedStudents.length}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cms-transport-trip-modal-tabs">
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "overview" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("overview")}
+                >
+                  Overview
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "morning" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("morning")}
+                >
+                  Morning Trip
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "evening" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("evening")}
+                >
+                  Evening Trip
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "students" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("students")}
+                >
+                  Student List{" "}
+                  <span className="cms-transport-trip-modal-tab-count">
+                    {modalAssignedStudents.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "history" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("history")}
+                >
+                  Trip History
+                </button>
+              </div>
+
+              <div className="cms-transport-trip-modal-body">
+                {tripModalTab === "overview" && (
+                  <div className="cms-transport-trip-overview-grid">
+                    <div className="cms-transport-trip-overview-col">
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Vehicle Number:</span>
+                        <strong>{selectedTripModal.vehicleNumber}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Registration Number:</span>
+                        <strong>{modalVehicle?.registrationNumber || "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Assigned Route:</span>
+                        <strong>{selectedTripModal.routeName}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Commercial Driver:</span>
+                        <strong>{modalDriverName}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Bus Attendant:</span>
+                        <strong>{modalAttendantName}</strong>
+                      </div>
+                    </div>
+                    <div className="cms-transport-trip-overview-col">
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Pickup Points:</span>
+                        <strong>{modalRouteStops.length} Configured Stops</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Assigned Students:</span>
+                        <strong>{modalAssignedStudents.length} Enrolled</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Route Distance:</span>
+                        <strong>{modalRoute?.totalDistanceKm ? `${modalRoute.totalDistanceKm} KM` : "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Estimated Trip Duration:</span>
+                        <strong>{modalRoute?.estimatedTimeMinutes ? `${modalRoute.estimatedTimeMinutes} Minutes` : "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Morning Departure / Arrival:</span>
+                        <strong>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Evening Departure / Arrival:</span>
+                        <strong>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "morning" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", padding: "14px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "10px", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>SCHEDULED DEPARTURE</small>
+                        <strong style={{ fontSize: "1rem" }}>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>ROUTE PATH</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalRoute?.routeStart || "Campus"} → {modalRoute?.routeEnd || modalRoute?.routeName || "Destination"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>COMMERCIAL DRIVER</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalDriverName} ({modalDriverPhone})</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>STATUS</small>
+                        <span className="cms-transport-pill pill-running">Scheduled / Running</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Configured Pickup Stops ({modalRouteStops.length})</h4>
+                      {modalRouteStops.length === 0 ? (
+                        <p style={{ color: "var(--cms-muted)", fontSize: "0.88rem" }}>No stops configured for this route.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="cms-table" style={{ width: "100%" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: "40px" }}>Stop</th>
+                                <th>Stop Name</th>
+                                <th>Pickup Time</th>
+                                <th>Location / Landmark</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modalRouteStops.map((stop, sIdx) => (
+                                <tr key={stop.id || sIdx}>
+                                  <td><strong>{sIdx + 1}</strong></td>
+                                  <td>{stop.pickupPointName || stop.pointName || "-"}</td>
+                                  <td>{stop.pickupTime || stop.morningTime || "-"}</td>
+                                  <td>{stop.location || stop.landmark || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "evening" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", padding: "14px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "10px", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>SCHEDULED DEPARTURE</small>
+                        <strong style={{ fontSize: "1rem" }}>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>RETURN ROUTE</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalRoute?.routeEnd || modalRoute?.routeName || "Destination"} → {modalRoute?.routeStart || "Campus"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>BUS ATTENDANT</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalAttendantName} ({modalAttendantPhone})</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>STATUS</small>
+                        <span className="cms-transport-pill pill-running">Scheduled / Running</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Drop Off Stops ({modalRouteStops.length})</h4>
+                      {modalRouteStops.length === 0 ? (
+                        <p style={{ color: "var(--cms-muted)", fontSize: "0.88rem" }}>No stops configured for this route.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="cms-table" style={{ width: "100%" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: "40px" }}>Stop</th>
+                                <th>Stop Name</th>
+                                <th>Drop Time</th>
+                                <th>Location / Landmark</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modalRouteStops.map((stop, sIdx) => (
+                                <tr key={stop.id || sIdx}>
+                                  <td><strong>{sIdx + 1}</strong></td>
+                                  <td>{stop.pickupPointName || stop.pointName || "-"}</td>
+                                  <td>{stop.dropTime || stop.eveningTime || "-"}</td>
+                                  <td>{stop.location || stop.landmark || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "students" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "0.92rem", fontWeight: "700", color: "var(--cms-text, #20251b)" }}>
+                        Enrolled Students ({modalAssignedStudents.length})
+                      </span>
+                      <div className="cms-transport-search" style={{ maxWidth: "300px" }}>
+                        <Search size={14} />
+                        <input
+                          placeholder="Search student by name or admission..."
+                          value={tripStudentSearch}
+                          onChange={(e) => setTripStudentSearch(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {filteredModalStudents.length === 0 ? (
+                      <div className="cms-transport-trip-empty">
+                        {modalAssignedStudents.length === 0
+                          ? "No students currently assigned to this vehicle. Students assigned in Student Transport will automatically appear here."
+                          : "No students matching your search."}
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="cms-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th style={{ width: "40px" }}>#</th>
+                              <th>Admission No</th>
+                              <th>Student Name</th>
+                              <th>Pickup Stop</th>
+                              <th>Fee Plan</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredModalStudents.map((student, idx) => (
+                              <tr key={student.id || student.studentId || idx}>
+                                <td>{idx + 1}</td>
+                                <td><strong>{student.admissionNo || "-"}</strong></td>
+                                <td>{student.studentName || "-"}</td>
+                                <td>{student.pickupPointName || "-"}</td>
+                                <td>{student.feePlan || "-"}</td>
+                                <td>
+                                  <StatusBadge value={student.status} />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tripModalTab === "history" && (
+                  <div>
+                    <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Vehicle Trip Logs</h4>
+                    {trips.filter((t) => String(t.vehicleId) === String(selectedTripModal.vehicleId) || String(t.assignmentId) === String(selectedTripModal.id)).length === 0 ? (
+                      <div style={{ padding: "16px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "8px", fontSize: "0.88rem", color: "var(--cms-muted, #737b68)", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                        No completed trip logs recorded in backend for this vehicle yet. Today's scheduled morning and evening runs are active.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="cms-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Trip Type</th>
+                              <th>Start Time</th>
+                              <th>End Time</th>
+                              <th>Students Present</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trips
+                              .filter((t) => String(t.vehicleId) === String(selectedTripModal.vehicleId) || String(t.assignmentId) === String(selectedTripModal.id))
+                              .map((t, tIdx) => (
+                                <tr key={t.id || tIdx}>
+                                  <td>{t.tripDate || "-"}</td>
+                                  <td>{t.tripType || "-"}</td>
+                                  <td>{t.startTime || "-"}</td>
+                                  <td>{t.endTime || "-"}</td>
+                                  <td>{t.studentsPresent || "-"}</td>
+                                  <td><StatusBadge value={t.status} /></td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -2851,7 +3551,11 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
               <div className="cms-card-body">{isLoading ? <SkeletonTable columns={4} rows={5} /> : renderGpsCards()}</div>
             </div>
           ) : (
-            renderTable(activeOperationsTab)
+            activeOperationsTab === "trips" ? (
+              renderVehicleTripsView()
+            ) : (
+              renderTable(activeOperationsTab)
+            )
           )}
         </div>
       );
