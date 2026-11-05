@@ -52,13 +52,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ITransportDriverDashboardService _driverDashboardService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly INotificationService? _notificationService;
 
         public TransportDriverDashboardController(
             ITransportDriverDashboardService driverDashboardService,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            INotificationService? notificationService = null)
         {
             _driverDashboardService = driverDashboardService;
             _jwtTokenHelper = jwtTokenHelper;
+            _notificationService = notificationService;
         }
 
         [HttpGet("notifications")]
@@ -128,6 +131,23 @@ namespace CollegeManagement.API.Controllers.V1
             if (staffId == null) return Unauthorized();
 
             var success = await _driverDashboardService.StartTripAsync(tripId, staffId.Value, ct);
+
+            if (success && _notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Transport Manager", "Parent", "Student" },
+                        null,
+                        "Bus Trip Started",
+                        $"Bus trip #{tripId} has started. Track live location in app.",
+                        "Transport",
+                        (int)tripId,
+                        "/transport/live-track");
+                }
+                catch { }
+            }
+
             return Ok(new { success = success, message = $"Trip {tripId} started." });
         }
 
@@ -138,6 +158,23 @@ namespace CollegeManagement.API.Controllers.V1
             if (staffId == null) return Unauthorized();
 
             var success = await _driverDashboardService.EndTripAsync(tripId, staffId.Value, ct);
+
+            if (success && _notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Transport Manager", "Admin" },
+                        null,
+                        "Bus Trip Completed",
+                        $"Bus trip #{tripId} completed successfully.",
+                        "Transport",
+                        (int)tripId,
+                        "/transport/trips");
+                }
+                catch { }
+            }
+
             return Ok(new { success = success, message = $"Trip {tripId} ended." });
         }
 
@@ -157,11 +194,37 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId == null) return Unauthorized();
 
+            var status = request?.Status ?? "Picked Up";
             var success = await _driverDashboardService.UpdateStudentAttendanceAsync(
                 studentId,
                 request?.TripId ?? 0L,
-                request?.Status ?? "Picked Up",
+                status,
                 ct);
+
+            if (success && _notificationService != null && studentId > 0)
+            {
+                try
+                {
+                    var timeStr = DateTime.Now.ToString("hh:mm tt");
+                    string message = status.ToLower() switch
+                    {
+                        "picked up" or "boarded" => $"Your ward has boarded the college bus at {timeStr}.",
+                        "dropped" or "dropped off" => $"Your ward has safely deboarded the college bus at {timeStr}.",
+                        "absent" or "skipped" => $"College bus departed stop. Student was marked absent/not present at stop at {timeStr}.",
+                        _ => $"Transport attendance update: status marked as {status} at {timeStr}."
+                    };
+
+                    await _notificationService.SendToStudentAsync(
+                        (int)studentId,
+                        $"Transport Update: {status}",
+                        message,
+                        "Transport",
+                        request?.TripId != null ? (int)request.TripId.Value : null,
+                        "/student/transport");
+                }
+                catch { }
+            }
+
             return Ok(new { success = success, message = $"Attendance for student {studentId} marked." });
         }
 

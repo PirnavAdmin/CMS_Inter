@@ -55,13 +55,19 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
+            string normalizedStaffType = staffType ?? "";
+            if (normalizedStaffType.Equals("NonTeaching", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedStaffType = "Non-Teaching";
+            }
+
             var conn = await GetOpenConnectionAsync();
             var designations = await conn.QueryAsync<DesignationResponseDto>(
                 "sp_GetDesignations",
                 new
                 {
                     p_IncludeInactive = includeInactive ? 1 : 0,
-                    p_StaffType = staffType ?? "",
+                    p_StaffType = normalizedStaffType,
                     p_DepartmentId = departmentId ?? 0,
                     p_CampusId = campusId
                 },

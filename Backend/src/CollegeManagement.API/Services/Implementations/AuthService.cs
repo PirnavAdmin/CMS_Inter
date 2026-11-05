@@ -245,15 +245,67 @@ namespace CollegeManagement.API.Services.Implementations
                     }
                 }
 
+                var allocSubjectsList = new List<string>();
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath, ProfileStatus, ProfileCompletionPercentage FROM Staff WHERE Id = @Id", 
+                        @"SELECT s.Id, d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, 
+                                 s.CampusId, s.BoardId, s.StaffType, s.PhotoPath, s.ProfileStatus, s.ProfileCompletionPercentage, s.DepartmentSpecificJson 
+                          FROM Staffs s 
+                          LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
+                          WHERE s.Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
-                        if (string.IsNullOrWhiteSpace(user.Designation)) user.Designation = staffInfo.Designation;
-                        if (string.IsNullOrWhiteSpace(user.EmployeeId)) user.EmployeeId = staffInfo.EmployeeId;
+                        var freshDesig = (string?)staffInfo.Designation;
+                        if (!string.IsNullOrWhiteSpace(freshDesig))
+                        {
+                            user.Designation = freshDesig;
+                            try
+                            {
+                                await connection.ExecuteAsync(
+                                    "UPDATE Users SET Designation = @Designation WHERE UserId = @UserId",
+                                    new { Designation = freshDesig, UserId = user.UserId });
+                            }
+                            catch { }
+                        }
+                        if (!string.IsNullOrWhiteSpace((string?)staffInfo.EmployeeId))
+                        {
+                            user.EmployeeId = (string)staffInfo.EmployeeId;
+                        }
+                    }
+
+                    try
+                    {
+                        var subs = await connection.QueryAsync<string>(
+                            @"SELECT s.SubjectName FROM StaffSubjectAllocations a 
+                              INNER JOIN Subjects s ON a.SubjectId = s.SubjectId 
+                              WHERE a.StaffId = @Id AND a.IsActive = 1",
+                            new { Id = user.StaffId.Value });
+                        allocSubjectsList = subs.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+                    }
+                    catch { }
+
+                    if (!allocSubjectsList.Any() && staffInfo?.DepartmentSpecificJson != null)
+                    {
+                        try
+                        {
+                            var jsonStr = (string)staffInfo.DepartmentSpecificJson;
+                            using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
+                            if (doc.RootElement.TryGetProperty("allocatedSubjects", out var el) || doc.RootElement.TryGetProperty("subjects", out el))
+                            {
+                                if (el.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                {
+                                    allocSubjectsList = el.EnumerateArray()
+                                        .Select(x => x.GetString())
+                                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                                        .Select(x => x!)
+                                        .Distinct()
+                                        .ToList();
+                                }
+                            }
+                        }
+                        catch { }
                     }
                     
                     var campuses = await connection.QueryAsync<int>(
@@ -324,7 +376,11 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
-                    Designation = user.Designation,
+                    Designation = (string?)staffInfo?.Designation ?? user.Designation,
+                    DesignationId = staffInfo?.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null,
+                    Department = (string?)staffInfo?.Department ?? string.Empty,
+                    DepartmentId = staffInfo?.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null,
+                    AllocatedSubjects = allocSubjectsList,
                     EmployeeId = user.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
                     StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
@@ -1252,6 +1308,9 @@ namespace CollegeManagement.API.Services.Implementations
             
             string? staffType = null;
             string? refreshPhotoPath = null;
+            string? refreshDept = null;
+            int? refreshDeptId = null;
+            int? refreshDesigId = null;
 
             if (user.AdminId.HasValue && user.AdminId.Value > 0)
             {
@@ -1261,7 +1320,10 @@ namespace CollegeManagement.API.Services.Implementations
             else if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                    "SELECT Designation, EmployeeId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
+                    @"SELECT d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, s.StaffType, s.PhotoPath 
+                      FROM Staffs s 
+                      LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
+                      WHERE s.Id = @Id", 
                     new { Id = user.StaffId.Value });
                 if (staffInfo != null)
                 {
@@ -1269,6 +1331,9 @@ namespace CollegeManagement.API.Services.Implementations
                     user.EmployeeId = staffInfo.EmployeeId;
                     staffType = staffInfo.StaffType;
                     refreshPhotoPath = (string?)staffInfo.PhotoPath;
+                    refreshDept = (string?)staffInfo.Department;
+                    refreshDeptId = staffInfo.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null;
+                    refreshDesigId = staffInfo.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null;
                 }
             }
 
@@ -1292,6 +1357,9 @@ namespace CollegeManagement.API.Services.Implementations
                     ? "Admin"
                     : (staffType ?? (user.StudentId.HasValue ? "Student" : "Non-Teaching")),
                 Designation = user.Designation,
+                DesignationId = refreshDesigId,
+                Department = refreshDept ?? string.Empty,
+                DepartmentId = refreshDeptId,
                 EmployeeId = user.EmployeeId,
                 PhotoPath = refreshPhotoPath,
                 PhotoUrl = refreshPhotoPath

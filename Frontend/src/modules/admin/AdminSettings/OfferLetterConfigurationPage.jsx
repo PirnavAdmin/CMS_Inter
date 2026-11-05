@@ -22,13 +22,20 @@ import {
   Check,
   X,
   CheckCircle2,
+  ChevronDown,
+  FileSpreadsheet,
+  FileCode,
+  Hash,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient from "@/api/axios.js";
 import templateApi from "@/api/templateApi.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { readNumberSeriesSettings } from "@/data/numberSeriesData.js";
+import { getNumberSeriesList } from "@/api/numberSeriesApi.js";
 import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import templatesImage from "@/assets/settings-3d/templates.png";
 import "./OfferLetterConfigurationPage.css";
@@ -231,6 +238,18 @@ export default function OfferLetterConfigurationPage() {
 
   // Preview Mode inside Editor (document vs pdf)
   const [editorPreviewMode, setEditorPreviewMode] = useState("document");
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target)) {
+        setExportDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Mini Preview Modal Popup for Catalog
   const [previewModalTemplate, setPreviewModalTemplate] = useState(null);
@@ -298,11 +317,68 @@ export default function OfferLetterConfigurationPage() {
     };
   }, [selectedCampus, currentDraft]);
 
-  const offerLetterSampleNumber = useMemo(() => {
-    const campusCode = selectedCampus?.campusCode || "PC";
-    const year = new Date().getFullYear();
-    return `${campusCode}-OL/${year}/0001`;
+  // Fetch live number series config from ID & Number Series module with fallback to cached/canonical
+  const [liveSeriesConfig, setLiveSeriesConfig] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    async function loadSeries() {
+      try {
+        const campusId = selectedCampus?.id ?? selectedCampus?.campusId;
+        const res = await getNumberSeriesList(campusId);
+        const list = res?.data || res || [];
+        if (Array.isArray(list)) {
+          const match = list.find(
+            (s) =>
+              s.seriesCode === "OFFER_LETTER_NO" ||
+              s.id === "offer-letter-no" ||
+              s.key === "offer-letter-no" ||
+              String(s.name || "").toLowerCase().includes("offer letter")
+          );
+          if (active && match) {
+            setLiveSeriesConfig(match);
+          }
+        }
+      } catch (err) {
+        // Fallback already handled
+      }
+    }
+    loadSeries();
+    return () => { active = false; };
   }, [selectedCampus]);
+
+  const offerLetterSeriesConfig = useMemo(() => {
+    if (liveSeriesConfig) return liveSeriesConfig;
+    try {
+      const allSeries = readNumberSeriesSettings();
+      const found = allSeries.find(
+        (s) =>
+          s.seriesCode === "OFFER_LETTER_NO" ||
+          s.id === "offer-letter-no" ||
+          s.key === "offer-letter-no" ||
+          String(s.name || "").toLowerCase().includes("offer letter")
+      );
+      if (found) return found;
+    } catch {}
+    return {
+      seriesCode: "OFFER_LETTER_NO",
+      name: "Staff Offer Letter Number",
+      format: "{CAMPUS}-OL/{YEAR}/{SEQ}",
+      prefix: "PC-OL",
+      numberLength: 4,
+    };
+  }, [liveSeriesConfig]);
+
+  // Format preview (showing pattern rather than hardcoded sequential count like 0001)
+  const offerLetterFormatPreview = useMemo(() => {
+    const campusCode = selectedCampus?.campusCode || "MAIN";
+    const year = new Date().getFullYear();
+    const rawFormat = offerLetterSeriesConfig?.format || "{CAMPUS}-OL/{YEAR}/{SEQ}";
+    return rawFormat
+      .replace(/{CAMPUS}/gi, campusCode)
+      .replace(/{YEAR}|{YYYY}/gi, String(year))
+      .replace(/{DEPT}/gi, "{DEPT}");
+  }, [selectedCampus, offerLetterSeriesConfig]);
 
   // Combined roles from Database (/api/v1/roles) + Standard intermediate presets
   const combinedRoleCategories = useMemo(() => {
@@ -640,6 +716,54 @@ export default function OfferLetterConfigurationPage() {
       window.print();
     } catch {
       window.print();
+    }
+  };
+
+  // Download official Excel docket with compensation breakdown and specifications
+  const handleDownloadExcel = () => {
+    try {
+      const empId = activeCandidate.data.EmployeeId || "Candidate";
+      const tmpl = currentDraft;
+
+      const specRows = [
+        ["PIRNAV EDUCATIONAL SOCIETY - OFFICIAL APPOINTMENT ORDER SPECIFICATIONS", ""],
+        ["Document Ref:", `PC-OL/${new Date().getFullYear()}/${empId}`],
+        ["Date of Issue:", activeCandidate.data.OfferDate || new Date().toLocaleDateString()],
+        ["Candidate / Staff Name:", activeCandidate.data.StaffName || ""],
+        ["Employee ID:", activeCandidate.data.EmployeeId || ""],
+        ["Designation:", activeCandidate.data.Designation || ""],
+        ["Department:", activeCandidate.data.Department || ""],
+        ["Campus Posting:", activeCandidate.data.CampusName || ""],
+        ["Effective Joining Date:", activeCandidate.data.JoiningDate || ""],
+        ["Reporting Authority:", activeCandidate.data.ReportingManager || ""],
+        ["Probation Period:", activeCandidate.data.ProbationPeriod || ""],
+        [],
+        ["COMPENSATION & SALARY STRUCTURE BREAKDOWN", ""],
+        ["Pay Component", "Annual Value (INR)"],
+        ["Annual CTC (Cost to Company)", activeCandidate.data.AnnualCtc || "Rs. 6,00,000/-"],
+        ["Basic Pay", activeCandidate.data.BasicPay || "Rs. 3,60,000/-"],
+        ["House Rent Allowance (HRA)", activeCandidate.data.Hra || "Rs. 1,44,000/-"],
+        ["Special Allowance", activeCandidate.data.SpecialAllowance || "Rs. 96,000/-"],
+        [],
+        ["TERMS & CONDITIONS / SERVICE BYLAWS", ""],
+        ...resolveTokens(tmpl.termsAndConditions || "", tmpl)
+          .split("\n")
+          .filter((l) => l.trim())
+          .map((line, idx) => [`Clause ${idx + 1}`, line.trim()]),
+        [],
+        ["Authorized Signatory:", tmpl.authorizedSignatoryName || "Dean of Academics & Administration"],
+        ["Signatory Role:", tmpl.authorizedSignatoryRole || "Directorate of Human Resources"],
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(specRows);
+      ws["!cols"] = [{ wch: 35 }, { wch: 75 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Appointment Order");
+      XLSX.writeFile(wb, `Offer_Letter_${empId}.xlsx`);
+      notify("Official Offer Letter Excel docket downloaded successfully.");
+    } catch (err) {
+      console.error("Excel download error:", err);
+      notify("Failed to export Excel docket.");
     }
   };
 
@@ -1263,15 +1387,15 @@ export default function OfferLetterConfigurationPage() {
         {activeTab === "editor" && (
           <div className="olc-editor-layout">
             {/* Left Column: Form Fields */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div className="olc-editor-form-col">
               {/* Template Meta Card */}
               <div className="olc-card">
-                <div className="olc-card-head">
+                <div className="olc-card-head olc-meta-card-head">
                   <h3 className="olc-card-title">
-                    <SlidersHorizontal size={17} style={{ color: "var(--cms-primary, #355e3b)" }} />
-                    Template Metadata &amp; Sequence Series
+                    <SlidersHorizontal size={17} style={{ color: "var(--cms-primary, #355e3b)", flexShrink: 0 }} />
+                    <span>Template Details &amp; Series</span>
                   </h3>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div className="olc-template-switcher">
                     {isCreatingNew ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span className="olc-badge olc-badge-primary" style={{ padding: "4px 10px", fontSize: "12px" }}>
@@ -1287,16 +1411,16 @@ export default function OfferLetterConfigurationPage() {
                         </button>
                       </div>
                     ) : (
-                      <>
-                        <span style={{ fontSize: "12px", color: "#64748b" }}>Selected:</span>
+                      <div className="olc-switcher-control">
+                        <span className="olc-switcher-label">Select Template:</span>
                         <select
-                          className="olc-select"
-                          style={{ width: "auto", fontWeight: 700 }}
+                          className="olc-switcher-select"
                           value={selectedTemplateId}
                           onChange={(e) => {
                             setIsCreatingNew(false);
                             setSelectedTemplateId(e.target.value);
                           }}
+                          title="Select offer letter template"
                         >
                           {templates.map((t) => (
                             <option key={t.id} value={t.id}>
@@ -1304,7 +1428,7 @@ export default function OfferLetterConfigurationPage() {
                             </option>
                           ))}
                         </select>
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1340,67 +1464,26 @@ export default function OfferLetterConfigurationPage() {
                   </div>
                 </div>
 
-                {/* Single Clean Dynamic Binding Field to ID & Number Series */}
-                <div
-                  className="olc-bound-series-container"
-                  style={{
-                    marginTop: "14px",
-                    padding: "12px 14px",
-                    background: "#f8fafc",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "8px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: "10px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div
-                      style={{
-                        width: "34px",
-                        height: "34px",
-                        borderRadius: "6px",
-                        background: "#e8f5e9",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--cms-primary, #355e3b)",
-                      }}
-                    >
-                      <FileText size={18} />
+                {/* Bound Number Series Format Pattern Preview (Sleek & Lightweight) */}
+                <div className="olc-bound-series-bar">
+                  <div className="olc-bound-series-info">
+                    <div className="olc-bound-series-icon">
+                      <Hash size={14} />
                     </div>
-                    <div>
-                      <div style={{ fontSize: "11px", fontWeight: "700", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                        Bound Number Series
+                    <div className="olc-bound-series-text">
+                      <div className="olc-bound-series-title-line">
+                        <span className="olc-bound-series-label">Bound Series:</span>
+                        <strong className="olc-bound-series-name">{offerLetterSeriesConfig.name || "Staff Offer Letter Number"}</strong>
+                        <code className="olc-bound-series-code">{offerLetterSeriesConfig.seriesCode || "OFFER_LETTER_NO"}</code>
                       </div>
-                      <div style={{ fontSize: "13.5px", fontWeight: "700", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
-                        Staff Offer Letter Number
-                        <code style={{ fontSize: "11.5px", background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px", color: "#0369a1", fontWeight: "600" }}>
-                          OFFER_LETTER_NO
-                        </code>
+                      <div className="olc-bound-series-preview-line">
+                        <span className="olc-bound-series-sublabel">Format Preview:</span>
+                        <code className="olc-bound-series-format-tag">{offerLetterFormatPreview}</code>
+                        <span className="olc-bound-series-hint">Auto-incremented on dispatch</span>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "11px", color: "#64748b" }}>Campus Sequence Sample</div>
-                      <div style={{ fontFamily: "monospace", fontSize: "12.5px", fontWeight: "700", color: "#15803d" }}>
-                        {offerLetterSampleNumber}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-ghost"
-                      style={{ fontSize: "11.5px", padding: "4px 8px" }}
-                      onClick={() => navigate("/dashboard/settings/number-series/offer-letter-no/edit")}
-                      title="Configure series pattern in ID & Number Series"
-                    >
-                      Configure Series →
-                    </button>
-                  </div>
                 </div>
               </div>
 
@@ -1608,17 +1691,83 @@ export default function OfferLetterConfigurationPage() {
             </div>
 
             {/* Right Column: Live Editor Proofing (Direct Visual Parity Document Sheet) */}
-            <div>
-              <div style={{ position: "sticky", top: "20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div className="olc-editor-preview-col">
+              <div className="olc-sticky-preview-wrap">
+                <div className="olc-preview-head">
                   <div>
-                    <h4 style={{ margin: 0, fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>Live Editor Proofing</h4>
-                    <span style={{ fontSize: "11.5px", color: "#64748b" }}>Visual parity preview</span>
+                    <h4 className="olc-preview-title">Live Editor Proofing</h4>
+                    <span className="olc-preview-subtitle">Visual parity preview with live candidate data</span>
+                  </div>
+
+                  {/* Export Button with Dropdown (PDF and Excel / Document) */}
+                  <div className="olc-export-dropdown-wrap" ref={exportDropdownRef} style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary olc-export-btn"
+                      onClick={() => setExportDropdownOpen((prev) => !prev)}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer", height: "34px", padding: "0 14px", fontSize: "12.5px" }}
+                    >
+                      <Download size={14} />
+                      <span>Export Letter</span>
+                      <ChevronDown size={13} style={{ transform: exportDropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                    </button>
+                    {exportDropdownOpen && (
+                      <div className="olc-export-dropdown-menu">
+                        <button
+                          type="button"
+                          className="olc-export-dropdown-item"
+                          onClick={() => {
+                            setExportDropdownOpen(false);
+                            handleDownloadPdf();
+                          }}
+                        >
+                          <span className="olc-export-icon-box pdf-type">
+                            <FileText size={16} />
+                          </span>
+                          <span className="olc-export-item-details">
+                            <strong>Download as PDF (.pdf)</strong>
+                            <small>Official QuestPDF document matching preview</small>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="olc-export-dropdown-item"
+                          onClick={() => {
+                            setExportDropdownOpen(false);
+                            handleDownloadExcel();
+                          }}
+                        >
+                          <span className="olc-export-icon-box excel-type">
+                            <FileSpreadsheet size={16} />
+                          </span>
+                          <span className="olc-export-item-details">
+                            <strong>Download as Excel (.xlsx)</strong>
+                            <small>Appointment specifications &amp; salary ledger</small>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="olc-export-dropdown-item"
+                          onClick={() => {
+                            setExportDropdownOpen(false);
+                            handleDownloadDocument(currentDraft);
+                          }}
+                        >
+                          <span className="olc-export-icon-box doc-type">
+                            <FileCode size={16} />
+                          </span>
+                          <span className="olc-export-item-details">
+                            <strong>Download as Document (.doc)</strong>
+                            <small>Microsoft Word editable appointment order</small>
+                          </span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* Render Embedded Sheet */}
-                <div style={{ background: "#f1f5f9", padding: "14px", borderRadius: "10px", border: "1px solid #cbd5e1", maxHeight: "calc(100vh - 160px)", overflowY: "auto" }}>
+                <div className="olc-sheet-container">
                   {renderDocumentSheet(currentDraft, false, true)}
                 </div>
               </div>

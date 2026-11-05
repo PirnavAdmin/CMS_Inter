@@ -103,8 +103,7 @@ const NON_TEACHING_DESIGNATIONS = [
   "Assistant Warden",
   "Warden",
   "Hostel Caretaker",
-  "Bus Driver",
-  "Driver",
+    "Driver",
   "Transport Incharge",
   "Transport Coordinator",
   "Security Guard",
@@ -817,7 +816,9 @@ const StaffList = () => {
                 {staffList.map((staff) => {
                   const fullName = `${staff.firstName || ""} ${staff.lastName || ""}`.trim();
                   const initials = `${(staff.firstName?.[0] || "").toUpperCase()}${(staff.lastName?.[0] || "").toUpperCase()}` || "ST";
-                  const isActive = (staff.status || "Active").toLowerCase() === "active";
+                  const statusRaw = staff.status || "Active";
+                  const isTransferred = statusRaw.toLowerCase().includes("transfer");
+                  const isActive = !isTransferred && statusRaw.toLowerCase() === "active";
 
                   return (
                     <tr key={staff.id || staff.staffId}>
@@ -847,8 +848,11 @@ const StaffList = () => {
 
                       {/* Status */}
                       <td>
-                        <span className={`staff-status-badge ${isActive ? "staff-status-active" : "staff-status-inactive"}`}>
-                          {isActive ? "Active" : "Inactive"}
+                        <span
+                          className={`staff-status-badge ${isTransferred ? "staff-status-transferred" : isActive ? "staff-status-active" : "staff-status-inactive"}`}
+                          style={isTransferred ? { background: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe" } : undefined}
+                        >
+                          {isTransferred ? "Transferred" : isActive ? "Active" : "Inactive"}
                         </span>
                       </td>
 

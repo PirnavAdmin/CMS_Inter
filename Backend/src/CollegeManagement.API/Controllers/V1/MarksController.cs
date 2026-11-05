@@ -20,10 +20,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class MarksController : ControllerBase
     {
         private readonly IMarksService _marksService;
+        private readonly INotificationService _notificationService;
 
-        public MarksController(IMarksService marksService)
+        public MarksController(IMarksService marksService, INotificationService notificationService)
         {
             _marksService = marksService;
+            _notificationService = notificationService;
         }
 
         [HttpGet]
@@ -72,7 +74,16 @@ namespace CollegeManagement.API.Controllers.V1
                     }
                 }
             }
-            return Ok(await _marksService.BulkSaveMarksAsync(dto));
+            var saveResult = await _marksService.BulkSaveMarksAsync(dto);
+            try
+            {
+                var staffName = User.Identity?.Name ?? "Faculty";
+                var examId = dto?.Marks?.FirstOrDefault()?.ExaminationId;
+                await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+            }
+            catch { }
+            return Ok(saveResult);
         }
 
         [HttpPut("{id:int}")]
@@ -121,11 +132,30 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpPost("verify")]
         [Authorize(Roles = "Admin,Super Admin,Principal")]
-        public async Task<IActionResult> VerifyMarks([FromBody] VerifyMarksDto dto) => Ok(new { Count = await _marksService.VerifyMarksAsync(dto) });
+        public async Task<IActionResult> VerifyMarks([FromBody] VerifyMarksDto dto)
+        {
+            var count = await _marksService.VerifyMarksAsync(dto);
+            try
+            {
+                await _notificationService.SendToRoleAsync("Faculty", null, "Marks Approved", $"Examination #{dto.ExaminationId} marks have been verified & approved by Admin.", "Marks", dto.ExaminationId, "/dashboard/faculty/marks");
+            }
+            catch { }
+            return Ok(new { Count = count });
+        }
 
         [HttpPatch("publish")]
         [Authorize(Roles = "Admin,Super Admin,Principal")]
-        public async Task<IActionResult> PublishMarks([FromBody] PublishMarksDto dto) => Ok(new { Count = await _marksService.PublishMarksAsync(dto) });
+        public async Task<IActionResult> PublishMarks([FromBody] PublishMarksDto dto)
+        {
+            var count = await _marksService.PublishMarksAsync(dto);
+            try
+            {
+                await _notificationService.SendToRoleAsync("Student", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published. Check your grades in student portal.", "Marks", dto.ExaminationId, "/student/results");
+                await _notificationService.SendToRoleAsync("Parent", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published.", "Marks", dto.ExaminationId, "/parent/dashboard");
+            }
+            catch { }
+            return Ok(new { Count = count });
+        }
 
         [HttpGet("summary/{examinationId:int}")]
         public async Task<IActionResult> GetSummary(int examinationId) => Ok(await _marksService.GetSummaryAsync(examinationId));

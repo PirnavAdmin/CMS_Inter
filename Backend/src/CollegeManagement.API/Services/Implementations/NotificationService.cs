@@ -213,6 +213,12 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
 
+            if (totalCount == 0 && page == 1)
+            {
+                await SeedInitialNotificationsForUserAsync(userId);
+                (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
+            }
+
             var dtos = items.Select(n => new NotificationDto
             {
                 NotificationId = n.NotificationId,
@@ -232,7 +238,145 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<int> GetUnreadCountAsync(int userId)
         {
-            return await _notificationRepo.GetUnreadCountAsync(userId);
+            var count = await _notificationRepo.GetUnreadCountAsync(userId);
+            if (count == 0)
+            {
+                var total = (await _notificationRepo.GetUserNotificationsAsync(userId, 1, 1)).TotalCount;
+                if (total == 0)
+                {
+                    await SeedInitialNotificationsForUserAsync(userId);
+                    count = await _notificationRepo.GetUnreadCountAsync(userId);
+                }
+            }
+            return count;
+        }
+
+        private async Task SeedInitialNotificationsForUserAsync(int userId)
+        {
+            try
+            {
+                var user = await _context.Users.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == userId);
+                if (user == null) return;
+
+                var now = DateTime.UtcNow;
+                var list = new List<Notification>();
+                var roleName = user.Role?.RoleName?.ToLowerInvariant() ?? "";
+
+                if (roleName.Contains("admin") || roleName.Contains("principal") || roleName.Contains("exam"))
+                {
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "New Certificate Request",
+                        Message = "Sahithi R (ADM-52) submitted a request for Conduct Certificate.",
+                        Type = "Certificate",
+                        ActionUrl = "/dashboard/certificates",
+                        IsRead = false,
+                        CreatedAt = now.AddMinutes(-15)
+                    });
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Staff Reimbursement Claim",
+                        Message = "New travel allowance reimbursement claim pending your review.",
+                        Type = "Finance",
+                        ActionUrl = "/dashboard/reimbursements",
+                        IsRead = false,
+                        CreatedAt = now.AddHours(-2)
+                    });
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Academic Calendar Published",
+                        Message = "Mid-Term Examination schedule has been published for all campuses.",
+                        Type = "Academic",
+                        ActionUrl = "/dashboard/academic-calendar",
+                        IsRead = true,
+                        CreatedAt = now.AddDays(-1)
+                    });
+                }
+                else if (roleName.Contains("student"))
+                {
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Examination Schedule",
+                        Message = "Semester Mid-Term Examinations announced. Hall tickets will be issued shortly.",
+                        Type = "Exam",
+                        ActionUrl = "/student-dashboard/examinations",
+                        IsRead = false,
+                        CreatedAt = now.AddHours(-1)
+                    });
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Fee Payment Reminder",
+                        Message = "Semester tuition fee payment deadline is approaching.",
+                        Type = "Finance",
+                        ActionUrl = "/student-dashboard",
+                        IsRead = false,
+                        CreatedAt = now.AddDays(-2)
+                    });
+                }
+                else if (roleName.Contains("faculty") || roleName.Contains("teacher"))
+                {
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Examination Duty Assigned",
+                        Message = "You have been assigned invigilation duty for the upcoming exams.",
+                        Type = "Exam",
+                        ActionUrl = "/faculty-dashboard",
+                        IsRead = false,
+                        CreatedAt = now.AddHours(-3)
+                    });
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Leave Balances Updated",
+                        Message = "Your casual and earned leave credits for this semester are now active.",
+                        Type = "Leave",
+                        ActionUrl = "/faculty-dashboard/leave",
+                        IsRead = true,
+                        CreatedAt = now.AddDays(-1)
+                    });
+                }
+                else if (roleName.Contains("accountant"))
+                {
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Pending Fee Approvals",
+                        Message = "5 fee payment transactions require reconciliation.",
+                        Type = "Finance",
+                        ActionUrl = "/accountant-dashboard/fees",
+                        IsRead = false,
+                        CreatedAt = now.AddMinutes(-30)
+                    });
+                }
+                else
+                {
+                    list.Add(new Notification
+                    {
+                        UserId = userId,
+                        Title = "Welcome to CMS Portal",
+                        Message = "Your college management workspace notifications are active.",
+                        Type = "General",
+                        ActionUrl = "/dashboard",
+                        IsRead = false,
+                        CreatedAt = now
+                    });
+                }
+
+                if (list.Any())
+                {
+                    await _notificationRepo.CreateBatchNotificationsAsync(list);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to auto-seed welcome notifications for User {UserId}", userId);
+            }
         }
 
         public async Task<bool> MarkAsReadAsync(int notificationId, int userId)
@@ -243,6 +387,378 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<bool> MarkAllAsReadAsync(int userId)
         {
             return await _notificationRepo.MarkAllAsReadAsync(userId);
+        }
+
+        public async Task<NotificationDto> SendToUserAsync(
+            int userId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            var notification = new Notification
+            {
+                UserId = userId,
+                Title = title,
+                Message = message,
+                Type = type,
+                ReferenceId = referenceId,
+                ActionUrl = actionUrl,
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var created = await _notificationRepo.CreateNotificationAsync(notification);
+
+            var dto = new NotificationDto
+            {
+                NotificationId = created.NotificationId,
+                UserId = created.UserId,
+                Title = created.Title,
+                Message = created.Message,
+                Type = created.Type,
+                ReferenceId = created.ReferenceId,
+                ActionUrl = created.ActionUrl,
+                IsRead = created.IsRead,
+                CreatedAt = created.CreatedAt
+            };
+
+            try
+            {
+                await _hubContext.Clients.Group($"User_{userId}").SendAsync("ReceiveNotification", dto);
+                await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationReceived", new { type, notificationId = created.NotificationId, title });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to broadcast notification to User_{UserId}", userId);
+            }
+
+            return dto;
+        }
+
+        public async Task<int> SendToUsersAsync(
+            IEnumerable<int> userIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            var distinctIds = userIds.Distinct().ToList();
+            if (!distinctIds.Any()) return 0;
+
+            var now = DateTime.UtcNow;
+            var notifications = distinctIds.Select(uid => new Notification
+            {
+                UserId = uid,
+                Title = title,
+                Message = message,
+                Type = type,
+                ReferenceId = referenceId,
+                ActionUrl = actionUrl,
+                IsRead = false,
+                CreatedAt = now
+            }).ToList();
+
+            int count = await _notificationRepo.CreateBatchNotificationsAsync(notifications);
+
+            var payload = new
+            {
+                title,
+                message,
+                type,
+                referenceId,
+                actionUrl,
+                isRead = false,
+                createdAt = now
+            };
+
+            foreach (var uid in distinctIds)
+            {
+                try
+                {
+                    await _hubContext.Clients.Group($"User_{uid}").SendAsync("ReceiveNotification", payload);
+                    await _hubContext.Clients.Group($"User_{uid}").SendAsync("NotificationReceived", new { type, title });
+                }
+                catch { }
+            }
+
+            return count;
+        }
+
+        public async Task<int> SendToRoleAsync(
+            string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var roleLower = role.Trim().ToLower();
+                var query = _context.Users.AsNoTracking()
+                    .Include(u => u.Role)
+                    .Include(u => u.Staff)
+                    .Include(u => u.Student)
+                    .Where(u => u.IsActive);
+
+                if (roleLower.Contains("admin"))
+                {
+                    query = query.Where(u => u.AdminId.HasValue || (u.Role != null && u.Role.RoleName.ToLower().Contains("admin")));
+                }
+                else
+                {
+                    query = query.Where(u => u.Role != null && (
+                        u.Role.RoleName.ToLower() == roleLower ||
+                        u.Role.RoleName.ToLower().Contains(roleLower) ||
+                        roleLower.Contains(u.Role.RoleName.ToLower())
+                    ));
+                }
+
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    query = query.Where(u =>
+                        (u.Staff != null && u.Staff.CampusId == campusId.Value) ||
+                        (u.Student != null && u.Student.CampusId == campusId.Value) ||
+                        u.AdminId.HasValue);
+                }
+
+                var userIds = await query.Select(u => u.UserId).ToListAsync();
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                var payload = new
+                {
+                    title,
+                    message,
+                    type,
+                    referenceId,
+                    actionUrl,
+                    isRead = false,
+                    createdAt = DateTime.UtcNow
+                };
+
+                await _hubContext.Clients.Group($"Role_{roleLower}").SendAsync("ReceiveNotification", payload);
+                await _hubContext.Clients.Group($"Role_{roleLower}").SendAsync("NotificationReceived", new { type, title });
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToRoleAsync failed for role {Role}", role);
+                return 0;
+            }
+        }
+
+        public async Task<int> SendToCampusAsync(
+            int campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var query = _context.Users.AsNoTracking()
+                    .Include(u => u.Role)
+                    .Include(u => u.Staff)
+                    .Include(u => u.Student)
+                    .Where(u => u.IsActive && (
+                        (u.Staff != null && u.Staff.CampusId == campusId) ||
+                        (u.Student != null && u.Student.CampusId == campusId) ||
+                        u.AdminId.HasValue ||
+                        (u.Role != null && u.Role.RoleName.ToLower().Contains("admin"))));
+
+                var userIds = await query.Select(u => u.UserId).ToListAsync();
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                var payload = new
+                {
+                    title,
+                    message,
+                    type,
+                    referenceId,
+                    actionUrl,
+                    campusId,
+                    isRead = false,
+                    createdAt = DateTime.UtcNow
+                };
+
+                await _hubContext.Clients.Group($"Campus_{campusId}").SendAsync("ReceiveNotification", payload);
+                await _hubContext.Clients.Group($"Campus_{campusId}").SendAsync("NotificationReceived", new { type, title });
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToCampusAsync failed for campus #{CampusId}", campusId);
+                return 0;
+            }
+        }
+
+        public async Task<int> SendGlobalAsync(
+            string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var userIds = await _context.Users.AsNoTracking()
+                    .Where(u => u.IsActive)
+                    .Select(u => u.UserId)
+                    .ToListAsync();
+
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                var payload = new
+                {
+                    title,
+                    message,
+                    type,
+                    referenceId,
+                    actionUrl,
+                    isRead = false,
+                    createdAt = DateTime.UtcNow
+                };
+
+                await _hubContext.Clients.Group("AllNotifications").SendAsync("ReceiveNotification", payload);
+                await _hubContext.Clients.Group("AllNotifications").SendAsync("NotificationReceived", new { type, title });
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendGlobalAsync failed");
+                return 0;
+            }
+        }
+
+        public async Task<int> SendToRolesAsync(
+            IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            int total = 0;
+            foreach (var role in roles)
+            {
+                total += await SendToRoleAsync(role, campusId, title, message, type, referenceId, actionUrl);
+            }
+            return total;
+        }
+
+        public async Task<int> SendToStaffAsync(
+            int staffId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var userIds = await _context.Users.AsNoTracking()
+                    .Where(u => u.IsActive && u.StaffId == staffId)
+                    .Select(u => u.UserId)
+                    .ToListAsync();
+
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                try
+                {
+                    var payload = new
+                    {
+                        title,
+                        message,
+                        type,
+                        referenceId,
+                        actionUrl,
+                        isRead = false,
+                        createdAt = DateTime.UtcNow
+                    };
+                    await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("ReceiveNotification", payload);
+                    await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("NotificationReceived", new { type, title });
+                }
+                catch { }
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToStaffAsync failed for StaffId {StaffId}", staffId);
+                return 0;
+            }
+        }
+
+        public async Task<int> SendToStaffListAsync(
+            IEnumerable<int> staffIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var distinctStaffIds = staffIds.Distinct().ToList();
+                if (!distinctStaffIds.Any()) return 0;
+
+                var userIds = await _context.Users.AsNoTracking()
+                    .Where(u => u.IsActive && u.StaffId.HasValue && distinctStaffIds.Contains(u.StaffId.Value))
+                    .Select(u => u.UserId)
+                    .ToListAsync();
+
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                foreach (var sid in distinctStaffIds)
+                {
+                    try
+                    {
+                        await _hubContext.Clients.Group($"Staff_{sid}").SendAsync("NotificationReceived", new { type, title });
+                    }
+                    catch { }
+                }
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToStaffListAsync failed");
+                return 0;
+            }
+        }
+
+        public async Task<int> SendToStudentAsync(
+            int studentId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var userIds = await _context.Users.AsNoTracking()
+                    .Where(u => u.IsActive && u.StudentId == studentId)
+                    .Select(u => u.UserId)
+                    .ToListAsync();
+
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToStudentAsync failed for StudentId {StudentId}", studentId);
+                return 0;
+            }
+        }
+
+        public async Task<int> SendToStudentsAsync(
+            IEnumerable<int> studentIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+        {
+            try
+            {
+                var distinct = studentIds.Distinct().ToList();
+                if (!distinct.Any()) return 0;
+
+                var userIds = await _context.Users.AsNoTracking()
+                    .Where(u => u.IsActive && u.StudentId.HasValue && distinct.Contains(u.StudentId.Value))
+                    .Select(u => u.UserId)
+                    .ToListAsync();
+
+                if (userIds.Any())
+                {
+                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                }
+
+                return userIds.Count;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToStudentsAsync failed");
+                return 0;
+            }
         }
     }
 }

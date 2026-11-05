@@ -42,7 +42,8 @@ namespace CollegeManagement.API.Services.Implementations
                 request.Status,
                 pageNumber,
                 pageSize,
-                request.CampusId);
+                request.CampusId,
+                request.BoardId);
 
             return new PagedAcademicYearResponseDto
             {
