@@ -874,7 +874,81 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating Result ID: {ResultId}", resultId);
             var updated = await _resultService.UpdateResultAsync(resultId, request);
             if (!updated) return BadRequest(new { success = false, message = "Result cannot be updated." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent" },
+                        null,
+                        "Examination Result Updated / Republished",
+                        $"Examination Result #{resultId} has been updated/recalculated. Please check the updated memo in your portal.",
+                        "Results",
+                        resultId,
+                        "/student/results");
+                }
+                catch { }
+            }
+
             return Ok(new { success = true, message = "Result updated successfully." });
+        }
+
+        /// <summary>
+        /// Dispatches student pass/fail outcome alert to student and parents.
+        /// </summary>
+        [HttpPost("notify-pass-fail/{studentId:int}")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Exam Cell,Examination Cell")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> NotifyStudentPassFail(
+            int studentId,
+            [FromQuery] int examinationId,
+            [FromQuery] string status,
+            [FromQuery] decimal? gpa = null)
+        {
+            if (studentId <= 0 || examinationId <= 0 || string.IsNullOrWhiteSpace(status))
+                return BadRequest(new { success = false, message = "Student ID, Exam ID, and Status are required." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var isPass = status.Equals("Pass", StringComparison.OrdinalIgnoreCase);
+                    var gpaText = gpa.HasValue ? $" (GPA: {gpa.Value:F2})" : "";
+                    var title = isPass ? "Examination Result: PASS" : "Examination Result: Supplementary / Improvement Required";
+                    var studentMsg = isPass
+                        ? $"Congratulations! You have PASSED examination #{examinationId}{gpaText}. Check your marks memo in the portal."
+                        : $"Your result for examination #{examinationId} has been published: Status: {status}{gpaText}. Please consult your academic advisor.";
+                    var parentMsg = isPass
+                        ? $"Result Announcement: Your ward has PASSED examination #{examinationId}{gpaText}."
+                        : $"Result Alert: Your ward's examination #{examinationId} status is {status}{gpaText}.";
+
+                    await _notificationService.SendToStudentAsync(
+                        studentId,
+                        title,
+                        studentMsg,
+                        "Results",
+                        examinationId,
+                        "/student/results");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        null,
+                        title,
+                        parentMsg,
+                        "Results",
+                        examinationId,
+                        "/parent/results");
+
+                    return Ok(new { success = true, message = "Pass/Fail notification sent to student and parent." });
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, new { success = false, message = ex.Message });
+                }
+            }
+
+            return Ok(new { success = true, message = "Notification service unavailable." });
         }
     }
 }

@@ -146,8 +146,26 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var slot = await _timetableService.GetByIdAsync(id);
                 var success = await _timetableService.DeleteAsync(id);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null && slot != null)
+                {
+                    try
+                    {
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            slot.CampusId,
+                            "Class Cancelled",
+                            $"Notice: Class for {slot.SubjectName ?? "Subject"} (Section #{slot.SectionId}, {slot.DayName}) has been CANCELLED.",
+                            "Timetable",
+                            slot.SectionId,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return NoContent();
             }
             catch (InvalidOperationException ex)

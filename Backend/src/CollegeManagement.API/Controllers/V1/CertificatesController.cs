@@ -373,6 +373,22 @@ public class CertificatesController : ControllerBase
         var success = await _service.MoveStatusAsync(id, "Generated", userName, ct);
         if (!success) return NotFound(new { message = "Certificate not found or could not be generated." });
 
+        try
+        {
+            var cert = await _service.GetByIdAsync(id, ct);
+            if (cert != null && cert.StudentId > 0)
+            {
+                await _notificationService.SendToStudentAsync(
+                    cert.StudentId,
+                    "Certificate Generated",
+                    $"Your {cert.CertificateType} certificate request has been generated and is pending final approval.",
+                    "Certificates",
+                    id,
+                    "/student/certificates");
+            }
+        }
+        catch { }
+
         return Ok(new { success = true, message = "Certificate generated successfully" });
     }
 
@@ -389,6 +405,33 @@ public class CertificatesController : ControllerBase
         var success = await _service.MoveStatusAsync(id, "Approved", userName, ct);
         if (!success) return NotFound(new { message = "Certificate not found" });
 
+        try
+        {
+            var cert = await _service.GetByIdAsync(id, ct);
+            if (cert != null)
+            {
+                if (cert.StudentId > 0)
+                {
+                    await _notificationService.SendToStudentAsync(
+                        cert.StudentId,
+                        "Certificate Approved",
+                        $"Your {cert.CertificateType} certificate application (#{id}) has been APPROVED.",
+                        "Certificates",
+                        id,
+                        "/student/certificates");
+                }
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    cert.CampusId,
+                    "Certificate Approved",
+                    $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been approved.",
+                    "Certificates",
+                    id,
+                    "/parent/certificates");
+            }
+        }
+        catch { }
+
         return Ok(new { success = true, message = "Certificate approved successfully" });
     }
 
@@ -404,6 +447,33 @@ public class CertificatesController : ControllerBase
         var issuer = issuedBy ?? GetCurrentUserName("Principal");
         var success = await _service.MoveStatusAsync(id, "Issued", issuer, ct);
         if (!success) return NotFound(new { message = "Certificate not found" });
+
+        try
+        {
+            var cert = await _service.GetByIdAsync(id, ct);
+            if (cert != null)
+            {
+                if (cert.StudentId > 0)
+                {
+                    await _notificationService.SendToStudentAsync(
+                        cert.StudentId,
+                        "Certificate Ready for Download",
+                        $"Your {cert.CertificateType} certificate (#{id}) has been ISSUED and is ready for download.",
+                        "Certificates",
+                        id,
+                        $"/student/certificates");
+                }
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    cert.CampusId,
+                    "Certificate Ready for Download",
+                    $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been issued and is available for download.",
+                    "Certificates",
+                    id,
+                    "/parent/certificates");
+            }
+        }
+        catch { }
 
         return Ok(new { success = true, message = "Certificate issued successfully" });
     }

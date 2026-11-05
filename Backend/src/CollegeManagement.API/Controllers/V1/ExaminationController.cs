@@ -752,6 +752,29 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating schedule ID: {Id} for Examination ID: {ExamId}", examScheduleId, examinationId);
             var result = await _examinationService.UpdateExamScheduleAsync(examScheduleId, request);
             if (result == null) return NotFound(new { message = "Schedule not found." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? request.CampusId ?? ResolveCampusId();
+                    var roomText = !string.IsNullOrWhiteSpace(result.RoomNumber) ? $" Room: {result.RoomNumber}," : string.Empty;
+                    var timeText = $"{result.StartTime:hh\\:mm} - {result.EndTime:hh\\:mm}";
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Exam Schedule / Room Updated",
+                        $"Exam slot for '{result.SubjectName ?? "Subject"}' ({examName}) updated.{roomText} Date: {result.ExamDate:yyyy-MM-dd}, Time: {timeText}.",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 
@@ -897,6 +920,39 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Generating hall tickets for Examination ID: {ExamId}", request.ExaminationId);
             var result = await _examinationService.GenerateHallTicketsAsync(request);
+
+            if (_notificationService != null && result != null && result.Any())
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(request.ExaminationId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var studentIds = result.Select(h => h.StudentId).Where(id => id > 0).Distinct().ToList();
+
+                    if (studentIds.Any())
+                    {
+                        await _notificationService.SendToStudentsAsync(
+                            studentIds,
+                            "Hall Ticket Available",
+                            $"Your Hall Ticket for '{examName}' is now generated and ready for download.",
+                            "Examination",
+                            request.ExaminationId,
+                            $"/student/halltickets/{request.ExaminationId}");
+                    }
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        campusId,
+                        "Hall Ticket Available",
+                        $"Hall tickets for '{examName}' have been generated and are available in the portal.",
+                        "Examination",
+                        request.ExaminationId,
+                        $"/parent/dashboard");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 

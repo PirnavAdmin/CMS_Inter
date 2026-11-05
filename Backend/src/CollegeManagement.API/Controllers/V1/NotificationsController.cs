@@ -222,5 +222,51 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(500, new { success = false, message = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Broadcast an important college announcement to students, parents, faculty, and staff.
+        /// </summary>
+        [HttpPost("broadcast-announcement")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> BroadcastAnnouncement([FromBody] SendNotificationRequestDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Message))
+                return BadRequest(new { success = false, message = "Title and Message are required." });
+
+            try
+            {
+                var title = dto.Title.StartsWith("Announcement", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Announcement: {dto.Title}";
+                var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Announcement", dto.ReferenceId, dto.ActionUrl ?? "/announcements");
+                return Ok(new { success = true, recipientCount = count, message = "Announcement broadcasted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Broadcast an official circular to students, parents, faculty, and staff.
+        /// </summary>
+        [HttpPost("broadcast-circular")]
+        [Authorize(Roles = "Super Admin,Admin,Principal")]
+        public async Task<IActionResult> BroadcastCircular([FromBody] SendNotificationRequestDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Message))
+                return BadRequest(new { success = false, message = "Title and Message are required." });
+
+            try
+            {
+                var title = dto.Title.StartsWith("Circular", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Circular: {dto.Title}";
+                var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Circular", dto.ReferenceId, dto.ActionUrl ?? "/circulars");
+                return Ok(new { success = true, recipientCount = count, message = "Circular published and broadcasted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
     }
 }
