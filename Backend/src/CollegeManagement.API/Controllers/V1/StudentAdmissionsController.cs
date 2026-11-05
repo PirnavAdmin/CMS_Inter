@@ -4,6 +4,10 @@ using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -15,11 +19,14 @@ namespace CollegeManagement.API.Controllers.V1
     public class StudentAdmissionController : ControllerBase
     {
         private readonly IStudentAdmissionService _service;
+        private readonly INotificationService? _notificationService;
 
         public StudentAdmissionController(
-            IStudentAdmissionService service)
+            IStudentAdmissionService service,
+            INotificationService? notificationService = null)
         {
             _service = service;
+            _notificationService = notificationService;
         }
 
         // =========================================================
@@ -57,6 +64,23 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var result =
                     await _service.CreateAsync(request);
+
+                if (_notificationService != null && result != null)
+                {
+                    try
+                    {
+                        var studentName = $"{request.FirstName} {request.LastName}".Trim();
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Admin", "Super Admin", "Principal" },
+                            request.SourceCampusId,
+                            "New Admission Application",
+                            $"New admission application #{result.AdmissionId} submitted for {studentName}.",
+                            "Admission",
+                            result.AdmissionId,
+                            "/dashboard/admissions");
+                    }
+                    catch { }
+                }
 
                 return CreatedAtAction(
                     nameof(GetById),
@@ -386,6 +410,24 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var admission = await _service.GetByIdAsync(id);
+                        var studentName = admission != null ? $"{admission.FirstName} {admission.LastName}".Trim() : $"Applicant #{id}";
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Admin", "Principal", "Accountant" },
+                            admission?.CampusId,
+                            "Admission Approved",
+                            $"Admission #{id} for {studentName} has been approved.",
+                            "Admission",
+                            id,
+                            "/dashboard/admissions");
+                    }
+                    catch { }
+                }
+
                 return Ok(new
                 {
                     statusCode = 200,
@@ -692,4 +734,3 @@ namespace CollegeManagement.API.Controllers.V1
         public int? AcademicYearId { get; set; }
     }
 }
-

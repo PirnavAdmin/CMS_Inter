@@ -13,17 +13,34 @@ namespace CollegeManagement.API.Hubs
         public override async Task OnConnectedAsync()
         {
             var user = Context.User;
-            var roleClaim = user?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role || c.Type == "role")?.Value;
-            var campusClaim = user?.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId")?.Value;
+            var roleClaims = user?.Claims
+                .Where(c => c.Type == ClaimTypes.Role || c.Type == "role" || c.Type == "roles")
+                .Select(c => c.Value)
+                .Distinct()
+                .ToList();
 
-            if (!string.IsNullOrEmpty(roleClaim))
+            if (roleClaims != null && roleClaims.Any())
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, $"Role_{roleClaim.ToLowerInvariant()}");
+                foreach (var role in roleClaims)
+                {
+                    if (!string.IsNullOrWhiteSpace(role))
+                    {
+                        await Groups.AddToGroupAsync(Context.ConnectionId, $"Role_{role.Trim().ToLowerInvariant()}");
+                        await Groups.AddToGroupAsync(Context.ConnectionId, $"Role_{role.Trim()}");
+                    }
+                }
             }
 
+            var campusClaim = user?.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId")?.Value;
             if (!string.IsNullOrEmpty(campusClaim))
             {
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"Campus_{campusClaim}");
+            }
+
+            var staffClaim = user?.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
+            if (!string.IsNullOrEmpty(staffClaim))
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"Staff_{staffClaim}");
             }
 
             var userIdClaim = user?.Claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier || c.Type == "UserId" || c.Type == "sub" || c.Type == "userId")?.Value;

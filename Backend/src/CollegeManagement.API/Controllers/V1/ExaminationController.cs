@@ -31,15 +31,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IExaminationService _examinationService;
         private readonly IExaminationExportService _exportService;
         private readonly ILogger<ExaminationController> _logger;
+        private readonly INotificationService? _notificationService;
 
         public ExaminationController(
             IExaminationService examinationService,
             IExaminationExportService exportService,
-            ILogger<ExaminationController> logger)
+            ILogger<ExaminationController> logger,
+            INotificationService? notificationService = null)
         {
             _examinationService = examinationService;
             _exportService = exportService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -598,6 +601,21 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { message = $"Duty assignment with ID {dutyId} was not found or could not be updated." });
             }
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToStaffAsync(
+                        request.NewStaffId,
+                        "Invigilation Duty Assigned",
+                        $"You have been reassigned invigilation duty #{dutyId}. Remarks: {request.Reason ?? "Updated duty assignment."}",
+                        "Examination",
+                        dutyId,
+                        "/dashboard/examinations/duties");
+                }
+                catch { }
+            }
+
             return Ok(new { success = true, message = "Exam invigilation duty reassigned successfully." });
         }
 
@@ -713,6 +731,27 @@ namespace CollegeManagement.API.Controllers.V1
             }
             _logger.LogInformation("Publishing exam schedules for Examination ID: {ExamId}.", examinationId);
             var publishedCount = await _examinationService.PublishExamSchedulesAsync(request);
+
+            if (_notificationService != null && publishedCount > 0)
+            {
+                try
+                {
+                    var targetExamId = examinationId > 0 ? examinationId : (request.ExaminationId ?? 0);
+                    var exam = await _examinationService.GetExaminationByIdAsync(targetExamId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Exam Schedules Announced",
+                        $"Examination schedule for '{examName}' has been published ({publishedCount} slot(s)). Check your portal for dates & times.",
+                        "Examination",
+                        targetExamId,
+                        "/dashboard/examinations");
+                }
+                catch { }
+            }
+
             return Ok(new { message = "Schedules published successfully.", publishedCount });
         }
 
@@ -835,6 +874,22 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Assigning invigilators to Schedule ID: {ScheduleId}", request.ExamScheduleId);
             await _examinationService.AssignInvigilatorsAsync(request);
+
+            if (_notificationService != null && request.InvigilatorIds != null && request.InvigilatorIds.Any())
+            {
+                try
+                {
+                    await _notificationService.SendToStaffListAsync(
+                        request.InvigilatorIds,
+                        "Invigilation Duty Assigned",
+                        $"You have been assigned as an invigilator for Exam Schedule #{request.ExamScheduleId}.",
+                        "Examination",
+                        request.ExamScheduleId,
+                        "/dashboard/examinations/duties");
+                }
+                catch { }
+            }
+
             return Ok(new { message = "Invigilators assigned successfully." });
         }
 

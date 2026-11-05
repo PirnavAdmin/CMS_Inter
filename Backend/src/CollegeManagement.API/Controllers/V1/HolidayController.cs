@@ -26,11 +26,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IHolidayService _holidayService;
         private readonly ILogger<HolidayController> _logger;
+        private readonly INotificationService? _notificationService;
 
-        public HolidayController(IHolidayService holidayService, ILogger<HolidayController> logger)
+        public HolidayController(
+            IHolidayService holidayService,
+            ILogger<HolidayController> logger,
+            INotificationService? notificationService = null)
         {
             _holidayService = holidayService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         // GET: api/v1/holidays
@@ -144,6 +149,24 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var created = await _holidayService.CreateAsync(request);
+
+                if (_notificationService != null && created != null)
+                {
+                    try
+                    {
+                        var dateDisplay = !string.IsNullOrWhiteSpace(created.FormattedDateRange) ? created.FormattedDateRange : created.StartDate.ToString("yyyy-MM-dd");
+
+                        await _notificationService.SendToCampusAsync(
+                            created.CampusId ?? 1,
+                            "New Holiday Declared",
+                            $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                            "Holiday",
+                            created.Id,
+                            "/dashboard/holidays");
+                    }
+                    catch { }
+                }
+
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, new
                 {
                     success = true,

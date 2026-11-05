@@ -27,15 +27,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IReimbursementService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly IStaffAttendanceService? _staffAttendanceService;
+        private readonly INotificationService? _notificationService;
 
         public ReimbursementController(
             IReimbursementService service,
             IJwtTokenHelper jwtTokenHelper,
-            IStaffAttendanceService? staffAttendanceService = null)
+            IStaffAttendanceService? staffAttendanceService = null,
+            INotificationService? notificationService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _staffAttendanceService = staffAttendanceService;
+            _notificationService = notificationService;
         }
 
         private (int UserId, int? StaffId, bool IsPrivileged) GetCallerIdentity()
@@ -173,6 +176,21 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _service.CreateClaimAsync(request);
+            if (_notificationService != null && result != null)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Admin", "Super Admin", "Accountant", "Principal" },
+                        request.CampusId,
+                        "New Reimbursement Claim",
+                        $"New reimbursement claim #{result.Id} ({result.ClaimNumber}) for ₹{request.Amount} submitted by Staff #{request.StaffId}.",
+                        "Reimbursement",
+                        result.Id,
+                        "/dashboard/reimbursements");
+                }
+                catch { }
+            }
             return Ok(new { Status = true, Message = "Reimbursement claim submitted successfully.", Data = result });
         }
 
@@ -293,6 +311,26 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return BadRequest(new { Status = false, Message = "Failed to verify reimbursement claim." });
             }
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var claim = await _service.GetClaimByIdAsync(id);
+                    if (claim != null)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            claim.StaffId,
+                            "Reimbursement Claim Approved",
+                            $"Your reimbursement claim #{id} for ₹{claim.Amount} ({claim.Category}) has been approved.",
+                            "Reimbursement",
+                            id,
+                            "/dashboard/reimbursements");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { Status = true, Message = "Claim approved successfully.", AccountRef = accountRef });
         }
 
@@ -313,6 +351,26 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return BadRequest(new { Status = false, Message = "Failed to request clarification on claim." });
             }
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var claim = await _service.GetClaimByIdAsync(id);
+                    if (claim != null)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            claim.StaffId,
+                            "Reimbursement Clarification Requested",
+                            $"Clarification needed for claim #{id}: {request?.ClarificationNotes ?? "Please provide more details."}",
+                            "Reimbursement",
+                            id,
+                            "/dashboard/reimbursements");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { Status = true, Message = "Clarification requested. Status updated to Under Review." });
         }
 
@@ -333,6 +391,26 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return BadRequest(new { Status = false, Message = "Failed to reject reimbursement claim." });
             }
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var claim = await _service.GetClaimByIdAsync(id);
+                    if (claim != null)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            claim.StaffId,
+                            "Reimbursement Claim Rejected",
+                            $"Your reimbursement claim #{id} for ₹{claim.Amount} was rejected. Reason: {request?.RejectionReason ?? "Not specified"}.",
+                            "Reimbursement",
+                            id,
+                            "/dashboard/reimbursements");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { Status = true, Message = "Claim rejected successfully." });
         }
 
@@ -353,6 +431,26 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return BadRequest(new { Status = false, Message = "Failed to mark claim as paid." });
             }
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var claim = await _service.GetClaimByIdAsync(id);
+                    if (claim != null)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            claim.StaffId,
+                            "Reimbursement Disbursed",
+                            $"Your reimbursement claim #{id} for ₹{claim.Amount} has been marked as Paid.",
+                            "Reimbursement",
+                            id,
+                            "/dashboard/reimbursements");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { Status = true, Message = "Claim marked as paid successfully." });
         }
 

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,11 +23,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ITimetableService _timetableService;
         private readonly ITimetableExportService _exportService;
+        private readonly INotificationService? _notificationService;
 
-        public TimetableController(ITimetableService timetableService, ITimetableExportService exportService)
+        public TimetableController(
+            ITimetableService timetableService,
+            ITimetableExportService exportService,
+            INotificationService? notificationService = null)
         {
             _timetableService = timetableService;
             _exportService = exportService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -246,6 +252,29 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _timetableService.PublishSectionTimetableAsync(sectionId, academicYearId ?? 0, dto.IsPublished);
+
+                if (_notificationService != null && dto.IsPublished)
+                {
+                    try
+                    {
+                        int campusId = 1;
+                        if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var cId) && cId > 0)
+                        {
+                            campusId = cId;
+                        }
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Faculty", "Teacher", "Student", "Parent" },
+                            campusId,
+                            "Timetable Published",
+                            $"Weekly timetable for Section #{sectionId} has been published. Please check your schedule.",
+                            "Timetable",
+                            sectionId,
+                            $"/dashboard/timetable/section/{sectionId}");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { message = $"All timetable slots for Section ID {sectionId} publish status set to {dto.IsPublished}." });
             }
             catch (KeyNotFoundException ex)
@@ -295,6 +324,29 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.ApproveSectionTimetableAsync(sectionId, academicYearId ?? 0);
+
+                if (_notificationService != null && result != null && result.IsSuccess)
+                {
+                    try
+                    {
+                        int campusId = 1;
+                        if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var cId) && cId > 0)
+                        {
+                            campusId = cId;
+                        }
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Admin", "Principal", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Approved",
+                            $"Timetable for Section #{sectionId} has been approved and verified.",
+                            "Timetable",
+                            sectionId,
+                            $"/dashboard/timetable/section/{sectionId}");
+                    }
+                    catch { }
+                }
+
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -374,7 +426,6 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
             }
         }
-
 
         /// <summary>
         /// Exports the weekly timetable for all programs and sections in a specific group as an Excel workbook (.xlsx).
