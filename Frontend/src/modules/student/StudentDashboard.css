@@ -6123,3 +6123,24 @@
   color: #fff;
   font-size: 12px;
 }
+/* Home dashboard: reuse Admin KPI gradients and compact quick-action colors. */
+.sp-shell .sp-dashboard-page .sp-summary { --student-kpi-accent:#22a447; min-height:56px; padding:5px 8px; gap:8px; border:1px solid color-mix(in srgb,var(--student-kpi-accent) 20%,var(--sp-border)); border-radius:8px; background:linear-gradient(145deg,color-mix(in srgb,var(--student-kpi-accent) 10%,var(--sp-surface)),var(--sp-surface) 75%); box-shadow:0 2px 6px color-mix(in srgb,var(--student-kpi-accent) 6%,transparent); }
+.sp-shell .sp-dashboard-page .sp-summary.sp-tone-orange { --student-kpi-accent:#f07a1a; }
+.sp-shell .sp-dashboard-page .sp-summary.sp-tone-purple { --student-kpi-accent:#7c3aed; }
+.sp-shell .sp-dashboard-page .sp-summary.sp-tone-cyan { --student-kpi-accent:#0891b2; }
+.sp-shell .sp-dashboard-page .sp-summary .sp-summary-icon { width:28px; height:28px; flex:0 0 28px; border-radius:6px; background:color-mix(in srgb,var(--student-kpi-accent) 14%,var(--sp-surface)); }
+.sp-shell .sp-dashboard-page .sp-summary .sp-summary-icon img { width:22px; height:22px; object-fit:contain; filter:drop-shadow(0 2px 3px color-mix(in srgb,var(--student-kpi-accent) 20%,transparent)); }
+.sp-shell .sp-dashboard-page .sp-summary strong { color:var(--sp-text); font-size:17px; font-weight:800; line-height:1.1; }
+.sp-shell .sp-dashboard-page .sp-summary small { font-size:10px; color:var(--sp-muted); font-weight:700; }
+.sp-shell .sp-dashboard-page .sp-summary em { font-size:9px; color:var(--sp-muted); font-style:normal; }
+.sp-shell .sp-dashboard-page .sp-dashboard-quick-actions { gap:6px; border-radius:8px; box-shadow:0 2px 6px #00000005; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action-grid { gap:5px; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action { --action-accent:var(--sp-primary); min-height:26px; padding:3px 6px; border:1px solid color-mix(in srgb,var(--action-accent) 20%,var(--sp-border)); border-radius:6px; background:color-mix(in srgb,var(--action-accent) 6%,var(--sp-surface)); color:var(--sp-text); }
+.sp-shell .sp-dashboard-page .sp-dashboard-action.tone-green { --action-accent:#16a34a; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action.tone-blue { --action-accent:#2563eb; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action.tone-cyan { --action-accent:#0891b2; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action.tone-purple { --action-accent:#7c3aed; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action.tone-orange { --action-accent:#f07a1a; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action strong { color:var(--sp-text); font-size:10px; font-weight:700; }
+.sp-shell .sp-dashboard-page .sp-dashboard-action:hover { border-color:var(--action-accent); background:color-mix(in srgb,var(--action-accent) 14%,var(--sp-surface)); }
+.sp-shell .sp-dashboard-page .sp-dashboard-action:focus-visible { outline:2px solid var(--action-accent); outline-offset:2px; }

@@ -26,11 +26,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IHolidayService _holidayService;
         private readonly ILogger<HolidayController> _logger;
+        private readonly INotificationService? _notificationService;
 
-        public HolidayController(IHolidayService holidayService, ILogger<HolidayController> logger)
+        public HolidayController(
+            IHolidayService holidayService,
+            ILogger<HolidayController> logger,
+            INotificationService? notificationService = null)
         {
             _holidayService = holidayService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         // GET: api/v1/holidays
@@ -144,6 +149,46 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var created = await _holidayService.CreateAsync(request);
+
+                if (_notificationService != null && created != null)
+                {
+                    try
+                    {
+                        var dateDisplay = !string.IsNullOrWhiteSpace(created.FormattedDateRange) ? created.FormattedDateRange : created.StartDate.ToString("yyyy-MM-dd");
+                        var campusId = (created.CampusId.HasValue && created.CampusId.Value > 0) ? created.CampusId.Value : (int?)null;
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Teacher", "Faculty" },
+                            campusId,
+                            "New Holiday Declared",
+                            $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                            "Holiday",
+                            created.Id,
+                            "/student/dashboard");
+
+                        if (campusId.HasValue)
+                        {
+                            await _notificationService.SendToCampusAsync(
+                                campusId.Value,
+                                "New Holiday Declared",
+                                $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                                "Holiday",
+                                created.Id,
+                                "/dashboard/holidays");
+                        }
+                        else
+                        {
+                            await _notificationService.SendGlobalAsync(
+                                "New Holiday Declared",
+                                $"College will remain closed on {dateDisplay} on account of {created.HolidayName}.",
+                                "Holiday",
+                                created.Id,
+                                "/dashboard/holidays");
+                        }
+                    }
+                    catch { }
+                }
+
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, new
                 {
                     success = true,
@@ -195,6 +240,25 @@ namespace CollegeManagement.API.Controllers.V1
                         success = false,
                         message = $"Holiday with ID {id} was not found."
                     });
+                }
+
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var dateDisplay = !string.IsNullOrWhiteSpace(updated.FormattedDateRange) ? updated.FormattedDateRange : updated.StartDate.ToString("yyyy-MM-dd");
+                        var campusId = (updated.CampusId.HasValue && updated.CampusId.Value > 0) ? updated.CampusId.Value : (int?)null;
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Teacher", "Faculty" },
+                            campusId,
+                            "Holiday Schedule Updated",
+                            $"Notice: Holiday schedule for '{updated.HolidayName}' has been updated to {dateDisplay}.",
+                            "Holiday",
+                            updated.Id,
+                            "/student/dashboard");
+                    }
+                    catch { }
                 }
 
                 return Ok(new

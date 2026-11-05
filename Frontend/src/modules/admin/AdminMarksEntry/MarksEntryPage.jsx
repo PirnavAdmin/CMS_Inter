@@ -1,6 +1,6 @@
 import { useLocation, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
-import React, { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState, useId } from "react";
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
@@ -134,6 +134,14 @@ const numericMark = (value) =>
   /^(?:\d+|\d+\.\d{1,2})$/.test(String(value)) &&
   Number.isFinite(Number(value));
 
+const marksFieldError = (value, max) => {
+  if (value === "" || value === null || value === undefined) return "";
+  if (Number.isFinite(Number(value)) && Number(value) < 0) return "Marks cannot be negative.";
+  if (!numericMark(value)) return "Enter valid marks with at most two decimals.";
+  if (Number(value) > Number(max)) return `Marks cannot exceed ${max}.`;
+  return "";
+};
+
 const validateMarksRows = (workspace, complete) => {
   const errors = {};
   if (!workspace?.rows) return errors;
@@ -152,8 +160,8 @@ const validateMarksRows = (workspace, complete) => {
       const val = row[key];
       if (val === "" || val === null || val === undefined) {
         if (complete) list.push(`${label} is required`);
-      } else if (!numericMark(val) || Number(val) < 0 || Number(val) > Number(max)) {
-        list.push(`${label} must be between 0 and ${max} with at most two decimals`);
+      } else if (marksFieldError(val, max)) {
+        list.push(`${label}: ${marksFieldError(val, max)}`);
       }
     });
     if ((row.remarks || "").trim().length > 250) list.push("Remarks cannot exceed 250 characters");
@@ -2607,7 +2615,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             if (field === "remarks") next.autoAbsentRemark = false;
             if (current.mode === "REGULAR") {
               const fields = ["internal", ...(current.practicalMax ? ["practical"] : []), "theory"];
-              next.total = fields.every((name) => numericMark(next[name]))
+              next.total = fields.every((name) => numericMark(next[name]) && !marksFieldError(next[name], current[`${name}Max`]))
                 ? fields.reduce((sum, name) => sum + Number(next[name]), 0)
                 : "";
               next.obtainedMarks = next.total;
@@ -4967,21 +4975,23 @@ function MarkRow({ row, workspace, locked, update }) {
       </td>
       {workspace.mode === "REGULAR" ? (
         <>
-          <Num value={row.internal} disabled={locked || row.absent} title="Internal Marks" onChange={(value) => update("internal", value)} />
+          <Num value={row.internal} max={workspace.internalMax} disabled={locked || row.absent} title="Internal Marks" onChange={(value) => update("internal", value)} />
           {workspace.practicalMax > 0 && (
             <Num
               value={row.practical}
+              max={workspace.practicalMax}
               disabled={locked || row.absent}
               title="Practical Marks"
               onChange={(value) => update("practical", value)}
             />
           )}
-          <Num value={row.theory} disabled={locked || row.absent} title="Theory Marks" onChange={(value) => update("theory", value)} />
+          <Num value={row.theory} max={workspace.theoryMax} disabled={locked || row.absent} title="Theory Marks" onChange={(value) => update("theory", value)} />
           <td className="cms-cell-center">{row.absent ? "ABS" : row.total === "" ? "—" : row.total}</td>
         </>
       ) : (
         <Num
           value={row.obtainedMarks}
+          max={workspace.maxMarks}
           disabled={locked || row.absent}
           title="Objective Marks"
           onChange={(value) => update("obtainedMarks", value)}
@@ -5658,20 +5668,30 @@ function SearchableSelect({
   );
 }
 
-const Num = ({ value, disabled, onChange, title = "Marks input" }) => (
+const Num = ({ value, max, disabled, onChange, title = "Marks input" }) => {
+  const errorId = useId();
+  const error = disabled ? "" : marksFieldError(value, max);
+  return (
   <td className="cms-cell-center">
     <input
       type="text"
       inputMode="decimal"
-      className="cms-number-input"
+      className={`cms-number-input${error ? " cms-mark-invalid" : ""}`}
       value={value}
       disabled={disabled}
       title={title}
       aria-label={title || "Marks input"}
-      onChange={(event) => onChange(event.target.value)}
+      aria-invalid={Boolean(error)}
+      aria-describedby={error ? errorId : undefined}
+      onChange={(event) => {
+        const next = event.target.value;
+        if (/^-?\d*(?:\.\d{0,2})?$/.test(next)) onChange(next);
+      }}
     />
+    {error && <small id={errorId} className="cms-mark-field-error" aria-live="polite">{error}</small>}
   </td>
-);
+  );
+};
 
 const SearchBox = ({ value, onChange }) => (
   <div className="cms-search-wrap">

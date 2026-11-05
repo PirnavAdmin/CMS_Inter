@@ -137,7 +137,7 @@ export default function DriverDashboard() {
       )}
 
       {activeTab === "route" && (
-        <DriverRoutePage onNavigateTab={handleSelectTab} />
+        <DriverRoutePage onNavigateTab={handleSelectTab} students={students} onUpdateStatus={handleUpdateStudentStatus} onBatchBoardStop={handleBatchBoardStop} activeTripState={activeTripState} />
       )}
 
       {activeTab === "trips" && (

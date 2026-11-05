@@ -91,3 +91,42 @@ Payments and Invoices now share one `Payments & Invoices` sidebar destination at
 - Existing files modified: `SuperAdminPortalRoutes.jsx`, `layout/SuperAdminLayout.jsx` and `.css`, `SuperAdminAccess/AccessPage.jsx` and `.css`, `SuperAdminDashboard/DashboardPage.jsx` and `.css`, and this README.
 
 Validation: scoped ESLint and production build passed. Headless Chrome verified 17 sidebar destinations, eight summary cards, five chart panels, icon loading, role search/pagination, both tabs, refresh persistence, three legacy redirects, mobile overflow and dark mode, with zero runtime exceptions. Tab and role changes issued no API requests. Preview browser checks do not verify real backend permission grants.
+
+## Plans, subscriptions and platform operations enhancement
+
+Modified existing files only: `SuperAdminSubscriptions/SubscriptionsPage.jsx` and `.css`, `SuperAdminPlatform/PlatformPage.jsx` and `.css`, `superAdminPreview.js`, `SuperAdminProvider.jsx`, `components/SuperAdminTable.jsx`, and this README.
+
+- Plans: create/view/edit, description/duration/price/account-limit validation, duplicate-name checks, status confirmation, structured modules; existing assignments preserved.
+- Subscriptions: account usage, recorded start date (otherwise Not recorded), computed expiry states, confirmed plan changes, over-limit warning, renewal/cancellation confirmations and actual preview renewal-event history.
+- Account Usage: distinct utilization columns/progress colors, plan filter and four summary cards using the shared unique-account counter.
+- Renewals: days remaining, dedicated summaries/status/date filters and eligible Renew 30 Days actions. No historical payments or renewal events are invented.
+- Modules: searchable matrix and confirmed preview edit/save updating the same plans used by subscription screens. No production URL authorization is simulated; no mandatory core-module configuration exists in the current model.
+- Settings: trimmed required identity, email validation, non-negative integer reminder (including zero), existing tab-session persistence and save feedback. Unsupported configuration fields were not added to requests.
+- Audit: newest-first, available actor/module/college/action/status metadata, filters and read-only details. Credential-like fields are excluded from detail displays; absent historical metadata is not fabricated.
+- Notifications: deduplicated date-derived renewal/account-limit reminders in preview, read filter/action and stored draft details; no external delivery is claimed. Preview read/draft state persists using the existing preview store.
+
+No production platform APIs are configured or newly introduced. All writes remain development-preview only. Production plan management, renewals, billing, notifications, durable auditing, activation limits and module authorization require verified backend support.
+
+Scoped ESLint and production build passed (existing bundle/import warnings remain). Hidden Chrome passed preview login, five plans, create form fields, utilization and renewal summaries, subscription confirmations, module-edit save, settings zero and refresh persistence, notification draft/read, audit details, mobile width and dark mode, with zero runtime exceptions. These browser checks blocked backend requests and do not verify production integrations.
+
+## Connected frontend-only college onboarding (current behavior)
+
+The mock workspace uses one shared provider for college masters, registration applications and CollegeAdmin accounts. Administrators are derived from the existing `users` collection, so subscription/account counts and the directory use the same account IDs. Existing `status`, `plan`, `phone` and `logo` aliases remain synchronized with the explicit college/admin fields for other preview modules.
+
+- Direct Add: creates one Active college with source `Direct add` on Free. Initial admin fields are contact suggestions only. The next action links to College Admins with `collegeId` and `action=create` in the URL. It never creates an account automatically.
+- Applications: `Submit Mock Registration` creates a separate Pending application. Confirmed approval creates/links one college master; rejection stays in application history without activating a college. `registrationStatus`, submitted/reviewed dates and the college's `collegeStatus` remain independent. Repeated approval and duplicate code/identity submissions are rejected.
+- Admin setup: create a mock CollegeAdmin or assign an existing unassigned/same-college compatible account. Only Active college masters are eligible. Email/account duplication and plan-capacity checks are shared with the account model. Account/login changes require confirmation. Deactivating a college preserves admins and blocks mock access eligibility; the Details action can check that eligibility without creating a login session.
+- Directory/registration/admin screens retain 5-row search/pagination and add connected summaries, filters, status-specific actions, details and responsive theme-aware forms. Registration approval history never derives from current Active status.
+
+Persistence:
+
+- Canonical mock data: localStorage `pirnav-super-admin-preview-data-v2` (schemaVersion 2).
+- Migration reads existing localStorage/sessionStorage `pirnav-super-admin-preview-data-v1`, merges by stable IDs and retains old storage. Valid v2 data takes precedence on later refreshes. Known legacy Pending/Rejected colleges migrate into applications, preserving their old IDs for later approval links; legacy active colleges are preserved as `Legacy preview` masters, without inventing application history.
+- Invalid canonical JSON is retained under `pirnav-super-admin-preview-data-v2-invalid-backup` before safe initialization. Unavailable storage shows a warning and keeps in-memory changes. Cross-tab storage events synchronize valid saved snapshots.
+- Authentication/session storage is unchanged and is not copied into mock data. Passwords, tokens and credential-like fields are excluded from persisted mock payloads.
+
+Existing files modified for onboarding: `superAdminPreview.js`, `SuperAdminProvider.jsx`, `SuperAdminColleges/CollegesPage.jsx` and `.css`, `SuperAdminAccess/AccessPage.jsx` and `.css`, `SuperAdminDashboard/DashboardPage.jsx` (pending application count and missing-date handling), `SuperAdminPlatform/PlatformPage.jsx` and `layout/SuperAdminLayout.jsx` (persistence wording), `src/app/App.jsx` and `src/hooks/useTheme.js` (isolate platform routes from tenant API/theme bootstrap), and this README. No new files, dependencies, backend changes, Axios calls, Swagger or endpoints were added for onboarding. Other portal routes retain their existing provider/API bootstrap.
+
+Verification: scoped lint/build and shared-model assertions cover legacy migration idempotency, direct creation without login, duplicate college/admin validation, linked account counts, deactivation eligibility, approval/rejection and JSON persistence. Hidden-browser workflows exercised Direct Add, refresh, preselected admin creation and directory reflection, mock application submission/approval/rejection, independent history and mobile/dark layout. Production login/provisioning, invitations and backend enforcement are not implemented. Legacy data without recorded approval history cannot reconstruct it; unknown dates remain unknown. Multi-tab persistence synchronizes snapshots, not transactional multi-user editing.
+
+Final onboarding browser verification also passed legacy user-created college migration with missing dates, shared-state refresh across five routes, 5+2 row pagination, mobile/dark overflow checks, zero `/api/v1` requests and zero runtime exceptions after platform provider/theme isolation. `src/hooks/useTheme.js` retains three pre-existing empty-catch lint errors, verified against HEAD; Super Admin and App scoped lint passed. Production build passed with existing project bundle/import warnings.

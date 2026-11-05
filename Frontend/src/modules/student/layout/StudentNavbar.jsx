@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, UserRound, Palette, Settings } from "lucide-react";
@@ -153,67 +154,7 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
         <button className="sp-icon-btn" onClick={toggleTheme} aria-label="Toggle theme">
           <img src={dark ? lightThemeIcon : darkThemeIcon} alt="" aria-hidden="true" />
         </button>
-        <div className="sp-notification-menu" ref={notifRef}>
-          <button
-            type="button"
-            className="sp-icon-btn sp-notification"
-            onClick={() => setNotifOpen((v) => !v)}
-            aria-label={`${unreadCount} notifications`}
-            aria-expanded={notifOpen}
-          >
-            <img src={notificationIcon} alt="" aria-hidden="true" />
-            {unreadCount > 0 ? <i>{unreadCount > 9 ? "9+" : unreadCount}</i> : null}
-          </button>
-          {notifOpen ? (
-            <div className="sp-notifications-dropdown">
-              <div className="sp-notif-header">
-                <div>
-                  <strong>Notifications</strong>
-                  {unreadCount > 0 && <span className="sp-notif-unread-badge">{unreadCount}</span>}
-                </div>
-                {unreadCount > 0 && (
-                  <button type="button" className="sp-notif-mark-all" onClick={markAllAsRead}>
-                    Mark all read
-                  </button>
-                )}
-              </div>
-              <div className="sp-notif-list">
-                {!notifications?.length ? (
-                  <div className="sp-notif-empty">
-                    <p>No notifications right now.</p>
-                  </div>
-                ) : (
-                  notifications.map((notif) => (
-                    <button
-                      key={notif.id}
-                      type="button"
-                      className={`sp-notif-item ${!notif.isRead ? "is-unread" : ""}`}
-                      onClick={() => {
-                        if (markAsRead) markAsRead(notif.id);
-                        setNotifOpen(false);
-                        navigate(notif.to || "/student-dashboard/certificates");
-                      }}
-                    >
-                      <span className={`sp-notif-status-badge is-${String(notif.status).toLowerCase()}`}>
-                        {notif.status}
-                      </span>
-                      <span className="sp-notif-item-body">
-                        <strong>{notif.title}</strong>
-                        <p>{notif.message}</p>
-                        <time>{formatNotifTime(notif.time)}</time>
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-              <div className="sp-notif-footer">
-                <Link to="/student-dashboard/certificates" onClick={() => setNotifOpen(false)}>
-                  View All Certificates →
-                </Link>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <NotificationBell />
         <div className="sp-profile-menu" ref={menuRef}>
           <button onClick={() => setProfileOpen((value) => !value)}>
             <span className="sp-avatar">{student && photoUrl && failedPhotoUrl !== photoUrl ? <img className="sp-navbar-photo" src={photoUrl} alt="" onError={() => setFailedPhotoUrl(photoUrl)}/> : initials}</span>

@@ -3360,3 +3360,277 @@
   font-weight: 600;
   color: var(--dp-text, #1e293b);
 }
+
+/* ==========================================================================
+   DRIVER SIDEBAR SECTION GROUPS
+   ========================================================================== */
+.dp-nav-section-group {
+  margin-bottom: 12px;
+}
+
+.dp-nav-section-group:not(:first-child) {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--dp-border);
+}
+
+.dp-nav-section-title {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--dp-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   STOP PASSENGERS QUICK BOARDING DECK
+   ========================================================================== */
+.dp-stop-boarding-deck {
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: var(--dp-surface);
+  border: 1px solid var(--dp-border);
+  border-radius: 12px;
+  box-shadow: var(--dp-shadow);
+}
+
+.dp-sbd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--dp-border);
+}
+
+.dp-sbd-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dp-sbd-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--dp-text);
+}
+
+.dp-sbd-subtitle {
+  font-size: 12px;
+  color: var(--dp-muted);
+}
+
+.dp-sbd-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dp-sbd-student-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--dp-soft);
+  border: 1px solid var(--dp-border);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.dp-sbd-student-card:hover {
+  background: var(--dp-surface);
+  border-color: var(--dp-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.dp-sbd-student-card.is-boarded {
+  border-color: rgba(46, 133, 64, 0.35);
+  background: rgba(46, 133, 64, 0.04);
+}
+
+.dp-sbd-student-card.is-missed {
+  border-color: rgba(217, 72, 65, 0.35);
+  background: rgba(217, 72, 65, 0.04);
+}
+
+.dp-sbd-avatar {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--dp-primary);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.dp-sbd-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.dp-sbd-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dp-sbd-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dp-text);
+}
+
+.dp-sbd-adm-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--dp-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dp-sbd-subtext {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dp-muted);
+}
+
+.dp-sbd-call-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dp-primary);
+  text-decoration: none;
+  margin-top: 2px;
+  transition: opacity 0.2s;
+}
+
+.dp-sbd-call-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.dp-sbd-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dp-sbd-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.dp-sbd-status-pill.status-picked-up {
+  background: rgba(46, 133, 64, 0.12);
+  color: #2e8540;
+}
+
+.dp-sbd-status-pill.status-missed {
+  background: rgba(217, 72, 65, 0.12);
+  color: #d94841;
+}
+
+.dp-sbd-status-pill.status-pending {
+  background: rgba(207, 121, 0, 0.12);
+  color: #cf7900;
+}
+
+.dp-sbd-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dp-sbd-empty-state {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 14px;
+  background: var(--dp-soft);
+  border-radius: 10px;
+}
+
+.dp-sbd-empty-text strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--dp-text);
+  margin-bottom: 2px;
+}
+
+.dp-sbd-empty-text p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dp-muted);
+}
+
+.dp-live-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #1e293b;
+  color: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  font-size: 13px;
+  font-weight: 600;
+  animation: dpToastSlideIn 0.25s ease-out;
+}
+
+@keyframes dpToastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dp-btn-xs {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .dp-sbd-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .dp-sbd-student-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .dp-sbd-actions {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 6px;
+  }
+}
