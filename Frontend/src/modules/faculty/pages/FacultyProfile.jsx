@@ -512,6 +512,8 @@ export default function FacultyProfile() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("staff_profile_photo");
       if (staffTargetId) {
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        // await syncAllSectionsToBackend(staffTargetId, profileData);
         localStorage.removeItem(`staff_profile_${staffTargetId}_photo`);
       }
       window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
@@ -1141,6 +1143,164 @@ export default function FacultyProfile() {
     return true;
   };
 
+  const getFormattedDraftPayload = (data) => {
+    const docsMap = {};
+    (data.documents || []).forEach((d, idx) => {
+      const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+      const v = String(d?.url || d?.name || "uploaded").trim();
+      if (k) docsMap[k] = v;
+    });
+
+    const expItems = (data.experience || []).map((e) => ({
+      id: e.id,
+      organization: e.institution || e.organization || e.institutionName || "",
+      institution: e.institution || e.organization || e.institutionName || "",
+      institutionName: e.institution || e.organization || e.institutionName || "",
+      designation: e.designation || "",
+      fromDate: e.fromDate || "",
+      toDate: e.toDate || "",
+      roles: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTeached: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTaught: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      totalYears: parseFloat(e.totalExp) || e.totalYears || 1.0,
+      totalExp: e.totalExp || `${e.totalYears || 1} Years`,
+      status: e.status || "Verified",
+    }));
+
+    const personal = {
+      firstName: data.firstName || "",
+      middleName: data.middleName || "",
+      lastName: data.lastName || "",
+      gender: data.gender || "",
+      dateOfBirth: data.dob || data.dateOfBirth || null,
+      maritalStatus: data.maritalStatus || "Single",
+      aadhaar: data.aadhaar || "",
+      panNumber: data.pan || data.panNumber || "",
+      pan: data.pan || data.panNumber || "",
+      bloodGroup: data.bloodGroup || "",
+      mobile: data.mobile || data.phone || "",
+      phone: data.mobile || data.phone || "",
+      phoneNumber: data.mobile || data.phone || "",
+      fatherOrHusbandName: data.fatherOrHusbandName || data.guardianName || "",
+      nationality: data.nationality || "Indian",
+    };
+
+    const bank = {
+      bankName: data.bankName || "",
+      accountHolderName: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountHolder: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountNumber: data.accountNumber || "",
+      ifscCode: data.ifsc || data.ifscCode || "",
+      ifsc: data.ifsc || data.ifscCode || "",
+      branch: data.branch || data.branchName || "",
+      branchName: data.branch || data.branchName || "",
+      accountType: data.accountType || "Salary Account",
+      panNumber: data.pan || data.panNumber || "",
+      pfNumber: data.pfNumber || data.uanNumber || "",
+      uanNumber: data.uanNumber || data.pfNumber || "",
+    };
+
+    const address = {
+      houseNumber: data.houseNumber || data.address || "",
+      street: data.street || data.streetArea || "",
+      currentAddress: [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || data.address || "",
+      permanentAddress: data.permanentAddress || [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || "",
+      city: data.city || data.cityVillage || "",
+      district: data.district || "",
+      state: data.state || "",
+      pincode: data.pin || data.pincode || "",
+      pin: data.pin || data.pincode || "",
+      country: data.country || "India",
+      alternateMobile: data.alternateMobile || "",
+    };
+
+    return { personal, bank, address, experience: expItems, documents: docsMap };
+  };
+
+  const syncAllSectionsToBackend = async (targetStaffId, currentData) => {
+    if (!targetStaffId) return;
+    const { personal, bank, address, experience, documents } = getFormattedDraftPayload(currentData);
+
+    const saveSection = async (sectionName, payload) => {
+      try {
+        const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+          sectionName,
+          ...payload,
+        });
+        const d = res?.data?.data || res?.data;
+        if (d && typeof d === "object" && (d.profileCompletionPercentage !== undefined || d.profileCompletion !== undefined)) {
+          const comp = d.profileCompletionPercentage ?? d.profileCompletion;
+          setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+        }
+      } catch (err) {
+        console.warn(`Draft save error for section ${sectionName}:`, err);
+      }
+    };
+
+    await saveSection("Personal", { personal, Personal: personal });
+    if (bank.accountNumber || bank.ifscCode || bank.bankName) {
+      await saveSection("Bank", { bank, Bank: bank });
+    }
+    if (address.houseNumber || address.street || address.city || address.pincode) {
+      await saveSection("Address", { address, Address: address });
+    }
+    if (experience.length > 0) {
+      await saveSection("Experience", { experience, Experience: experience });
+    }
+    if (Object.keys(documents).length > 0 || (currentData.documents && currentData.documents.length > 0)) {
+      await saveSection("Documents", { documents, Documents: documents });
+    }
+
+    // Composite full draft to saveProfileDraft
+    try {
+      const resComposite = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+        sectionName: "All",
+        personal,
+        Personal: personal,
+        bank,
+        Bank: bank,
+        address,
+        Address: address,
+        experience,
+        Experience: experience,
+        documents,
+        Documents: documents,
+      });
+      const compData = resComposite?.data?.data || resComposite?.data;
+      if (compData && typeof compData === "object" && (compData.profileCompletionPercentage !== undefined || compData.profileCompletion !== undefined)) {
+        const comp = compData.profileCompletionPercentage ?? compData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Composite draft save warning:", e);
+    }
+
+    // Direct Staff entity update via PUT /api/v1/staff/{id} to persist all sections directly to DB
+    try {
+      const staffUpdatePayload = {
+        ...currentData,
+        ...personal,
+        ...bank,
+        ...address,
+        dateOfBirth: currentData.dob || currentData.dateOfBirth || null,
+        joiningDate: currentData.dateOfJoining || currentData.joiningDate || null,
+        dateOfJoining: currentData.dateOfJoining || currentData.joiningDate || null,
+        documents,
+        experience: experience.length * 1.0,
+        photoPath: currentData.photoPath || currentData.photoUrl || "",
+        profileCompletionPercentage: Math.max(profileCompletion, Number(currentData.profileCompletionPercentage || 0)),
+      };
+      const putRes = await apiClient.put(apiEndpoints.faculty.update(targetStaffId), staffUpdatePayload);
+      const putData = putRes?.data?.data || putRes?.data;
+      if (putData && typeof putData === "object" && (putData.profileCompletionPercentage !== undefined || putData.profileCompletion !== undefined)) {
+        const comp = putData.profileCompletionPercentage ?? putData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Staff PUT update warning:", e);
+    }
+  };
+
   const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       if (!validateCurrentProfileStep()) return;
@@ -1241,6 +1401,19 @@ export default function FacultyProfile() {
           break;
       }
 
+      if (payload.Personal) payload.personal = payload.Personal;
+      if (payload.Bank) payload.bank = payload.Bank;
+      if (payload.Address) payload.address = payload.Address;
+      if (payload.Experience) payload.experience = payload.Experience;
+      if (payload.Documents) {
+        payload.documents = {};
+        (profileData.documents || []).forEach((d, idx) => {
+          const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+          const v = String(d?.url || d?.name || "uploaded").trim();
+          if (k) payload.documents[k] = v;
+        });
+      }
+
       if (sectionName && targetStaffId) {
         try {
           const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
@@ -1299,9 +1472,17 @@ export default function FacultyProfile() {
     setIsSavingProfile(true);
 
     try {
-      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId;
+      const authUser = getAuthUser() || {};
+      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId || authUser.staffId || authUser.id;
       if (staffTargetId) {
-        await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        // await syncAllSectionsToBackend(staffTargetId, profileData);
+        await syncAllSectionsToBackend(staffTargetId, profileData);
+        const submitRes = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        const sData = submitRes?.data?.data || submitRes?.data || {};
+        if (sData.profileCompletionPercentage) {
+          profileData.profileCompletionPercentage = sData.profileCompletionPercentage;
+        }
       }
       const updated = {
         ...profileData,
@@ -1451,7 +1632,13 @@ export default function FacultyProfile() {
               type="button"
               key={step.id}
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
-              onClick={() => setProfileStep(step.id)}
+              onClick={() => {
+                if (isEditingProfile) {
+                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, profileData);
+                }
+                setProfileStep(step.id);
+              }}
               title={`View ${step.title}`}
             >
               <div className="sp-wizard-num">{isCompleted ? <Check size={14} /> : step.id}</div>
@@ -2111,6 +2298,10 @@ export default function FacultyProfile() {
                                   const updated = safeExperience.filter((item) => item.id !== x.id);
                                   setProfileData({ ...profileData, experience: updated });
                                   persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+   
+   
                                   notify("Experience record removed.");
                                 }}
                                 title="Delete Experience"
@@ -2247,6 +2438,8 @@ export default function FacultyProfile() {
                             const updatedDocs = [...safeDocuments, docRecord];
                             setProfileData({ ...profileData, documents: updatedDocs });
                             persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                             if (docFileRef.current) docFileRef.current.value = "";
                             notify("Document uploaded successfully!");
@@ -2332,6 +2525,8 @@ export default function FacultyProfile() {
                                     const updated = safeDocuments.filter((item) => item.id !== d.id);
                                     setProfileData({ ...profileData, documents: updated });
                                     persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
                                     notify("Document removed.");
                                   }}
                                   title="Delete Document"
@@ -2493,6 +2688,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Personal details updated successfully.");
                           }}
                         >
@@ -2736,6 +2932,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Bank details updated successfully.");
                           }}
                         >
@@ -2937,6 +3134,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Address updated successfully.");
                           }}
                         >
@@ -3160,6 +3358,8 @@ export default function FacultyProfile() {
                         setProfileData({ ...profileData, experience: updated });
                         persistStaffProfile({ ...profileData, experience: updated });
                         setNewExp({ institution: "", designation: "", fromDate: "", toDate: "", subjectsTeached: "", totalExp: "" });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
                         notify("Experience added.");
                       }}
                     >
@@ -3195,6 +3395,8 @@ export default function FacultyProfile() {
                               const updated = safeExperience.filter((item) => item.id !== exp.id);
                               setProfileData({ ...profileData, experience: updated });
                               persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
                               notify("Experience record removed.");
                             }}
                             title="Delete Experience"
@@ -3314,6 +3516,8 @@ export default function FacultyProfile() {
                         const updatedDocs = [...safeDocuments, docRecord];
                         setProfileData({ ...profileData, documents: updatedDocs });
                         persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
                         setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                         if (docFileRef.current) docFileRef.current.value = "";
                         notify("Document uploaded successfully!");
@@ -3351,6 +3555,8 @@ export default function FacultyProfile() {
                               const updated = safeDocuments.filter((item) => item.id !== doc.id);
                               setProfileData({ ...profileData, documents: updated });
                               persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
                               notify("Document removed.");
                             }}
                             title="Delete Document"
