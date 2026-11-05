@@ -52,3 +52,89 @@ export function createPreviewData() {
     settings: { platformName: "PIRNAV CMS", supportEmail: "support@example.test", renewalDays: 30 },
   };
 }
+
+// One versioned preview model. Legacy aliases stay synchronized for subscriptions/dashboard.
+export const MOCK_DATA_KEY = "pirnav-super-admin-preview-data-v2";
+export const LEGACY_DATA_KEY = "pirnav-super-admin-preview-data-v1";
+const clean = (value) => String(value ?? "").trim();
+const identity = (value) => clean(value).toLowerCase();
+export const collegeAdmins = (data, id) => data.users.filter((user) => user.role === "CollegeAdmin" && user.collegeId === id);
+export const mockAdminEligible = (data, user) => Boolean(user && user.role === "CollegeAdmin" && user.active && user.loginEnabled && data.colleges.some((college) => college.id === user.collegeId && college.collegeStatus === "Active"));
+export function normalizeMockData(input) {
+  const data = { ...input, schemaVersion: 2 };
+  data.plans = (input.plans ?? []).map((plan) => ({ ...plan, id: plan.id || plan.name }));
+  data.users = (input.users ?? []).map((user) => ({ ...user, name: user.name ?? user.fullName ?? "", fullName: user.name ?? user.fullName ?? "", phone: user.phone ?? "", active: user.active ?? user.accountStatus === "Active", accountStatus: (user.active ?? user.accountStatus === "Active") ? "Active" : "Inactive" }));
+  data.registrations = [...(input.registrations ?? [])];
+  data.colleges = [];
+  for (const college of input.colleges ?? []) {
+    // Only known application states migrate to applications; Active never implies approval.
+    const status = college.registrationStatus || (["Pending", "Rejected"].includes(college.status) ? college.status : null);
+    if (input.schemaVersion !== 2 && status && !data.registrations.some((row) => row.legacyCollegeId === college.id || row.collegeId === college.id)) {
+      data.registrations.push({ id: `REG-${college.id}`, legacyCollegeId: college.id, collegeId: status === "Approved" ? college.id : null,
+        name: college.name, code: college.code, email: college.email, contact: college.phone || "", address: college.address || "", logoUrl: college.logo || "", applicantName: college.admin || "", applicantEmail: college.adminEmail || college.email, plan: college.plan, registrationStatus: status, submittedAt: college.registered || null, reviewedAt: null });
+    }
+    if (["Pending", "Rejected"].includes(status) && input.schemaVersion !== 2) continue;
+    const plan = data.plans.find((row) => row.name === college.plan) || data.plans.find((row) => row.id === college.subscriptionPlanId);
+    const statusValue = college.status ?? college.collegeStatus ?? "Inactive";
+    const admins = data.users.filter((user) => user.role === "CollegeAdmin" && user.collegeId === college.id);
+    data.colleges.push({ ...college, source: college.source || "Legacy preview", collegeStatus: statusValue, status: statusValue,
+      contact: college.phone ?? college.contact ?? "", phone: college.phone ?? college.contact ?? "", logoUrl: college.logo ?? college.logoUrl ?? "", logo: college.logo ?? college.logoUrl ?? "",
+      plan: plan?.name || college.plan || "Free", subscriptionPlanId: plan?.id || college.subscriptionPlanId || "Free", createdAt: college.createdAt || college.registered || null,
+      initialAdminName: college.initialAdminName || college.admin || "", initialAdminEmail: college.initialAdminEmail || college.adminEmail || "", admin: admins.map((user) => user.name).join(", ") });
+  }
+  return data;
+}
+export function validateCollegeIdentity(data, values, exceptId) {
+  if (!clean(values.name) || !clean(values.code) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(values.email))) throw new Error("Enter college name, unique code and a valid email.");
+  if (data.colleges.some((row) => row.id !== exceptId && identity(row.code) === identity(values.code))) throw new Error("A college with this code already exists.");
+  if (data.colleges.some((row) => row.id !== exceptId && (identity(row.email) === identity(values.email) || (identity(row.name) === identity(values.name) && identity(row.address) === identity(values.address))))) throw new Error("This college identity already exists.");
+}
+export function saveMockCollege(data, values) {
+  validateCollegeIdentity(data, values, values.id);
+  if (values.adminEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(values.adminEmail))) throw new Error("Enter a valid initial admin contact email.");
+  const existing = data.colleges.find((row) => row.id === values.id);
+  const college = { ...existing, ...values, id: existing?.id || crypto.randomUUID(), name: clean(values.name), code: clean(values.code).toUpperCase(), email: identity(values.email), phone: clean(values.phone), logo: clean(values.logo),
+    initialAdminName: clean(values.initialAdminName), initialAdminEmail: identity(values.adminEmail || values.initialAdminEmail),
+    source: existing?.source || "Direct add", status: existing?.status || "Active", plan: existing?.plan || "Free", createdAt: existing?.createdAt || new Date().toISOString(), registered: existing?.registered || new Date().toISOString().slice(0, 10), renewal: existing?.renewal || "" };
+  // Contact details are never converted into an account.
+  return { ...data, colleges: existing ? data.colleges.map((row) => row.id === college.id ? college : row) : [...data.colleges, college] };
+}
+export function saveMockApplication(data, values) {
+  const existing = data.registrations.find((row) => row.id === values.id);
+  if (existing && existing.registrationStatus !== "Pending") throw new Error("Only pending applications can be edited.");
+  validateCollegeIdentity(data, values);
+  if (!clean(values.applicantName) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(values.applicantEmail))) throw new Error("Enter applicant name and valid applicant email.");
+  if (data.registrations.some((row) => row.id !== values.id && row.registrationStatus !== "Rejected" && (identity(row.code) === identity(values.code) || identity(row.email) === identity(values.email) || (identity(row.name) === identity(values.name) && identity(row.address) === identity(values.address))))) throw new Error("An application with this college code or identity already exists.");
+  const registration = { ...existing, ...values, id: existing?.id || crypto.randomUUID(), name: clean(values.name), code: clean(values.code).toUpperCase(), email: identity(values.email), applicantEmail: identity(values.applicantEmail), collegeId: null, registrationStatus: "Pending", submittedAt: existing?.submittedAt || new Date().toISOString(), reviewedAt: null };
+  return { ...data, registrations: existing ? data.registrations.map((row) => row.id === registration.id ? registration : row) : [...data.registrations, registration] };
+}
+export function reviewMockApplication(data, id, status) {
+  const registration = data.registrations.find((row) => row.id === id);
+  if (!registration || registration.registrationStatus !== "Pending" || !["Approved", "Rejected"].includes(status)) throw new Error("This application is no longer pending.");
+  let colleges = data.colleges; let collegeId = null;
+  if (status === "Approved") {
+    const existing = colleges.find((row) => identity(row.code) === identity(registration.code));
+    if (existing && (identity(existing.name) !== identity(registration.name) || identity(existing.email) !== identity(registration.email))) throw new Error("This code belongs to a different college. Review the application details.");
+    if (existing) collegeId = existing.id;
+    else {
+      validateCollegeIdentity(data, registration);
+      collegeId = registration.legacyCollegeId || crypto.randomUUID();
+      colleges = [...colleges, { id: collegeId, name: registration.name, code: registration.code, email: registration.email, phone: registration.contact || "", address: registration.address || "", logo: registration.logoUrl || "", source: "Registration", status: "Active", collegeStatus: "Active", plan: registration.plan || "Free", createdAt: new Date().toISOString(), registered: new Date().toISOString().slice(0, 10), renewal: "" }];
+    }
+  }
+  return { ...data, colleges, registrations: data.registrations.map((row) => row.id === id ? { ...row, collegeId, registrationStatus: status, reviewedAt: new Date().toISOString() } : row) };
+}
+export function saveMockAdmin(data, values, existingId) {
+  const college = data.colleges.find((row) => row.id === values.collegeId);
+  if (!college || college.collegeStatus !== "Active") throw new Error("Select an active, approved college.");
+  const email = identity(values.email); const name = clean(values.name);
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter full name and a valid email.");
+  const existing = data.users.find((row) => row.id === existingId);
+  if (existingId && (!existing || existing.role !== "CollegeAdmin")) throw new Error("Select a compatible CollegeAdmin account.");
+  if (existing?.collegeId && existing.collegeId !== college.id) throw new Error("This admin is already assigned to another college. Select an unassigned or same-college account.");
+  const match = data.users.find((row) => identity(row.email) === email && row.id !== existingId);
+  if (match) throw new Error("An account with this email exists. Use Assign Existing Admin if it is compatible.");
+  const user = { ...existing, id: existing?.id || crypto.randomUUID(), name, fullName: name, email, phone: clean(values.phone), collegeId: college.id, role: "CollegeAdmin", active: values.active, accountStatus: values.active ? "Active" : "Inactive", loginEnabled: values.loginEnabled };
+  if (user.active && user.loginEnabled && !(existing?.active && existing?.loginEnabled && existing.collegeId === college.id)) assertAccountActivation(data, college.id);
+  return { ...data, users: existing ? data.users.map((row) => row.id === user.id ? user : row) : [...data.users, user] };
+}

@@ -2,8 +2,11 @@
 .sa-shell .sa-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--cms-border); background: var(--cms-secondary); }
 .sa-shell .sa-section-head h2 { margin: 0; font-size: 14px; font-weight: 700; }
 .sa-shell .sa-table-toolbar { gap: 10px; padding: 12px 14px; background: var(--cms-surface); }
-.sa-shell .sa-search { flex: 1 1 200px; min-width: 180px; max-width: 320px; min-height: 38px; padding: 8px 11px; border-radius: 10px; background: var(--cms-surface); }
-.sa-shell .sa-search input { font-size: 12px; }
+.sa-shell .sa-table-toolbar .sa-search { display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px; flex: 1 1 320px; min-width: 0; max-width: 360px; height: 40px; min-height: 40px; padding: 0 13px; box-sizing: border-box; border: 1px solid var(--cms-border); border-radius: 10px; background: var(--cms-surface); }
+.sa-shell .sa-table-toolbar .sa-search > svg { position: static; flex: 0 0 18px; width: 18px; height: 18px; color: var(--cms-muted); }
+.sa-shell .sa-table-toolbar .sa-search input { display: block; flex: 1 1 0; min-width: 0; width: 0; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent; color: var(--cms-text); font: inherit; font-size: 13px; }
+.sa-shell .sa-table-toolbar .sa-search input::placeholder { color: var(--cms-muted); opacity: 1; }
+.sa-shell .sa-table-toolbar .sa-search:focus-within { border-color: var(--cms-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 12%, transparent); }
 .sa-shell .sa-table-card .cms-table-wrap { width: 100%; max-width: 100%; overflow-x: auto; border-radius: 0; box-shadow: none; -webkit-overflow-scrolling: touch; }
 .sa-shell .sa-table-card .cms-table { width: 100%; min-width: 640px; border-collapse: collapse; }
 .sa-shell .sa-table-card .cms-table th { padding: clamp(8px, .65vw, 11px) clamp(7px, .8vw, 13px); font-size: clamp(10px, .72vw, 11.5px); letter-spacing: .6px; text-transform: uppercase; font-weight: 700; background: var(--cms-table-header, var(--cms-subtle)); color: var(--cms-muted); text-align: left; white-space: nowrap; }
@@ -22,4 +25,4 @@
 .sa-shell .sa-user-actions .edit { color: var(--cms-violet); background: var(--cms-violet-soft); border-color: color-mix(in srgb, var(--cms-violet) 25%, var(--cms-border)); }
 .sa-shell .sa-user-actions .status { color: var(--cms-red); background: var(--cms-red-soft); border-color: color-mix(in srgb, var(--cms-red) 25%, var(--cms-border)); }
 .sa-shell .sa-user-actions .status.activate { color: var(--cms-green); background: var(--cms-green-soft); }
-@media(max-width: 700px) { .sa-shell .sa-search { flex-basis: 100%; max-width: none; } .sa-shell .sa-table-toolbar { align-items: stretch; } }
+@media(max-width: 700px) { .sa-shell .sa-table-toolbar .sa-search { flex-basis: 100%; max-width: none; } .sa-shell .sa-table-toolbar { align-items: stretch; } }
