@@ -184,13 +184,13 @@ export default function DriverLeavePage() {
   );
 
   const bal = details.balance || {};
-  const totalBal = bal.total != null ? Number(bal.total) : 12;
+  const totalBal = bal.total != null && Number(bal.total) > 0 ? Number(bal.total) : 35;
   const usedBal = bal.used != null ? Number(bal.used) : (details.approved || 0);
   const remainingBal = bal.remaining != null ? Number(bal.remaining) : Math.max(0, totalBal - usedBal);
 
-  const casualBal = bal.casualLeaves != null ? Number(bal.casualLeaves) : Math.max(0, Math.floor(remainingBal * 0.5));
-  const sickBal = bal.sickLeaves != null ? Number(bal.sickLeaves) : Math.max(0, Math.floor(remainingBal * 0.3));
-  const earnedBal = bal.earnedLeaves != null ? Number(bal.earnedLeaves) : Math.max(0, remainingBal - casualBal - sickBal);
+  const casualBal = bal.casualLeaves != null ? Number(bal.casualLeaves) : (totalBal >= 35 ? Math.max(0, 10 - usedBal) : Math.max(0, Math.floor(remainingBal * 0.5)));
+  const sickBal = bal.sickLeaves != null ? Number(bal.sickLeaves) : (totalBal >= 35 ? 10 : Math.max(0, Math.floor(remainingBal * 0.3)));
+  const earnedBal = bal.earnedLeaves != null ? Number(bal.earnedLeaves) : (totalBal >= 35 ? 15 : Math.max(0, remainingBal - casualBal - sickBal));
 
   return (
     <div className="dp-page-container dp-leave">
