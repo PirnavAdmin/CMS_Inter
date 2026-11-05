@@ -697,11 +697,40 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStaticFiles();
 
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(webRootPath))
+{
+    Directory.CreateDirectory(webRootPath);
+}
+
+var staffPhotosDir = Path.Combine(webRootPath, "uploads", "staff-photos");
+if (!Directory.Exists(staffPhotosDir))
+{
+    Directory.CreateDirectory(staffPhotosDir);
+}
+
+var staffDocsDir = Path.Combine(webRootPath, "uploads", "staff-documents");
+if (!Directory.Exists(staffDocsDir))
+{
+    Directory.CreateDirectory(staffDocsDir);
+}
+
 var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "Uploads");
 if (!Directory.Exists(uploadsDir))
 {
     Directory.CreateDirectory(uploadsDir);
 }
+
+var wwwrootUploads = Path.Combine(webRootPath, "uploads");
+if (Directory.Exists(wwwrootUploads))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwrootUploads),
+        RequestPath = "/uploads"
+    });
+}
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),

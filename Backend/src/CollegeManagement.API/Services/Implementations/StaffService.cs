@@ -620,6 +620,14 @@ namespace CollegeManagement.API.Services.Implementations
                 // 2. Insert Staff domain record via EF Core inside this transaction
                 await _staffRepository.AddAsync(staff);
 
+                var initialPhoto = dto.PhotoPath ?? dto.Photo;
+                var localSavedPhoto = await EnsurePhotoSavedLocallyAsync(staff.Id, initialPhoto);
+                if (!string.IsNullOrWhiteSpace(localSavedPhoto))
+                {
+                    staff.PhotoPath = localSavedPhoto;
+                    await _staffRepository.UpdatePhotoPathAsync(staff.Id, localSavedPhoto);
+                }
+
                 // 3. Subject Allocations
                 var subNames = dto.AllocatedSubjects ?? dto.Subjects;
                 if (subNames != null && subNames.Any())
@@ -906,6 +914,13 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.AadhaarDocument, dto.PanDocument, dto.QualificationCertificate, dto.ExperienceCertificate, dto.Resume, dto.BankProof, dto.DrivingLicence, dto.OtherDocuments, dto.Photo, dto.Signature,
                 dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson,
                 dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
+
+            var updatePhotoRaw = dto.PhotoPath ?? dto.Photo;
+            var updateLocalPhoto = await EnsurePhotoSavedLocallyAsync(existingStaff.Id, updatePhotoRaw);
+            if (!string.IsNullOrWhiteSpace(updateLocalPhoto))
+            {
+                existingStaff.PhotoPath = updateLocalPhoto;
+            }
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
@@ -1206,6 +1221,14 @@ namespace CollegeManagement.API.Services.Implementations
 
             ApplySectionUpdate(staff, dto);
 
+            var photoDocItem = dto.Documents?.FirstOrDefault(d => string.Equals(d.type, "Photo", StringComparison.OrdinalIgnoreCase) || string.Equals(d.name, "Photo", StringComparison.OrdinalIgnoreCase));
+            var draftPhotoRaw = photoDocItem?.url;
+            var draftLocalPhoto = await EnsurePhotoSavedLocallyAsync(staff.Id, draftPhotoRaw);
+            if (!string.IsNullOrWhiteSpace(draftLocalPhoto))
+            {
+                staff.PhotoPath = draftLocalPhoto;
+            }
+
             // Calculate percentage
             var percentage = CalculateCompletionPercentage(staff);
             staff.ProfileCompletionPercentage = percentage;
@@ -1351,6 +1374,61 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return _mapper.Map<StaffResponseDto>(staff);
+        }
+
+        private async Task<string?> EnsurePhotoSavedLocallyAsync(int staffId, string? photoString)
+        {
+            if (string.IsNullOrWhiteSpace(photoString)) return null;
+
+            var trimmed = photoString.Trim();
+            if (!trimmed.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) && !trimmed.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase) && !trimmed.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase))
+            {
+                // If it's a raw base64 string without data prefix
+                if (!trimmed.Contains("/") && !trimmed.Contains("\\") && trimmed.Length > 200)
+                {
+                    trimmed = $"data:image/jpeg;base64,{trimmed}";
+                }
+            }
+
+            if (trimmed.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var match = Regex.Match(trimmed, @"^data:image/(?<type>jpeg|jpg|png|webp);base64,(?<data>.+)$", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        var type = match.Groups["type"].Value.ToLowerInvariant();
+                        var ext = type == "jpeg" || type == "jpg" ? ".jpg" : $".{type}";
+                        var base64Data = match.Groups["data"].Value;
+                        var bytes = Convert.FromBase64String(base64Data);
+
+                        var rootPath = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                        var uploadDir = Path.Combine(rootPath, "uploads", "staff-photos");
+                        if (!Directory.Exists(uploadDir))
+                        {
+                            Directory.CreateDirectory(uploadDir);
+                        }
+
+                        var fileName = $"photo_staff_{staffId}_{Guid.NewGuid():N}{ext}";
+                        var physicalPath = Path.Combine(uploadDir, fileName);
+                        await File.WriteAllBytesAsync(physicalPath, bytes);
+
+                        var relativeUrl = $"/uploads/staff-photos/{fileName}";
+                        return relativeUrl;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to decode and save base64 photo for staff #{StaffId}", staffId);
+                }
+            }
+
+            if (trimmed.StartsWith("/") || trimmed.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed;
+            }
+
+            return trimmed.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase) ? $"/{trimmed}" : trimmed;
         }
 
         private static void ValidateFileSignature(IFormFile file, string[] allowedExtensions)
@@ -2343,21 +2421,34 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var photoPath = await _staffRepository.GetPhotoPathAsync(id);
             var webRoot = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var contentRoot = Directory.GetCurrentDirectory();
 
             if (!string.IsNullOrWhiteSpace(photoPath))
             {
                 var cleanRel = photoPath.TrimStart('/').Replace('\\', '/');
-                var fullPath = Path.Combine(webRoot, cleanRel.Replace('/', Path.DirectorySeparatorChar));
-                if (File.Exists(fullPath))
+                var pathInWebRoot = Path.Combine(webRoot, cleanRel.Replace('/', Path.DirectorySeparatorChar));
+                var pathInContentRoot = Path.Combine(contentRoot, cleanRel.Replace('/', Path.DirectorySeparatorChar));
+
+                string? foundPath = null;
+                if (File.Exists(pathInWebRoot))
                 {
-                    var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+                    foundPath = pathInWebRoot;
+                }
+                else if (File.Exists(pathInContentRoot))
+                {
+                    foundPath = pathInContentRoot;
+                }
+
+                if (foundPath != null)
+                {
+                    var ext = Path.GetExtension(foundPath).ToLowerInvariant();
                     var contentType = ext switch
                     {
                         ".png" => "image/png",
                         ".webp" => "image/webp",
                         _ => "image/jpeg"
                     };
-                    return (fullPath, contentType);
+                    return (foundPath, contentType);
                 }
             }
 
@@ -2366,6 +2457,12 @@ namespace CollegeManagement.API.Services.Implementations
             if (File.Exists(defaultAvatar))
             {
                 return (defaultAvatar, "image/png");
+            }
+
+            var fallbackAvatar = Path.Combine(contentRoot, "wwwroot", "images", "default-avatar.png");
+            if (File.Exists(fallbackAvatar))
+            {
+                return (fallbackAvatar, "image/png");
             }
 
             throw new NotFoundException("No photo available.");

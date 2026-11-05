@@ -412,7 +412,7 @@ export default function FacultyMarks() {
     } catch (err) {
       console.warn("Could not load faculty evaluations from API:", err);
     }
-  }, [context?.profile?.staffId, context?.profileData?.staffId, context?.profile?.name]);
+  }, [context?.profile?.staffId, context?.profileData?.staffId, context?.profile?.name, context?.profileData?.allocatedSubjects]);
 
   useEffect(() => {
     fetchLiveEvaluations();
@@ -477,7 +477,7 @@ export default function FacultyMarks() {
       .catch((err) => console.warn("Could not load faculty subject allocations:", err));
 
     return () => { isMounted = false; };
-  }, [context?.profile?.staffId, context?.profileData?.staffId]);
+  }, [context?.profile?.staffId, context?.profileData?.staffId, context?.profileData?.allocatedSubjects]);
 
   // Load fallback academic levels and programs if needed
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 // No mock data
 import { getAuthUser } from "@/modules/auth/authStorage.js";
@@ -78,18 +78,18 @@ export const persistStaffProfile = (data) => {
       if (authUser) {
         const compPct = Number(data?.profileCompletion || data?.profileCompletionPercentage || authUser.profileCompletionPercentage || 0);
         const pStatus = data?.profileStatus || authUser.profileStatus;
+        const statusClean = String(pStatus || "").toLowerCase();
         const isCompleted =
-          String(pStatus).toLowerCase() === "completed" ||
-          String(pStatus).toLowerCase() === "approved" ||
-          String(pStatus).toLowerCase() === "submitted" ||
-          compPct >= 50;
+          statusClean === "completed" ||
+          statusClean === "approved" ||
+          (authUser.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
 
         const updatedAuth = {
           ...authUser,
           ...(data?.photoUrl ? { photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl } : {}),
           ...(pStatus ? { profileStatus: pStatus } : {}),
           ...(compPct ? { profileCompletionPercentage: compPct } : {}),
-          ...(isCompleted ? { isOnboarded: true } : {}),
+          isOnboarded: isCompleted,
         };
         if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updatedAuth));
         if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updatedAuth));
@@ -262,7 +262,7 @@ export function FacultyProvider({ children }) {
   const [profileStep, setProfileStep] = useState(1);
 
   // Synchronize profile data with authenticated user and fetch full staff record if available
-  useEffect(() => {
+  const fetchStaffProfileSafe = useCallback(() => {
     const authUser = getAuthUser();
     if (!authUser) return;
 
@@ -343,17 +343,17 @@ export function FacultyProvider({ children }) {
 
             const pStatus = apiStaff.profileStatus || updated.profileStatus;
             const compPct = Number(apiStaff.profileCompletionPercentage || updated.profileCompletion || updated.profileCompletionPercentage || 0);
+            const statusClean = String(pStatus || "").toLowerCase();
+            const currentAuth = getAuthUser();
             const isCompleted =
-              String(pStatus).toLowerCase() === "completed" ||
-              String(pStatus).toLowerCase() === "approved" ||
-              String(pStatus).toLowerCase() === "submitted" ||
-              compPct >= 50;
+              statusClean === "completed" ||
+              statusClean === "approved" ||
+              (currentAuth?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
 
             // Immediately persist updated staff record to local storage so refreshes and reloads stay synchronized
             persistStaffProfile(updated);
 
             try {
-              const currentAuth = getAuthUser();
               if (currentAuth) {
                 const upAuth = {
                   ...currentAuth,
@@ -364,7 +364,7 @@ export function FacultyProvider({ children }) {
                   campusId: apiStaff.campusId || currentAuth.campusId,
                   boardId: apiStaff.boardId || currentAuth.boardId,
                   profileStatus: pStatus,
-                  isOnboarded: isCompleted || currentAuth.isOnboarded,
+                  isOnboarded: isCompleted,
                   profileCompletionPercentage: compPct,
                 };
                 if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(upAuth));
@@ -381,6 +381,22 @@ export function FacultyProvider({ children }) {
         console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
       });
   }, []);
+
+  useEffect(() => {
+    fetchStaffProfileSafe();
+
+    const handleSync = () => {
+      fetchStaffProfileSafe();
+    };
+    window.addEventListener("cms-staff-updated", handleSync);
+    window.addEventListener("cms-staff-records-updated", handleSync);
+    window.addEventListener("staff-records-updated", handleSync);
+    return () => {
+      window.removeEventListener("cms-staff-updated", handleSync);
+      window.removeEventListener("cms-staff-records-updated", handleSync);
+      window.removeEventListener("staff-records-updated", handleSync);
+    };
+  }, [fetchStaffProfileSafe]);
 
   // Sync profile updates across tabs and storage events
   useEffect(() => {
@@ -515,6 +531,7 @@ export function FacultyProvider({ children }) {
       sidebarOpen,
       setSidebarOpen,
       initials,
+      refreshStaffProfile: fetchStaffProfileSafe,
     }),
     [
       profileData,
@@ -527,6 +544,7 @@ export function FacultyProvider({ children }) {
       activeModule,
       sidebarOpen,
       initials,
+      fetchStaffProfileSafe,
     ]
   );
 

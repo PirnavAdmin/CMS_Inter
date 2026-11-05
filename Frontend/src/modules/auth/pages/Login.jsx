@@ -205,14 +205,11 @@ export default function Login() {
         navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         const pStatus = result?.user?.profileStatus;
-        const compPct = Number(result?.user?.profileCompletionPercentage || 0);
-        const isOnboarded = result?.user?.isOnboarded === true;
+        const statusClean = String(pStatus || "").toLowerCase();
         const isCompleted =
-          isOnboarded ||
-          String(pStatus || "").toLowerCase() === "completed" ||
-          String(pStatus || "").toLowerCase() === "approved" ||
-          String(pStatus || "").toLowerCase() === "submitted" ||
-          compPct >= 50;
+          statusClean === "completed" ||
+          statusClean === "approved" ||
+          (result?.user?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
 
         if (!isCompleted) {
           navigate("/faculty-dashboard/profile", { replace: true });

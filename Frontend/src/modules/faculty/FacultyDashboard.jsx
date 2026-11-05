@@ -39,7 +39,11 @@ function FacultyDashboardInner() {
   const outlet = useOutlet();
   const authUser = getAuthUser();
   const profileStatus = profileData?.profileStatus || authUser?.profileStatus;
-  const isCompleted = profileStatus === "Completed" || profileStatus === "Approved";
+  const statusClean = String(profileStatus || "").toLowerCase();
+  const isCompleted =
+    statusClean === "completed" ||
+    statusClean === "approved" ||
+    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
   const roleLower = String(authUser?.role || "").toLowerCase();
   const staffTypeLower = String(authUser?.staffType || "").toLowerCase();
   const isFaculty =
