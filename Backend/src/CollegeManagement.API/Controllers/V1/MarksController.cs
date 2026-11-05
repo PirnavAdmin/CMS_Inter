@@ -81,6 +81,31 @@ namespace CollegeManagement.API.Controllers.V1
                 var examId = dto?.Marks?.FirstOrDefault()?.ExaminationId;
                 await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
                 await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                // Check for student absent during examination
+                var absentMarks = dto?.Marks?.Where(m => m.IsAbsent && m.StudentId > 0).ToList();
+                if (absentMarks != null && absentMarks.Any())
+                {
+                    foreach (var absent in absentMarks)
+                    {
+                        var studentName = !string.IsNullOrWhiteSpace(absent.StudentName) ? absent.StudentName : $"Student #{absent.StudentId}";
+                        await _notificationService.SendToStudentAsync(
+                            absent.StudentId,
+                            "Examination Absence Notice",
+                            $"You were marked ABSENT for examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/student/examinations");
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Parent" },
+                            null,
+                            "Exam Absence Alert",
+                            $"Alert: Your ward {studentName} was marked ABSENT for Examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/parent/dashboard");
+                    }
+                }
             }
             catch { }
             return Ok(saveResult);
@@ -155,6 +180,53 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch { }
             return Ok(new { Count = count });
+        }
+
+        /// <summary>
+        /// Sends pending marks submission reminder to Faculty.
+        /// </summary>
+        [HttpPost("send-submission-reminder")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Exam Cell,Examination Cell")]
+        public async Task<IActionResult> SendMarksSubmissionReminder(
+            [FromQuery] int examinationId,
+            [FromQuery] string? subjectName = null,
+            [FromQuery] int? staffId = null)
+        {
+            if (examinationId <= 0) return BadRequest(new { success = false, message = "Examination ID is required." });
+
+            try
+            {
+                var subjectText = !string.IsNullOrWhiteSpace(subjectName) ? $" for subject '{subjectName}'" : "";
+                var message = $"Reminder: Marks entry submission{subjectText} is PENDING for Examination #{examinationId}. Please enter and submit marks promptly.";
+
+                if (staffId.HasValue && staffId.Value > 0)
+                {
+                    await _notificationService.SendToStaffAsync(
+                        staffId.Value,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+                else
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Faculty", "Teacher", "Staff" },
+                        null,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+
+                return Ok(new { success = true, message = "Marks submission pending reminder sent successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
         }
 
         [HttpGet("summary/{examinationId:int}")]
