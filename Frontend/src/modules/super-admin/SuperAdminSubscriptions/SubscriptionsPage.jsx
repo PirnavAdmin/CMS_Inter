@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminPreview.js";
+import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminDataUtils.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
 import "./SubscriptionsPage.css";
 
@@ -39,7 +39,7 @@ export default function SubscriptionsPage({ section = "plans" }) {
     setConfirm({ title: "Change subscription?", message: `Change ${college.name} to ${planName}?${warning}`, run: () => changeCollege(college,
       { plan: planName, subscriptionStatus: planName === "Free" ? "Free" : "Active", ...(planName === "Free" ? { renewal: "" } : {}) }, "Changed subscription") });
   };
-  const renew = (college) => setConfirm({ title: "Renew subscription?", message: `Extend ${college.name}'s subscription by 30 days? This preview does not process a payment.`, run: () => {
+  const renew = (college) => setConfirm({ title: "Renew subscription?", message: `Extend ${college.name}'s subscription by 30 days?`, run: () => {
     const renewal = new Date(Math.max(Date.now(), new Date(`${college.renewal || new Date().toISOString().slice(0, 10)}T00:00:00`).getTime()) + 30 * 86400000).toISOString().slice(0, 10);
     const history = [...(college.renewalHistory ?? []), { at: new Date().toISOString(), previousRenewal: college.renewal, renewal, plan: college.plan }];
     return changeCollege(college, { renewal, subscriptionStatus: "Active", renewalHistory: history }, "Renewed subscription");

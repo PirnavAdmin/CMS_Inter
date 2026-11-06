@@ -10,7 +10,7 @@ import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
-import { isSuperAdminRole, loginPreview, previewEmail, previewEnabled } from "@/modules/super-admin/superAdminSession.js";
+import { isSuperAdminRole } from "@/modules/super-admin/superAdminSession.js";
 
 const fields = [
   {
@@ -97,16 +97,6 @@ export default function Login() {
     const password = String(submitted.get("password") || values.password || "").trim();
     if (!emailOrMobile || !password) {
       validate();
-      return;
-    }
-
-    if (previewEnabled && emailOrMobile.toLowerCase() === previewEmail) {
-      setBusy(true);
-      try {
-        await loginPreview(emailOrMobile, password);
-        navigate("/super-admin/dashboard", { replace: true });
-      } catch (failure) { setError(failure.message); }
-      finally { setBusy(false); }
       return;
     }
 
@@ -333,7 +323,6 @@ export default function Login() {
           </button>
         </fieldset>
       </form>
-      {previewEnabled ? <Link to="/super-admin/preview-login">Super Admin · Development preview</Link> : null}
     </AuthLayout>
   );
 }

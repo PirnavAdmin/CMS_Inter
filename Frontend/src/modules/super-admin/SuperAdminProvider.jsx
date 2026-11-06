@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import superAdminApi, { getApiErrorMessage } from "@/api/superAdminApi.js";
-import { MODULES } from "./superAdminPreview.js";
+import { MODULES } from "./superAdminDataUtils.js";
 
 const Context = createContext(null);
 const emptyState = () => ({
-  colleges: [], registrations: [], users: [], collegeAdmins: [], plans: [], payments: [],
+  colleges: [], users: [], collegeAdmins: [], plans: [], payments: [],
   activities: [], notifications: [], readNotificationIds: [], subscriptions: [], renewals: [],
   accountUsage: [], moduleMatrix: [], dashboard: {}, profile: null,
   settings: { platformName: "PIRNAV CMS", supportEmail: "", renewalDays: 30 },
@@ -38,10 +38,6 @@ function normalizeLiveData(sources) {
     const status = row.status ?? row.collegeStatus ?? "Active";
     return { ...row, id: idOf(row), collegeId: Number(row.collegeId ?? row.id ?? 0), name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", status, collegeStatus: status, plan: row.plan ?? row.planName ?? "Free", registered: row.registered ?? row.registeredAt ?? row.createdAt ?? "", renewal: row.renewal ?? row.renewalDate ?? "", activeAccounts: Number(row.activeAccounts ?? row.accountCount ?? 0), accountLimit: Number(row.accountLimit ?? 0) };
   });
-  const pending = choose(sources.pending, bootstrap, "registrations", "colleges");
-  data.registrations = pending.filter((row) => (row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending").toLowerCase() === "pending" || row.registrationStatus === "Approved" || row.registrationStatus === "Rejected").map((row) => ({ ...row, id: idOf(row), collegeId: row.collegeId ? String(row.collegeId) : null, name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", contact: row.phone ?? row.contact ?? "", applicantName: row.applicantName ?? row.admin ?? "", applicantEmail: row.applicantEmail ?? row.email ?? "", plan: row.plan ?? row.planName ?? "Free", registrationStatus: row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending", submittedAt: row.submittedAt ?? row.registeredAt ?? row.createdAt ?? null }));
-  if (!sources.pending?.ok && !data.registrations.length) data.registrations = data.colleges.filter((row) => ["Pending", "Rejected"].includes(row.status)).map((row) => ({ ...row, registrationStatus: row.status, applicantName: row.admin ?? "", applicantEmail: row.email }));
-
   data.plans = choose(sources.plans, bootstrap, "plans").map((row) => ({ ...row, id: row.planId ?? row.id ?? row.name, planId: Number(row.planId ?? row.id ?? 0), name: row.name ?? row.planName ?? "", description: row.description ?? "", price: Number(row.price ?? 0), limit: Number(row.limit ?? row.accountLimit ?? 0), durationDays: Number(row.durationDays ?? 30), active: row.active !== false && row.status !== "Inactive", modules: Array.isArray(row.modules) ? row.modules : [] }));
   const users = choose(sources.users, bootstrap, "users", "globalUsers");
   const admins = choose(sources.admins, bootstrap, "collegeAdmins", "admins");
@@ -83,7 +79,6 @@ export default function SuperAdminProvider({ session, children }) {
       bootstrap: superAdminApi.getBootstrap,
       dashboard: superAdminApi.getDashboard,
       colleges: superAdminApi.getColleges,
-      pending: () => superAdminApi.getColleges({ status: "Pending" }),
       users: superAdminApi.getGlobalUsers,
       admins: superAdminApi.getCollegeAdmins,
       plans: superAdminApi.getPlans,
