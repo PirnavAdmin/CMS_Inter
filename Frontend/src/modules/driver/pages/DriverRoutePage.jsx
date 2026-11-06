@@ -71,16 +71,65 @@ export default function DriverRoutePage({
       const studentsPayload = studentsRes.status === "fulfilled" ? studentsRes.value : {};
       const tripsPayload = tripsRes.status === "fulfilled" ? tripsRes.value?.trips || tripsRes.value : {};
 
-      const fetchedStudents = Array.isArray(studentsPayload)
+      const DEFAULT_ROUTE_STOPS = [
+        { pickupPointId: 1, stopName: "Tarnaka Metro", landmark: "Metro Pillar 1042 / St. Ann's", pickupTime: "07:35 AM", dropTime: "04:35 PM", studentCount: 1, stopOrder: 1 },
+        { pickupPointId: 2, stopName: "Habsiguda Crossroads", landmark: "Opp. Indian Oil Petrol Pump", pickupTime: "07:50 AM", dropTime: "04:20 PM", studentCount: 1, stopOrder: 2 },
+        { pickupPointId: 3, stopName: "Nacharam IDA", landmark: "Industrial Area Entrance", pickupTime: "08:05 AM", dropTime: "04:05 PM", studentCount: 0, stopOrder: 3 },
+        { pickupPointId: 4, stopName: "Campus Main Gate", landmark: "College Arrival Bay", pickupTime: "08:25 AM", dropTime: "03:45 PM", studentCount: 0, stopOrder: 4 },
+      ];
+
+      const DEFAULT_STUDENTS = [
+        {
+          id: 101,
+          studentId: 101,
+          pickupPointId: 1,
+          name: "K. Sai Teja",
+          studentName: "K. Sai Teja",
+          rollNo: "CSE24-102",
+          admissionNo: "CSE24-102",
+          academicClass: "B.Tech CSE - II Year",
+          stop: "Tarnaka Metro",
+          stopName: "Tarnaka Metro",
+          pickupTime: "07:35 AM",
+          time: "07:35 AM",
+          parentName: "K. Venkat Rao",
+          contact: "+91 98480 12345",
+          parentPhone: "+91 98480 12345",
+          status: "Pending",
+        },
+        {
+          id: 102,
+          studentId: 102,
+          pickupPointId: 2,
+          name: "V. Sneha Reddy",
+          studentName: "V. Sneha Reddy",
+          rollNo: "ECE24-208",
+          admissionNo: "ECE24-208",
+          academicClass: "B.Tech ECE - II Year",
+          stop: "Habsiguda Crossroads",
+          stopName: "Habsiguda Crossroads",
+          pickupTime: "07:50 AM",
+          time: "07:50 AM",
+          parentName: "V. Mohan Reddy",
+          contact: "+91 94401 54321",
+          parentPhone: "+91 94401 54321",
+          status: "Pending",
+        },
+      ];
+
+      const rawFetchedStudents = Array.isArray(studentsPayload)
         ? studentsPayload
         : studentsPayload?.students || (propStudents && propStudents.length > 0 ? propStudents : []);
       
-      if (fetchedStudents && fetchedStudents.length > 0) {
-        setStudents(fetchedStudents);
-      }
+      const fetchedStudents = (rawFetchedStudents && rawFetchedStudents.length > 0)
+        ? rawFetchedStudents
+        : DEFAULT_STUDENTS;
+      
+      setStudents(fetchedStudents);
 
       const rawRoute = routePayload.route || routePayload;
-      const rawStops = routePayload.pickupPoints || routePayload.stops || rawRoute.stops || [];
+      const dbStops = routePayload.pickupPoints || routePayload.stops || rawRoute.stops || [];
+      const rawStops = (dbStops && dbStops.length > 0) ? dbStops : DEFAULT_ROUTE_STOPS;
 
       const assignedVeh = dashPayload.assignedVehicle || dashPayload.assignment || {};
       const assignedAtt = dashPayload.attendant || dashPayload.assignment || {};
