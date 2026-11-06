@@ -50,6 +50,7 @@ import {
 import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
 import "@/modules/admin/AdminDashboard/DashboardPage.css";
 import "@/modules/admin/AdminTransport/TransportPage.css";
+import "@/modules/transport-manager/TransportManagerReports.css";
 
 const setupTabs = [
   { id: "routes", label: "Route Management" },
@@ -3680,6 +3681,36 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
     const activeReportDefinition = reportDefinitions[activeReportTab];
     const reportFilename = activeReportDefinition?.filename || "transport-report";
+    const reportDashboardStats = [
+      {
+        label: "Annual Transport Fee",
+        value: formatCurrency(studentAssignments.reduce((total, student) => total + (Number(student.annualFee ?? (Number(student.monthlyFee) * 12)) || 0), 0)),
+        hint: "from active assignments",
+        icon: IndianRupee,
+        tone: "green",
+      },
+      {
+        label: "Maintenance Cost",
+        value: formatCurrency(maintenance.reduce((total, item) => total + (Number(item.cost ?? item.amount ?? item.maintenanceCost) || 0), 0)),
+        hint: "logged fleet service costs",
+        icon: Wrench,
+        tone: "amber",
+      },
+      {
+        label: "Fleet Capacity",
+        value: formatNumber(vehicles.reduce((total, vehicle) => total + (Number(vehicle.capacity) || 0), 0)),
+        hint: "total seats",
+        icon: Bus,
+        tone: "blue",
+      },
+      {
+        label: "Drivers & Attendants",
+        value: formatNumber(drivers.length + attendants.length),
+        hint: "staff profiles",
+        icon: Users,
+        tone: "violet",
+      },
+    ];
     const reportRequestParams = {
       reportType: activeReportDefinition?.type,
       campusId: Number(effectiveCampusId) || undefined,
@@ -3702,8 +3733,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         />
 
         {activeReportTab === "transport-dashboard-report" ? (
-          <div className="cms-transport-stat-grid">
-            {reportRows.map((row) => <StatCard key={row.metric || row.name || JSON.stringify(row)} icon={BarChart3} label={row.metric || row.name} value={row.value} hint={row.status} tone="blue" />)}
+          <div className="cms-transport-report-dashboard-stats">
+            {reportDashboardStats.map((stat) => <StatCard key={stat.label} icon={stat.icon} label={stat.label} value={stat.value} hint={stat.hint} tone={stat.tone} />)}
           </div>
         ) : null}
 
@@ -4819,7 +4850,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const currentMeta = sectionMeta[activeSection] || sectionMeta.setup;
 
   return (
-    <div className="cms-transport-page" style={{ padding: "0.25rem 0" }}>
+    <div className="cms-transport-page tm-transport-page" style={{ padding: "0.25rem 0" }}>
       {/* Module Title Header matching sidebar item (shown for non-dashboard tabs) */}
       {activeSection !== "dashboard" && (
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
