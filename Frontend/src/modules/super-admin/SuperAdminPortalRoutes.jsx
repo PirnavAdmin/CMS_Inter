@@ -17,12 +17,13 @@ function PlatformGate() {
     return () => window.clearInterval(timer);
   }, []);
   const session = getPlatformSession();
-  if (!session) return <Navigate to={previewEnabled ? "/super-admin/preview-login" : "/login"} replace/>;
+  if (!session) return <Navigate to="/super-admin/login" replace/>;
   return <SuperAdminProvider session={session}><Outlet/></SuperAdminProvider>;
 }
 
 export default function SuperAdminPortalRoutes() {
   return <Routes>
+    <Route path="login" element={<LoginPage/>}/>
     <Route path="preview-login" element={<LoginPage/>}/>
     <Route element={<PlatformGate/>}><Route element={<SuperAdminLayout/>}>
       <Route index element={<Navigate to="dashboard" replace/>}/>

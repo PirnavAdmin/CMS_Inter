@@ -44,14 +44,19 @@ export default function SuperAdminLayout() {
   const navigate = useNavigate();
   const logout = () => {
     if (session.preview) logoutPreview(); else clearAuthSession();
-    navigate(session.preview ? "/super-admin/preview-login" : "/login", { replace: true });
+    navigate("/super-admin/login", { replace: true });
   };
   return <div className={`cms-shell sa-shell ${open ? "sa-nav-open" : ""} ${collapsed ? "sa-nav-collapsed" : ""}`} data-dashboard-palette="olive">
     {open ? <button type="button" className="sa-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)}/> : null}
     <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label="Pirnav Super Admin Dashboard"><img src={collegeLogo} alt="Pirnav College"/><small>SUPER ADMIN PORTAL</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav><button type="button" className="sa-logout" title="Logout" aria-label="Logout" onClick={logout}><LogOut size={17}/><span className="sa-nav-text">Logout</span></button></aside>
     <div className="sa-workspace"><header className="sa-topbar"><div className="sa-topbar-start"><button type="button" className="cms-icon-btn sa-menu" aria-label="Toggle navigation" aria-controls="sa-navigation" aria-expanded={mobile ? open : !collapsed} onClick={() => mobile ? setOpen(!open) : setCollapsed(!collapsed)}><ThreeDIcon name="menu" size={22}/></button><span className="sa-platform-label"><ThreeDIcon name="board" size={24}/><span><small>PLATFORM WORKSPACE</small><strong>All colleges</strong></span></span></div><div><ThemeToggle variant="dashboard"/><span className="sa-avatar">SA</span><span><strong>{session.name}</strong><small>Super Admin</small></span></div></header>
       <main className="sa-content">
-        {session.preview ? <div className="sa-preview-banner"><ShieldCheck size={18}/><span><strong>Development preview</strong> · Sample data. Mock changes persist in this browser; no backend accounts, payments or invitations are created.</span></div> : <div className="sa-preview-banner">Platform backend integration is pending. Sample data and platform writes are disabled for this session.</div>}
+        {session.preview ? (
+          <div className="sa-preview-banner">
+            <ShieldCheck size={18} />
+            <span><strong>Development preview</strong> · Developer preview session active.</span>
+          </div>
+        ) : null}
         {message ? <div className="sa-feedback" role="status">{message}<button type="button" aria-label="Dismiss message" onClick={clearMessage}><X size={16}/></button></div> : null}
         <Outlet/>
       </main>
