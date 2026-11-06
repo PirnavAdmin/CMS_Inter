@@ -55,30 +55,30 @@ export function scopeTransportRecords(records, context) {
   // Drivers are requested with CampusId. Some driver DTOs omit campus and
   // staff links; preserve those results while rejecting explicit conflicts.
   const drivers = records.drivers.filter((row) => compatible(row, ['campusId']));
-  const attendants = records.attendants.filter((row) => compatible(row, ['campusId']) && (exactCampus(row) || linkedStaff(row) || contains(vehicleIds, row, 'assignedVehicleId')));
-  const pickups = records.pickups.filter((row) => compatible(row, ['campusId']) && contains(routeIds, row, 'routeId'));
-  const assignments = records.assignments.filter((row) => contains(routeIds, row, 'routeId') && contains(vehicleIds, row, 'vehicleId'));
+  const attendants = records.attendants.filter((row) => compatible(row, ['campusId']));
+  const pickups = records.pickups.filter((row) => compatible(row, ['campusId']) && (routeIds.size === 0 || contains(routeIds, row, 'routeId')));
+  const assignments = records.assignments.filter((row) => (routeIds.size === 0 || contains(routeIds, row, 'routeId')) && (vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId')));
   const assignmentIds = ids(assignments, 'assignmentId', 'id');
-  // /students supports these filters. Explicit conflicting IDs are still rejected.
-  const students = context.boardId && context.academicYearId ? records.students.filter((row) => compatible(row, ['campusId', 'boardId', 'academicYearId'])) : [];
-  const studentIds = ids(students, 'studentId', 'id'), admissions = ids(students, 'admissionNo', 'admissionNumber');
-  const studentAssignments = records.studentAssignments.filter((row) => {
-    const studentId = transportValue(row, 'studentId');
-    const member = studentId != null ? studentIds.has(id(studentId)) : contains(admissions, row, 'admissionNo', 'admissionNumber');
-    const vehicle = transportValue(row, 'vehicleId'), assignment = transportValue(row, 'vehicleAssignmentId');
-    return member && compatible(row, ['campusId', 'boardId', 'academicYearId']) && contains(routeIds, row, 'routeId')
-      && (vehicle == null || vehicleIds.has(id(vehicle))) && (assignment == null || Number(assignment) === 0 || assignmentIds.has(id(assignment)));
-  }).map((row) => {
-    const student = students.find((item) => id(transportValue(item, 'studentId', 'id')) === id(transportValue(row, 'studentId')));
-    return { ...row,
-      studentName: transportValue(row, 'studentName') || transportValue(student, 'studentName', 'fullName', 'name') || '',
-      admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || transportValue(student, 'admissionNo', 'admissionNumber') || '',
-    };
-  });
-  return { routes, vehicles, staff, drivers, attendants, pickups, assignments, students, studentAssignments,
-    trips: records.trips.filter((row) => contains(routeIds, row, 'routeId') && contains(vehicleIds, row, 'vehicleId')),
-    gps: records.gps.filter((row) => contains(vehicleIds, row, 'vehicleId', 'id')),
-    maintenance: records.maintenance.filter((row) => contains(vehicleIds, row, 'vehicleId')) };
+  const students = records.students || [];
+  const studentAssignments = (records.studentAssignments || []).filter((row) => compatible(row, ['campusId', 'boardId', 'academicYearId'])).map((row) => ({
+    ...row,
+    studentName: transportValue(row, 'studentName') || '',
+    admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || '',
+  }));
+  return {
+    routes,
+    vehicles,
+    staff,
+    drivers,
+    attendants,
+    pickups,
+    assignments,
+    students,
+    studentAssignments,
+    trips: records.trips.filter((row) => (routeIds.size === 0 || contains(routeIds, row, 'routeId')) && (vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId'))),
+    gps: records.gps.filter((row) => compatible(row, ['campusId'])),
+    maintenance: records.maintenance.filter((row) => vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId')),
+  };
 }
 
 export async function getAllTransportPages(client, url, params = {}, signal) {
@@ -124,29 +124,6 @@ export async function getAllTransportPages(client, url, params = {}, signal) {
 }
 
 export function scopeTransportReport(tab, rows, records, filters = {}) {
-  // These report projections omit resource IDs. The report API scopes them via CampusId.
-  if (['driver-reports', 'transport-dashboard-report', 'monthly-cost-reports'].includes(tab)) return rows;
-  const matches = (row, collection, keys) => collection.find((item) => keys.some(([source, target]) => {
-    const value = transportValue(row, source), other = transportValue(item, target);
-    return value != null && other != null && id(value) === id(other);
-  }));
-  const studentMatch = (row) => {
-    // A known assignment identity must not be rescued by another assignment
-    // for the same student (which may belong to another campus or period).
-    if (transportValue(row, 'assignmentId') != null) return matches(row, records.studentAssignments, [['assignmentId', 'assignmentId']]);
-    return matches(row, records.studentAssignments, [['studentId', 'studentId'], ['admissionNo', 'admissionNo']]);
-  };
-  return rows.filter((row) => {
-    if (tab === 'student-transport-reports') return Boolean(studentMatch(row));
-    if (tab === 'route-reports') return Boolean(matches(row, records.routes, [['routeId', 'routeId'], ['routeCode', 'routeCode']]));
-    if (tab === 'pickup-wise-reports') return Boolean(matches(row, records.pickups, [['pickupPointId', 'pickupPointId']]));
-    return Boolean(matches(row, records.vehicles, [['vehicleId', 'vehicleId'], ['vehicleNumber', 'vehicleNumber'], ['registrationNumber', 'registrationNumber']]));
-  }).map((row) => {
-    if (tab !== 'student-transport-reports') return row;
-    const assignment = studentMatch(row);
-    return { ...row,
-      studentName: transportValue(row, 'studentName') || transportValue(assignment, 'studentName') || '',
-      admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || transportValue(assignment, 'admissionNo', 'admissionNumber') || '',
-    };
-  });
+  if (!Array.isArray(rows)) return [];
+  return rows;
 }

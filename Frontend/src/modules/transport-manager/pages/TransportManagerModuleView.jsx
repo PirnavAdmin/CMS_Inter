@@ -41,6 +41,13 @@ import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
+import {
+  getAllTransportPages,
+  scopeTransportRecords,
+  scopeTransportReport,
+  transportValue,
+} from "@/modules/admin/AdminTransport/transportContext.js";
+import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
 import "@/modules/admin/AdminDashboard/DashboardPage.css";
 import "@/modules/admin/AdminTransport/TransportPage.css";
 
@@ -200,6 +207,20 @@ async function exportTablePdf(filename, report) {
     document.text(`Matching records: ${report.rows.length}  |  Screen page: ${report.page} of ${report.totalPages}`, 40, document.internal.pageSize.getHeight() - 20);
   }
   document.save(filename);
+}
+
+async function downloadTransportReportFile(endpoint, params, filename, fallbackMimeType) {
+  const response = await apiClient.get(endpoint, { params, responseType: "blob" });
+  const contentType = response.headers?.["content-type"] || fallbackMimeType;
+  const blob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function reportColumnsFromRows(rows, fallback) {
@@ -720,7 +741,7 @@ function extractList(data) {
   if (Array.isArray(data)) return data;
   const listKeys = [
     "items", "Items", "records", "Records", "results", "Results", "trips", "vehicles",
-    "drivers", "routes", "students", "pickupPoints", "assignments", "maintenance",
+    "drivers", "attendants", "Attendants", "routes", "students", "pickupPoints", "assignments", "maintenance",
   ];
   for (const key of listKeys) {
     if (Array.isArray(data[key])) return data[key];
@@ -730,6 +751,20 @@ function extractList(data) {
     for (const key of listKeys) {
       if (Array.isArray(data.data[key])) return data.data[key];
     }
+  }
+  return [];
+}
+
+function extractAttendantRows(responseData) {
+  let payload = responseData;
+  for (let depth = 0; depth < 5 && payload; depth += 1) {
+    if (Array.isArray(payload)) return payload;
+    const rows = [payload.items, payload.Items, payload.attendants, payload.Attendants]
+      .find(Array.isArray);
+    if (rows) return rows;
+    const nested = payload.data ?? payload.Data ?? payload.result ?? payload.Result;
+    if (!nested || nested === payload) break;
+    payload = nested;
   }
   return [];
 }
@@ -989,11 +1024,27 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const academicContext = useAcademicContext?.() || {};
   const campusContext = useCampusContext?.() || {};
 
-  const effectiveCampusId = tmContext?.effectiveCampusId ?? campusContext.selectedCampus?.id ?? campusContext.selectedCampusId ?? 1;
+  // Admin Transport scopes the shared attendant master against the campus
+  // selected in CampusContext. Prefer that same selection here so the manager
+  // does not discard valid attendant rows using a stale profile campus value.
+  const effectiveCampusId = campusContext.selectedCampusId ?? campusContext.selectedCampus?.id ?? tmContext?.effectiveCampusId ?? 1;
   const effectiveBoardId = tmContext?.effectiveBoardId ?? tmContext?.selectedBoardId ?? academicContext.selectedBoardId ?? 1;
   const effectiveAcademicYearId = tmContext?.effectiveAcademicYearId ?? academicContext.selectedAcademicYearId ?? 1;
 
   const activeSection = defaultSection;
+
+  // Accept links from the dashboard/search and older sidebar URLs while
+  // keeping each transport area in its own top-level route.
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && setupTabs.some((item) => item.id === tab) && activeSection !== "setup") {
+      navigate(`/transport-manager/setup?${searchParams.toString()}`, { replace: true });
+    } else if (tab && operationTabs.some((item) => item.id === tab) && activeSection !== "operations") {
+      navigate(`/transport-manager/operations?${searchParams.toString()}`, { replace: true });
+    } else if (tab && reportTabs.some((item) => item.id === tab) && activeSection !== "reports") {
+      navigate(`/transport-manager/reports?${searchParams.toString()}`, { replace: true });
+    }
+  }, [activeSection, navigate, searchParams]);
 
   const activeSetupTab = searchParams.get("tab") && setupTabs.some((t) => t.id === searchParams.get("tab"))
     ? searchParams.get("tab")
@@ -1019,6 +1070,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   });
   const [reportFilters, setReportFilters] = useTransportRouteValue(navigation, "reportFilters", { route: "All", vehicle: "All", status: "All" });
   const [toast, setToast] = useState({ message: "", type: "success" });
+  const [driverLoadError, setDriverLoadError] = useState("");
   const lastErrorToastRef = useRef({ message: "", time: 0 });
   const [formConfig, setFormConfigState] = useState(null);
   const [isAddDriverOpen, setIsAddDriverOpenState] = useState(false);
@@ -1027,6 +1079,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [deleteConfig, setDeleteConfigState] = useState(null);
   const scope = [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId].join(":");
   const [recordsReady, setRecordsReady] = useState(null);
+  const scopedRecords = useRef(null);
+  const loadRequest = useRef({ id: 0, controller: null });
   const requestSequence = useRef(0);
   const openedAction = useRef("");
   const closeAction = () => navigation.update({ action: null, entity: null, id: null, actionCampusId: null, actionBoardId: null, actionYearId: null });
@@ -1337,7 +1391,10 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       if (tmContext.pickupPoints?.length) setPickupPoints(tmContext.pickupPoints);
       if (tmContext.vehicles?.length) setVehicles(tmContext.vehicles);
       if (tmContext.drivers?.length) setDrivers(tmContext.drivers);
-      if (tmContext.attendants?.length) setAttendants(tmContext.attendants);
+      if (tmContext.attendants?.length
+        && !(activeSection === "setup" && activeSetupTab === "attendants")) {
+        setAttendants(tmContext.attendants);
+      }
       if (tmContext.assignments?.length) setVehicleAssignments(tmContext.assignments);
       if (tmContext.studentAssignments?.length) setStudentAssignments(tmContext.studentAssignments);
       if (tmContext.trips?.length) setTrips(tmContext.trips);
@@ -1345,6 +1402,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     }
   }, [
     tmContext,
+    activeSection,
+    activeSetupTab,
     tmContext?.routes,
     tmContext?.pickupPoints,
     tmContext?.vehicles,
@@ -1356,7 +1415,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     tmContext?.maintenance,
   ]);
 
-  const showToast = (message, type = "success") => setToast({ message, type });
+  const showToast = useCallback((message, type = "success") => setToast({ message, type }), []);
   const preparePrint = (report) => {
     setPrintPayload(report);
     window.setTimeout(() => window.print(), 80);
@@ -1367,42 +1426,15 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     return () => window.removeEventListener("afterprint", clearPrintPayload);
   }, []);
 
-  const showErrorToast = (message) => {
+  const showErrorToast = useCallback((message) => {
     const normalizedMessage = String(message || "An unexpected server error occurred.");
     const now = Date.now();
     if (lastErrorToastRef.current.message === normalizedMessage && now - lastErrorToastRef.current.time < 3000) return;
     lastErrorToastRef.current = { message: normalizedMessage, time: now };
     showToast(normalizedMessage, "error");
-  };
+  }, [showToast]);
 
-  const scoped = useCallback((items) => {
-    if (!Array.isArray(items)) return [];
-    if (typeof tmContext?.filterByScope === "function") {
-      return tmContext.filterByScope(items);
-    }
-    return items.filter((item) => {
-      if (!item) return false;
-      const cId = item.campusId ?? item.CampusId;
-      const bId = item.boardId ?? item.BoardId;
-      const ayId = item.academicYearId ?? item.AcademicYearId;
-
-      if (cId != null && String(cId) !== String(effectiveCampusId)) return false;
-      if (bId != null && String(bId) !== String(effectiveBoardId)) return false;
-      if (ayId != null && String(ayId) !== String(effectiveAcademicYearId)) return false;
-
-      const cList = item.assignedCampusIds ?? item.assignedCampuses;
-      if (Array.isArray(cList) && cList.length > 0) {
-        if (!cList.some((c) => String(typeof c === "object" ? c.id || c.campusId : c) === String(effectiveCampusId))) return false;
-      }
-
-      const bList = item.assignedBoardIds ?? item.assignedBoards;
-      if (Array.isArray(bList) && bList.length > 0) {
-        if (!bList.some((b) => String(typeof b === "object" ? b.id || b.boardId : b) === String(effectiveBoardId))) return false;
-      }
-
-      return true;
-    });
-  }, [tmContext, effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
+  const scoped = (items) => Array.isArray(items) ? items : [];
 
   const fetchTransportData = async () => {
     const sequence = ++requestSequence.current;
@@ -1410,15 +1442,19 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     setIsLoading(true);
 
     try {
-      const commonParams = {
-        campusId: effectiveCampusId,
-        boardId: effectiveBoardId,
-        academicYearId: effectiveAcademicYearId,
-        CampusId: effectiveCampusId,
-        BoardId: effectiveBoardId,
-        AcademicYearId: effectiveAcademicYearId,
-        PageNumber: 1,
-        PageSize: 1000,
+      const campusParams = { CampusId: Number(effectiveCampusId) };
+      const driverStaffParams = {
+        CampusId: Number(effectiveCampusId),
+        Department: "Transport",
+        Designation: "Driver",
+        isDriver: true,
+        PageSize: 100,
+      };
+      const driverParams = {
+        CampusId: Number(effectiveCampusId),
+        boardId: Number(effectiveBoardId) || undefined,
+        academicYearId: Number(effectiveAcademicYearId) || undefined,
+        PageSize: 100,
       };
 
       const [
@@ -1435,28 +1471,76 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         maintenanceRes,
         studentRes,
         dashboardRes,
+        studentsRes,
       ] = await Promise.allSettled([
-        apiClient.get(apiEndpoints.transport.routes, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.pickupPoints, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.lookups.pickupPoints, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.vehicles, { params: commonParams }),
-        getAllTransportPages(apiClient, apiEndpoints.faculty.list, { CampusId: Number(effectiveCampusId) }),
-        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, {
-          campusId: Number(effectiveCampusId),
-          boardId: Number(effectiveBoardId) || undefined,
-          academicYearId: Number(effectiveAcademicYearId) || undefined,
-          PageSize: 1000,
-        }),
-        getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}),
-        apiClient.get(apiEndpoints.transport.vehicleAssignments, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.trips, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.gps, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.maintenance, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.studentAssignments, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.dashboard, { params: commonParams }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.routes, campusParams),
+        getAllTransportPages(apiClient, apiEndpoints.transport.pickupPoints, campusParams),
+        Promise.resolve({ data: [] }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.vehicles, campusParams),
+        getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams),
+        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams),
+        // Match the successful Admin Transport request exactly and parse its
+        // `{ items, pageNumber, ... }` payload in this page.
+        activeSection === "setup" && activeSetupTab === "attendants"
+          ? Promise.resolve({ data: [] })
+          : apiClient.get(apiEndpoints.transport.attendants, { params: { PageNumber: 1, PageSize: 100 } }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}),
+        apiClient.get(apiEndpoints.transport.trips),
+        apiClient.get(apiEndpoints.transport.gps),
+        getAllTransportPages(apiClient, apiEndpoints.transport.maintenance, {}),
+        getAllTransportPages(apiClient, apiEndpoints.transport.studentAssignments, {}),
+        Promise.resolve({ data: null }),
+        Promise.resolve({ data: [] }),
       ]);
 
       if (sequence !== requestSequence.current) return;
+      setRecordsReady({
+        scope, entities: Object.fromEntries([
+          ["routes", routesRes], ["pickupPoints", pickupsRes], ["vehicles", vehiclesRes],
+          ["drivers", driversRes], ["attendants", attendantsRes], ["vehicleAssignments", assignmentsRes],
+          ["studentAssignments", studentRes], ["trips", tripsRes], ["maintenance", maintenanceRes],
+        ].map(([key, result]) => [key, result.status === "fulfilled"]))
+      });
+
+      const driverResult = driversRes.status === "fulfilled" ? driversRes.value : null;
+      const rawDriverItems = driverResult?.data ? extractList(driverResult.data) : [];
+      const reportedDriverTotal = driverResult?.reportedTotal ?? driverResult?.data?.totalCount ?? 0;
+      if (reportedDriverTotal > 0 && rawDriverItems.length === 0) {
+        setDriverLoadError(
+          `Data inconsistency: The driver API reported ${reportedDriverTotal} total record(s), but returned 0 items. Please verify database synchronization.`
+        );
+      } else if (driversRes.status === "rejected") {
+        setDriverLoadError(getApiErrorMessage(driversRes.reason));
+      } else {
+        setDriverLoadError("");
+      }
+
+      const resultRows = (result) => result.status === 'fulfilled' ? extractList(result.value.data) : [];
+      const attendantRows = attendantsRes.status === "fulfilled"
+        ? extractAttendantRows(attendantsRes.value.data)
+        : [];
+      const records = scopeTransportRecords({
+        routes: resultRows(routesRes), pickups: resultRows(pickupsRes), vehicles: resultRows(vehiclesRes),
+        staff: resultRows(staffRes), drivers: resultRows(driversRes), attendants: attendantRows,
+        assignments: resultRows(assignmentsRes), trips: resultRows(tripsRes), gps: resultRows(gpsRes),
+        maintenance: resultRows(maintenanceRes), studentAssignments: resultRows(studentRes), students: resultRows(studentsRes),
+      }, { campusId: effectiveCampusId, boardId: effectiveBoardId, academicYearId: effectiveAcademicYearId });
+      // The attendant master returns valid campus-wide rows with campusId:
+      // null. Keep the API rows intact, as Admin Transport does, instead of
+      // dropping them through campus scoping.
+      records.attendants = attendantRows;
+      records.studentAssignments = records.studentAssignments.map((row) => ({
+        ...row,
+        vehicleId: row.vehicleId ?? records.assignments.find((assignment) => String(assignment.assignmentId ?? assignment.id) === String(row.vehicleAssignmentId))?.vehicleId,
+      }));
+      scopedRecords.current = records;
+
+      [[routesRes, 'routes'], [pickupsRes, 'pickups'], [vehiclesRes, 'vehicles'], [staffRes, 'staff'],
+      [driversRes, 'drivers'], [attendantsRes, 'attendants'], [assignmentsRes, 'assignments'], [tripsRes, 'trips'],
+      [gpsRes, 'gps'], [maintenanceRes, 'maintenance'], [studentRes, 'studentAssignments']].forEach(([result, key]) => {
+        if (result.status === 'fulfilled') result.value = { ...result.value, data: records[key] };
+      });
+
       setRecordsReady({
         scope, entities: Object.fromEntries([
           ["routes", routesRes], ["pickupPoints", pickupsRes], ["vehicles", vehiclesRes],
@@ -1552,56 +1636,131 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           .filter(([id]) => id && id !== "undefined")));
       }
 
-      if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
+      if (!(activeSection === "setup" && activeSetupTab === "attendants")
+        && (attendantsRes.status === "fulfilled" || staffRes.status === "fulfilled")) {
         const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
-        const eligibleStaff = staffItems.filter(isAttendantStaffRecord);
-        const eligibleStaffIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "staffId", "id", "facultyId"))));
-        const eligibleEmployeeIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()).filter(Boolean));
-        const linkedItems = scoped(extractList(attendantsRes.value.data)).filter((attendant) => {
-          const staffId = transportValue(attendant, "staffId");
-          const employeeId = String(transportValue(attendant, "employeeId", "attendantCode") || "").trim().toLowerCase();
-          return (staffId != null && eligibleStaffIds.has(String(staffId))) || (employeeId && eligibleEmployeeIds.has(employeeId));
+        const staffMap = new Map();
+        staffItems.forEach((s) => {
+          const sId = transportValue(s, "staffId", "id", "facultyId");
+          const eId = String(transportValue(s, "employeeId", "empId") || "").trim().toLowerCase();
+          if (sId) staffMap.set(String(sId), s);
+          if (eId) staffMap.set(eId, s);
         });
-        const items = [...new Map(linkedItems.map((attendant) => [
-          String(transportValue(attendant, "staffId") ?? transportValue(attendant, "employeeId", "attendantCode") ?? transportValue(attendant, "attendantId", "id")), attendant,
-        ])).values()];
-        setAttendants(
-          items.map((a) => ({
+        const backendAttendants = attendantRows;
+        const attendantStaff = staffItems.filter(isAttendantStaffRecord);
+
+        const attendantMap = new Map();
+        backendAttendants.forEach((a) => {
+          const sId = transportValue(a, "staffId");
+          const eId = String(transportValue(a, "employeeId", "attendantCode") || "").trim().toLowerCase();
+          const linked = (sId && staffMap.get(String(sId))) || (eId && staffMap.get(eId));
+          const key = String(sId || eId || a.attendantId || a.id);
+          attendantMap.set(key, {
             id: a.attendantId || a.id,
-            attendantName: a.attendantName || a.attendantFullName || a.fullName || a.name || "",
-            employeeId: a.employeeId || a.attendantCode || "",
-            mobileNumber: a.mobileNumber || a.phone || "",
-            gender: a.gender || "",
-            branch: a.branchName || a.branch || "",
+            attendantId: a.attendantId || a.id,
+            staffId: a.staffId || linked?.staffId || linked?.id,
+            attendantName: a.attendantName || a.attendantFullName || linked?.fullName || linked?.staffName || a.fullName || a.name || "",
+            employeeId: a.employeeId || a.attendantCode || linked?.employeeId || "",
+            mobileNumber: a.mobileNumber || a.phone || linked?.mobile || linked?.mobileNumber || "",
+            gender: a.gender || linked?.gender || "Female",
+            branch: a.branchName || a.branch || linked?.branch || "Main Campus",
             status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
-          }))
-        );
+          });
+        });
+
+        attendantStaff.forEach((staff) => {
+          const sId = transportValue(staff, "staffId", "id", "facultyId");
+          const eId = String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase();
+          const key = String(sId || eId);
+          if (!attendantMap.has(key)) {
+            const name = transportValue(staff, "fullName", "staffName", "name")
+              || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" ");
+            attendantMap.set(key, {
+              id: sId,
+              staffId: sId,
+              attendantName: name,
+              employeeId: transportValue(staff, "employeeId", "empId") || "",
+              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+              gender: transportValue(staff, "gender") || "Female",
+              branch: transportValue(staff, "branchName", "branch", "campusName") || "Main Campus",
+              status: [staff.status, staff.isActive].includes("Inactive") ? "Inactive" : "Active",
+            });
+          }
+        });
+
+        setAttendants(Array.from(attendantMap.values()));
       }
 
       if (driversRes.status === "fulfilled" || staffRes.status === "fulfilled") {
-        const rawItems = driversRes.status === "fulfilled" ? extractList(driversRes.value.data) : [];
-        const items = scoped(rawItems);
-        const finalDrivers = (items.length > 0 ? items : rawItems).map((driver) => {
-          const transportDriverId = Number(transportValue(driver, "driverId", "id")) > 0 ? transportValue(driver, "driverId", "id") : null;
-          const driverApiId = transportDriverId || transportValue(driver, "licenceNumber", "licenseNumber", "employeeId", "id");
+        const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
+        const driverStaff = staffItems.filter(isDriverStaffRecord);
+        const staffByIdMap = new Map();
+        const staffByEmpMap = new Map();
+        driverStaff.forEach((s) => {
+          if (s.id != null) staffByIdMap.set(String(s.id), s);
+          if (s.staffId != null) staffByIdMap.set(String(s.staffId), s);
+          if (s.employeeId) staffByEmpMap.set(String(s.employeeId).toUpperCase(), s);
+        });
+
+        // Staff Management is the source of eligible driver staff. Keep any
+        // linked transport profile as the operational record, and show staff
+        // drivers without a transport profile as staff-sourced rows.
+        const canonicalDrivers = driversRes.status === "fulfilled" ? scoped(extractList(driversRes.value.data)) : [];
+        const finalDrivers = canonicalDrivers.map((driver) => {
+          const rawDriverId = driver.driverId ?? driver.transportDriverId ?? (driver.staffId ? null : driver.id);
+          const transportDriverId = rawDriverId != null ? Number(rawDriverId) : Number(driver.id);
+          const staffId = driver.staffId != null ? Number(driver.staffId) : null;
+          const empId = driver.employeeId ? String(driver.employeeId).toUpperCase() : "";
+          const linkedStaff = (staffId != null && staffByIdMap.get(String(staffId))) ||
+            (empId && staffByEmpMap.get(empId)) || null;
+
           return {
             ...driver,
-            id: driverApiId,
-            driverApiId,
-            transportDriverId,
-            staffId: transportValue(driver, "staffId") ?? null,
-            driverName: transportValue(driver, "driverName", "name", "fullName") || "",
-            employeeId: transportValue(driver, "employeeId", "empId") || "",
-            mobileNumber: transportValue(driver, "mobileNumber", "phone") || "",
-            email: transportValue(driver, "email") || "",
-            licenseNumber: transportValue(driver, "licenceNumber", "licenseNumber") || "",
-            licenseExpiryDate: String(transportValue(driver, "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
-            address: transportValue(driver, "address") || "",
-            experience: Number(transportValue(driver, "experience") || 0),
-            status: [true, 1, "Active"].includes(transportValue(driver, "status")) ? "Active" : "Inactive",
+            ...normalizeDriver(driver),
+            id: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            driverId: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            driverApiId: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            transportDriverId: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            staffId: staffId ?? (linkedStaff?.id ? Number(linkedStaff.id) : null),
+            driverName: driver.driverName || (linkedStaff ? `${linkedStaff.firstName || ""} ${linkedStaff.lastName || ""}`.trim() : ""),
+            employeeId: driver.employeeId || linkedStaff?.employeeId || "",
+            mobileNumber: driver.mobileNumber || linkedStaff?.mobile || "",
+            alternateMobileNumber: driver.alternateMobileNumber || linkedStaff?.alternateMobile || "",
+            email: driver.email || linkedStaff?.email || "",
+            licenseNumber: driver.licenseNumber || linkedStaff?.drivingLicenseNumber || "",
+            licenseExpiryDate: String(driver.licenseExpiryDate || linkedStaff?.drivingLicenseExpiryDate || "").split("T")[0],
+            address: driver.address || linkedStaff?.currentAddress || "",
+            experienceYears: Number(driver.experienceYears ?? driver.experience ?? linkedStaff?.drivingExperienceYears ?? 5),
+            experience: Number(driver.experienceYears ?? driver.experience ?? linkedStaff?.drivingExperienceYears ?? 5),
+            status: [true, 1, "Active"].includes(driver.status) ? "Active" : "Inactive",
           };
-        }).filter((driver) => Number(driver.transportDriverId) > 0);
-        setDrivers(finalDrivers);
+        }).filter((driver) => Number(driver.driverId) > 0);
+        const linkedStaffIds = new Set(finalDrivers.map((driver) => String(driver.staffId ?? "")).filter(Boolean));
+        const linkedEmployeeIds = new Set(finalDrivers.map((driver) => String(driver.employeeId || "").trim().toLowerCase()).filter(Boolean));
+        const staffDriverRows = driverStaff
+          .filter((staff) => !linkedStaffIds.has(String(transportValue(staff, "staffId", "id", "facultyId")))
+            && !linkedEmployeeIds.has(String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()))
+          .map((staff) => {
+            const staffId = transportValue(staff, "staffId", "id", "facultyId");
+            return {
+              id: staffId,
+              staffId,
+              source: "staff",
+              transportDriverId: null,
+              driverName: transportValue(staff, "fullName", "staffName", "name")
+                || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" "),
+              employeeId: transportValue(staff, "employeeId", "empId") || "",
+              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+              email: transportValue(staff, "email") || "",
+              licenseNumber: transportValue(staff, "drivingLicenseNumber", "licenceNumber", "licenseNumber") || "",
+              licenseExpiryDate: String(transportValue(staff, "drivingLicenseExpiryDate", "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
+              address: transportValue(staff, "currentAddress", "address") || "",
+              experienceYears: Number(transportValue(staff, "drivingExperienceYears", "experienceYears", "experience") || 0),
+              experience: Number(transportValue(staff, "drivingExperienceYears", "experienceYears", "experience") || 0),
+              status: "Active",
+            };
+          });
+        setDrivers([...finalDrivers, ...staffDriverRows]);
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1753,38 +1912,71 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, activeSetupTab]);
 
+  // Bus Attendants uses the same direct paged API response as Admin Transport.
+  // Keep this independent from fleet loading so another transport request
+  // cannot replace these rows with an empty scoped list.
+  useEffect(() => {
+    if (activeSection !== "setup" || activeSetupTab !== "attendants") return undefined;
+    let active = true;
+    const request = new AbortController();
+    apiClient.get(apiEndpoints.transport.attendants, {
+      params: { PageNumber: 1, PageSize: 100 },
+      signal: request.signal,
+    }).then((response) => {
+      if (!active) return;
+      const rows = extractAttendantRows(response.data);
+      setAttendants(rows.map((attendant) => ({
+        id: attendant.attendantId ?? attendant.id,
+        attendantId: attendant.attendantId ?? attendant.id,
+        staffId: attendant.staffId,
+        attendantName: attendant.attendantName || attendant.attendantFullName || attendant.fullName || attendant.name || "",
+        employeeId: attendant.employeeId || attendant.attendantCode || "",
+        mobileNumber: attendant.mobileNumber || attendant.phone || "",
+        gender: attendant.gender || "",
+        branch: attendant.branchName || attendant.branch || "Main Campus",
+        status: attendant.status === true || attendant.status === 1 || attendant.status === "Active" ? "Active" : "Inactive",
+      })));
+    }).catch((error) => {
+      if (active && error?.name !== "AbortError" && error?.code !== "ERR_CANCELED") {
+        showErrorToast(getApiErrorMessage(error) || "Unable to load bus attendants.");
+      }
+    });
+    return () => { active = false; request.abort(); };
+    // Fetch only when the roster view or its route changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSection, activeSetupTab]);
+
   // Report sync
   useEffect(() => {
-    if (activeSection !== "reports" || activeReportTab === "trip-reports") return undefined;
+    if (isLoading || !effectiveCampusId || activeSection !== "reports") return undefined;
     const definition = reportDefinitions[activeReportTab];
     if (!definition) return undefined;
     let active = true;
+    const request = new AbortController();
     const params = {
-      campusId: effectiveCampusId,
-      boardId: effectiveBoardId,
-      academicYearId: effectiveAcademicYearId,
-      CampusId: effectiveCampusId,
-      BoardId: effectiveBoardId,
-      AcademicYearId: effectiveAcademicYearId,
+      campusId: Number(effectiveCampusId) || undefined,
       routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
       vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
       status: reportFilters.status !== "All" ? reportFilters.status : undefined,
     };
+    setReportApiRows((data) => { const next = { ...data }; delete next[activeReportTab]; return next; });
     setReportLoading(true);
-    apiClient.get(definition.endpoint, { params })
+    apiClient.get(definition.endpoint, { params, signal: request.signal })
       .then((response) => {
         if (!active) return;
-        setReportApiPayloads((current) => ({ ...current, [activeReportTab]: response.data }));
-        setReportApiRows((current) => ({ ...current, [activeReportTab]: scoped(reportRowsFromPayload(response.data)) }));
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load this transport report.");
+        const scopedData = scopedRecords.current || {};
+        setReportApiRows((current) => ({ ...current, [activeReportTab]: scopeTransportReport(activeReportTab, reportRowsFromPayload(response.data), scopedData, params) }));
       })
       .catch((error) => {
         if (!active) return;
-        showErrorToast(`${getApiErrorMessage(error) || "Unable to load this transport report."} Showing the currently loaded transport data where available.`);
+        if (error?.name === "AbortError" || error?.code === "ERR_CANCELED") return;
+        showErrorToast(getApiErrorMessage(error) || "Unable to load this transport report.");
       })
       .finally(() => active && setReportLoading(false));
-    return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { active = false; request.abort(); };
   }, [
+    isLoading,
     activeSection,
     activeReportTab,
     effectiveCampusId,
@@ -1793,7 +1985,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     reportFilters.route,
     reportFilters.vehicle,
     reportFilters.status,
-    scoped,
+    showErrorToast,
   ]);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
@@ -1985,10 +2177,10 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     },
     drivers: {
       title: "Driver Master",
-      subtitle: "Manage driver licensing, expirations and duty allocations.",
+      subtitle: driverLoadError || "Manage driver licensing, expirations and duty allocations.",
       rows: drivers,
       fields: driverFields,
-      addLabel: "Add Driver",
+      addLabel: undefined,
       columns: [
         { key: "employeeId", label: "EMPLOYEE ID", strong: true },
         { key: "driverName", label: "DRIVER" },
@@ -2003,7 +2195,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       subtitle: "Manage attendant allocation-ready profiles.",
       rows: attendants,
       fields: attendantFields,
-      addLabel: "Add Attendant",
+      addLabel: undefined,
       columns: [
         { key: "employeeId", label: "EMPLOYEE ID", strong: true },
         { key: "attendantName", label: "ATTENDANT" },
@@ -2767,6 +2959,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
                 : config.addLabel && config.fields
                   ? () => openForm(key, config.addLabel, config.fields)
                   : undefined
+                    ? () => setIsAddDriverOpen(true)
+                    : key === "attendants"
+                      ? undefined
+                      : config.addLabel && config.fields
+                        ? () => openForm(key, config.addLabel, config.fields)
+                        : undefined
         }
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
@@ -3463,78 +3661,111 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     </div>
   );
 
-  // Reports calculations
-  const dashboardAnnualFee = useMemo(() => {
-    return studentAssignments
-      .filter((s) => s.status === "Active")
-      .reduce((sum, s) => sum + (Number(s.monthlyFee) || 0) * 11, 0);
-  }, [studentAssignments]);
-
-  const dashboardMaintenanceCost = useMemo(() => {
-    return maintenance.reduce((sum, m) => sum + (Number(m.cost) || 0), 0);
-  }, [maintenance]);
-
-  const dashboardFleetCapacity = useMemo(() => {
-    return vehicles.reduce((sum, v) => sum + (Number(v.capacity) || 0), 0);
-  }, [vehicles]);
-
-  const dashboardStaffCount = useMemo(() => {
-    return drivers.length + attendants.length;
-  }, [drivers, attendants]);
-
-  const reportDashboardRows = useMemo(() => [
-    { metric: "Fleet Size", value: vehicles.length, status: `${vehicles.filter((v) => v.status === "Active").length} Active` },
-    { metric: "Active Routes", value: routes.filter((r) => r.status === "Active").length, status: "Configured" },
-    { metric: "Active Drivers", value: drivers.filter((d) => d.status === "Active").length, status: "Licensed Staff" },
-    { metric: "Transport Students", value: studentAssignments.length, status: "Assigned" },
-  ], [vehicles, routes, drivers, studentAssignments]);
-
-  const reportDashboardColumns = [
-    { key: "metric", label: "METRIC", strong: true },
-    { key: "value", label: "VALUE" },
-    { key: "status", label: "STATUS" },
-  ];
-
-  const reportRows = useMemo(() => {
-    if (activeReportTab === "transport-dashboard-report") return reportDashboardRows;
-    if (activeReportTab === "trip-reports") return trips;
-    if (reportApiRows[activeReportTab]) return reportApiRows[activeReportTab];
-    if (activeReportTab === "vehicle-reports") return vehicles;
-    if (activeReportTab === "driver-reports") return drivers;
-    if (activeReportTab === "route-reports") return routes;
-    if (activeReportTab === "student-transport-reports") return studentAssignments;
-    if (activeReportTab === "pickup-wise-reports") return pickupPoints;
-    if (activeReportTab === "maintenance-reports") return maintenance;
-    return [];
-  }, [activeReportTab, reportDashboardRows, trips, reportApiRows, vehicles, drivers, routes, studentAssignments, pickupPoints, maintenance]);
-
-  const reportColumns = useMemo(() => {
-    if (activeReportTab === "transport-dashboard-report") return reportDashboardColumns;
-    if (activeReportTab === "trip-reports") return tableConfigs.trips.columns;
-    if (activeReportTab === "vehicle-reports") return tableConfigs.vehicles.columns;
-    if (activeReportTab === "driver-reports") return tableConfigs.drivers.columns;
-    if (activeReportTab === "route-reports") return tableConfigs.routes.columns;
-    if (activeReportTab === "student-transport-reports") return tableConfigs.studentAssignments.columns;
-    if (activeReportTab === "pickup-wise-reports") return tableConfigs.pickupPoints.columns;
-    if (activeReportTab === "maintenance-reports") return tableConfigs.maintenance.columns;
-    return reportColumnsFromRows(reportRows, reportDashboardColumns);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeReportTab, reportDashboardColumns, reportRows]);
-
-  const reportFilterOptions = [
-    {
-      name: "route",
-      label: "Route Filter",
-      options: [{ value: "All", label: "All Routes" }, ...routes.map((r) => ({ value: r.id, label: r.routeName }))],
-    },
-    {
-      name: "status",
-      label: "Status Filter",
-      options: [{ value: "All", label: "All Statuses" }, { value: "Active", label: "Active" }, { value: "Inactive", label: "Inactive" }],
-    },
+  const studentTransportReportColumns = [
+    { key: "studentName", label: "Student", strong: true },
+    { key: "admissionNo", label: "Admission Number" },
+    { key: "routeName", label: "Transit Route" },
+    { key: "pickupPointName", label: "Pickup Point" },
+    { key: "vehicleNumber", label: "Assigned Vehicle" },
+    { key: "feePlan", label: "Fee Plan" },
+    { key: "monthlyFee", label: "Fee Amount", currency: true },
+    { key: "status", label: "Status", badge: true },
   ];
 
   const renderReports = () => {
+    // Reports are read-only projections from their dedicated API, not master lists.
+    const reportRows = reportApiRows[activeReportTab] ?? [];
+    const fallbackReportColumns = activeReportTab === "student-transport-reports"
+      ? studentTransportReportColumns
+      : activeReportTab === "route-reports"
+        ? tableConfigs.routes.columns
+        : activeReportTab === "vehicle-reports"
+          ? tableConfigs.vehicles.columns
+          : activeReportTab === "driver-reports"
+            ? tableConfigs.drivers.columns
+            : activeReportTab === "maintenance-reports"
+              ? tableConfigs.maintenance.columns
+              : activeReportTab === "trip-reports"
+                ? tableConfigs.trips.columns
+                : activeReportTab === "transport-dashboard-report"
+                  ? tableConfigs.vehicleAssignments.columns
+                  : [{ key: "name", label: "Report Item" }, { key: "value", label: "Value" }];
+    const excludedReportColumnKeys = activeReportTab === "student-transport-reports"
+      ? new Set(["assignmentid", "id"])
+      : activeReportTab === "pickup-wise-reports"
+        ? new Set(["pickuppointid", "pickupid"])
+        : activeReportTab === "seat-occupancy-reports"
+          ? new Set(["vehicleid"])
+          : activeReportTab === "maintenance-reports"
+            ? new Set(["maintenanceid", "id"])
+            : new Set();
+    const reportColumns = reportColumnsFromRows(reportRows, fallbackReportColumns)
+      .filter((column) => !excludedReportColumnKeys.has(String(column.key).replace(/[_-]/g, "").toLowerCase()));
+    const filterOption = (value, label) => ({ value, label });
+    const routeFilterOptions = [
+      filterOption("All", "All Routes"),
+      ...routes.map((route) => filterOption(route.id, `${route.routeName} (${route.routeCode})`)),
+    ];
+    const vehicleFilterOptions = [
+      filterOption("All", "All Vehicles"),
+      ...vehicles.map((vehicle) => filterOption(vehicle.id, `${vehicle.vehicleNumber} (${vehicle.registrationNumber})`)),
+    ];
+    const statusFilterOptions = [
+      filterOption("All", "All Statuses"),
+      ...Array.from(new Set(reportRows.map((row) => row.status).filter(Boolean))).map((status) => filterOption(status, status)),
+    ];
+    const reportFilterFields = {
+      "transport-dashboard-report": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "trip-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "vehicle-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "driver-reports": [
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "route-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "student-transport-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "maintenance-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "pickup-wise-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+      ],
+      "seat-occupancy-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+      ],
+      "monthly-cost-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+      ],
+    };
+    const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
+    const activeReportDefinition = reportDefinitions[activeReportTab];
+    const reportFilename = activeReportDefinition?.filename || "transport-report";
+    const reportRequestParams = {
+      reportType: activeReportDefinition?.type,
+      campusId: Number(effectiveCampusId) || undefined,
+      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
+      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
+      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
+      search: query.trim() || undefined,
+    };
+
     return (
       <div className="cms-transport-stack">
         <ReportTabsNavigation
@@ -3549,10 +3780,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
         {activeReportTab === "transport-dashboard-report" ? (
           <div className="cms-transport-stat-grid">
-            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(dashboardAnnualFee)} hint="from active assignments" tone="green" />
-            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(dashboardMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
-            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(dashboardFleetCapacity)} hint="total seats" tone="blue" />
-            <StatCard icon={UserCheck} label="Drivers & Attendants" value={formatNumber(dashboardStaffCount)} hint="staff profiles" tone="violet" />
+            {reportRows.map((row) => <StatCard key={row.metric || row.name || JSON.stringify(row)} icon={BarChart3} label={row.metric || row.name} value={row.value} hint={row.status} tone="blue" />)}
           </div>
         ) : null}
 
@@ -3561,22 +3789,47 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         {!reportLoading ? (
           <TableSection
             title="Transport Report"
-            subtitle="Live transport report data derived from fleet records."
+            subtitle="Live data from the selected transport report API."
             rows={reportRows}
             columns={reportColumns}
             query={query}
             onQuery={setQuery}
-            filters={reportFilterOptions}
+            filters={reportFilterFields[activeReportTab]}
             filterValues={reportFilters}
             onFilterChange={(name, value) => { setReportFilters((current) => ({ ...current, [name]: value })); navigation.update({ page: null }); }}
             printSection="Reports"
             printSubsection={reportTabs.find((tab) => tab.id === activeReportTab)?.label || "Transport Report"}
-            exportFilename={`transport-${activeReportTab}.csv`}
-            onPrint={preparePrint}
-            tableClassName="cms-transport-report-table"
-            onPdfExport={async (report) => {
+            exportFilename={`${reportFilename}.csv`}
+            onPrint={async (report) => {
               try {
-                await exportTablePdf(`transport-${activeReportTab}.pdf`, report);
+                await apiClient.get(apiEndpoints.transport.reports.print, { params: reportRequestParams });
+                preparePrint(report);
+              } catch (error) {
+                showErrorToast(`Unable to prepare report for printing: ${getApiErrorMessage(error)}`);
+              }
+            }}
+            onExport={async () => {
+              try {
+                await downloadTransportReportFile(
+                  apiEndpoints.transport.reports.exportCsv,
+                  reportRequestParams,
+                  `${reportFilename}.csv`,
+                  "text/csv;charset=utf-8",
+                );
+              } catch (error) {
+                showErrorToast(`Unable to export CSV: ${getApiErrorMessage(error)}`);
+              }
+            }}
+            toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
+            tableClassName="cms-transport-report-table"
+            onPdfExport={async () => {
+              try {
+                await downloadTransportReportFile(
+                  apiEndpoints.transport.reports.exportPdf,
+                  reportRequestParams,
+                  `${reportFilename}.pdf`,
+                  "application/pdf",
+                );
               } catch (error) {
                 showErrorToast(`Unable to export PDF: ${getApiErrorMessage(error)}`);
               }
@@ -3773,7 +4026,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             onClick={() => {
               fetchTransportData();
               fetchUpcomingHolidays().then(() => { fetchMyAttendance(); });
-        
+
               setLastUpdated(
                 new Intl.DateTimeFormat("en-IN", {
                   day: "2-digit",
@@ -4652,7 +4905,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     },
     reports: {
       title: "Reports",
-      subtitle: "Live transport report data derived from fleet records.",
+      subtitle: "Live data from the transport reports APIs.",
     },
     dashboard: {
       title: "Dashboard",
