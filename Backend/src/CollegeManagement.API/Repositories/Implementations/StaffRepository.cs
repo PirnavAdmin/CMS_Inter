@@ -378,36 +378,54 @@ namespace CollegeManagement.API.Repositories.Implementations
             int pageNumber = queryParams.PageNumber < 1 ? 1 : queryParams.PageNumber;
             int pageSize = queryParams.PageSize < 1 ? 5 : queryParams.PageSize;
 
-            try
+            if (!queryParams.CampusId.HasValue || queryParams.CampusId.Value <= 0)
             {
-                var p = new DynamicParameters();
-                p.Add("p_PageNumber", pageNumber);
-                p.Add("p_PageSize", pageSize);
-                p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(queryParams.SearchTerm) ? null : queryParams.SearchTerm.Trim());
-                p.Add("p_Department", string.IsNullOrWhiteSpace(queryParams.Department) ? null : queryParams.Department.Trim());
-                p.Add("p_DepartmentId", queryParams.DepartmentId ?? 0);
-                p.Add("p_Designation", string.IsNullOrWhiteSpace(queryParams.Designation) ? null : queryParams.Designation.Trim());
-                p.Add("p_DesignationId", queryParams.DesignationId ?? 0);
-                p.Add("p_StaffType", string.IsNullOrWhiteSpace(queryParams.StaffType) ? null : queryParams.StaffType.Trim());
-                p.Add("p_Status", string.IsNullOrWhiteSpace(queryParams.Status) ? null : queryParams.Status.Trim());
-                p.Add("p_ProfileStatus", string.IsNullOrWhiteSpace(queryParams.ProfileStatus) ? null : queryParams.ProfileStatus.Trim());
-                p.Add("p_BoardId", queryParams.BoardId ?? 0);
-                p.Add("p_BoardName", string.IsNullOrWhiteSpace(queryParams.BoardName) ? null : queryParams.BoardName.Trim());
-                p.Add("p_SortBy", string.IsNullOrWhiteSpace(queryParams.SortBy) ? "id" : queryParams.SortBy.Trim());
-                p.Add("p_SortOrder", string.IsNullOrWhiteSpace(queryParams.SortOrder) ? "DESC" : queryParams.SortOrder.Trim());
-
-                using var multi = await Connection.QueryMultipleAsync("sp_GetPagedStaff", p, commandType: CommandType.StoredProcedure);
-                if (!multi.IsConsumed)
+                try
                 {
-                    var meta = await multi.ReadFirstOrDefaultAsync<dynamic>();
-                    var staffList = (await multi.ReadAsync<Staff>()).ToList();
-                    int total = meta != null && meta.TotalCount != null ? (int)meta.TotalCount : staffList.Count;
-                    return (staffList, total);
+                    var p = new DynamicParameters();
+                    p.Add("p_PageNumber", pageNumber);
+                    p.Add("p_PageSize", pageSize);
+                    p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(queryParams.SearchTerm) ? null : queryParams.SearchTerm.Trim());
+                    p.Add("p_Department", string.IsNullOrWhiteSpace(queryParams.Department) ? null : queryParams.Department.Trim());
+                    p.Add("p_DepartmentId", queryParams.DepartmentId ?? 0);
+                    p.Add("p_Designation", string.IsNullOrWhiteSpace(queryParams.Designation) ? null : queryParams.Designation.Trim());
+                    p.Add("p_DesignationId", queryParams.DesignationId ?? 0);
+                    p.Add("p_StaffType", string.IsNullOrWhiteSpace(queryParams.StaffType) ? null : queryParams.StaffType.Trim());
+                    p.Add("p_Status", string.IsNullOrWhiteSpace(queryParams.Status) ? null : queryParams.Status.Trim());
+                    p.Add("p_ProfileStatus", string.IsNullOrWhiteSpace(queryParams.ProfileStatus) ? null : queryParams.ProfileStatus.Trim());
+                    p.Add("p_BoardId", queryParams.BoardId ?? 0);
+                    p.Add("p_BoardName", string.IsNullOrWhiteSpace(queryParams.BoardName) ? null : queryParams.BoardName.Trim());
+                    p.Add("p_SortBy", string.IsNullOrWhiteSpace(queryParams.SortBy) ? "id" : queryParams.SortBy.Trim());
+                    p.Add("p_SortOrder", string.IsNullOrWhiteSpace(queryParams.SortOrder) ? "DESC" : queryParams.SortOrder.Trim());
+
+                    using var multi = await Connection.QueryMultipleAsync("sp_GetPagedStaff", p, commandType: CommandType.StoredProcedure);
+                    if (!multi.IsConsumed)
+                    {
+                        var meta = await multi.ReadFirstOrDefaultAsync<dynamic>();
+                        var staffList = (await multi.ReadAsync<Staff>()).ToList();
+                        int total = meta != null && meta.TotalCount != null ? (int)meta.TotalCount : staffList.Count;
+
+                        if (staffList.Any())
+                        {
+                            var sIds = staffList.Select(s => s.Id).ToList();
+                            var campusAssignments = await _context.StaffCampusAssignments
+                                .AsNoTracking()
+                                .Include(a => a.Campus)
+                                .Where(a => sIds.Contains(a.StaffId))
+                                .ToListAsync();
+                            foreach (var s in staffList)
+                            {
+                                s.StaffCampusAssignments = campusAssignments.Where(a => a.StaffId == s.Id).ToList();
+                            }
+                        }
+
+                        return (staffList, total);
+                    }
                 }
-            }
-            catch
-            {
-                // Fallback to EF Core LINQ query if SP is missing or fails
+                catch
+                {
+                    // Fallback to EF Core LINQ query if SP is missing or fails
+                }
             }
 
             var query = _context.Staffs
@@ -415,6 +433,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.BoardRef)
+                .Include(s => s.Campus)
+                .Include(s => s.TransferredFromCampus)
+                .Include(s => s.TransferredToCampus)
+                .Include(s => s.StaffCampusAssignments)
+                    .ThenInclude(a => a.Campus)
+                .Include(s => s.StaffBoardAssignments)
+                    .ThenInclude(b => b.Board)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
                 .Where(s => !s.IsDeleted);
@@ -479,12 +504,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.BoardRef != null && (s.BoardRef.BoardName == bName || s.BoardRef.BoardCode == bName));
             }
 
-            // 4.1 Campus filter - Include currently assigned staff as well as past assigned staff
+            // 4.1 Campus filter - Include currently assigned staff as well as transferred / past assigned staff
             if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
             {
                 var cid = queryParams.CampusId.Value;
                 query = query.Where(s => 
                     s.CampusId == cid ||
+                    s.TransferredFromCampusId == cid ||
                     s.StaffCampusAssignments.Any(a => a.CampusId == cid));
             }
 

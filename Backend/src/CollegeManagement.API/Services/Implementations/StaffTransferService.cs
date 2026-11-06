@@ -252,6 +252,11 @@ namespace CollegeManagement.API.Services.Implementations
                         // 3. Update staff primary master record
                         staff.CampusId = transfer.ToCampusId;
                         staff.Status = "Active";
+                        staff.IsTransferred = true;
+                        staff.TransferredFromCampusId = transfer.FromCampusId;
+                        staff.TransferredToCampusId = transfer.ToCampusId;
+                        staff.TransferStatus = "Transferred";
+                        staff.TransferredAt = DateTime.UtcNow;
 
                         if (transfer.ToDepartmentId.HasValue && transfer.ToDepartmentId.Value > 0)
                         {

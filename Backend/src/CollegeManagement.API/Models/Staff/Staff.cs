@@ -171,6 +171,24 @@ namespace CollegeManagement.API.Models.Staff
         [StringLength(50)]
         public string Status { get; set; } = "Active";
 
+        // Inter-Campus Transfer Tracking
+        public bool IsTransferred { get; set; } = false;
+
+        public int? TransferredFromCampusId { get; set; }
+
+        [ForeignKey(nameof(TransferredFromCampusId))]
+        public virtual Campus? TransferredFromCampus { get; set; }
+
+        public int? TransferredToCampusId { get; set; }
+
+        [ForeignKey(nameof(TransferredToCampusId))]
+        public virtual Campus? TransferredToCampus { get; set; }
+
+        [StringLength(50)]
+        public string? TransferStatus { get; set; }
+
+        public DateTime? TransferredAt { get; set; }
+
         [StringLength(500)]
         public string? PhotoPath { get; set; }
 

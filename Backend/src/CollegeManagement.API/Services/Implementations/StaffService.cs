@@ -118,9 +118,12 @@ namespace CollegeManagement.API.Services.Implementations
                     if (st.CampusId != targetCid)
                     {
                         var assignment = st.StaffCampusAssignments?.FirstOrDefault(a => a.CampusId == targetCid);
-                        if (assignment != null && (assignment.Status == "TransferredOut" || !assignment.IsActive))
+                        if (st.TransferredFromCampusId == targetCid || (assignment != null && (assignment.Status == "TransferredOut" || !assignment.IsActive)))
                         {
                             dto.Status = "Transferred";
+                            dto.IsTransferred = true;
+                            dto.TransferredToCampusId = st.CampusId;
+                            dto.TransferredToCampusName = st.Campus?.CampusName;
                         }
                     }
                 }
@@ -165,16 +168,31 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.BoardCode = staff.BoardRef.BoardCode;
             }
 
-            if (staff.StaffCampusAssignments != null && staff.StaffCampusAssignments.Any(a => a.IsActive))
+            if (staff.IsTransferred || staff.TransferredFromCampusId.HasValue)
+            {
+                dto.IsTransferred = true;
+                dto.TransferredFromCampusId = staff.TransferredFromCampusId;
+                dto.TransferredToCampusId = staff.TransferredToCampusId;
+                dto.TransferStatus = staff.TransferStatus ?? "Transferred";
+                dto.TransferredAt = staff.TransferredAt;
+                if (staff.TransferredFromCampus != null)
+                    dto.TransferredFromCampusName = staff.TransferredFromCampus.CampusName;
+                if (staff.TransferredToCampus != null)
+                    dto.TransferredToCampusName = staff.TransferredToCampus.CampusName;
+            }
+
+            if (staff.StaffCampusAssignments != null && staff.StaffCampusAssignments.Any())
             {
                 var activeCampuses = staff.StaffCampusAssignments.Where(a => a.IsActive).ToList();
                 dto.AssignedCampusIds = activeCampuses.Select(a => a.CampusId).ToList();
-                dto.AssignedCampuses = activeCampuses.Select(a => new
+                dto.AssignedCampuses = staff.StaffCampusAssignments.Select(a => new
                 {
                     id = a.CampusId,
                     name = a.Campus != null ? a.Campus.CampusName : $"Campus #{a.CampusId}",
                     code = a.Campus != null ? a.Campus.CampusCode : "",
-                    isPrimary = a.IsPrimary
+                    isPrimary = a.IsPrimary,
+                    isActive = a.IsActive,
+                    status = a.Status
                 }).Cast<object>().ToList();
 
                 var assignmentsList = activeCampuses.Select(a => new

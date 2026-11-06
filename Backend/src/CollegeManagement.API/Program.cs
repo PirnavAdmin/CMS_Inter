@@ -869,6 +869,31 @@ try
             {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
             }
+
+            // Align Staff table inter-campus transfer columns
+            try
+            {
+                var isTransCol = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'Staff' AND column_name = 'IsTransferred'").FirstOrDefaultAsync();
+                if (isTransCol == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `IsTransferred` TINYINT(1) NOT NULL DEFAULT 0;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredFromCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredToCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferStatus` VARCHAR(50) NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredAt` DATETIME NULL;");
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to align Staff transfer columns.");
+            }
+
             // Align Examination Module tables & columns
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE IF NOT EXISTS `ExaminationSubjects` (

@@ -1331,14 +1331,23 @@ export default function FacultyMarks() {
         })),
       };
 
+      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
+      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
+      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
+      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
+      const resolvedLevelName = "Intermediate";
+      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
+
       const bulkPayload = currentStudents.map((s) => ({
-        campusId: Number(campusId),
-        boardId: extractId(selectedBoard) ? Number(extractId(selectedBoard)) : undefined,
-        academicYearId: extractId(selectedYear) ? Number(extractId(selectedYear)) : undefined,
-        academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-        groupId: selectedGroup ? Number(selectedGroup) : undefined,
+        campusId: Number(campusId) || 1,
+        board: resolvedBoardName,
+        boardId: resolvedBoardId,
+        academicYearId: resolvedYearId,
+        academicLevel: resolvedLevelName,
+        academicLevelId: resolvedLevelId,
+        groupId: resolvedGroupId,
         programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(selectedSection),
+        sectionId: Number(selectedSection) || 1,
         examinationId: Number(selectedExam),
         subjectId: Number(selectedSubject),
         studentId: Number(s.studentId),
@@ -1358,7 +1367,7 @@ export default function FacultyMarks() {
         isActive: true,
       }));
 
-      await apiClient.post("/api/v1/marks/bulk", bulkPayload, {
+      await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
         headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
       }).catch(() => null);
 
@@ -1445,14 +1454,23 @@ export default function FacultyMarks() {
         })),
       };
 
+      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
+      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
+      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
+      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
+      const resolvedLevelName = "Intermediate";
+      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
+
       const bulkPayload = currentStudents.map((s) => ({
-        campusId: Number(campusId),
-        boardId: extractId(selectedBoard) ? Number(extractId(selectedBoard)) : undefined,
-        academicYearId: extractId(selectedYear) ? Number(extractId(selectedYear)) : undefined,
-        academicLevelId: selectedLevel ? Number(selectedLevel) : undefined,
-        groupId: selectedGroup ? Number(selectedGroup) : undefined,
+        campusId: Number(campusId) || 1,
+        board: resolvedBoardName,
+        boardId: resolvedBoardId,
+        academicYearId: resolvedYearId,
+        academicLevel: resolvedLevelName,
+        academicLevelId: resolvedLevelId,
+        groupId: resolvedGroupId,
         programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(selectedSection),
+        sectionId: Number(selectedSection) || 1,
         examinationId: Number(selectedExam),
         subjectId: Number(selectedSubject),
         studentId: Number(s.studentId),
@@ -1472,7 +1490,7 @@ export default function FacultyMarks() {
         isActive: true,
       }));
 
-      await apiClient.post("/api/v1/marks/bulk", bulkPayload, {
+      await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
         headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
       });
 

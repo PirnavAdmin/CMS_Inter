@@ -61,19 +61,66 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("bulk")]
-        public async Task<IActionResult> BulkSaveMarks([FromBody] BulkUploadMarksDto dto)
+        public async Task<IActionResult> BulkSaveMarks([FromBody] System.Text.Json.JsonElement payload)
         {
-            if (!IsAdmin())
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
             {
-                var staffId = GetCallerStaffId();
-                if (staffId.HasValue && staffId.Value > 0 && dto?.Marks != null)
+                PropertyNameCaseInsensitive = true
+            };
+
+            BulkUploadMarksDto dto;
+            if (payload.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var marksList = System.Text.Json.JsonSerializer.Deserialize<List<SaveMarkDto>>(payload.GetRawText(), jsonOptions) ?? new List<SaveMarkDto>();
+                dto = new BulkUploadMarksDto { Marks = marksList };
+            }
+            else
+            {
+                dto = System.Text.Json.JsonSerializer.Deserialize<BulkUploadMarksDto>(payload.GetRawText(), jsonOptions) ?? new BulkUploadMarksDto();
+                if (dto.Marks == null || dto.Marks.Count == 0)
                 {
-                    foreach (var m in dto.Marks)
+                    if (payload.TryGetProperty("marks", out var marksProp) && marksProp.ValueKind == System.Text.Json.JsonValueKind.Array)
                     {
-                        m.FacultyId = staffId.Value;
+                        dto.Marks = System.Text.Json.JsonSerializer.Deserialize<List<SaveMarkDto>>(marksProp.GetRawText(), jsonOptions) ?? new List<SaveMarkDto>();
                     }
                 }
             }
+
+            var callerStaffId = GetCallerStaffId();
+            var callerCampusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId")?.Value;
+            int? callerCampusId = int.TryParse(callerCampusClaim, out int cid) ? cid : null;
+
+            if (dto?.Marks != null)
+            {
+                foreach (var m in dto.Marks)
+                {
+                    if (!IsAdmin() && callerStaffId.HasValue && callerStaffId.Value > 0)
+                    {
+                        m.FacultyId = callerStaffId.Value;
+                    }
+                    if (!m.CampusId.HasValue || m.CampusId.Value <= 0)
+                    {
+                        m.CampusId = callerCampusId ?? 1;
+                    }
+                    if (string.IsNullOrWhiteSpace(m.Board))
+                    {
+                        m.Board = "BIEAP";
+                    }
+                    if (string.IsNullOrWhiteSpace(m.AcademicLevel))
+                    {
+                        m.AcademicLevel = "Intermediate";
+                    }
+                    if (m.AcademicYearId <= 0)
+                    {
+                        m.AcademicYearId = 1;
+                    }
+                    if (m.GroupId <= 0)
+                    {
+                        m.GroupId = 1;
+                    }
+                }
+            }
+
             var saveResult = await _marksService.BulkSaveMarksAsync(dto);
             try
             {
