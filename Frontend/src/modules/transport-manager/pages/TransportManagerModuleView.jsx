@@ -1,13 +1,14 @@
 import { SkeletonRow } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useTransportNavigation, useTransportRouteValue, validTransportPage } from "../TransportManagerContext.jsx";
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
   Bus,
+  Calendar,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -27,13 +28,20 @@ import {
   UserCheck,
   Users,
   Wrench,
+  Clock,
+  CalendarDays,
+  X,
 } from "lucide-react";
 import { ConfirmDialog, FormModal, Modal, SkeletonTable, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
+import { ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Tooltip as ReTooltip } from "recharts";
+import { attendanceService } from "@/api/attendanceService.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
+import "@/modules/admin/AdminDashboard/DashboardPage.css";
 import "@/modules/admin/AdminTransport/TransportPage.css";
 
 const setupTabs = [
@@ -925,7 +933,25 @@ function isDriverStaffRecord(staff) {
     customFields.designation,
     customFields.designationName,
   ];
-  return explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim()));
+  const status = staff?.status ?? staff?.Status ?? staff?.isActive ?? staff?.IsActive;
+  const active = status == null || status === true || status === 1 || ["active", "true", "1"].includes(String(status).toLowerCase());
+  return active && (explicitDriverFlag || driverFields.some((value) => /\bdriver\b/i.test(String(value || "").trim())));
+}
+
+function isAttendantStaffRecord(staff) {
+  const departmentSpecific = readDepartmentSpecific(staff);
+  const customFields = readCustomFields(staff);
+  const personal = staff?.personal && typeof staff.personal === "object" ? staff.personal : {};
+  const values = [
+    staff?.role, staff?.roleName, staff?.roleCode, staff?.designation, staff?.designationName,
+    personal.role, personal.roleName, personal.designation, personal.designationName,
+    departmentSpecific.role, departmentSpecific.roleName, departmentSpecific.designation,
+    departmentSpecific.designationName, customFields.role, customFields.roleName,
+    customFields.designation, customFields.designationName,
+  ];
+  const status = staff?.status ?? staff?.Status ?? staff?.isActive ?? staff?.IsActive;
+  const active = status == null || status === true || status === 1 || ["active", "true", "1"].includes(String(status).toLowerCase());
+  return active && values.some((value) => /\battendant\b/i.test(String(value || "").trim()));
 }
 
 function toTimeInputValue(value) {
@@ -1025,6 +1051,11 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [vehicleAssignments, setVehicleAssignments] = useState(() => tmContext?.assignments || []);
   const [studentAssignments, setStudentAssignments] = useState(() => tmContext?.studentAssignments || []);
   const [trips, setTrips] = useState(() => tmContext?.trips || []);
+  const [tripSearchQuery, setTripSearchQuery] = useState("");
+  const [tripRouteFilter, setTripRouteFilter] = useState("All");
+  const [selectedTripModal, setSelectedTripModal] = useState(null);
+  const [tripModalTab, setTripModalTab] = useState("overview");
+  const [tripStudentSearch, setTripStudentSearch] = useState("");
   const [maintenance, setMaintenance] = useState(() => tmContext?.maintenance || []);
   const [gpsSnapshots, setGpsSnapshots] = useState([]);
   const [dashboardMetrics, setDashboardMetrics] = useState(() => tmContext?.dashboardMetrics || null);
@@ -1032,6 +1063,214 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [reportApiPayloads, setReportApiPayloads] = useState({});
   const [reportLoading, setReportLoading] = useState(false);
   const [printPayload, setPrintPayload] = useState(null);
+
+  const authUser = useMemo(() => (typeof getAuthUser === "function" ? getAuthUser() || {} : {}), []);
+  const [lastUpdated, setLastUpdated] = useState(() =>
+    new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date())
+  );
+
+  // Holidays API state & fetch
+  const [holidaysData, setHolidaysData] = useState([]);
+  const [holidaysLoading, setHolidaysLoading] = useState(false);
+
+  const fetchUpcomingHolidays = useCallback(async () => {
+    setHolidaysLoading(true);
+    try {
+      const params = {
+        academicYearId: effectiveAcademicYearId || 9,
+        boardId: effectiveBoardId || 1,
+        page: 1,
+        pageSize: 10,
+        status: "Active",
+      };
+      let list = [];
+      try {
+        const res = await apiClient.get("/api/v1/holidays", { params });
+        const d = res.data?.data || res.data?.items || res.data?.$values || (Array.isArray(res.data) ? res.data : []);
+        list = Array.isArray(d) ? d : (d?.items || []);
+      } catch {
+        const res2 = await apiClient.get("/api/v1/dashboard/upcoming-holidays", { params });
+        const d2 = res2.data?.data || res2.data || [];
+        list = Array.isArray(d2) ? d2 : [];
+      }
+      setHolidaysData(list);
+    } catch (e) {
+      console.warn("Could not fetch holidays:", e);
+    } finally {
+      setHolidaysLoading(false);
+    }
+  }, [effectiveAcademicYearId, effectiveBoardId]);
+
+  // My Attendance API state & fetch
+  const [myAttLoading, setMyAttLoading] = useState(false);
+  const [myAttToday, setMyAttToday] = useState({
+    status: "not_punched",
+    inTime: null,
+    outTime: null,
+    shiftStartTime: "08:30 AM",
+    shiftEndTime: "05:30 PM",
+  });
+  const [myAttMetrics, setMyAttMetrics] = useState({
+    workingDays: 0,
+    presentDays: 0,
+    leaves: 0,
+    holidays: 0,
+    absentDays: 0,
+    leaveBalance: 15,
+    elapsedDays: 0,
+    monthLabel: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date()),
+    rate: 100,
+  });
+
+  const fetchMyAttendance = useCallback(async () => {
+    setMyAttLoading(true);
+    try {
+      const staffId = authUser.staffId || authUser.id || authUser.employeeId;
+      // 1. Live Today punch status: /api/v1/staff-attendance/my-today
+      const todayPromise = apiClient.get("/api/v1/staff-attendance/my-today").catch(() => null);
+      // 2. Live Week attendance history: /api/v1/staff-attendance/my-history?period=week
+      const weekHistoryPromise = apiClient.get("/api/v1/staff-attendance/my-history?period=week").catch(() => null);
+      // 3. Month attendance history
+      const monthHistoryPromise = apiClient.get("/api/v1/staff-attendance/my-history?period=month").catch(() => null);
+      // 4. Staff details & profile
+      const staffDetailsPromise = staffId
+        ? apiClient.get(apiEndpoints.staffAttendance.details(staffId)).catch(() => null)
+        : Promise.resolve(null);
+      const staffProfilePromise = staffId
+        ? apiClient.get(`/api/v1/staff/${staffId}`).catch(() => null)
+        : Promise.resolve(null);
+      // 5. Leave history
+      const leavePromise = attendanceService?.getMyLeaveHistory?.().catch(() => null);
+
+      const [todayRes, weekRes, monthRes, staffDetailsRes, staffProfileRes, leaveRes] = await Promise.all([
+        todayPromise,
+        weekHistoryPromise,
+        monthHistoryPromise,
+        staffDetailsPromise,
+        staffProfilePromise,
+        leavePromise,
+      ]);
+
+      const todayRaw = todayRes?.data?.data !== undefined ? todayRes.data.data : todayRes?.data;
+      const todayPayload = todayRaw?.status !== undefined || todayRaw?.inTime !== undefined ? todayRaw : null;
+      if (todayPayload) {
+        setMyAttToday({
+          status: todayPayload.status || todayPayload.Status || (todayPayload.inTime ? "punched_in" : "not_punched"),
+          inTime: todayPayload.inTime || todayPayload.InTime || null,
+          outTime: todayPayload.outTime || todayPayload.OutTime || null,
+          shiftStartTime: todayPayload.shiftStartTime || todayPayload.ShiftStartTime || "08:30 AM",
+          shiftEndTime: todayPayload.shiftEndTime || todayPayload.ShiftEndTime || "05:30 PM",
+        });
+      }
+
+      const weekPayload = weekRes?.data?.data !== undefined ? weekRes.data.data : weekRes?.data;
+      const monthPayload = monthRes?.data?.data !== undefined ? monthRes.data.data : monthRes?.data;
+      const histPayload =
+        monthPayload?.metrics || monthPayload?.logs?.length
+          ? monthPayload
+          : weekPayload?.metrics || weekPayload?.logs?.length
+          ? weekPayload
+          : monthPayload || weekPayload || {};
+
+      const rawMetrics = histPayload?.metrics || histPayload?.Metrics || {};
+      const rawLogs = Array.isArray(histPayload?.logs || histPayload?.Logs) ? (histPayload?.logs || histPayload?.Logs) : [];
+      const staffData = staffDetailsRes?.data?.data || staffDetailsRes?.data || staffProfileRes?.data?.data || staffProfileRes?.data;
+
+      const parseNum = (v) => {
+        if (v == null || v === "") return null;
+        const match = String(v).match(/\d+/);
+        return match ? parseInt(match[0], 10) : null;
+      };
+
+      let workingDays = parseNum(rawMetrics.workingDays || rawMetrics.WorkingDays || staffData?.totalWorkingDays) ?? 0;
+      let presentDays = parseNum(rawMetrics.presentDays || rawMetrics.PresentDays || staffData?.presentDays) ?? 0;
+      let absentDays = parseNum(rawMetrics.absentDays || rawMetrics.AbsentDays || staffData?.absentDays) ?? 0;
+      let leaves = parseNum(rawMetrics.leaves || rawMetrics.Leaves || staffData?.leaveDays || staffData?.leaves) ?? 0;
+      let holidays = parseNum(rawMetrics.holidays || rawMetrics.Holidays || staffData?.holidays) ?? 0;
+
+      if (rawLogs.length > 0) {
+        let pCount = 0;
+        let aCount = 0;
+        let lCount = 0;
+        let hCount = 0;
+        rawLogs.forEach((l) => {
+          const st = String(l.status || l.Status || "").toLowerCase();
+          if (st.includes("present") || st.includes("late")) pCount++;
+          else if (st.includes("absent")) aCount++;
+          else if (st.includes("leave")) lCount++;
+          else if (st.includes("holiday") || st.includes("off") || st.includes("sunday") || Boolean(l.holidayName || l.HolidayName)) hCount++;
+        });
+        if (pCount > 0) presentDays = pCount;
+        if (aCount > 0) absentDays = aCount;
+        if (lCount > 0) leaves = lCount;
+        if (hCount > 0) holidays = hCount;
+        if (!workingDays) {
+          workingDays = rawLogs.filter((l) => {
+            const st = String(l.status || l.Status || "").toLowerCase();
+            return !st.includes("off") && !st.includes("holiday") && !st.includes("sunday");
+          }).length;
+        }
+      }
+
+      // If user has punched in today but today is not yet represented in presentDays
+      if (todayPayload?.status === "punched_in" && presentDays === 0) {
+        presentDays = 1;
+      }
+
+      if (workingDays === 0) {
+        workingDays = Math.max(1, presentDays + leaves + absentDays);
+      }
+
+      const elapsed = presentDays + leaves + absentDays;
+      let rate = 100;
+      if (elapsed > 0) {
+        rate = Math.round((presentDays / elapsed) * 100);
+      } else if (workingDays > 0) {
+        rate = Math.round((presentDays / workingDays) * 100);
+      }
+
+      let leaveBalance = 15;
+      const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data;
+      if (leaveData?.balance?.remaining != null) leaveBalance = Number(leaveData.balance.remaining);
+      else if (leaveData?.balance?.totalAvailable != null) leaveBalance = Number(leaveData.balance.totalAvailable);
+      else if (leaveData?.balance?.total != null) leaveBalance = Math.max(0, Number(leaveData.balance.total) - (Number(leaveData.balance.used) || 0));
+      else if (leaveData?.remaining != null) leaveBalance = Number(leaveData.remaining);
+
+      let monthLabel = rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "";
+      if (monthLabel) monthLabel = monthLabel.replace(/\s*Total\s*$/i, "").trim();
+      if (!monthLabel) monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+
+      setMyAttMetrics({
+        workingDays,
+        presentDays,
+        leaves,
+        holidays,
+        absentDays,
+        leaveBalance,
+        elapsedDays: elapsed,
+        monthLabel,
+        rate,
+      });
+    } catch (e) {
+      console.warn("Could not load my attendance data:", e);
+    } finally {
+      setMyAttLoading(false);
+    }
+  }, [authUser.staffId, authUser.id, authUser.employeeId]);
+
+  useEffect(() => {
+    if (activeSection === "dashboard") {
+      fetchUpcomingHolidays();
+      fetchMyAttendance();
+    }
+  }, [activeSection, fetchUpcomingHolidays, fetchMyAttendance]);
 
   useEffect(() => {
     if (tmContext) {
@@ -1142,9 +1381,14 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         apiClient.get(apiEndpoints.transport.pickupPoints, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.lookups.pickupPoints, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.vehicles, { params: commonParams }),
-        apiClient.get(apiEndpoints.faculty.list, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.drivers, { params: commonParams }),
-        apiClient.get(apiEndpoints.transport.attendants, { params: commonParams }),
+        getAllTransportPages(apiClient, apiEndpoints.faculty.list, { CampusId: Number(effectiveCampusId) }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, {
+          campusId: Number(effectiveCampusId),
+          boardId: Number(effectiveBoardId) || undefined,
+          academicYearId: Number(effectiveAcademicYearId) || undefined,
+          PageSize: 1000,
+        }),
+        getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}),
         apiClient.get(apiEndpoints.transport.vehicleAssignments, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.trips, { params: commonParams }),
         apiClient.get(apiEndpoints.transport.gps, { params: commonParams }),
@@ -1170,12 +1414,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             routeStart: r.startLocation || r.routeStart || "",
             routeEnd: r.endLocation || r.routeEnd || "",
             totalDistanceKm: Number(r.distanceKm ?? r.DistanceKm ?? r.totalDistanceKm ?? r.distance ?? 0),
-            estimatedTimeMinutes: Number(r.estimatedDurationMinutes || r.estimatedTimeMinutes || 30),
-            minDistanceKm: Number(r.minRangeKm || r.minDistanceKm || 5),
-            minBaseFare: Number(r.nonAcBaseFare || r.defaultMonthlyFee || r.minBaseFare || 1000),
-            ratePerKm: Number(r.nonAcRatePerKm || r.ratePerKm || 100),
-            acMinBaseFare: Number(r.acBaseFare || r.acMinBaseFare || 1200),
-            acRatePerKm: Number(r.acRatePerKm || 150),
+            estimatedTimeMinutes: Number(r.estimatedDurationMinutes || r.estimatedTimeMinutes || 0),
+            minDistanceKm: Number(r.minRangeKm || r.minDistanceKm || 0),
+            minBaseFare: Number(r.nonAcBaseFare || r.defaultMonthlyFee || r.minBaseFare || 0),
+            ratePerKm: Number(r.nonAcRatePerKm || r.ratePerKm || 0),
+            acMinBaseFare: Number(r.acBaseFare || r.acMinBaseFare || 0),
+            acRatePerKm: Number(r.acRatePerKm || 0),
             description: r.description || "",
             status: [r.status, r.isActive, r.active].some((value) => value === "Active" || value === true || value === 1) ? "Active" : "Inactive",
           }))
@@ -1216,7 +1460,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             vehicleNumber: v.vehicleNumber || "",
             registrationNumber: v.registrationNumber || v.vehicleRegistrationNo || "",
             vehicleType: v.vehicleType || "Bus",
-            capacity: Number(v.capacity || 40),
+            capacity: Number(v.capacity || 0),
             isAC: Boolean(v.isAC),
             gpsDeviceId: v.gpsDeviceId || "",
             chassisNumber: v.chassisNumber || "",
@@ -1231,69 +1475,72 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
       if (staffRes.status === "fulfilled" && staffRes.value?.data) {
         const items = scoped(extractList(staffRes.value.data));
+        const attendantStaff = items.filter(isAttendantStaffRecord);
         setNonTeachingStaff(
-          items
-            .filter((staff) => {
-              const isNonTeaching = [staff.staffType, staff.facultyType].some((value) => /non[-\s]?teaching/i.test(String(value || "")));
-              const isBusAttendant = [staff.role, staff.roleName, staff.designation, staff.designationName]
-                .some((value) => String(value || "").trim().toLowerCase() === "bus attendant");
-              return isNonTeaching && isBusAttendant;
-            })
-            .map((staff) => ({
-              id: staff.staffId || staff.id || staff.facultyId,
-              name: staff.fullName || staff.staffName || [staff.firstName, staff.middleName, staff.lastName].filter(Boolean).join(" "),
-              employeeId: staff.employeeId || staff.empId || "",
-              mobileNumber: staff.mobile || staff.mobileNumber || staff.phone || "",
-              gender: staff.gender || "",
-            })),
+          attendantStaff.map((staff) => ({
+            id: transportValue(staff, "staffId", "id", "facultyId"),
+            name: transportValue(staff, "fullName", "staffName", "name") || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" "),
+            employeeId: transportValue(staff, "employeeId", "empId") || "",
+            mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+            gender: transportValue(staff, "gender") || "",
+          })),
         );
         const driverStaff = items.filter(isDriverStaffRecord);
-        setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [String(staff.staffId || staff.id || staff.facultyId), staff])));
+        setDriverStaffRecords(Object.fromEntries(driverStaff
+          .map((staff) => [String(transportValue(staff, "staffId", "id", "facultyId")), staff])
+          .filter(([id]) => id && id !== "undefined")));
       }
 
       if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
-        const items = scoped(extractList(attendantsRes.value.data));
+        const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
+        const eligibleStaff = staffItems.filter(isAttendantStaffRecord);
+        const eligibleStaffIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "staffId", "id", "facultyId"))));
+        const eligibleEmployeeIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()).filter(Boolean));
+        const linkedItems = scoped(extractList(attendantsRes.value.data)).filter((attendant) => {
+          const staffId = transportValue(attendant, "staffId");
+          const employeeId = String(transportValue(attendant, "employeeId", "attendantCode") || "").trim().toLowerCase();
+          return (staffId != null && eligibleStaffIds.has(String(staffId))) || (employeeId && eligibleEmployeeIds.has(employeeId));
+        });
+        const items = [...new Map(linkedItems.map((attendant) => [
+          String(transportValue(attendant, "staffId") ?? transportValue(attendant, "employeeId", "attendantCode") ?? transportValue(attendant, "attendantId", "id")), attendant,
+        ])).values()];
         setAttendants(
           items.map((a) => ({
             id: a.attendantId || a.id,
             attendantName: a.attendantName || a.attendantFullName || a.fullName || a.name || "",
             employeeId: a.employeeId || a.attendantCode || "",
             mobileNumber: a.mobileNumber || a.phone || "",
-            gender: a.gender || "Female",
-            branch: a.branchName || a.branch || "Main Campus",
+            gender: a.gender || "",
+            branch: a.branchName || a.branch || "",
             status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
           }))
         );
       }
 
-      if (driversRes.status === "fulfilled" && driversRes.value?.data) {
-        const rawItems = extractList(driversRes.value.data);
+      if (driversRes.status === "fulfilled" || staffRes.status === "fulfilled") {
+        const rawItems = driversRes.status === "fulfilled" ? extractList(driversRes.value.data) : [];
         const items = scoped(rawItems);
-        const finalDrivers = items.length > 0 ? items : (rawItems.length > 0 ? rawItems : []);
-        setDrivers(
-          finalDrivers.map((driver) => {
-            const transportDriverId = Number(driver.driverId) > 0 ? driver.driverId : null;
-            const driverApiId = transportDriverId
-              || driver.licenceNumber
-              || driver.licenseNumber
-              || driver.employeeId
-              || driver.id;
-            return {
-              id: driverApiId,
-              driverApiId,
-              transportDriverId,
-              driverName: driver.driverName || driver.name || "",
-              employeeId: driver.employeeId || driver.empId || "",
-              mobileNumber: driver.mobileNumber || driver.phone || "",
-              email: driver.email || "",
-              licenseNumber: driver.licenceNumber || driver.licenseNumber || "",
-              licenseExpiryDate: String(driver.licenceExpiry || driver.licenseExpiryDate || "").split("T")[0],
-              address: driver.address || "",
-              experience: Number(driver.experience || 0),
-              status: driver.status === true || driver.status === 1 || driver.status === "Active" ? "Active" : "Inactive",
-            };
-          })
-        );
+        const finalDrivers = (items.length > 0 ? items : rawItems).map((driver) => {
+          const transportDriverId = Number(transportValue(driver, "driverId", "id")) > 0 ? transportValue(driver, "driverId", "id") : null;
+          const driverApiId = transportDriverId || transportValue(driver, "licenceNumber", "licenseNumber", "employeeId", "id");
+          return {
+            ...driver,
+            id: driverApiId,
+            driverApiId,
+            transportDriverId,
+            staffId: transportValue(driver, "staffId") ?? null,
+            driverName: transportValue(driver, "driverName", "name", "fullName") || "",
+            employeeId: transportValue(driver, "employeeId", "empId") || "",
+            mobileNumber: transportValue(driver, "mobileNumber", "phone") || "",
+            email: transportValue(driver, "email") || "",
+            licenseNumber: transportValue(driver, "licenceNumber", "licenseNumber") || "",
+            licenseExpiryDate: String(transportValue(driver, "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
+            address: transportValue(driver, "address") || "",
+            experience: Number(transportValue(driver, "experience") || 0),
+            status: [true, 1, "Active"].includes(transportValue(driver, "status")) ? "Active" : "Inactive",
+          };
+        }).filter((driver) => Number(driver.transportDriverId) > 0);
+        setDrivers(finalDrivers);
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1360,12 +1607,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
               id: g.vehicleId || g.id,
               vehicleNumber: g.vehicleNumber || g.busNumber || "",
               routeName: g.routeName || g.route || "",
-              speed: parseInt(String(g.speed || "40").replace(/[^\d]/g, ""), 10) || 40,
-              nextStop: g.nextStop || "Main Gate",
+              speed: parseInt(String(g.speed || "0").replace(/[^\d]/g, ""), 10) || 0,
+              nextStop: g.nextStop || "",
               lastUpdated: g.eta ? `ETA: ${g.eta}` : (g.gpsSignal || "Active"),
-              latitude: g.latitude || "17.3850",
-              longitude: g.longitude || "78.4867",
-              status: g.tripStatus || "In Transit",
+              latitude: g.latitude || "",
+              longitude: g.longitude || "",
+              status: g.tripStatus || g.status || "Idle",
             }))
           );
         }
@@ -1402,7 +1649,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             pickupPointName: s.pickupPointName || s.pickupPoint || "",
             vehicleNumber: s.vehicleNumber || s.busNumber || "",
             feePlan: s.feePlan || s.plan || "Annual",
-            monthlyFee: Number(s.monthlyFee || s.fee || 1200),
+            monthlyFee: Number(s.monthlyFee || s.fee || 0),
             status: s.status === true || s.status === 1 || s.status === "Active" ? "Active" : "Inactive",
             routeId: s.routeId,
             vehicleId: s.vehicleId,
@@ -1418,16 +1665,32 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     } catch (err) {
       console.warn("Transport data fetch note:", err);
     } finally {
-      if (sequence === requestSequence.current) setIsLoading(false);
+      if (sequence === requestSequence.current) {
+        setIsLoading(false);
+        setLastUpdated(
+          new Intl.DateTimeFormat("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          }).format(new Date())
+        );
+      }
     }
   };
 
   useEffect(() => {
-    if (!tmContext || (!tmContext.vehicles?.length && !tmContext.routes?.length)) {
+    // Driver/attendant setup also needs the Staff Management roster, which the
+    // shared operational context does not load. Fetch it when either roster
+    // tab is opened even if fleet and route data already exist in context.
+    if (["drivers", "attendants"].includes(activeSetupTab)
+      || !tmContext || (!tmContext.vehicles?.length && !tmContext.routes?.length)) {
       fetchTransportData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, activeSetupTab]);
 
   // Report sync
   useEffect(() => {
@@ -1474,7 +1737,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
-  const driverOptions = drivers.map((driver) => ({ value: driver.id, label: driver.driverName }));
+  const driverOptions = drivers
+    .filter((driver) => Number(driver.transportDriverId ?? driver.driverId) > 0)
+    .map((driver) => ({ value: driver.transportDriverId ?? driver.driverId, label: driver.driverName }));
   const attendantOptions = attendants.map((attendant) => ({ value: attendant.id, label: attendant.attendantName }));
 
   const findRoute = (id) => routes.find((route) => String(route.id) === String(id));
@@ -1727,7 +1992,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       subtitle: "Track daily morning and evening trip movement.",
       rows: trips,
       fields: tripFields,
-      addLabel: "Add Trip",
+
       columns: [
         { key: "vehicleNumber", label: "VEHICLE", strong: true, value: (r) => r.vehicleNumber || r.busNumber || "-" },
         { key: "routeName", label: "ROUTE", value: (r) => r.routeName || r.route || "-" },
@@ -2050,9 +2315,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         }
       } else if (key === "drivers") {
         if (isEdit) {
-          const staffRecord = driverStaffRecords[String(record.id)]
+          const staffRecord = record.source === "staff" ? (driverStaffRecords[String(record.id)]
             ?? Object.values(driverStaffRecords).find((staff) => String(staff.employeeId || staff.empId || "").trim().toLowerCase()
-              === String(record.employeeId || values.employeeId || "").trim().toLowerCase());
+              === String(record.employeeId || values.employeeId || "").trim().toLowerCase())) : null;
           if (staffRecord) {
             const departmentSpecific = {
               ...readDepartmentSpecific(staffRecord),
@@ -2447,6 +2712,666 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     );
   };
 
+  const exportVehicleTripsCsv = () => {
+    const headers = [
+      "Vehicle Number",
+      "Registration Number",
+      "Route",
+      "Commercial Driver",
+      "Driver Phone",
+      "Bus Attendant",
+      "Attendant Phone",
+      "Morning Trip Time",
+      "Evening Trip Time",
+      "Assigned Students",
+      "Status",
+    ];
+    const rows = vehicleAssignments.map((va) => {
+      const v = findVehicle(va.vehicleId);
+      const d = findDriver(va.driverId);
+      const a = findAttendant(va.attendantId);
+      const students = studentAssignments.filter((s) => (
+        (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(va.id)) ||
+        (s.vehicleId && String(s.vehicleId) === String(va.vehicleId)) ||
+        (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(va.routeId))
+      ));
+      return [
+        va.vehicleNumber || "",
+        v?.registrationNumber || "",
+        va.routeName || "",
+        va.driverName || d?.driverName || "",
+        d?.mobileNumber || d?.phone || "",
+        va.attendantName || a?.attendantName || "",
+        a?.mobileNumber || a?.phone || "",
+        va.morningTripTime || "07:00 AM",
+        va.eveningTripTime || "03:45 PM",
+        students.length,
+        va.status || "Active",
+      ];
+    });
+    const csvContent = [headers.join(","), ...rows.map((r) => r.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `vehicle-trips-${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const renderVehicleTripsView = () => {
+    const runningVehiclesCount = vehicleAssignments.filter((va) => va.status === "Active").length;
+    const completedTripsCount = trips.filter((t) => t.status === "Completed").length;
+    const delayedTripsCount = trips.filter((t) => ["Delayed", "Cancelled"].includes(t.status)).length;
+    const offlineGpsCount = vehicleAssignments.filter((va) => {
+      const v = findVehicle(va.vehicleId);
+      return !v?.gpsDeviceId;
+    }).length;
+    const activeMorningCount = vehicleAssignments.filter((va) => va.status === "Active" && Boolean(va.morningTripTime)).length;
+    const activeEveningCount = vehicleAssignments.filter((va) => va.status === "Active" && Boolean(va.eveningTripTime)).length;
+
+    const filteredAssignments = vehicleAssignments.filter((assignment) => {
+      if (tripRouteFilter !== "All" && String(assignment.routeId) !== String(tripRouteFilter)) return false;
+      if (!tripSearchQuery.trim()) return true;
+      const q = tripSearchQuery.toLowerCase();
+      const vehicle = findVehicle(assignment.vehicleId);
+      const driver = findDriver(assignment.driverId);
+      const attendant = findAttendant(assignment.attendantId);
+      return (
+        (assignment.vehicleNumber || "").toLowerCase().includes(q) ||
+        (assignment.routeName || "").toLowerCase().includes(q) ||
+        (assignment.driverName || driver?.driverName || "").toLowerCase().includes(q) ||
+        (assignment.attendantName || attendant?.attendantName || "").toLowerCase().includes(q) ||
+        (vehicle?.registrationNumber || "").toLowerCase().includes(q)
+      );
+    });
+
+    const modalVehicle = selectedTripModal ? findVehicle(selectedTripModal.vehicleId) : null;
+    const modalRoute = selectedTripModal ? findRoute(selectedTripModal.routeId) : null;
+    const modalDriver = selectedTripModal ? findDriver(selectedTripModal.driverId) : null;
+    const modalAttendant = selectedTripModal ? findAttendant(selectedTripModal.attendantId) : null;
+
+    const modalAssignedStudents = selectedTripModal
+      ? studentAssignments.filter((s) => (
+          (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(selectedTripModal.id)) ||
+          (s.vehicleId && String(s.vehicleId) === String(selectedTripModal.vehicleId)) ||
+          (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(selectedTripModal.routeId))
+        ))
+      : [];
+
+    const modalRouteStops = selectedTripModal
+      ? pickupPoints.filter((stop) => String(stop.routeId) === String(selectedTripModal.routeId))
+      : [];
+
+    const filteredModalStudents = modalAssignedStudents.filter((student) => {
+      if (!tripStudentSearch.trim()) return true;
+      const q = tripStudentSearch.toLowerCase();
+      return (
+        (student.studentName || "").toLowerCase().includes(q) ||
+        (student.admissionNo || "").toLowerCase().includes(q) ||
+        (student.pickupPointName || "").toLowerCase().includes(q)
+      );
+    });
+
+    const modalDriverName = selectedTripModal ? (selectedTripModal.driverName || modalDriver?.driverName || "Unassigned") : "";
+    const modalDriverPhone = modalDriver?.mobileNumber || modalDriver?.phone || "-";
+    const modalAttendantName = selectedTripModal ? (selectedTripModal.attendantName || modalAttendant?.attendantName || "Unassigned") : "";
+    const modalAttendantPhone = modalAttendant?.mobileNumber || modalAttendant?.phone || "-";
+
+    return (
+      <div className="cms-transport-trips-view">
+        <div className="cms-transport-trips-head">
+          <div className="cms-transport-trips-head-title">
+            <Bus size={26} color="var(--cms-primary, #5d7000)" />
+            <div>
+              <h2>Vehicle Trips</h2>
+              <p>Track daily morning and evening trip movement.</p>
+            </div>
+          </div>
+          <div className="cms-transport-trips-head-actions">
+            <span className="cms-transport-date-badge">
+              <Calendar size={14} />
+              {new Date().toLocaleDateString("en-GB")}
+            </span>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              onClick={exportVehicleTripsCsv}
+              title="Download vehicle trips as CSV"
+            >
+              <Download size={15} /> Download
+            </button>
+          </div>
+        </div>
+
+        <div className="cms-transport-trips-stat-grid">
+          <div className="cms-transport-trips-stat-card tone-green">
+            <small>Vehicles Running</small>
+            <strong>{runningVehiclesCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Trips Completed</small>
+            <strong>{completedTripsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-amber">
+            <small>Delayed Trips</small>
+            <strong>{delayedTripsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-red">
+            <small>Offline GPS Devices</small>
+            <strong>{offlineGpsCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Active Morning Trips</small>
+            <strong>{activeMorningCount}</strong>
+          </div>
+          <div className="cms-transport-trips-stat-card tone-blue">
+            <small>Active Evening Trips</small>
+            <strong>{activeEveningCount}</strong>
+          </div>
+        </div>
+
+        <div className="cms-transport-trips-toolbar">
+          <div className="cms-transport-trips-search">
+            <Search size={16} />
+            <input
+              placeholder="Search vehicle, route, driver..."
+              value={tripSearchQuery}
+              onChange={(e) => setTripSearchQuery(e.target.value)}
+            />
+          </div>
+          <select
+            className="cms-transport-trips-route-select"
+            value={tripRouteFilter}
+            onChange={(e) => setTripRouteFilter(e.target.value)}
+          >
+            <option value="All">All Routes</option>
+            {routes.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.routeName} ({r.routeCode || "Route"})
+              </option>
+            ))}
+          </select>
+          {(tripSearchQuery || tripRouteFilter !== "All") && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost cms-btn-sm"
+              onClick={() => {
+                setTripSearchQuery("");
+                setTripRouteFilter("All");
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+
+        <div className="cms-transport-trips-cards-grid">
+          {filteredAssignments.length === 0 ? (
+            <div className="cms-card cms-transport-trip-empty" style={{ gridColumn: "1 / -1" }}>
+              {vehicleAssignments.length === 0
+                ? "No vehicle assignments found. Vehicles and routes configured in Operations → Vehicle Assignment will appear here."
+                : "No vehicles matching your search or route filter."}
+            </div>
+          ) : (
+            filteredAssignments.map((assignment) => {
+              const vehicle = findVehicle(assignment.vehicleId);
+              const driver = findDriver(assignment.driverId);
+              const attendant = findAttendant(assignment.attendantId);
+              const students = studentAssignments.filter((s) => (
+                (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(assignment.id)) ||
+                (s.vehicleId && String(s.vehicleId) === String(assignment.vehicleId)) ||
+                (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(assignment.routeId))
+              ));
+              const hasGps = Boolean(vehicle?.gpsDeviceId);
+              const isRunning = assignment.status === "Active";
+              const regNo = vehicle?.registrationNumber || "-";
+              const driverName = assignment.driverName || driver?.driverName || "Unassigned";
+              const driverPhone = driver?.mobileNumber || driver?.phone || "-";
+              const attendantName = assignment.attendantName || attendant?.attendantName || "Unassigned";
+              const attendantPhone = attendant?.mobileNumber || attendant?.phone || "-";
+
+              return (
+                <div key={assignment.id} className="cms-transport-trip-card">
+                  <div className="cms-transport-trip-card-head">
+                    <div className="cms-transport-trip-veh-meta">
+                      <div className="cms-transport-trip-veh-row">
+                        <span className="cms-transport-trip-veh-tag">
+                          {assignment.vehicleNumber || "Vehicle"}
+                        </span>
+                        <h3 className="cms-transport-trip-route-name">
+                          {assignment.routeName || "Route"}
+                        </h3>
+                      </div>
+                      <span className="cms-transport-trip-reg">Reg: {regNo}</span>
+                    </div>
+                    <div className="cms-transport-trip-badges">
+                      <span className={`cms-transport-pill ${isRunning ? "pill-running" : "pill-inactive"}`}>
+                        {isRunning ? "Running" : "Inactive"}
+                      </span>
+                      <span className={`cms-transport-pill ${hasGps ? "pill-gps-active" : "pill-gps-offline"}`}>
+                        {hasGps ? "GPS Active" : "GPS Offline"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cms-transport-trip-crew-box">
+                    <div className="cms-transport-trip-crew-col">
+                      <span className="cms-transport-trip-crew-label">
+                        <Bus size={12} /> Commercial Driver
+                      </span>
+                      <span className="cms-transport-trip-crew-name" title={driverName}>
+                        {driverName}
+                      </span>
+                      <span className="cms-transport-trip-crew-phone">
+                        {driverPhone}
+                      </span>
+                    </div>
+                    <div className="cms-transport-trip-crew-col">
+                      <span className="cms-transport-trip-crew-label">
+                        <UserCheck size={12} /> Bus Attendant
+                      </span>
+                      <span className="cms-transport-trip-crew-name" title={attendantName}>
+                        {attendantName}
+                      </span>
+                      <span className="cms-transport-trip-crew-phone">
+                        {attendantPhone}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="cms-transport-trip-card-foot">
+                    <span className="cms-transport-trip-student-pill">
+                      <Users size={14} /> {students.length} Student{students.length === 1 ? "" : "s"} Assigned
+                    </span>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary cms-btn-sm"
+                      onClick={() => {
+                        setSelectedTripModal(assignment);
+                        setTripModalTab("overview");
+                        setTripStudentSearch("");
+                      }}
+                    >
+                      <Eye size={14} /> View Details
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {selectedTripModal && (
+          <div
+            className="cms-transport-trip-modal-overlay"
+            onClick={() => setSelectedTripModal(null)}
+          >
+            <div
+              className="cms-transport-trip-modal-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="cms-transport-trip-modal-banner">
+                <div className="cms-transport-trip-modal-banner-top">
+                  <div className="cms-transport-trip-modal-banner-veh">
+                    <span className="cms-transport-trip-modal-veh-pill">
+                      {selectedTripModal.vehicleNumber}
+                    </span>
+                    <span className="cms-transport-trip-modal-route-title">
+                      {selectedTripModal.routeName}
+                    </span>
+                    <span className="cms-transport-trip-modal-status">
+                      {selectedTripModal.status === "Active" ? "Running" : "Inactive"}
+                    </span>
+                    {selectedTripModal.effectiveFrom && (
+                      <span className="cms-transport-trip-modal-effective">
+                        Effective From: {selectedTripModal.effectiveFrom}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="cms-transport-trip-modal-close-btn"
+                    onClick={() => setSelectedTripModal(null)}
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="cms-transport-trip-modal-strip">
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Driver</small>
+                    <strong title={`${modalDriverName} (${modalDriverPhone})`}>
+                      {modalDriverName}
+                    </strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Bus Attendant</small>
+                    <strong title={`${modalAttendantName} (${modalAttendantPhone})`}>
+                      {modalAttendantName}
+                    </strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Morning Trip</small>
+                    <strong>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Evening Trip</small>
+                    <strong>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Capacity</small>
+                    <strong>{modalVehicle?.capacity || 40} Seats</strong>
+                  </div>
+                  <div className="cms-transport-trip-modal-strip-item">
+                    <small>Assigned Students</small>
+                    <strong>{modalAssignedStudents.length}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="cms-transport-trip-modal-tabs">
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "overview" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("overview")}
+                >
+                  Overview
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "morning" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("morning")}
+                >
+                  Morning Trip
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "evening" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("evening")}
+                >
+                  Evening Trip
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "students" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("students")}
+                >
+                  Student List{" "}
+                  <span className="cms-transport-trip-modal-tab-count">
+                    {modalAssignedStudents.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`cms-transport-trip-modal-tab-btn ${tripModalTab === "history" ? "is-active" : ""}`}
+                  onClick={() => setTripModalTab("history")}
+                >
+                  Trip History
+                </button>
+              </div>
+
+              <div className="cms-transport-trip-modal-body">
+                {tripModalTab === "overview" && (
+                  <div className="cms-transport-trip-overview-grid">
+                    <div className="cms-transport-trip-overview-col">
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Vehicle Number:</span>
+                        <strong>{selectedTripModal.vehicleNumber}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Registration Number:</span>
+                        <strong>{modalVehicle?.registrationNumber || "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Assigned Route:</span>
+                        <strong>{selectedTripModal.routeName}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Commercial Driver:</span>
+                        <strong>{modalDriverName}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Bus Attendant:</span>
+                        <strong>{modalAttendantName}</strong>
+                      </div>
+                    </div>
+                    <div className="cms-transport-trip-overview-col">
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Pickup Points:</span>
+                        <strong>{modalRouteStops.length} Configured Stops</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Assigned Students:</span>
+                        <strong>{modalAssignedStudents.length} Enrolled</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Total Route Distance:</span>
+                        <strong>{modalRoute?.totalDistanceKm ? `${modalRoute.totalDistanceKm} KM` : "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Estimated Trip Duration:</span>
+                        <strong>{modalRoute?.estimatedTimeMinutes ? `${modalRoute.estimatedTimeMinutes} Minutes` : "-"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Morning Departure / Arrival:</span>
+                        <strong>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                      </div>
+                      <div className="cms-transport-trip-overview-row">
+                        <span>Evening Departure / Arrival:</span>
+                        <strong>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "morning" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", padding: "14px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "10px", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>SCHEDULED DEPARTURE</small>
+                        <strong style={{ fontSize: "1rem" }}>{selectedTripModal.morningTripTime || "07:00 AM"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>ROUTE PATH</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalRoute?.routeStart || "Campus"} → {modalRoute?.routeEnd || modalRoute?.routeName || "Destination"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>COMMERCIAL DRIVER</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalDriverName} ({modalDriverPhone})</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>STATUS</small>
+                        <span className="cms-transport-pill pill-running">Scheduled / Running</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Configured Pickup Stops ({modalRouteStops.length})</h4>
+                      {modalRouteStops.length === 0 ? (
+                        <p style={{ color: "var(--cms-muted)", fontSize: "0.88rem" }}>No stops configured for this route.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="cms-table" style={{ width: "100%" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: "40px" }}>Stop</th>
+                                <th>Stop Name</th>
+                                <th>Pickup Time</th>
+                                <th>Location / Landmark</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modalRouteStops.map((stop, sIdx) => (
+                                <tr key={stop.id || sIdx}>
+                                  <td><strong>{sIdx + 1}</strong></td>
+                                  <td>{stop.pickupPointName || stop.pointName || "-"}</td>
+                                  <td>{stop.pickupTime || stop.morningTime || "-"}</td>
+                                  <td>{stop.location || stop.landmark || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "evening" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", padding: "14px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "10px", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>SCHEDULED DEPARTURE</small>
+                        <strong style={{ fontSize: "1rem" }}>{selectedTripModal.eveningTripTime || "03:45 PM"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>RETURN ROUTE</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalRoute?.routeEnd || modalRoute?.routeName || "Destination"} → {modalRoute?.routeStart || "Campus"}</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>BUS ATTENDANT</small>
+                        <strong style={{ fontSize: "0.95rem" }}>{modalAttendantName} ({modalAttendantPhone})</strong>
+                      </div>
+                      <div>
+                        <small style={{ color: "var(--cms-muted, #737b68)", display: "block", fontSize: "0.72rem", textTransform: "uppercase", fontWeight: "700" }}>STATUS</small>
+                        <span className="cms-transport-pill pill-running">Scheduled / Running</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Drop Off Stops ({modalRouteStops.length})</h4>
+                      {modalRouteStops.length === 0 ? (
+                        <p style={{ color: "var(--cms-muted)", fontSize: "0.88rem" }}>No stops configured for this route.</p>
+                      ) : (
+                        <div style={{ overflowX: "auto" }}>
+                          <table className="cms-table" style={{ width: "100%" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: "40px" }}>Stop</th>
+                                <th>Stop Name</th>
+                                <th>Drop Time</th>
+                                <th>Location / Landmark</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modalRouteStops.map((stop, sIdx) => (
+                                <tr key={stop.id || sIdx}>
+                                  <td><strong>{sIdx + 1}</strong></td>
+                                  <td>{stop.pickupPointName || stop.pointName || "-"}</td>
+                                  <td>{stop.dropTime || stop.eveningTime || "-"}</td>
+                                  <td>{stop.location || stop.landmark || "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {tripModalTab === "students" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "0.92rem", fontWeight: "700", color: "var(--cms-text, #20251b)" }}>
+                        Enrolled Students ({modalAssignedStudents.length})
+                      </span>
+                      <div className="cms-transport-search" style={{ maxWidth: "300px" }}>
+                        <Search size={14} />
+                        <input
+                          placeholder="Search student by name or admission..."
+                          value={tripStudentSearch}
+                          onChange={(e) => setTripStudentSearch(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    {filteredModalStudents.length === 0 ? (
+                      <div className="cms-transport-trip-empty">
+                        {modalAssignedStudents.length === 0
+                          ? "No students currently assigned to this vehicle. Students assigned in Student Transport will automatically appear here."
+                          : "No students matching your search."}
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="cms-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th style={{ width: "40px" }}>#</th>
+                              <th>Admission No</th>
+                              <th>Student Name</th>
+                              <th>Pickup Stop</th>
+                              <th>Fee Plan</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredModalStudents.map((student, idx) => (
+                              <tr key={student.id || student.studentId || idx}>
+                                <td>{idx + 1}</td>
+                                <td><strong>{student.admissionNo || "-"}</strong></td>
+                                <td>{student.studentName || "-"}</td>
+                                <td>{student.pickupPointName || "-"}</td>
+                                <td>{student.feePlan || "-"}</td>
+                                <td>
+                                  <StatusBadge value={student.status} />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tripModalTab === "history" && (
+                  <div>
+                    <h4 style={{ margin: "0 0 10px", fontSize: "0.95rem", fontWeight: "700" }}>Vehicle Trip Logs</h4>
+                    {trips.filter((t) => String(t.vehicleId) === String(selectedTripModal.vehicleId) || String(t.assignmentId) === String(selectedTripModal.id)).length === 0 ? (
+                      <div style={{ padding: "16px", background: "var(--cms-bg, #f7f9f3)", borderRadius: "8px", fontSize: "0.88rem", color: "var(--cms-muted, #737b68)", border: "1px solid var(--cms-border, #dce2d0)" }}>
+                        No completed trip logs recorded in backend for this vehicle yet. Today's scheduled morning and evening runs are active.
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table className="cms-table" style={{ width: "100%" }}>
+                          <thead>
+                            <tr>
+                              <th>Date</th>
+                              <th>Trip Type</th>
+                              <th>Start Time</th>
+                              <th>End Time</th>
+                              <th>Students Present</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trips
+                              .filter((t) => String(t.vehicleId) === String(selectedTripModal.vehicleId) || String(t.assignmentId) === String(selectedTripModal.id))
+                              .map((t, tIdx) => (
+                                <tr key={t.id || tIdx}>
+                                  <td>{t.tripDate || "-"}</td>
+                                  <td>{t.tripType || "-"}</td>
+                                  <td>{t.startTime || "-"}</td>
+                                  <td>{t.endTime || "-"}</td>
+                                  <td>{t.studentsPresent || "-"}</td>
+                                  <td><StatusBadge value={t.status} /></td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderGpsCards = () => (
     <div className="cms-transport-gps-grid">
       {gpsSnapshots.length === 0 ? (
@@ -2686,123 +3611,888 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     }
   };
 
+  const holidaysList = useMemo(() => {
+    const raw = Array.isArray(holidaysData)
+      ? holidaysData
+      : holidaysData?.items || holidaysData?.holidays || [];
+    if (!raw.length) {
+      return [];
+    }
+    return raw.map((item, idx) => {
+      const name = item.holidayName || item.name || item.title || "Holiday";
+      const type = item.holidayType || item.type || "Festival Holiday";
+      const start = item.startDate || item.holidayDate || item.date;
+      const end = item.endDate || start;
+      let dateRangeText = "Scheduled";
+      let dayOfWeek = "";
+      let durationText = item.durationText || (item.totalDays ? `${item.totalDays} Days` : "1 Day");
+      let badge = item.countdownText || item.badge || "Upcoming";
+
+      let tone = "violet";
+      const lower = String(type).toLowerCase();
+      if (lower.includes("national") || lower.includes("public")) tone = "orange";
+      else if (lower.includes("festival")) tone = "violet";
+      else if (lower.includes("special")) tone = "cyan";
+      else if (lower.includes("vacation") || lower.includes("break")) tone = "green";
+
+      if (start) {
+        const dStart = new Date(start);
+        const dEnd = new Date(end);
+        if (!isNaN(dStart.getTime())) {
+          dayOfWeek = dStart.toLocaleDateString("en-US", { weekday: "short" });
+          const sText = dStart.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          const eText = !isNaN(dEnd.getTime()) ? dEnd.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : sText;
+          dateRangeText = (start === end || !item.endDate) ? sText : `${sText} - ${eText}`;
+          const diff = Math.max(1, Math.round((dEnd.getTime() - dStart.getTime()) / 86400000) + 1);
+          durationText = `${diff} ${diff === 1 ? "Day" : "Days"}`;
+
+          const now = new Date();
+          now.setHours(0, 0, 0, 0);
+          const daysLeft = Math.ceil((dStart.getTime() - now.getTime()) / 86400000);
+          if (daysLeft < 0) badge = "Completed";
+          else if (daysLeft === 0) badge = "Today";
+          else if (daysLeft === 1) badge = "Tomorrow";
+          else badge = `In ${daysLeft} Days`;
+        }
+      }
+
+      return {
+        id: item.id || item.holidayId || idx,
+        name,
+        type,
+        tone,
+        dateRangeText,
+        dayOfWeek,
+        durationText,
+        badge,
+      };
+    });
+  }, [holidaysData]);
+
+  const myAttendanceDonutData = useMemo(() => {
+    const p = myAttMetrics.presentDays || 0;
+    const l = myAttMetrics.leaves || 0;
+    const h = myAttMetrics.holidays || 0;
+    const a = myAttMetrics.absentDays || 0;
+
+    const items = [];
+    if (p > 0) items.push({ name: "Present", value: p, color: "#22a447" });
+    if (l > 0) items.push({ name: "Leave", value: l, color: "#f59e0b" });
+    if (h > 0) items.push({ name: "Holidays", value: h, color: "#94a3b8" });
+    if (a > 0) items.push({ name: "Absent", value: a, color: "#ef4444" });
+
+    if (!items.length) return [{ name: "No Data", value: 1, color: "#cbd5e1" }];
+    return items;
+  }, [myAttMetrics]);
+
+  const currentHour = new Date().getHours();
+  const greeting = currentHour < 12 ? { text: "Good Morning", icon: "🌅" } : currentHour < 17 ? { text: "Good Afternoon", icon: "☀️" } : { text: "Good Evening", icon: "🌙" };
+  const userDisplayName = authUser.fullName || authUser.name || authUser.username || "Transport Manager";
+
   const renderDashboard = () => (
-    <div className="cms-transport-stack">
-      <div className="cms-transport-stat-grid">
-        <StatCard icon={Bus} label="Total Vehicles" value={summary.totalVehicles} hint={`(${summary.activeVehicles} Active)`} tone="blue" />
-        <StatCard icon={Route} label="Active Routes" value={summary.activeRoutes} hint={`${pickupPoints.length} pickup points`} tone="green" />
-        <StatCard icon={Users} label="Total Drivers" value={summary.totalDrivers} hint={`(${summary.activeDrivers} Active)`} tone="blue" />
-        <StatCard icon={UserCheck} label="Total Bus Attendants" value={summary.totalAttendants} tone="violet" />
-        <StatCard icon={CheckCircle} label="Students Using Transport" value={summary.activeStudents} hint={`${summary.utilization}% capacity used`} tone="green" />
-        <StatCard icon={Wrench} label="Vehicles Under Maintenance" value={summary.maintenanceVehicles} tone="amber" />
-        <StatCard icon={FileText} label="Expiring Vehicle Documents" value={summary.expiringDocs} tone="red" />
-        <StatCard icon={AlertTriangle} label="Expiring Driver Licenses" value={summary.expiringLicenses} tone="red" />
+    <div className="cms-transport-stack tm-dashboard-layout" style={{ gap: "8px" }}>
+      {/* 1. Top Header Bar: Greeting, Last Updated, Refresh */}
+      <div className="dashboard-header-bar" style={{ marginBottom: "2px" }}>
+        <div>
+          <h1 className="dashboard-greeting-title">
+            <span className="dashboard-greeting-emoji">{greeting.icon}</span> {greeting.text}, {userDisplayName}!
+          </h1>
+          <p className="dashboard-greeting-sub">Here's what's happening in your college transport operations today.</p>
+        </div>
+        <div className="dashboard-header-controls">
+          <div className="dashboard-last-updated-badge">
+            <Clock size={13} />
+            <span>Last updated <strong>{lastUpdated}</strong></span>
+          </div>
+          <button
+            type="button"
+            className="dashboard-refresh-btn"
+            onClick={() => {
+              fetchTransportData();
+              fetchUpcomingHolidays();
+              fetchMyAttendance();
+              setLastUpdated(
+                new Intl.DateTimeFormat("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                }).format(new Date())
+              );
+            }}
+            disabled={isLoading}
+          >
+            <RefreshCw size={13} className={isLoading ? "dashboard-spin" : ""} />
+            <span>Refresh Dashboard</span>
+          </button>
+        </div>
       </div>
 
-      {(summary.expiringDocs || summary.expiringLicenses) ? (
-        <div className="cms-transport-warning">
+      {/* 2. Top KPI Cards Row (5 horizontal compact cards matching Reference 4) */}
+      <div className="dashboard-kpi-grid">
+        <div className="dashboard-kpi dashboard-kpi-blue">
+          <div className="dashboard-kpi-top">
+            <div className="dashboard-kpi-icon" style={{ background: "#eaf3fd", color: "#2563eb" }}>
+              <Bus size={18} />
+            </div>
+            <div className="dashboard-kpi-title-wrap">
+              <span className="dashboard-kpi-label">Total Vehicles</span>
+              <div className="dashboard-kpi-value-row">
+                <span className="dashboard-kpi-value">{summary.totalVehicles}</span>
+                <span className="dashboard-kpi-trend">{summary.activeVehicles} Active</span>
+              </div>
+              <small className="dashboard-kpi-subtext">Registered fleet</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi dashboard-kpi-green">
+          <div className="dashboard-kpi-top">
+            <div className="dashboard-kpi-icon" style={{ background: "#edf7e2", color: "#22a447" }}>
+              <Route size={18} />
+            </div>
+            <div className="dashboard-kpi-title-wrap">
+              <span className="dashboard-kpi-label">Active Routes</span>
+              <div className="dashboard-kpi-value-row">
+                <span className="dashboard-kpi-value">{summary.activeRoutes}</span>
+                <span className="dashboard-kpi-trend">{pickupPoints.length} Stops</span>
+              </div>
+              <small className="dashboard-kpi-subtext">Covered zones</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi dashboard-kpi-cyan">
+          <div className="dashboard-kpi-top">
+            <div className="dashboard-kpi-icon" style={{ background: "#ecfeff", color: "#0891b2" }}>
+              <Users size={18} />
+            </div>
+            <div className="dashboard-kpi-title-wrap">
+              <span className="dashboard-kpi-label">Total Drivers</span>
+              <div className="dashboard-kpi-value-row">
+                <span className="dashboard-kpi-value">{summary.totalDrivers}</span>
+                <span className="dashboard-kpi-trend">{summary.activeDrivers} Active</span>
+              </div>
+              <small className="dashboard-kpi-subtext">Licensed drivers</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi dashboard-kpi-violet">
+          <div className="dashboard-kpi-top">
+            <div className="dashboard-kpi-icon" style={{ background: "#f5f3ff", color: "#7c3aed" }}>
+              <UserCheck size={18} />
+            </div>
+            <div className="dashboard-kpi-title-wrap">
+              <span className="dashboard-kpi-label">Bus Attendants</span>
+              <div className="dashboard-kpi-value-row">
+                <span className="dashboard-kpi-value">{summary.totalAttendants}</span>
+                <span className="dashboard-kpi-trend">Assigned</span>
+              </div>
+              <small className="dashboard-kpi-subtext">Safety attendants</small>
+            </div>
+          </div>
+        </div>
+
+        <div className="dashboard-kpi dashboard-kpi-orange">
+          <div className="dashboard-kpi-top">
+            <div className="dashboard-kpi-icon" style={{ background: "#fffbeb", color: "#d97706" }}>
+              <CheckCircle size={18} />
+            </div>
+            <div className="dashboard-kpi-title-wrap">
+              <span className="dashboard-kpi-label">Transport Students</span>
+              <div className="dashboard-kpi-value-row">
+                <span className="dashboard-kpi-value">{summary.activeStudents}</span>
+                <span className="dashboard-kpi-trend">{summary.utilization}%</span>
+              </div>
+              <small className="dashboard-kpi-subtext">Capacity utilized</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Quick Actions Bar with 3 Tabs routing to sidebar modules */}
+      <nav className="dashboard-quick-actions" aria-label="Quick Actions">
+        <h2>Quick Actions</h2>
+        <div className="dashboard-quick-actions-list" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <button
+            type="button"
+            className="dashboard-quick-action tone-violet"
+            onClick={() => navigate("/transport-manager/setup")}
+            title="Go to Transport Setup module"
+          >
+            <Route size={15} />
+            <span>Setup</span>
+          </button>
+          <button
+            type="button"
+            className="dashboard-quick-action tone-green"
+            onClick={() => navigate("/transport-manager/operations")}
+            title="Go to Transport Operations module"
+          >
+            <Bus size={15} />
+            <span>Operations</span>
+          </button>
+          <button
+            type="button"
+            className="dashboard-quick-action tone-orange"
+            onClick={() => navigate("/transport-manager/reports")}
+            title="Go to Transport Reports module"
+          >
+            <BarChart3 size={15} />
+            <span>Reports</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Compliance Warning Banner if any documents/licenses expiring */}
+      {(summary.expiringDocs > 0 || summary.expiringLicenses > 0) ? (
+        <div className="cms-transport-warning" style={{ margin: "2px 0" }}>
           <AlertTriangle size={18} />
-          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.
-            {summary.expiringLicenseDrivers?.length ? ` Drivers: ${summary.expiringLicenseDrivers.map((driver) => `${driver.driverName} (${driver.licenseExpiryDate})`).join(", ")}.` : ""}
+          <span>
+            <strong>Regulatory Compliance Warning:</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.
+            {summary.expiringLicenseDrivers?.length
+              ? ` Drivers: ${summary.expiringLicenseDrivers.map((d) => `${d.driverName} (${d.licenseExpiryDate})`).join(", ")}.`
+              : ""}
           </span>
           <em>Action Required</em>
         </div>
       ) : null}
 
-      <div className="cms-card">
-        <div className="cms-card-head cms-transport-status-head">
-          <div>
+      {/* 4. Grid of Small Cards (Responsive 3-column / 2-column grid) */}
+      <section className="dashboard-grid-row tm-grid-row" aria-label="Transport Operations and HR">
+        {/* Card 1: Today's Transport Status */}
+        <article className="dashboard-card tm-dashboard-card">
+          <div className="dashboard-card-head">
             <h2>Today's Transport Status</h2>
-            <p>Current trip activity and assignment readiness from live operations.</p>
+            <button
+              type="button"
+              className="dashboard-footer-btn"
+              onClick={openTransportOperations}
+              style={{ fontSize: "10.5px" }}
+            >
+              Open Operations <ArrowRight size={12} />
+            </button>
           </div>
-          <button type="button" className="cms-btn cms-btn-primary cms-transport-open-ops" onClick={openTransportOperations}>
-            Open Transport Operations <ArrowRight size={15} />
-          </button>
-        </div>
-        <div className="cms-card-body">
-          <div className="cms-transport-status-metrics">
-            {transportStatusMetrics.map((metric) => (
-              <div key={metric.label} className={`cms-transport-status-metric tone-${metric.tone}`}>
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-              </div>
-            ))}
+          <div className="dashboard-card-body" style={{ display: "flex", flexDirection: "column" }}>
+            <div className="dashboard-info-list tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
+              {trips.length === 0 ? (
+                <div className="cms-transport-empty" style={{ padding: "12px", textAlign: "center", fontSize: "11px" }}>
+                  No vehicle trip activity recorded today.
+                </div>
+              ) : (
+                trips.map((trip, tripIndex) => {
+                  const assignment = findAssignment(trip.assignmentId);
+                  return (
+                    <div
+                      key={`${trip.id}-${trip.tripDate}-${trip.tripType}-${tripIndex}`}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "6px 8px",
+                        marginBottom: "4px",
+                        border: "1px solid var(--cms-border)",
+                        borderRadius: "6px",
+                        background: "var(--cms-subtle)",
+                        gap: "6px",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <strong style={{ fontSize: "11px", color: "var(--cms-text)", whiteSpace: "nowrap" }}>
+                            {trip.vehicleNumber}
+                          </strong>
+                          <span
+                            style={{
+                              fontSize: "9.5px",
+                              fontWeight: 600,
+                              padding: "1px 5px",
+                              borderRadius: "4px",
+                              background: "color-mix(in srgb, var(--cms-primary, #6F8400) 10%, var(--cms-surface))",
+                              color: "var(--cms-primary, #6F8400)",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {trip.routeName ? `${trip.routeName} • ` : ""}{trip.tripType}
+                          </span>
+                        </div>
+                        <small
+                          style={{
+                            fontSize: "9px",
+                            color: "var(--cms-muted)",
+                            display: "block",
+                            marginTop: "1px",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}
+                        </small>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                        {(() => {
+                          const s = String(trip.status || "Scheduled").trim();
+                          const sLower = s.toLowerCase();
+                          let bg = "rgba(100, 116, 139, 0.12)";
+                          let color = "#475569";
+                          let dotColor = "#64748b";
+                          if (sLower.includes("run") || sLower.includes("active") || sLower.includes("progress")) {
+                            bg = "rgba(22, 163, 74, 0.15)";
+                            color = "#15803d";
+                            dotColor = "#16a34a";
+                          } else if (sLower.includes("schedul")) {
+                            bg = "rgba(59, 130, 246, 0.15)";
+                            color = "#2563eb";
+                            dotColor = "#3b82f6";
+                          } else if (sLower.includes("complet")) {
+                            bg = "rgba(16, 185, 129, 0.15)";
+                            color = "#059669";
+                            dotColor = "#10b981";
+                          } else if (sLower.includes("delay") || sLower.includes("cancel")) {
+                            bg = "rgba(239, 68, 68, 0.15)";
+                            color = "#dc2626";
+                            dotColor = "#ef4444";
+                          }
+                          return (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "2px 7px",
+                                borderRadius: "999px",
+                                fontSize: "10px",
+                                fontWeight: 600,
+                                background: bg,
+                                color: color,
+                                whiteSpace: "nowrap",
+                                lineHeight: 1.2,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: "5px",
+                                  height: "5px",
+                                  borderRadius: "50%",
+                                  background: dotColor,
+                                  display: "inline-block",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              {s}
+                            </span>
+                          );
+                        })()}
+                        <button
+                          type="button"
+                          className="cms-transport-details-btn"
+                          onClick={() => openTripDetails(trip)}
+                          title="View trip details"
+                          style={{
+                            padding: "4px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: "22px",
+                            height: "22px",
+                            borderRadius: "50%",
+                            border: "1px solid var(--cms-border)",
+                            background: "var(--cms-surface)",
+                            cursor: "pointer",
+                            color: "var(--cms-primary, #6F8400)",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Eye size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="dashboard-card-footer">
+              <button type="button" className="dashboard-footer-btn" onClick={openTransportOperations}>
+                View All Trips <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
-          <div className="cms-transport-trip-list">
-            {trips.length === 0 ? (
-              <div className="cms-transport-empty" style={{ padding: "1.5rem", textAlign: "center" }}>
-                No vehicle trip activity recorded today.
-              </div>
-            ) : (
-              trips.map((trip, tripIndex) => {
-                const assignment = findAssignment(trip.assignmentId);
-                return (
-                  <div key={`${trip.id}-${trip.tripDate}-${trip.tripType}-${tripIndex}`} className="cms-transport-trip">
-                    <span className="cms-transport-trip-info">
-                      <strong>{trip.vehicleNumber}</strong>
-                      <small>{trip.routeName} - {trip.tripType}</small>
-                      <small>Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}</small>
-                    </span>
-                    <span className="cms-transport-trip-actions">
-                      <StatusBadge value={trip.status} />
-                      <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
-                        <Eye size={14} /> Details
-                      </button>
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
+        </article>
 
-      <div className="cms-transport-two-col">
-        <div className="cms-card">
-          <div className="cms-card-head"><h2><BarChart3 size={20} /> Vehicle Seat Occupancy Matrix</h2></div>
-          <div className="cms-card-body">
-            <div className="cms-transport-occupancy">
+        {/* Card 2: Vehicle Seat Occupancy Matrix */}
+        <article className="dashboard-card tm-dashboard-card">
+          <div className="dashboard-card-head">
+            <h2 style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <BarChart3 size={15} /> Vehicle Seat Occupancy Matrix
+            </h2>
+          </div>
+          <div className="dashboard-card-body">
+            <div className="tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
               {vehicles.length === 0 ? (
-                <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No vehicles registered yet.</p>
+                <p className="cms-transport-empty" style={{ margin: "1rem 0", fontSize: "11px" }}>No vehicles registered yet.</p>
               ) : (
                 vehicles.map((vehicle, vehicleIndex) => {
                   const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
                   return (
-                    <div key={`${vehicle.id}-${vehicleIndex}`}>
-                      <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
-                      <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
+                    <div
+                      key={`${vehicle.id}-${vehicleIndex}`}
+                      className="tm-occupancy-row"
+                    >
+                      <strong style={{ fontSize: "11px", whiteSpace: "nowrap", color: "var(--cms-text)" }}>
+                        {vehicle.vehicleNumber} {vehicle.vehicleType ? `(${vehicle.vehicleType})` : ""}
+                      </strong>
+                      <div
+                        className="cms-transport-progress"
+                        style={{
+                          flex: 1,
+                          height: "6px",
+                          minWidth: "40px",
+                          margin: "0 6px",
+                          borderRadius: "999px",
+                          background: "color-mix(in srgb, var(--cms-primary, #6F8400) 15%, var(--cms-surface))",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <i
+                          style={{
+                            display: "block",
+                            height: "100%",
+                            borderRadius: "inherit",
+                            background: "linear-gradient(90deg, var(--cms-primary, #6F8400), #22a447)",
+                            width: `${Math.min(percent, 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: "var(--cms-text)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {assigned} / {capacity}
+                      </span>
                     </div>
                   );
                 })
               )}
             </div>
+            <div className="dashboard-card-footer">
+              <button
+                type="button"
+                className="dashboard-footer-btn"
+                onClick={() => navigate("/transport-manager/setup?tab=vehicles")}
+              >
+                View Vehicle Fleet <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
-        </div>
+        </article>
 
-        <div className="cms-card">
-          <div className="cms-card-head"><h2><PieChart size={20} /> Route-wise Student Distribution</h2></div>
-          <div className="cms-card-body">
-            <div className="cms-transport-route-distribution">
+        {/* Card 3: Route-wise Student Distribution */}
+        <article className="dashboard-card tm-dashboard-card">
+          <div className="dashboard-card-head">
+            <h2 style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <PieChart size={15} /> Route-wise Student Distribution
+            </h2>
+          </div>
+          <div className="dashboard-card-body">
+            <div className="cms-transport-route-distribution tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
               {routes.length === 0 ? (
-                <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No transport routes registered yet.</p>
+                <p className="cms-transport-empty" style={{ margin: "1rem 0", fontSize: "11px" }}>No transport routes registered yet.</p>
               ) : (
                 routes.map((route, routeIndex) => {
-                  const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
+                  const students = studentAssignments.filter(
+                    (student) => student.routeId === route.id && student.status === "Active"
+                  ).length;
                   return (
-                    <div key={`${route.id}-${routeIndex}`}>
+                    <div
+                      key={`${route.id}-${routeIndex}`}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "6px 8px",
+                        marginBottom: "4px",
+                        border: "1px solid var(--cms-border)",
+                        borderRadius: "6px",
+                        background: "var(--cms-subtle)",
+                      }}
+                    >
                       <span>
-                        <strong>{route.routeName}</strong>
-                        <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
+                        <strong style={{ fontSize: "11px", display: "block" }}>{route.routeName}</strong>
+                        <small style={{ fontSize: "9.5px", color: "var(--cms-muted)" }}>
+                          {route.routeCode} &bull; {route.totalDistanceKm} KM
+                        </small>
                       </span>
-                      <em>{students} Student{students === 1 ? "" : "s"}</em>
+                      <em
+                        style={{
+                          fontSize: "10.5px",
+                          fontStyle: "normal",
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          background: "color-mix(in srgb, var(--cms-primary, #6F8400) 12%, var(--cms-surface))",
+                          color: "var(--cms-primary, #6F8400)",
+                        }}
+                      >
+                        {students} Student{students === 1 ? "" : "s"}
+                      </em>
                     </div>
                   );
                 })
               )}
             </div>
+            <div className="dashboard-card-footer">
+              <button
+                type="button"
+                className="dashboard-footer-btn"
+                onClick={() => navigate("/transport-manager/setup?tab=routes")}
+              >
+                View Route Network <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
+        </article>
+
+        {/* Card 4: My Attendance */}
+        <article className="dashboard-card tm-dashboard-card dashboard-staff-attendance-card">
+          <div className="dashboard-card-head">
+            <h2>
+              My Attendance ({myAttMetrics.monthLabel})
+            </h2>
+          </div>
+          <div className="dashboard-card-body dashboard-attendance-body">
+            {/* Donut Chart & Side Status Legend */}
+            <div className="dashboard-attendance-donut-row">
+              <div className="dashboard-donut-chart-wrap" style={{ width: 108, height: 108, flex: "0 0 108px" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RePieChart>
+                    <Pie
+                      data={myAttendanceDonutData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius="65%"
+                      outerRadius="90%"
+                      paddingAngle={myAttendanceDonutData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                      stroke="var(--cms-surface, #ffffff)"
+                      strokeWidth={2}
+                    >
+                      {myAttendanceDonutData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <ReTooltip />
+                  </RePieChart>
+                </ResponsiveContainer>
+                <div className="dashboard-donut-center">
+                  <strong>{myAttMetrics.rate}%</strong>
+                  <span>PUNCTUAL</span>
+                </div>
+              </div>
+
+              <div className="dashboard-attendance-legend-vertical">
+                <div className="legend-item">
+                  <span className="legend-label">
+                    <span className="dot dot-present" /> Present ({myAttMetrics.presentDays} {myAttMetrics.presentDays === 1 ? "Day" : "Days"})
+                  </span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-label">
+                    <span className="dot dot-late" /> Leave ({myAttMetrics.leaves} {myAttMetrics.leaves === 1 ? "Day" : "Days"})
+                  </span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-label">
+                    <span className="dot" style={{ background: "#94a3b8" }} /> Holidays ({myAttMetrics.holidays} Days)
+                  </span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-label">
+                    <span className="dot dot-absent" /> Absent ({myAttMetrics.absentDays} {myAttMetrics.absentDays === 1 ? "Day" : "Days"})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 5 KPI Chips */}
+            <div className="dashboard-staff-kpi-wrap">
+              <div className="dashboard-staff-kpis">
+                <div
+                  className="staff-chip"
+                  onClick={() => navigate("/transport-manager/my-attendance")}
+                  title="Click to view My Attendance"
+                >
+                  <small>Working</small>
+                  <strong>{myAttMetrics.workingDays} Days</strong>
+                </div>
+                <div
+                  className="staff-chip text-present"
+                  onClick={() => navigate("/transport-manager/my-attendance")}
+                  title="Click to view My Attendance"
+                >
+                  <small>Present</small>
+                  <strong>{myAttMetrics.presentDays} {myAttMetrics.presentDays === 1 ? "Day" : "Days"}</strong>
+                </div>
+                <div
+                  className="staff-chip text-late"
+                  onClick={() => navigate("/transport-manager/my-attendance")}
+                  title="Click to view My Attendance"
+                >
+                  <small>Leave</small>
+                  <strong>{myAttMetrics.leaves} {myAttMetrics.leaves === 1 ? "Day" : "Days"}</strong>
+                </div>
+                <div
+                  className="staff-chip"
+                  onClick={() => navigate("/transport-manager/my-attendance")}
+                  title="Click to view My Attendance"
+                >
+                  <small>Holidays</small>
+                  <strong>{myAttMetrics.holidays} Days</strong>
+                </div>
+                <div
+                  className="staff-chip text-leave"
+                  onClick={() => navigate("/transport-manager/my-attendance")}
+                  title="Click to view My Attendance"
+                >
+                  <small>Balance</small>
+                  <strong>{myAttMetrics.leaveBalance} Days</strong>
+                </div>
+              </div>
+
+              {/* Shift Note & In/Out Status */}
+              <div className="dashboard-staff-split-note" style={{ marginTop: "3px" }}>
+                <span>
+                  Shift: <strong>{myAttToday.shiftStartTime} – {myAttToday.shiftEndTime}</strong>
+                </span>
+                <span className="split-divider">|</span>
+                <span>
+                  Status:{" "}
+                  <strong
+                    style={{
+                      color:
+                        myAttToday.status === "punched_in"
+                          ? "#22a447"
+                          : myAttToday.status === "punched_out"
+                          ? "#f59e0b"
+                          : "#64748b",
+                    }}
+                  >
+                    {myAttToday.status === "punched_in"
+                      ? `Checked In (${myAttToday.inTime || "--"})`
+                      : myAttToday.status === "punched_out"
+                      ? `Checked Out (${myAttToday.outTime || "--"})`
+                      : "Not Checked In"}
+                  </strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="dashboard-card-footer">
+              <button
+                type="button"
+                className="dashboard-footer-btn"
+                onClick={() => navigate("/transport-manager/my-attendance")}
+              >
+                View Punch Logs <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        </article>
+
+        {/* Card 5: Upcoming Holidays (Matching Reference Image 5) */}
+        <article className="dashboard-card tm-dashboard-card dashboard-holiday-card">
+          <div className="dashboard-card-head">
+            <h2>Upcoming Holidays ({holidaysList.length})</h2>
+          </div>
+          <div className="dashboard-card-body">
+            <div className="dashboard-info-list tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
+              {holidaysLoading ? (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--cms-muted)", fontSize: "11px" }}>
+                  Loading holidays...
+                </div>
+              ) : holidaysList.length === 0 ? (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--cms-muted)", fontSize: "11px" }}>
+                  No upcoming holidays scheduled.
+                </div>
+              ) : (
+                holidaysList.map((item, index) => (
+                  <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item" style={{ marginBottom: "4px" }}>
+                    <span className={`dashboard-list-icon tone-${item.tone}`}>
+                      <CalendarDays size={14} />
+                    </span>
+                    <div className="dashboard-info-content" style={{ flex: 1, minWidth: 0 }}>
+                      <div className="dashboard-holiday-title-row" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <strong style={{ fontSize: "11px" }}>{item.name}</strong>
+                        <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
+                      </div>
+                      <small className="dashboard-holiday-meta" style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "9px" }}>
+                        <span>{item.dateRangeText}</span>
+                        {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
+                        <span className="holiday-duration-badge">{item.durationText}</span>
+                      </small>
+                    </div>
+                    <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="dashboard-card-footer">
+              <button
+                type="button"
+                className="dashboard-footer-btn"
+                onClick={() => navigate("/transport-manager/holidays")}
+              >
+                View Holiday Calendar <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        </article>
+
+        {/* Card 6: Fleet Maintenance & Compliance Alerts */}
+        <article className="dashboard-card tm-dashboard-card">
+          <div className="dashboard-card-head">
+            <h2 style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+              <Wrench size={15} /> Fleet Maintenance &amp; Readiness
+            </h2>
+          </div>
+          <div className="dashboard-card-body">
+            <div className="dashboard-info-list tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
+              {maintenance.length === 0 && summary.maintenanceVehicles === 0 ? (
+                <div style={{ padding: "16px", textAlign: "center", color: "var(--cms-muted)", fontSize: "11px" }}>
+                  <CheckCircle size={22} style={{ color: "#22a447", margin: "0 auto 6px", display: "block" }} />
+                  All vehicles are fully operational and active in fleet.
+                </div>
+              ) : (
+                maintenance.map((m, mIndex) => (
+                  <div
+                    key={`${m.id}-${mIndex}`}
+                    className="dashboard-info-item"
+                    style={{
+                      marginBottom: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span className="dashboard-list-icon tone-amber">
+                      <Wrench size={13} />
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0, marginLeft: "4px" }}>
+                      <strong style={{ fontSize: "11px", display: "block" }}>{m.vehicleNumber}</strong>
+                      <small style={{ fontSize: "9.5px", color: "var(--cms-muted)" }}>
+                        {m.category || "Service"} &bull; Next Due: {m.nextDueDate || "TBD"}
+                      </small>
+                    </div>
+                    <StatusBadge value={m.status || "Maintenance"} />
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="dashboard-card-footer">
+              <button
+                type="button"
+                className="dashboard-footer-btn"
+                onClick={() => navigate("/transport-manager/operations?tab=maintenance")}
+              >
+                View Maintenance Logs <ChevronRight size={13} />
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      {/* Scoped CSS for responsive dashboard and clean scrollbars */}
+      <style>{`
+        .tm-dashboard-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          width: 100%;
+        }
+        .tm-grid-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          width: 100%;
+        }
+        .tm-dashboard-card {
+          min-height: 250px;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+        }
+        .tm-occupancy-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 8px;
+          margin-bottom: 4px;
+          border: 1px solid var(--cms-border);
+          border-radius: 6px;
+          background: var(--cms-subtle);
+          gap: 8px;
+          transition: background-color 0.15s ease;
+        }
+        .tm-occupancy-row:hover {
+          background: color-mix(in srgb, var(--cms-primary, #6F8400) 6%, var(--cms-surface, #ffffff));
+        }
+        .tm-scrollable-card-body,
+        .tm-dashboard-card .dashboard-info-list,
+        .tm-dashboard-card .cms-transport-route-distribution {
+          scrollbar-width: thin !important;
+          scrollbar-color: var(--cms-border, #cbd5e1) transparent !important;
+        }
+        .tm-scrollable-card-body::-webkit-scrollbar,
+        .tm-dashboard-card .dashboard-info-list::-webkit-scrollbar,
+        .tm-dashboard-card .cms-transport-route-distribution::-webkit-scrollbar {
+          width: 3.5px !important;
+          height: 3.5px !important;
+        }
+        .tm-scrollable-card-body::-webkit-scrollbar-track,
+        .tm-dashboard-card .dashboard-info-list::-webkit-scrollbar-track,
+        .tm-dashboard-card .cms-transport-route-distribution::-webkit-scrollbar-track {
+          background: transparent !important;
+        }
+        .tm-scrollable-card-body::-webkit-scrollbar-thumb,
+        .tm-dashboard-card .dashboard-info-list::-webkit-scrollbar-thumb,
+        .tm-dashboard-card .cms-transport-route-distribution::-webkit-scrollbar-thumb {
+          background: var(--cms-border, #cbd5e1) !important;
+          border-radius: 999px !important;
+        }
+        .tm-scrollable-card-body::-webkit-scrollbar-thumb:hover,
+        .tm-dashboard-card .dashboard-info-list::-webkit-scrollbar-thumb:hover,
+        .tm-dashboard-card .cms-transport-route-distribution::-webkit-scrollbar-thumb:hover {
+          background: var(--cms-muted, #94a3b8) !important;
+        }
+        @media (max-width: 1200px) {
+          .tm-grid-row {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .dashboard-kpi-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+        @media (max-width: 768px) {
+          .tm-grid-row {
+            grid-template-columns: 1fr !important;
+          }
+          .dashboard-kpi-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+          .dashboard-quick-actions-list {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 
@@ -2851,7 +4541,11 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
               <div className="cms-card-body">{isLoading ? <SkeletonTable columns={4} rows={5} /> : renderGpsCards()}</div>
             </div>
           ) : (
-            renderTable(activeOperationsTab)
+            activeOperationsTab === "trips" ? (
+              renderVehicleTripsView()
+            ) : (
+              renderTable(activeOperationsTab)
+            )
           )}
         </div>
       );
@@ -2887,7 +4581,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
   return (
     <div className="cms-transport-page" style={{ padding: "0.25rem 0" }}>
-      {/* Module Title Header matching sidebar item */}
+      {/* Module Title Header matching sidebar item (shown for non-dashboard tabs) */}
+      {activeSection !== "dashboard" && (
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.45rem", fontWeight: 700, color: "var(--cms-text, #232a1e)" }}>
@@ -2909,6 +4604,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           <span>{isLoading ? "Syncing..." : "Sync Live Data"}</span>
         </button>
       </div>
+
+      )}
 
       {/* Render Active Sub-Tabs & Content */}
       {renderActiveSection()}

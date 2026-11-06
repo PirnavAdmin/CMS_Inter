@@ -117,12 +117,11 @@ export function OnboardingRoute({ children }) {
     }
   } catch {}
 
+  const statusClean = String(profileStatus || "").toLowerCase();
   const isCompleted =
-    String(profileStatus || "").toLowerCase() === "completed" ||
-    String(profileStatus || "").toLowerCase() === "approved" ||
-    String(profileStatus || "").toLowerCase() === "submitted" ||
-    authUser?.isOnboarded === true ||
-    compPct >= 50;
+    statusClean === "completed" ||
+    statusClean === "approved" ||
+    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
 
   if (isFaculty && !isCompleted) {
     return <Navigate to="/faculty-dashboard/profile" replace />;

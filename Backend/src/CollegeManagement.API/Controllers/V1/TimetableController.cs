@@ -46,6 +46,24 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.CreateAsync(dto);
+
+                if (_notificationService != null && result != null)
+                {
+                    try
+                    {
+                        var campusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : (int?)null);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Updated",
+                            $"New timetable slot added for Section #{result.SectionId} ({result.SubjectName ?? "Subject"} on {result.DayName}).",
+                            "Timetable",
+                            result.Id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (InvalidOperationException ex)
@@ -92,6 +110,24 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var result = await _timetableService.UpdateAsync(id, dto);
                 if (result == null) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var campusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : (int?)null);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Modified",
+                            $"Timetable slot updated for Section #{result.SectionId} ({result.SubjectName ?? "Subject"} on {result.DayName}).",
+                            "Timetable",
+                            result.Id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -110,8 +146,26 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var slot = await _timetableService.GetByIdAsync(id);
                 var success = await _timetableService.DeleteAsync(id);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null && slot != null)
+                {
+                    try
+                    {
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            slot.CampusId,
+                            "Class Cancelled",
+                            $"Notice: Class for {slot.SubjectName ?? "Subject"} (Section #{slot.SectionId}, {slot.DayName}) has been CANCELLED.",
+                            "Timetable",
+                            slot.SectionId,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return NoContent();
             }
             catch (InvalidOperationException ex)
@@ -232,6 +286,24 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var success = await _timetableService.TogglePublishSlotAsync(id, dto.IsPublished);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null && dto.IsPublished)
+                {
+                    try
+                    {
+                        var slot = await _timetableService.GetByIdAsync(id);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            slot?.CampusId,
+                            "Timetable Published",
+                            $"Timetable slot for {slot?.SubjectName ?? "Subject"} has been published.",
+                            "Timetable",
+                            id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { message = $"Slot publish status updated to {dto.IsPublished}." });
             }
             catch (InvalidOperationException ex)
@@ -371,6 +443,24 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.GenerateTheoryTimetableAsync(dto);
+
+                if (_notificationService != null && result != null && result.IsSuccess)
+                {
+                    try
+                    {
+                        var sectionCount = dto.SectionIds?.Count ?? 0;
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            dto.CampusId > 0 ? dto.CampusId : (int?)null,
+                            "Timetable Generated",
+                            $"Automated timetable generated ({result.TotalSlotsGenerated} slots across {sectionCount} section(s)). Check your schedule.",
+                            "Timetable",
+                            null,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return StatusCode(StatusCodes.Status201Created, result);
             }
             catch (KeyNotFoundException ex)

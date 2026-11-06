@@ -111,6 +111,16 @@ namespace CollegeManagement.API.DTOs.Staff
         public decimal Experience { get; set; }
         public string? EmploymentType { get; set; } = "Full Time";
         public string Status { get; set; } = "Active";
+
+        // Inter-Campus Transfer Tracking
+        public bool IsTransferred { get; set; } = false;
+        public int? TransferredFromCampusId { get; set; }
+        public string? TransferredFromCampusName { get; set; }
+        public int? TransferredToCampusId { get; set; }
+        public string? TransferredToCampusName { get; set; }
+        public string? TransferStatus { get; set; }
+        public DateTime? TransferredAt { get; set; }
+
         public string? PhotoPath { get; set; }
         public string? PhotoUrl { get; set; }
         public string? ProfilePhoto => !string.IsNullOrWhiteSpace(PhotoUrl) ? PhotoUrl : PhotoPath;

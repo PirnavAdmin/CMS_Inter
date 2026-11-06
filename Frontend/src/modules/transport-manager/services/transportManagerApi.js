@@ -7,11 +7,16 @@ import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 
 const extractList = (data) => {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.$values)) return data.$values;
+  let payload = data;
+  const listKeys = ["items", "Items", "records", "Records", "results", "Results", "vehicles", "Vehicles", "drivers", "Drivers", "routes", "Routes", "attendants", "Attendants", "$values"];
+  for (let depth = 0; depth < 5 && payload; depth += 1) {
+    if (Array.isArray(payload)) return payload;
+    const list = listKeys.map((key) => payload?.[key]).find(Array.isArray);
+    if (list) return list;
+    const nested = payload.data ?? payload.Data ?? payload.result ?? payload.Result;
+    if (!nested || nested === payload) break;
+    payload = nested;
+  }
   return [];
 };
 

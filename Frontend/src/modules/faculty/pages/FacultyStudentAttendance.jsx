@@ -428,7 +428,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       });
 
     return () => { isMounted = false; };
-  }, [context?.profile?.staffId, context?.profileData?.staffId]);
+  }, [context?.profile?.staffId, context?.profileData?.staffId, context?.profileData?.allocatedSubjects]);
 
   // 1. Initialize Boards & Academic Years from Context or Live API (for metadata display)
   useEffect(() => {

@@ -805,10 +805,8 @@ export default function FacultyNavbar() {
         {/* Theme Toggle */}
         <ThemeToggle variant="dashboard" />
 
-        {/* Notifications Button */}
-        <button className="cms-icon-btn" onClick={() => notify("No new notifications")} title="Notifications">
-          <NavbarIcon src={navbarNotificationsIcon} />
-        </button>
+        {/* Universal Notification Bell active */}
+        <NotificationBell />
 
         {/* Profile Avatar & Dropdown */}
         <div style={{ position: "relative" }} ref={profileDropRef}>

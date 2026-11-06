@@ -117,7 +117,35 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> Rollback(
             [FromBody] RollbackPromotionRequest request,
             CancellationToken cancellationToken = default)
-            => Ok(await _service.RollbackAsync(request, GetCurrentUserName(), cancellationToken));
+        {
+            var result = await _service.RollbackAsync(request, GetCurrentUserName(), cancellationToken);
+
+            if (_notificationService != null && result != null && result.StudentId > 0)
+            {
+                try
+                {
+                    await _notificationService.SendToStudentAsync(
+                        result.StudentId,
+                        "Promotion Status Update",
+                        $"Your academic promotion record has been rolled back. Reason: {request.Reason}",
+                        "Promotion",
+                        result.PromotionId,
+                        "/student/profile");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        null,
+                        "Promotion Status Update",
+                        $"Academic promotion for {result.StudentName} has been rolled back. Reason: {request.Reason}",
+                        "Promotion",
+                        result.PromotionId,
+                        "/parent/dashboard");
+                }
+                catch { }
+            }
+
+            return Ok(result);
+        }
 
         [HttpPost("student/{studentId:int}")]
         public async Task<IActionResult> PromoteSingle(

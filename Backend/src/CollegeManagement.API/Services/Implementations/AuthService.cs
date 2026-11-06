@@ -381,7 +381,7 @@ namespace CollegeManagement.API.Services.Implementations
                     Department = (string?)staffInfo?.Department ?? string.Empty,
                     DepartmentId = staffInfo?.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null,
                     AllocatedSubjects = allocSubjectsList,
-                    EmployeeId = user.EmployeeId,
+                    EmployeeId = !string.IsNullOrWhiteSpace(user.EmployeeId) ? user.EmployeeId : (string?)staffInfo?.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
                     StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
                         ? "Admin"
@@ -395,8 +395,6 @@ namespace CollegeManagement.API.Services.Implementations
                     IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals((string?)staffInfo?.ProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase)
-                        || (staffInfo?.ProfileCompletionPercentage != null && Convert.ToInt32(staffInfo.ProfileCompletionPercentage) >= 50)
                 };
             }
 

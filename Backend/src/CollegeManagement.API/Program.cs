@@ -697,11 +697,40 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStaticFiles();
 
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(webRootPath))
+{
+    Directory.CreateDirectory(webRootPath);
+}
+
+var staffPhotosDir = Path.Combine(webRootPath, "uploads", "staff-photos");
+if (!Directory.Exists(staffPhotosDir))
+{
+    Directory.CreateDirectory(staffPhotosDir);
+}
+
+var staffDocsDir = Path.Combine(webRootPath, "uploads", "staff-documents");
+if (!Directory.Exists(staffDocsDir))
+{
+    Directory.CreateDirectory(staffDocsDir);
+}
+
 var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "Uploads");
 if (!Directory.Exists(uploadsDir))
 {
     Directory.CreateDirectory(uploadsDir);
 }
+
+var wwwrootUploads = Path.Combine(webRootPath, "uploads");
+if (Directory.Exists(wwwrootUploads))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwrootUploads),
+        RequestPath = "/uploads"
+    });
+}
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
@@ -840,6 +869,31 @@ try
             {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
             }
+
+            // Align Staff table inter-campus transfer columns
+            try
+            {
+                var isTransCol = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'Staff' AND column_name = 'IsTransferred'").FirstOrDefaultAsync();
+                if (isTransCol == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `IsTransferred` TINYINT(1) NOT NULL DEFAULT 0;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredFromCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredToCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferStatus` VARCHAR(50) NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredAt` DATETIME NULL;");
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to align Staff transfer columns.");
+            }
+
             // Align Examination Module tables & columns
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE IF NOT EXISTS `ExaminationSubjects` (

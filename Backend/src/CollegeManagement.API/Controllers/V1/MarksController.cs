@@ -61,19 +61,66 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpPost("bulk")]
-        public async Task<IActionResult> BulkSaveMarks([FromBody] BulkUploadMarksDto dto)
+        public async Task<IActionResult> BulkSaveMarks([FromBody] System.Text.Json.JsonElement payload)
         {
-            if (!IsAdmin())
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
             {
-                var staffId = GetCallerStaffId();
-                if (staffId.HasValue && staffId.Value > 0 && dto?.Marks != null)
+                PropertyNameCaseInsensitive = true
+            };
+
+            BulkUploadMarksDto dto;
+            if (payload.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var marksList = System.Text.Json.JsonSerializer.Deserialize<List<SaveMarkDto>>(payload.GetRawText(), jsonOptions) ?? new List<SaveMarkDto>();
+                dto = new BulkUploadMarksDto { Marks = marksList };
+            }
+            else
+            {
+                dto = System.Text.Json.JsonSerializer.Deserialize<BulkUploadMarksDto>(payload.GetRawText(), jsonOptions) ?? new BulkUploadMarksDto();
+                if (dto.Marks == null || dto.Marks.Count == 0)
                 {
-                    foreach (var m in dto.Marks)
+                    if (payload.TryGetProperty("marks", out var marksProp) && marksProp.ValueKind == System.Text.Json.JsonValueKind.Array)
                     {
-                        m.FacultyId = staffId.Value;
+                        dto.Marks = System.Text.Json.JsonSerializer.Deserialize<List<SaveMarkDto>>(marksProp.GetRawText(), jsonOptions) ?? new List<SaveMarkDto>();
                     }
                 }
             }
+
+            var callerStaffId = GetCallerStaffId();
+            var callerCampusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId")?.Value;
+            int? callerCampusId = int.TryParse(callerCampusClaim, out int cid) ? cid : null;
+
+            if (dto?.Marks != null)
+            {
+                foreach (var m in dto.Marks)
+                {
+                    if (!IsAdmin() && callerStaffId.HasValue && callerStaffId.Value > 0)
+                    {
+                        m.FacultyId = callerStaffId.Value;
+                    }
+                    if (!m.CampusId.HasValue || m.CampusId.Value <= 0)
+                    {
+                        m.CampusId = callerCampusId ?? 1;
+                    }
+                    if (string.IsNullOrWhiteSpace(m.Board))
+                    {
+                        m.Board = "BIEAP";
+                    }
+                    if (string.IsNullOrWhiteSpace(m.AcademicLevel))
+                    {
+                        m.AcademicLevel = "Intermediate";
+                    }
+                    if (m.AcademicYearId <= 0)
+                    {
+                        m.AcademicYearId = 1;
+                    }
+                    if (m.GroupId <= 0)
+                    {
+                        m.GroupId = 1;
+                    }
+                }
+            }
+
             var saveResult = await _marksService.BulkSaveMarksAsync(dto);
             try
             {
@@ -81,6 +128,31 @@ namespace CollegeManagement.API.Controllers.V1
                 var examId = dto?.Marks?.FirstOrDefault()?.ExaminationId;
                 await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
                 await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                // Check for student absent during examination
+                var absentMarks = dto?.Marks?.Where(m => m.IsAbsent && m.StudentId > 0).ToList();
+                if (absentMarks != null && absentMarks.Any())
+                {
+                    foreach (var absent in absentMarks)
+                    {
+                        var studentName = !string.IsNullOrWhiteSpace(absent.StudentName) ? absent.StudentName : $"Student #{absent.StudentId}";
+                        await _notificationService.SendToStudentAsync(
+                            absent.StudentId,
+                            "Examination Absence Notice",
+                            $"You were marked ABSENT for examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/student/examinations");
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Parent" },
+                            null,
+                            "Exam Absence Alert",
+                            $"Alert: Your ward {studentName} was marked ABSENT for Examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
+                            "Examination",
+                            absent.ExaminationId,
+                            "/parent/dashboard");
+                    }
+                }
             }
             catch { }
             return Ok(saveResult);
@@ -155,6 +227,53 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch { }
             return Ok(new { Count = count });
+        }
+
+        /// <summary>
+        /// Sends pending marks submission reminder to Faculty.
+        /// </summary>
+        [HttpPost("send-submission-reminder")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Exam Cell,Examination Cell")]
+        public async Task<IActionResult> SendMarksSubmissionReminder(
+            [FromQuery] int examinationId,
+            [FromQuery] string? subjectName = null,
+            [FromQuery] int? staffId = null)
+        {
+            if (examinationId <= 0) return BadRequest(new { success = false, message = "Examination ID is required." });
+
+            try
+            {
+                var subjectText = !string.IsNullOrWhiteSpace(subjectName) ? $" for subject '{subjectName}'" : "";
+                var message = $"Reminder: Marks entry submission{subjectText} is PENDING for Examination #{examinationId}. Please enter and submit marks promptly.";
+
+                if (staffId.HasValue && staffId.Value > 0)
+                {
+                    await _notificationService.SendToStaffAsync(
+                        staffId.Value,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+                else
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Faculty", "Teacher", "Staff" },
+                        null,
+                        "Marks Submission Pending",
+                        message,
+                        "Marks",
+                        examinationId,
+                        "/dashboard/faculty/marks");
+                }
+
+                return Ok(new { success = true, message = "Marks submission pending reminder sent successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
         }
 
         [HttpGet("summary/{examinationId:int}")]

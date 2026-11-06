@@ -6,6 +6,12 @@ namespace CollegeManagement.API.Dtos.Transport.Attendant
 
         public bool? Status { get; set; }
 
+        public int? CampusId { get; set; }
+
+        public int? BoardId { get; set; }
+
+        public int? AcademicYearId { get; set; }
+
         public string? SortBy { get; set; } = "attendantName";
 
         public string? SortOrder { get; set; } = "asc";
@@ -15,4 +21,3 @@ namespace CollegeManagement.API.Dtos.Transport.Attendant
         public int PageSize { get; set; } = 10;
     }
 }
-

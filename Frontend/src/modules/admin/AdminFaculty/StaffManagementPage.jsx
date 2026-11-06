@@ -695,6 +695,11 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
 
   if (targetId == null && !targetName && !targetCode) return true;
 
+  // Transferred out of this campus check (so staff transferred out still show up in old campus as transferred)
+  if (targetId != null && staffRecord.transferredFromCampusId != null && String(staffRecord.transferredFromCampusId) === String(targetId)) {
+    return true;
+  }
+
   // Active or past assigned campuses list (supports multi-campus or transferred staff)
   const assignments = staffRecord.assignedCampuses || staffRecord.staffCampusAssignments || staffRecord.StaffCampusAssignments;
   if (Array.isArray(assignments) && assignments.length > 0) {
@@ -3231,19 +3236,39 @@ function Steps({ labels, step }) {
   );
 }
 
-function Badge({ value }) {
+function Badge({ value, record, currentCampusId }) {
   if (!value) return null;
   const isCompleted = value === "Completed" || value === "Active" || value === "Teaching";
   const isPending = value === "Pending" || value === "Link Sent" || value === "In Progress";
-  const isTransferred = String(value).toLowerCase().includes("transfer");
+  const isTransferred = String(value).toLowerCase().includes("transfer") || 
+    (record && currentCampusId && String(record.transferredFromCampusId) === String(currentCampusId));
   const isInactive = value === "Inactive";
   const cls = isCompleted ? "status-badge is-active" : isTransferred ? "status-badge is-transferred" : isPending ? "status-badge is-warning" : isInactive ? "status-badge is-inactive" : "status-badge";
+  
+  const destName = record?.transferredToCampusName || (record?.transferredToCampusId ? `Campus #${record.transferredToCampusId}` : "");
+  const displayLabel = isTransferred 
+    ? (destName ? `Transferred to ${destName}` : "Transferred") 
+    : value;
+
   return (
     <span
       className={`status-badge ${cls}`}
-      style={isTransferred ? { background: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe", fontWeight: "600", padding: "2px 8px", borderRadius: "12px", fontSize: "11px" } : undefined}
+      style={isTransferred ? { 
+        background: "#f1f5f9", 
+        color: "#475569", 
+        border: "1px solid #cbd5e1", 
+        fontWeight: "600", 
+        padding: "3px 10px", 
+        borderRadius: "12px", 
+        fontSize: "11px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        whiteSpace: "nowrap"
+      } : undefined}
     >
-      {value}
+      {isTransferred && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#64748b" }} />}
+      {displayLabel}
     </span>
   );
 }
@@ -5241,31 +5266,41 @@ function StaffList({ records = [], setRecords, forced }) {
                       <td>{r.department}</td>
                       <td>{r.designation}</td>
                       {showStaffType ? <td><Badge value={r.staffType} /></td> : null}
-                      <td><Badge value={r.status || "Active"} /></td>
+                      <td><Badge value={r.status || "Active"} record={r} currentCampusId={activeCampusId} /></td>
                       <td>
-                        <div className="row-actions">
-                          <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
-                            <Eye />
-                          </button>
-                          <button title="Transfer Campus" onClick={() => { setListTransferTarget(r); setShowListTransferModal(true); }}>
-                            <ArrowRightLeft />
-                          </button>
-                          <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
-                            try {
-                              const response = await apiClient.get(apiEndpoints.faculty.printPdf(r.id), { responseType: "blob" });
-                              const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
-                              window.open(url, "_blank");
-                            } catch {
-                              n(`/dashboard/staff/${r.id}`);
-                              setTimeout(() => window.print(), 300);
-                            }
-                          }}>
-                            <Printer />
-                          </button>
-                          <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
-                            <Trash2 />
-                          </button>
-                        </div>
+                        {(() => {
+                          const isTransferredOut = r.status === "Transferred" || (activeCampusId && String(r.transferredFromCampusId) === String(activeCampusId));
+                          return (
+                            <div className="row-actions">
+                              <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
+                                <Eye />
+                              </button>
+                              <button 
+                                title={isTransferredOut ? `Staff already transferred to ${r.transferredToCampusName || "another campus"}` : "Transfer Campus"} 
+                                disabled={isTransferredOut}
+                                style={isTransferredOut ? { opacity: 0.35, cursor: "not-allowed" } : undefined}
+                                onClick={() => { if (!isTransferredOut) { setListTransferTarget(r); setShowListTransferModal(true); } }}
+                              >
+                                <ArrowRightLeft />
+                              </button>
+                              <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
+                                try {
+                                  const response = await apiClient.get(apiEndpoints.faculty.printPdf(r.id), { responseType: "blob" });
+                                  const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+                                  window.open(url, "_blank");
+                                } catch {
+                                  n(`/dashboard/staff/${r.id}`);
+                                  setTimeout(() => window.print(), 300);
+                                }
+                              }}>
+                                <Printer />
+                              </button>
+                              <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
+                                <Trash2 />
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))

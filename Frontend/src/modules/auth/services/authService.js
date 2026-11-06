@@ -846,12 +846,11 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     0
   );
   const rawIsOnboarded = data.IsOnboarded ?? data.isOnboarded ?? payload.IsOnboarded ?? payload.isOnboarded ?? data.user?.isOnboarded ?? payload.user?.isOnboarded;
+  const statusClean = String(profileStatus || "").toLowerCase();
   const isCompleted =
-    String(profileStatus || "").toLowerCase() === "completed" ||
-    String(profileStatus || "").toLowerCase() === "approved" ||
-    String(profileStatus || "").toLowerCase() === "submitted" ||
-    profileCompletionPercentage >= 50 ||
-    rawIsOnboarded === true;
+    statusClean === "completed" ||
+    statusClean === "approved" ||
+    (rawIsOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
   const isOnboarded = isCompleted || isAdmin;
 
   const user = {
