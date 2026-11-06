@@ -88,7 +88,8 @@ import ParentProfilePage from "@/modules/parent/pages/ParentProfilePage.jsx";
 import ParentSettingsPage from "@/modules/parent/pages/ParentSettingsPage.jsx";
 import { ParentPortalProvider } from "@/modules/parent/context/ParentPortalContext.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
-import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
+import ProtectedRoute, { PublicOnlyRoute, isTransportManagerRole } from "./ProtectedRoute.jsx";
+import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import {
   HostelDashboard,
   HostelMasterSetup,
@@ -114,6 +115,19 @@ function ModuleListRoute({ slug }) {
   const config = moduleConfigs[slug];
   if (!config) return <Navigate to="/dashboard" replace />;
   return <ListPage slug={slug} config={config} />;
+}
+
+function TransportRouteEntry() {
+  const [searchParams] = useSearchParams();
+  const user = getAuthUser();
+  const role = getAuthItem("role") || user?.role || user?.staffType;
+  if (!isTransportManagerRole(role, user)) return <TransportPage />;
+
+  const requestedSection = searchParams.get("tab");
+  const section = ["setup", "operations", "reports"].includes(requestedSection) ? requestedSection : "overview";
+  const submodule = section === "overview" ? "" : searchParams.get("section") || (section === "setup" ? "routes" : "");
+  const query = submodule ? `?tab=${encodeURIComponent(submodule)}` : "";
+  return <Navigate to={`/transport-manager/${section}${query}`} replace />;
 }
 
 function ModuleFormRoute({ slug }) {
@@ -335,7 +349,7 @@ export default function AppRoutes() {
 
         {/* Transport */}
         <Route element={<ProtectedRoute requiredModule="transport" />}>
-          <Route path="/dashboard/transport" element={<TransportPage />} />
+          <Route path="/dashboard/transport" element={<TransportRouteEntry />} />
         </Route>
 
         {/* Fee Management */}
