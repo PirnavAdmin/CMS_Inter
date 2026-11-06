@@ -14,10 +14,15 @@ export default function DashboardPage() {
   const [updatedAt, setUpdatedAt] = useState(() => new Date());
   const [refreshing, setRefreshing] = useState(false);
   const { colleges, plans, users, activities, payments } = data;
+  const summary = data.dashboard || {};
+  const metric = (keys, fallback) => {
+    for (const key of keys) if (summary[key] !== undefined && summary[key] !== null) return Number(summary[key]);
+    return fallback;
+  };
   const active = colleges.filter((college) => college.status === "Active");
   const now = new Date();
   const revenue = payments.filter((payment) => payment.status === "Paid" && payment.date.slice(0, 7) === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`).reduce((sum, payment) => sum + payment.amount, 0);
-  const counts = [["Total Colleges", colleges.length, "campus-configuration"], ["Active Colleges", active.length, "board"], ["Inactive Colleges", colleges.filter((college) => college.status === "Inactive").length, "campus-configuration"], ["Pending Registrations", data.registrations.filter((registration) => registration.registrationStatus === "Pending").length, "add-student"], ["Active Login Accounts", colleges.reduce((sum, college) => sum + activeAccountCount(users, college.id), 0), "total-students"], ["Free Plan Colleges", colleges.filter((college) => college.plan === "Free").length, "total-groups"], ["Paid Plan Colleges", colleges.filter((college) => college.plan !== "Free").length, "certificates"], ["Monthly Revenue", money(revenue), "fees"]];
+  const counts = [["Total Colleges", metric(["totalColleges", "collegeCount"], colleges.length), "campus-configuration"], ["Active Colleges", metric(["activeColleges", "activeCollegeCount"], active.length), "board"], ["Inactive Colleges", metric(["inactiveColleges", "inactiveCollegeCount"], colleges.filter((college) => college.status === "Inactive").length), "campus-configuration"], ["Pending Registrations", metric(["pendingRegistrations", "pendingRegistrationCount"], data.registrations.filter((registration) => registration.registrationStatus === "Pending").length), "add-student"], ["Active Login Accounts", metric(["activeAccounts", "activeLoginAccounts"], colleges.reduce((sum, college) => sum + activeAccountCount(users, college.id), 0)), "total-students"], ["Free Plan Colleges", metric(["freePlanColleges"], colleges.filter((college) => college.plan === "Free").length), "total-groups"], ["Paid Plan Colleges", metric(["paidPlanColleges"], colleges.filter((college) => college.plan !== "Free").length), "certificates"], ["Monthly Revenue", money(metric(["monthlyRevenue", "revenueThisMonth"], revenue)), "fees"]];
   const registrationMonths = Array.from({ length: 6 }, (_, index) => {
     const month = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
     const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
@@ -34,7 +39,7 @@ export default function DashboardPage() {
     const limit = plans.find((plan) => plan.name === college.plan)?.limit;
     return { name: college.name, accounts, limit, percentage: limit > 0 ? Math.round(accounts / limit * 1000) / 10 : null };
   }).filter((college) => college.percentage !== null).sort((left, right) => right.percentage - left.percentage).slice(0, 6);
-  const expiring = colleges.filter((college) => college.renewal && new Date(college.renewal).getTime() <= Date.now() + 30 * 86400000);
+  const expiring = (data.renewals.length ? data.renewals : colleges).filter((college) => (college.renewal ?? college.renewalDate) && new Date(college.renewal ?? college.renewalDate).getTime() <= Date.now() + 30 * 86400000);
   const chartTooltip = { background: "var(--cms-surface)", border: "1px solid var(--cms-border)", borderRadius: 9, color: "var(--cms-text)", fontSize: 11 };
   const refreshDashboard = () => {
     setRefreshing(true);

@@ -1480,11 +1480,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicles, campusParams),
         getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams),
         getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams),
-        // Match the successful Admin Transport request exactly and parse its
-        // `{ items, pageNumber, ... }` payload in this page.
-        activeSection === "setup" && activeSetupTab === "attendants"
-          ? Promise.resolve({ data: [] })
-          : apiClient.get(apiEndpoints.transport.attendants, { params: { PageNumber: 1, PageSize: 100 } }),
+        apiClient.get(apiEndpoints.transport.lookups.attendants),
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}),
         apiClient.get(apiEndpoints.transport.trips),
         apiClient.get(apiEndpoints.transport.gps),
@@ -1637,59 +1633,18 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           .filter(([id]) => id && id !== "undefined")));
       }
 
-      if (!(activeSection === "setup" && activeSetupTab === "attendants")
-        && (attendantsRes.status === "fulfilled" || staffRes.status === "fulfilled")) {
-        const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
-        const staffMap = new Map();
-        staffItems.forEach((s) => {
-          const sId = transportValue(s, "staffId", "id", "facultyId");
-          const eId = String(transportValue(s, "employeeId", "empId") || "").trim().toLowerCase();
-          if (sId) staffMap.set(String(sId), s);
-          if (eId) staffMap.set(eId, s);
-        });
-        const backendAttendants = attendantRows;
-        const attendantStaff = staffItems.filter(isAttendantStaffRecord);
-
-        const attendantMap = new Map();
-        backendAttendants.forEach((a) => {
-          const sId = transportValue(a, "staffId");
-          const eId = String(transportValue(a, "employeeId", "attendantCode") || "").trim().toLowerCase();
-          const linked = (sId && staffMap.get(String(sId))) || (eId && staffMap.get(eId));
-          const key = String(sId || eId || a.attendantId || a.id);
-          attendantMap.set(key, {
-            id: a.attendantId || a.id,
-            attendantId: a.attendantId || a.id,
-            staffId: a.staffId || linked?.staffId || linked?.id,
-            attendantName: a.attendantName || a.attendantFullName || linked?.fullName || linked?.staffName || a.fullName || a.name || "",
-            employeeId: a.employeeId || a.attendantCode || linked?.employeeId || "",
-            mobileNumber: a.mobileNumber || a.phone || linked?.mobile || linked?.mobileNumber || "",
-            gender: a.gender || linked?.gender || "Female",
-            branch: a.branchName || a.branch || linked?.branch || "Main Campus",
-            status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
-          });
-        });
-
-        attendantStaff.forEach((staff) => {
-          const sId = transportValue(staff, "staffId", "id", "facultyId");
-          const eId = String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase();
-          const key = String(sId || eId);
-          if (!attendantMap.has(key)) {
-            const name = transportValue(staff, "fullName", "staffName", "name")
-              || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" ");
-            attendantMap.set(key, {
-              id: sId,
-              staffId: sId,
-              attendantName: name,
-              employeeId: transportValue(staff, "employeeId", "empId") || "",
-              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
-              gender: transportValue(staff, "gender") || "Female",
-              branch: transportValue(staff, "branchName", "branch", "campusName") || "Main Campus",
-              status: [staff.status, staff.isActive].includes("Inactive") ? "Inactive" : "Active",
-            });
-          }
-        });
-
-        setAttendants(Array.from(attendantMap.values()));
+      if (attendantsRes.status === "fulfilled") {
+        setAttendants(attendantRows.map((row) => ({
+          ...row,
+          id: row.attendantId ?? row.id ?? row.value,
+          attendantId: row.attendantId ?? row.id ?? row.value,
+          attendantName: row.attendantName ?? row.name ?? row.displayName ?? row.label ?? "",
+          employeeId: row.employeeId ?? row.attendantCode ?? "",
+          mobileNumber: row.mobileNumber ?? row.phone ?? "",
+          gender: row.gender ?? "",
+          branch: row.branchName ?? row.branch ?? row.campusName ?? "",
+          status: row.status ?? "",
+        })));
       }
 
       if (driversRes.status === "fulfilled" || staffRes.status === "fulfilled") {
@@ -1913,29 +1868,27 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, activeSetupTab]);
 
-  // Bus Attendants uses the same direct paged API response as Admin Transport.
-  // Keep this independent from fleet loading so another transport request
-  // cannot replace these rows with an empty scoped list.
+  // The attendant lookup is a plain array response, independent of campus filters.
   useEffect(() => {
     if (activeSection !== "setup" || activeSetupTab !== "attendants") return undefined;
     let active = true;
     const request = new AbortController();
-    apiClient.get(apiEndpoints.transport.attendants, {
-      params: { PageNumber: 1, PageSize: 100 },
+    apiClient.get(apiEndpoints.transport.lookups.attendants, {
       signal: request.signal,
     }).then((response) => {
       if (!active) return;
       const rows = extractAttendantRows(response.data);
       setAttendants(rows.map((attendant) => ({
-        id: attendant.attendantId ?? attendant.id,
-        attendantId: attendant.attendantId ?? attendant.id,
+        ...attendant,
+        id: attendant.attendantId ?? attendant.id ?? attendant.value,
+        attendantId: attendant.attendantId ?? attendant.id ?? attendant.value,
         staffId: attendant.staffId,
-        attendantName: attendant.attendantName || attendant.attendantFullName || attendant.fullName || attendant.name || "",
+        attendantName: attendant.attendantName || attendant.attendantFullName || attendant.fullName || attendant.name || attendant.displayName || attendant.label || "",
         employeeId: attendant.employeeId || attendant.attendantCode || "",
         mobileNumber: attendant.mobileNumber || attendant.phone || "",
         gender: attendant.gender || "",
-        branch: attendant.branchName || attendant.branch || "Main Campus",
-        status: attendant.status === true || attendant.status === 1 || attendant.status === "Active" ? "Active" : "Inactive",
+        branch: attendant.branchName || attendant.branch || attendant.campusName || "",
+        status: attendant.status ?? "",
       })));
     }).catch((error) => {
       if (active && error?.name !== "AbortError" && error?.code !== "ERR_CANCELED") {

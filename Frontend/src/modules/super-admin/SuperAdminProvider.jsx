@@ -3,358 +3,186 @@ import superAdminApi, { getApiErrorMessage } from "@/api/superAdminApi.js";
 import { MODULES } from "./superAdminPreview.js";
 
 const Context = createContext(null);
-
 const emptyState = () => ({
-  colleges: [],
-  registrations: [],
-  users: [],
-  plans: [],
-  payments: [],
-  activities: [],
-  settings: { platformName: "PIRNAV CMS", supportEmail: "support@example.test", renewalDays: 30 },
-  notifications: [],
-  readNotificationIds: [],
+  colleges: [], registrations: [], users: [], collegeAdmins: [], plans: [], payments: [],
+  activities: [], notifications: [], readNotificationIds: [], subscriptions: [], renewals: [],
+  accountUsage: [], moduleMatrix: [], dashboard: {}, profile: null,
+  settings: { platformName: "PIRNAV CMS", supportEmail: "", renewalDays: 30 },
 });
 
-function normalizeLiveData(res) {
+const unwrap = (value) => value?.data?.data ?? value?.data ?? value;
+const list = (value, ...keys) => {
+  const item = unwrap(value);
+  if (Array.isArray(item)) return item;
+  for (const key of [...keys, "items", "results", "records", "rows"]) {
+    if (Array.isArray(item?.[key])) return item[key];
+  }
+  return [];
+};
+const record = (value, ...keys) => {
+  const item = unwrap(value);
+  if (!item || typeof item !== "object") return {};
+  for (const key of keys) if (item[key] && typeof item[key] === "object") return item[key];
+  return item;
+};
+const idOf = (row) => String(row?.id ?? row?.collegeId ?? row?.userId ?? row?.planId ?? row?.paymentId ?? "");
+
+function normalizeLiveData(sources) {
   const data = emptyState();
-  if (!res || typeof res !== "object") return data;
-
-  // 1. Plans
-  data.plans = (res.plans ?? []).map((plan) => ({
-    id: plan.planId || plan.id || plan.name,
-    planId: plan.planId || plan.id || 0,
-    name: plan.name,
-    description: plan.description || "",
-    price: Number(plan.price || 0),
-    limit: Number(plan.limit || 0),
-    durationDays: Number(plan.durationDays || 30),
-    active: plan.active !== false,
-    modules: Array.isArray(plan.modules) ? plan.modules : [],
-  }));
-
-  // 2. Global Users & College Admins
-  data.users = (res.users ?? []).map((user) => {
-    const active = Boolean(user.active || user.accountStatus === "Active");
-    return {
-      id: String(user.id || user.userId || ""),
-      userId: Number(user.userId || user.id || 0),
-      name: user.name || user.fullName || "User",
-      fullName: user.name || user.fullName || "User",
-      email: user.email || "",
-      phone: user.phone || "",
-      collegeId: user.collegeId ? String(user.collegeId) : null,
-      collegeName: user.collegeName || "Platform",
-      role: user.role || "User",
-      active,
-      loginEnabled: user.loginEnabled !== false,
-      accountStatus: active ? "Active" : "Inactive",
-      lastLogin: user.lastLogin || null,
-      createdAt: user.createdAt || null,
-    };
-  });
-
-  // 3. Colleges
-  data.colleges = (res.colleges ?? []).map((college) => {
-    const id = String(college.id || college.collegeId || "");
-    const status = college.status || college.collegeStatus || "Active";
-    return {
-      ...college,
-      id,
-      collegeId: Number(college.collegeId || college.id || 0),
-      name: college.name || "",
-      code: college.code || "",
-      email: college.email || "",
-      phone: college.phone || "",
-      address: college.address || "",
-      logo: college.logo || "",
-      admin: college.admin || "",
-      plan: college.plan || "Free",
-      status,
-      collegeStatus: status,
-      registered: college.registered ? String(college.registered).slice(0, 10) : "",
-      renewal: college.renewal ? String(college.renewal).slice(0, 10) : "",
-      activeAccounts: Number(college.activeAccounts || 0),
-      accountLimit: Number(college.accountLimit || 0),
-    };
-  });
-
-  // 4. Registrations (Pending or explicit registration applications)
-  data.registrations = (res.registrations ?? []).map((reg) => ({
-    id: String(reg.id || reg.collegeId || ""),
-    collegeId: reg.collegeId ? String(reg.collegeId) : null,
-    name: reg.name || "",
-    code: reg.code || "",
-    email: reg.email || "",
-    contact: reg.phone || reg.contact || "",
-    applicantName: reg.applicantName || reg.admin || "",
-    applicantEmail: reg.applicantEmail || reg.email || "",
-    plan: reg.plan || "Free",
-    registrationStatus: reg.registrationStatus || reg.status || "Pending",
-    submittedAt: reg.submittedAt || reg.registered || null,
-    reviewedAt: reg.reviewedAt || null,
-  }));
-
-  // Auto-fill registrations from colleges that have Pending or Rejected status
-  data.colleges.forEach((c) => {
-    if ((c.status === "Pending" || c.status === "Rejected") && !data.registrations.some((r) => r.id === c.id)) {
-      data.registrations.push({
-        id: c.id,
-        collegeId: c.status === "Approved" ? c.id : null,
-        name: c.name,
-        code: c.code,
-        email: c.email,
-        contact: c.phone || "",
-        applicantName: c.admin || c.name,
-        applicantEmail: c.email,
-        plan: c.plan || "Free",
-        registrationStatus: c.status,
-        submittedAt: c.registered || null,
-        reviewedAt: null,
-      });
-    }
-  });
-
-  // 5. Payments & Invoices
-  data.payments = (res.payments ?? []).map((p) => ({
-    id: String(p.id || p.paymentId || ""),
-    paymentId: Number(p.paymentId || p.id || 0),
-    invoice: p.invoice || `INV-${p.id || p.paymentId}`,
-    collegeId: String(p.collegeId || ""),
-    collegeName: p.collegeName || "",
-    amount: Number(p.amount || 0),
-    date: p.date ? String(p.date).slice(0, 10) : "",
-    status: p.status || "Paid",
-    paymentMethod: p.paymentMethod || "Online",
-    transactionReference: p.transactionReference || "",
-  }));
-
-  // 6. Platform Audit Activities
-  data.activities = (res.activities ?? []).map((a) => ({
-    id: String(a.id || a.auditLogId || crypto.randomUUID()),
-    auditLogId: Number(a.auditLogId || 0),
-    message: a.message || "",
-    performedBy: a.performedBy || "Super Admin",
-    module: a.module || "",
-    college: a.college || "Platform Global",
-    collegeId: a.collegeId ? String(a.collegeId) : null,
-    at: a.at || new Date().toISOString(),
-    actionType: a.actionType || "Action",
-    status: a.status || "Success",
-    scope: a.scope || "Platform",
-    details: a.details || null,
-  }));
-
-  // 7. Global Platform Settings
-  data.settings = {
-    platformName: res.settings?.platformName || "PIRNAV CMS",
-    supportEmail: res.settings?.supportEmail || "support@example.test",
-    renewalDays: Number(res.settings?.renewalDays ?? 30),
+  const bootstrap = record(sources.bootstrap);
+  const choose = (source, fallback, ...keys) => {
+    const rows = list(source, ...keys);
+    return rows.length || source?.ok ? rows : list(fallback, ...keys);
   };
+  data.colleges = choose(sources.colleges, bootstrap, "colleges").map((row) => {
+    const status = row.status ?? row.collegeStatus ?? "Active";
+    return { ...row, id: idOf(row), collegeId: Number(row.collegeId ?? row.id ?? 0), name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", status, collegeStatus: status, plan: row.plan ?? row.planName ?? "Free", registered: row.registered ?? row.registeredAt ?? row.createdAt ?? "", renewal: row.renewal ?? row.renewalDate ?? "", activeAccounts: Number(row.activeAccounts ?? row.accountCount ?? 0), accountLimit: Number(row.accountLimit ?? 0) };
+  });
+  const pending = choose(sources.pending, bootstrap, "registrations", "colleges");
+  data.registrations = pending.filter((row) => (row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending").toLowerCase() === "pending" || row.registrationStatus === "Approved" || row.registrationStatus === "Rejected").map((row) => ({ ...row, id: idOf(row), collegeId: row.collegeId ? String(row.collegeId) : null, name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", contact: row.phone ?? row.contact ?? "", applicantName: row.applicantName ?? row.admin ?? "", applicantEmail: row.applicantEmail ?? row.email ?? "", plan: row.plan ?? row.planName ?? "Free", registrationStatus: row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending", submittedAt: row.submittedAt ?? row.registeredAt ?? row.createdAt ?? null }));
+  if (!sources.pending?.ok && !data.registrations.length) data.registrations = data.colleges.filter((row) => ["Pending", "Rejected"].includes(row.status)).map((row) => ({ ...row, registrationStatus: row.status, applicantName: row.admin ?? "", applicantEmail: row.email }));
 
-  // 8. Notifications
-  data.notifications = (res.notifications ?? []).map((n) => ({
-    id: String(n.id || n.notificationId || crypto.randomUUID()),
-    notificationId: Number(n.notificationId || 0),
-    title: n.title || "",
-    message: n.message || "",
-    category: n.category || "System Alerts",
-    date: n.date || "",
-    status: n.status || "Delivered",
-    recipientScope: n.recipientScope || "Platform",
-    read: n.read || "Unread",
-  }));
-
-  data.readNotificationIds = data.notifications
-    .filter((n) => n.read === "Read")
-    .map((n) => n.id);
-
+  data.plans = choose(sources.plans, bootstrap, "plans").map((row) => ({ ...row, id: row.planId ?? row.id ?? row.name, planId: Number(row.planId ?? row.id ?? 0), name: row.name ?? row.planName ?? "", description: row.description ?? "", price: Number(row.price ?? 0), limit: Number(row.limit ?? row.accountLimit ?? 0), durationDays: Number(row.durationDays ?? 30), active: row.active !== false && row.status !== "Inactive", modules: Array.isArray(row.modules) ? row.modules : [] }));
+  const users = choose(sources.users, bootstrap, "users", "globalUsers");
+  const admins = choose(sources.admins, bootstrap, "collegeAdmins", "admins");
+  data.collegeAdmins = admins.map((row) => ({ ...row, id: idOf(row), userId: Number(row.userId ?? row.id ?? 0), name: row.name ?? row.fullName ?? "", role: row.role ?? "CollegeAdmin", collegeId: row.collegeId ? String(row.collegeId) : null }));
+  data.users = [...new Map([...users, ...admins].map((row) => [idOf(row), row])).values()].map((row) => {
+    const active = row.active ?? (row.accountStatus === "Active" || row.status === "Active");
+    return { ...row, id: idOf(row), userId: Number(row.userId ?? row.id ?? 0), name: row.name ?? row.fullName ?? "User", fullName: row.fullName ?? row.name ?? "User", email: row.email ?? "", phone: row.phone ?? row.mobileNumber ?? "", collegeId: row.collegeId ? String(row.collegeId) : null, collegeName: row.collegeName ?? "Platform", role: row.role ?? "User", active: Boolean(active), loginEnabled: row.loginEnabled !== false, accountStatus: row.accountStatus ?? row.status ?? (active ? "Active" : "Inactive") };
+  });
+  data.payments = choose(sources.payments, bootstrap, "payments", "invoices").map((row) => ({ ...row, id: idOf(row), paymentId: Number(row.paymentId ?? row.id ?? 0), invoice: row.invoice ?? row.invoiceNumber ?? `INV-${idOf(row)}`, collegeId: String(row.collegeId ?? ""), amount: Number(row.amount ?? 0), date: row.date ?? row.paymentDate ?? row.createdAt ?? "", status: row.status ?? "Pending" }));
+  data.activities = choose(sources.audit, bootstrap, "activities", "auditLogs", "items").map((row) => ({ ...row, id: idOf(row) || String(row.auditLogId ?? `${row.createdAt}-${row.actionType}`), message: row.message ?? row.description ?? row.action ?? "", performedBy: row.performedBy ?? row.userName ?? "", at: row.at ?? row.createdAt ?? row.timestamp ?? "", actionType: row.actionType ?? row.action ?? "", scope: row.scope ?? "Platform" }));
+  data.notifications = choose(sources.notifications, bootstrap, "notifications").map((row) => ({ ...row, id: idOf(row), notificationId: Number(row.notificationId ?? row.id ?? 0), date: row.date ?? row.createdAt ?? "", read: row.read ?? (row.isRead ? "Read" : "Unread") }));
+  data.readNotificationIds = data.notifications.filter((row) => row.read === "Read").map((row) => row.id);
+  data.subscriptions = list(sources.subscriptions, "subscriptions");
+  data.accountUsage = list(sources.usage, "accountUsage", "items");
+  data.renewals = list(sources.renewals, "renewals", "items");
+  data.moduleMatrix = list(sources.modules, "modules", "plans", "items");
+  const matrixRows = data.moduleMatrix.flatMap((row) => Array.isArray(row.modules) ? row.modules.map((module) => typeof module === "string" ? { planId: row.planId ?? row.id, moduleName: module, isEnabled: true } : { ...module, planId: module.planId ?? row.planId ?? row.id }) : [row]);
+  if (matrixRows.some((row) => row.moduleName || row.module)) {
+    data.plans = data.plans.map((plan) => {
+      const matched = matrixRows.filter((row) => String(row.planId ?? row.subscriptionPlanId) === String(plan.planId ?? plan.id));
+      return matched.length ? { ...plan, modules: matched.filter((row) => row.isEnabled !== false && row.enabled !== false).map((row) => row.moduleName ?? row.module) } : plan;
+    });
+  }
+  data.dashboard = record(sources.dashboard, "dashboard", "summary");
+  data.profile = record(sources.profile, "profile");
+  const settings = record(sources.settings, "settings");
+  data.settings = { ...data.settings, ...settings, renewalDays: Number(settings.renewalDays ?? 30) };
   return data;
 }
 
 export default function SuperAdminProvider({ session, children }) {
-  const [data, setData] = useState(() => emptyState());
+  const [data, setData] = useState(emptyState);
   const latest = useRef(data);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
 
   const loadLivePlatformData = useCallback(async () => {
-    try {
-      const res = await superAdminApi.getBootstrap();
-      if (res) {
-        const normalized = normalizeLiveData(res);
-        latest.current = normalized;
-        setData(normalized);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.error("Failed to load platform data from API:", err);
-      setMessage(getApiErrorMessage(err));
-      return false;
-    } finally {
+    const requests = {
+      bootstrap: superAdminApi.getBootstrap,
+      dashboard: superAdminApi.getDashboard,
+      colleges: superAdminApi.getColleges,
+      pending: () => superAdminApi.getColleges({ status: "Pending" }),
+      users: superAdminApi.getGlobalUsers,
+      admins: superAdminApi.getCollegeAdmins,
+      plans: superAdminApi.getPlans,
+      subscriptions: superAdminApi.getSubscriptions,
+      usage: superAdminApi.getAccountUsage,
+      renewals: superAdminApi.getRenewals,
+      payments: superAdminApi.getPaymentsAndInvoices,
+      modules: superAdminApi.getPlanModuleMatrix,
+      notifications: superAdminApi.getNotifications,
+      audit: superAdminApi.getAuditLogs,
+      settings: superAdminApi.getSettings,
+      profile: superAdminApi.getProfile,
+    };
+    const entries = await Promise.all(Object.entries(requests).map(async ([key, request]) => {
+      try { return [key, { ok: true, value: await request() }]; }
+      catch (error) { return [key, { ok: false, error }]; }
+    }));
+    const sources = Object.fromEntries(entries.map(([key, result]) => [key, result.ok ? result.value : null]));
+    for (const [key, result] of entries) if (result.ok) sources[key] = { data: result.value, ok: true };
+    const successful = entries.filter(([, result]) => result.ok).length;
+    if (!successful) {
+      const firstError = entries.find(([, result]) => !result.ok)?.[1].error;
+      setMessage(getApiErrorMessage(firstError));
       setLoading(false);
+      return false;
     }
+    const normalized = normalizeLiveData(sources);
+    latest.current = normalized;
+    setData(normalized);
+    const failed = entries.filter(([, result]) => !result.ok).map(([key]) => key);
+    if (failed.length) setMessage(`Some platform data could not be loaded: ${failed.join(", ")}.`);
+    setLoading(false);
+    return true;
   }, []);
 
-  useEffect(() => {
-    loadLivePlatformData();
-  }, [loadLivePlatformData]);
+  useEffect(() => { loadLivePlatformData(); }, [loadLivePlatformData]);
 
-  const update = async (label, action, details = {}) => {
+  const update = async (label, _legacyAction, details = {}) => {
     setMessage("");
     try {
-      let apiResult = null;
-      const mod = details?.module;
-      const act = details?.actionType;
-
-      // 1. Colleges
+      const { module: mod, actionType: act } = details;
+      const payload = details.payload ?? details.newValues ?? {};
+      let result;
       if (mod === "Colleges") {
-        if (act === "Status change" && details.collegeId) {
-          const current = latest.current.colleges.find(
-            (c) => c.id === String(details.collegeId) || c.collegeId === Number(details.collegeId)
-          );
-          const nextStatus = current?.status === "Active" ? "Inactive" : "Active";
-          apiResult = await superAdminApi.updateCollegeStatus(details.collegeId, nextStatus);
-        } else if (act === "Create") {
-          const payload = details.payload || details.newValues || {};
-          apiResult = await superAdminApi.createCollege(payload);
-        } else if (act === "Update" && (details.collegeId || details.payload?.id)) {
-          const cid = details.collegeId || details.payload?.id;
-          const payload = details.payload || details.newValues || {};
-          apiResult = await superAdminApi.updateCollege(cid, payload);
-        }
-      }
-      // 2. Registrations
-      else if (mod === "Registrations") {
-        if (act === "Approved" || act === "Rejected") {
-          const cid = details.collegeId || details.id;
-          apiResult = await superAdminApi.updateCollegeStatus(cid, act === "Approved" ? "Active" : "Inactive");
-        } else if (act === "Create" || act === "Update") {
-          const form = details.payload || details.newValues || {};
-          apiResult = await superAdminApi.createCollege({ ...form, status: "Pending" });
-        }
-      }
-      // 3. College Admins
-      else if (mod === "College Admins") {
-        if (act === "Create" || act === "Assign / Update") {
-          const payload = details.payload || details.newValues || {};
-          apiResult = await superAdminApi.createCollegeAdmin({
-            name: payload.name,
-            email: payload.email,
-            collegeId: Number(payload.collegeId),
-          });
-        } else if (act === "Access change" && details.userId) {
-          const payload = details.payload || details.newValues || {};
-          const status = payload.active ? "Active" : "Inactive";
-          apiResult = await superAdminApi.updateUserStatus(details.userId, status);
-        }
-      }
-      // 4. Subscriptions
-      else if (mod === "Subscriptions") {
+        if (act === "Status change") {
+          const current = latest.current.colleges.find((row) => row.id === String(details.collegeId));
+          result = await superAdminApi.updateCollegeStatus(details.collegeId, details.status ?? (current?.status === "Active" ? "Inactive" : "Active"));
+        } else if (act === "Create") result = await superAdminApi.createCollege(payload);
+        else if (act === "Update") result = await superAdminApi.updateCollege(details.collegeId ?? payload.id, payload);
+      } else if (mod === "Registrations") {
+        const cid = details.collegeId ?? details.id;
+        if (act === "Approved" || act === "Rejected") result = await superAdminApi.updateCollegeStatus(cid, act === "Approved" ? "Active" : "Inactive");
+        else if (act === "Create") result = await superAdminApi.createCollege({ ...payload, status: "Pending" });
+        else if (act === "Update") result = await superAdminApi.updateCollege(cid, { ...payload, status: "Pending" });
+      } else if (mod === "College Admins") {
+        if (act === "Create") result = await superAdminApi.createCollegeAdmin({ name: payload.name, email: payload.email, collegeId: Number(payload.collegeId) });
+        else if (act === "Access change") result = await superAdminApi.updateUserStatus(details.userId, payload.active ? "Active" : "Inactive");
+      } else if (mod === "Global Users") {
+        if (act === "Status change") result = await superAdminApi.updateUserStatus(details.userId, details.status);
+        else if (act === "Reset password") result = await superAdminApi.resetUserPassword(details.userId, details.newPassword);
+      } else if (mod === "Subscriptions") {
         const cid = details.collegeId;
-        if (act === "Changed subscription") {
-          const planName = details.newValues?.plan || details.planName;
-          apiResult = await superAdminApi.changeCollegePlan(cid, planName);
-        } else if (act === "Renewed subscription") {
-          apiResult = await superAdminApi.renewCollegeSubscription(cid, 30);
-        } else if (act === "Cancelled subscription") {
-          apiResult = await superAdminApi.cancelCollegeSubscription(cid);
+        if (act === "Changed subscription") result = await superAdminApi.changeCollegePlan(cid, details.planName ?? payload.plan);
+        else if (act === "Renewed subscription") result = await superAdminApi.renewCollegeSubscription(cid, details.extensionDays ?? 30);
+        else if (act === "Cancelled subscription") result = await superAdminApi.cancelCollegeSubscription(cid);
+      } else if (mod === "Plans") {
+        if (act === "Create" || act === "Update") result = await superAdminApi.savePlan(payload, details.planId ?? payload.planId ?? null);
+        else if (act === "Status change") {
+          const current = latest.current.plans.find((row) => String(row.planId) === String(details.planId));
+          result = await superAdminApi.updatePlanStatus(details.planId, details.status ?? (current?.active ? "Inactive" : "Active"));
         }
-      }
-      // 5. Plans
-      else if (mod === "Plans") {
-        if (act === "Create" || act === "Update") {
-          const payload = details.payload || details.newValues || {};
-          const planId = details.planId || payload.planId || null;
-          apiResult = await superAdminApi.savePlan(payload, planId);
-        } else if (act === "Status change" && (details.planId || details.id)) {
-          const pid = details.planId || details.id;
-          const currentPlan = latest.current.plans.find((p) => p.id === pid || p.planId === pid);
-          const nextStatus = currentPlan?.active ? "Inactive" : "Active";
-          apiResult = await superAdminApi.updatePlanStatus(pid, nextStatus);
-        }
-      }
-      // 6. Module Management
-      else if (mod === "Module Management") {
-        const draftPlans = details.draft || details.newValues || [];
-        for (const p of draftPlans) {
-          if (p.planId) {
-            for (const modName of MODULES) {
-              const isEnabled = p.modules.includes(modName);
-              await superAdminApi.updatePlanModule(p.planId, modName, isEnabled);
-            }
-          }
-        }
-        apiResult = { success: true, message: "Plan modules updated successfully." };
-      }
-      // 7. Settings
-      else if (mod === "Settings") {
-        const payload = details.payload || details.newValues || details.settings || {};
-        apiResult = await superAdminApi.updateSettings(payload);
-      }
-      // 8. Notifications
+      } else if (mod === "Module Management" && act === "Update") {
+        const plans = details.draft ?? [];
+        const results = await Promise.all(plans.flatMap((plan) => MODULES.map((name) => superAdminApi.updatePlanModule(plan.planId ?? plan.id, name, plan.modules.includes(name)))));
+        result = results.at(-1);
+      } else if (mod === "Settings" && act === "Update") result = await superAdminApi.updateSettings(details.settings ?? payload);
       else if (mod === "Notifications") {
-        if (act === "Draft") {
-          const payload = details.payload || details.newValues || {};
-          apiResult = await superAdminApi.createNotification({
-            title: payload.title || "Platform Broadcast",
-            message: payload.message,
-            category: payload.category || "System Alerts",
-          });
-        } else if (act === "Read" && (details.id || details.notificationId)) {
-          const nid = details.id || details.notificationId;
-          apiResult = await superAdminApi.markNotificationRead(nid);
-        }
-      }
+        if (act === "Draft") result = await superAdminApi.createNotification(payload);
+        else if (act === "Read") result = await superAdminApi.markNotificationRead(details.notificationId ?? details.id);
+      } else if (mod === "Payments" && act === "Verify") result = await superAdminApi.verifyPayment(details.paymentId);
 
-      // If action is a synchronous preview transformer function, execute as fallback/optimistic
-      if (typeof action === "function") {
-        try {
-          const next = action(latest.current);
-          if (next) {
-            latest.current = next;
-            setData(next);
-          }
-        } catch {
-          /* optimistic failure tolerated */
-        }
-      }
-
-      // Re-fetch authoritative state from backend API
+      if (result === undefined) throw new Error(`No API action is configured for ${mod || "this feature"} / ${act || "this operation"}.`);
       await loadLivePlatformData();
-      setMessage(apiResult?.message || `${label} completed successfully.`);
+      setMessage(result?.message ?? `${label} completed successfully.`);
       return true;
-    } catch (err) {
-      console.error(`SuperAdmin operation failed during "${label}":`, err);
-      setMessage(getApiErrorMessage(err));
+    } catch (error) {
+      console.error(`Super Admin API operation failed (${label}):`, error);
+      setMessage(getApiErrorMessage(error));
       return false;
     }
   };
 
   const refresh = async () => {
     const success = await loadLivePlatformData();
-    if (success) {
-      setMessage("Platform data refreshed successfully from database.");
-    }
+    if (success) setMessage("Platform data refreshed from the API.");
     return success;
   };
 
-  return (
-    <Context.Provider
-      value={{
-        session,
-        data,
-        loading,
-        update,
-        refresh,
-        message,
-        clearMessage: () => setMessage(""),
-      }}
-    >
-      {children}
-    </Context.Provider>
-  );
+  return <Context.Provider value={{ session, data, loading, update, refresh, message, clearMessage: () => setMessage("") }}>{children}</Context.Provider>;
 }
 
 export const useSuperAdmin = () => useContext(Context);
