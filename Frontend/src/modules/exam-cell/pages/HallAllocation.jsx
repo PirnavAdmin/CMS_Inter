@@ -50,6 +50,7 @@ import {
   hasTimeOverlap,
 } from "@/utils/examinationUtils.js";
 import "./HallAllocation.css";
+import { enrichExaminations } from "../services/examCellMasterData.js";
 
 const printDutiesRegister = (duties = [], campusId = 1) => {
   if (!duties || duties.length === 0) return;
@@ -484,11 +485,17 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     setLoadingDuties(true);
     try {
       const params = {};
-      if (dutyStaffFilter && dutyStaffFilter !== "all") {
-        params.staffId = dutyStaffFilter;
+      if (selectedAcademicYearId) {
+        params.academicYearId = selectedAcademicYearId;
       }
-      if (dutyStatusFilter && dutyStatusFilter !== "all") {
-        params.status = dutyStatusFilter;
+      if (selectedBoardId) {
+        params.boardId = selectedBoardId;
+      }
+      if (false) {
+        // staff filter applied client-side
+      }
+      if (false) {
+        // status filter applied client-side
       }
       if (selectedCampusId) {
         params.campusId = selectedCampusId;
@@ -501,7 +508,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     } finally {
       setLoadingDuties(false);
     }
-  }, [dutyStaffFilter, dutyStatusFilter, selectedCampusId]);
+  }, [selectedCampusId, selectedAcademicYearId, selectedBoardId]);
 
   useEffect(() => {
     if (activeTab === "duties") {
@@ -542,6 +549,18 @@ export default function HallAllocation({ initialTab = "rooms" }) {
   // Filtered duties by search
   const filteredDuties = useMemo(() => {
     let result = duties;
+
+    if (dutyStatusFilter && dutyStatusFilter !== "all") {
+      result = result.filter(
+        (d) => (d.status || "").toLowerCase() === dutyStatusFilter.toLowerCase()
+      );
+    }
+
+    if (dutyStaffFilter && dutyStaffFilter !== "all") {
+      result = result.filter(
+        (d) => String(d.invigilatorId) === String(dutyStaffFilter)
+      );
+    }
     if (dutySearch.trim()) {
       const q = dutySearch.toLowerCase().trim();
       result = result.filter(
@@ -558,7 +577,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
       );
     }
     return result;
-  }, [duties, dutySearch]);
+  }, [duties, dutyStatusFilter, dutyStaffFilter, dutySearch]);
 
   // Paginated duties
   const paginatedDuties = useMemo(() => {
@@ -641,7 +660,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
       .get("/api/v1/examinations", { params })
       .then((res) => {
         if (!active) return;
-        const raw = unwrap(res);
+        const raw = enrichExaminations(unwrap(res));
         let list = raw.map((e) => ({
           id: normalizeId(e.examinationId ?? e.id),
           examinationId: normalizeId(e.examinationId ?? e.id),
@@ -731,7 +750,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           });
         }
         if (!active) return;
-        const raw = unwrap(res);
+        const raw = enrichExaminations(unwrap(res));
         const mapped = raw
           .filter((r) => r.isActive !== false)
           .map((r) => {
@@ -787,7 +806,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           },
         });
         if (!active) return;
-        const raw = unwrap(res);
+        const raw = enrichExaminations(unwrap(res));
         const mapped = raw
           .filter((f) => f.isActive !== false)
           .map((f) => {

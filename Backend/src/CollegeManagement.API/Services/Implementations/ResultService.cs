@@ -382,9 +382,25 @@ namespace CollegeManagement.API.Services.Implementations
             var stats = await _resultRepository.GetResultStatisticsAsync(
                 boardId, academicYearId, academicLevelId, groupId, examId, campusId);
 
-            var toppers = (await _resultRepository.GetRankListAsync(
-                boardId ?? 0, academicYearId ?? 0, academicLevelId ?? 0, groupId ?? 0, examId ?? 0, campusId))
-                .Take(10).ToList();
+            var allRanked = (await _resultRepository.GetRankListAsync(
+                boardId ?? 0, academicYearId ?? 0, academicLevelId ?? 0, groupId ?? 0, examId ?? 0, campusId)).ToList();
+
+            var toppers = allRanked.Take(10).ToList();
+
+            var passedList = allRanked
+                .Where(s => string.Equals(s.Result, "PASS", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(s.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase))
+                .Select(s => new PassedStudentItemDto
+                {
+                    StudentId = s.StudentId,
+                    RollNo = s.RollNo,
+                    StudentName = s.StudentName,
+                    SectionId = 0,
+                    SectionName = s.SectionName ?? string.Empty,
+                    TotalMarks = s.TotalMarks,
+                    Percentage = s.Percentage,
+                    Result = "PASS"
+                }).ToList();
 
             var failed = (await _resultRepository.GetFailedStudentsAsync(
                 boardId, academicYearId, academicLevelId, groupId, examId, campusId)).ToList();
@@ -395,25 +411,53 @@ namespace CollegeManagement.API.Services.Implementations
                 RollNo = s.RollNumber,
                 StudentName = s.StudentName,
                 SectionId = s.Subjects.FirstOrDefault()?.SubjectId,
-                SectionName = s.SectionName,
+                SectionName = s.SectionName ?? string.Empty,
                 TotalMarks = s.GrandTotal,
                 Percentage = s.Percentage,
                 Result = "FAIL"
             }).ToList();
 
+            if (failedList.Count == 0 && allRanked.Any(s => string.Equals(s.Result, "FAIL", StringComparison.OrdinalIgnoreCase)))
+            {
+                failedList = allRanked
+                    .Where(s => string.Equals(s.Result, "FAIL", StringComparison.OrdinalIgnoreCase))
+                    .Select(s => new FailedStudentItemDto
+                    {
+                        StudentId = s.StudentId,
+                        RollNo = s.RollNo,
+                        StudentName = s.StudentName,
+                        SectionId = 0,
+                        SectionName = s.SectionName ?? string.Empty,
+                        TotalMarks = s.TotalMarks,
+                        Percentage = s.Percentage,
+                        Result = "FAIL"
+                    }).ToList();
+            }
+
             var analysis = await _resultRepository.GetResultAnalysisAsync(
                 boardId ?? 0, academicYearId ?? 0, academicLevelId ?? 0, groupId ?? 0, examId ?? 0, campusId);
 
-            var subjectPerformance = analysis.Subjects.Select(sub => new SubjectPerformanceItemDto
-            {
-                SubjectId = sub.SubjectId,
-                SubjectName = sub.SubjectName,
-                Students = sub.TotalStudents,
-                Average = sub.AverageScore,
-                Highest = sub.MaximumMarks,
-                Lowest = 0m,
-                PassPercentage = sub.SubjectPassPercentage
-            }).ToList();
+            var subjectPerformance = analysis.Subjects
+                .GroupBy(sub => (sub.SubjectName ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var students = g.Max(s => s.TotalStudents);
+                    var avg = g.Average(s => s.AverageMarks != 0 ? s.AverageMarks : s.AverageScore);
+                    var highest = g.Max(s => s.HighestMarks != 0 ? s.HighestMarks : s.MaximumMarks);
+                    var lowest = g.Min(s => s.LowestMarks);
+                    var passPct = g.Average(s => s.PassPercentage != 0 ? s.PassPercentage : s.SubjectPassPercentage);
+                    return new SubjectPerformanceItemDto
+                    {
+                        SubjectId = first.SubjectId,
+                        SubjectName = first.SubjectName,
+                        Students = students,
+                        Average = Math.Round(avg, 2),
+                        Highest = Math.Round(highest, 2),
+                        Lowest = Math.Round(lowest, 2),
+                        PassPercentage = Math.Round(passPct, 2)
+                    };
+                }).ToList();
 
             var analytics = new ResultAnalyticsDto
             {
@@ -422,6 +466,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Failed = stats.FailedStudents,
                 Pass = stats.PassPercentage,
                 Average = stats.AverageMarks,
+                PassedStudents = passedList,
                 FailedStudents = failedList,
                 SubjectPerformance = subjectPerformance
             };

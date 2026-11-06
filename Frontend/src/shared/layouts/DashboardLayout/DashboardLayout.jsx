@@ -989,11 +989,22 @@ export default function DashboardLayout({
     if (!rawPhoto || typeof rawPhoto !== "string" || isInvalidOrBrokenPhoto(rawPhoto)) return null;
     const trimmed = rawPhoto.trim();
     if (!trimmed || isInvalidOrBrokenPhoto(trimmed)) return null;
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      if (env.useDevProxy && trimmed.includes("/uploads/")) {
+        const uploadPath = trimmed.slice(trimmed.indexOf("/uploads/"));
+        return isInvalidOrBrokenPhoto(uploadPath) ? null : uploadPath;
+      }
       return isInvalidOrBrokenPhoto(trimmed) ? null : trimmed;
     }
+    if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+      return trimmed;
+    }
+    const uploadPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+    if (env.useDevProxy && uploadPath.startsWith("/uploads/")) {
+      return isInvalidOrBrokenPhoto(uploadPath) ? null : uploadPath;
+    }
     const apiBase = (env.apiBaseUrl || "http://localhost:5167").replace(/\/$/, "");
-    const candidate = `${apiBase}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+    const candidate = `${apiBase}${uploadPath}`;
     return isInvalidOrBrokenPhoto(candidate) ? null : candidate;
   }, [user]);
 

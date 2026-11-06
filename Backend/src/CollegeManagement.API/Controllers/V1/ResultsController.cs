@@ -138,14 +138,16 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetSectionResultDetail(
             [FromRoute] int sectionId,
-            [FromQuery] int examId)
+            [FromQuery] int examId = 0,
+            [FromQuery] int? examinationId = null)
         {
-            if (sectionId <= 0 || examId <= 0)
+            int targetExamId = examId > 0 ? examId : (examinationId ?? 0);
+            if (sectionId <= 0 || targetExamId <= 0)
             {
                 return BadRequest(new { success = false, message = "Valid Section ID and Exam ID are required." });
             }
             _logger.LogInformation("Retrieving section result detail for Section: {SectionId}, Exam: {ExamId}", sectionId, examId);
-            var detail = await _resultService.GetSectionResultDetailAsync(sectionId, examId);
+            var detail = await _resultService.GetSectionResultDetailAsync(sectionId, targetExamId);
             if (detail == null)
             {
                 return NotFound(new { success = false, message = "Section result detail not found." });
@@ -171,10 +173,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> PublishSectionResults(
             [FromRoute] int? sectionId,
             [FromQuery] int? examId,
+            [FromQuery] int? examinationId = null,
             [FromBody] ProcessResultRequestDto? request = null)
         {
             var effectiveSectionId = sectionId ?? request?.SectionId ?? 0;
-            var effectiveExamId = examId ?? request?.ExamId ?? 0;
+            var effectiveExamId = (examId > 0 ? examId : (examinationId > 0 ? examinationId : (request?.ExamId > 0 ? request.ExamId : (request?.ExaminationId > 0 ? request.ExaminationId : 0)))) ?? 0;
 
             if (effectiveSectionId <= 0 || effectiveExamId <= 0)
             {
@@ -215,13 +218,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("publish")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> PublishGroupResults([FromBody] ProcessResultRequestDto request)
+        public async Task<IActionResult> PublishGroupResults([FromBody] ProcessResultRequestDto request, [FromQuery] int? examId = null, [FromQuery] int? examinationId = null)
         {
             if (request != null)
             {
                 request.CampusId = ResolveCampusId(request.CampusId);
             }
-            var effectiveExamId = request?.ExamId ?? request?.ExaminationId ?? 0;
+            var effectiveExamId = (request?.ExamId > 0 ? request.ExamId : (request?.ExaminationId > 0 ? request.ExaminationId : (examId ?? examinationId ?? 0)));
             var effectiveGroupId = request?.GroupId ?? 0;
             var effectiveSectionId = request?.SectionId ?? 0;
 
@@ -445,11 +448,13 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] string? programId = null,
             [FromQuery] int? examId = null,
+            [FromQuery] int? examinationId = null,
             [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving results analytics for Exam: {ExamId}, Group: {GroupId}, CampusId: {CampusId}", examId, groupId, campusId);
+            var effectiveExamId = examId ?? examinationId;
+            _logger.LogInformation("Retrieving results analytics for Exam: {ExamId}, Group: {GroupId}, CampusId: {CampusId}", effectiveExamId, groupId, campusId);
             var analytics = await _resultService.GetResultAnalyticsAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, examId, campusId);
+                boardId, academicYearId, academicLevelId, groupId, programId, effectiveExamId, campusId);
 
             return Ok(analytics);
         }

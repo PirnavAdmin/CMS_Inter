@@ -8,16 +8,24 @@ const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
 
 export const userLogin = (data) =>
-  apiClient.post(apiEndpoints.auth.login, {
-    emailOrMobile: data.emailOrMobile,
-    password: data.password,
-  });
+  apiClient.post(
+    apiEndpoints.auth.login,
+    {
+      emailOrMobile: data.emailOrMobile,
+      password: data.password,
+    },
+    { timeout: 12000, skipAuthRedirect: true }
+  );
 
 export const adminLogin = (data) =>
-  apiClient.post(apiEndpoints.admin.login, {
-    email: data.email,
-    password: data.password,
-  });
+  apiClient.post(
+    apiEndpoints.admin.login,
+    {
+      email: data.email,
+      password: data.password,
+    },
+    { timeout: 12000, skipAuthRedirect: true }
+  );
 
 export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
@@ -184,7 +192,13 @@ export const loginUser = async (credentials) => {
     // Only allow offline development mock fallback if the backend is strictly unreachable (network error/connection refused)
     const isNetworkError =
       authError?.code === "ERR_NETWORK" ||
+      authError?.code === "ECONNABORTED" ||
+      authError?.code === "ETIMEDOUT" ||
       authError?.message === "Network Error" ||
+      authError?.response?.status === 502 ||
+      authError?.response?.status === 503 ||
+      authError?.response?.status === 504 ||
+      authError?.response?.data?.message === "Backend proxy unreachable" ||
       !authError?.response;
 
     if (isNetworkError) {

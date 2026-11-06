@@ -308,8 +308,8 @@ export default function ParentExaminationsPage() {
                 </thead>
                 <tbody>
                   {exams.length > 0 ? (
-                    exams.map((ex) => (
-                      <tr key={ex.id}>
+                    exams.map((ex, idx) => (
+                      <tr key={ex.id ? `sched-${ex.id}-${idx}` : `exam-${idx}`}>
                         <td>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "var(--cms-text)" }}>
                             <Calendar size={14} color="var(--cms-primary)" /> {ex.date}
@@ -463,8 +463,8 @@ export default function ParentExaminationsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {exams.map((ex) => (
-                    <tr key={ex.id}>
+                  {exams.map((ex, idx) => (
+                    <tr key={ex.id ? `ticket-${ex.id}-${idx}` : `ticket-${idx}`}>
                       <td>{ex.date}</td>
                       <td>{ex.time}</td>
                       <td><strong>{ex.subject}</strong> ({ex.code})</td>

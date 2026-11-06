@@ -447,7 +447,7 @@ export default function ParentAttendancePage() {
                     Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : subjects.length > 0 ? (
                     subjects.map((sub, idx) => (
-                      <tr key={sub.subjectId ?? sub.code ?? idx}>
+                      <tr key={sub.subjectId ? `att-${sub.subjectId}-${idx}` : `${sub.code || "sub"}-${idx}`}>
                         <td>
                           <strong>{sub.subject}</strong>
                           <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{sub.code}</div>
