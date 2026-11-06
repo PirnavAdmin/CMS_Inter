@@ -1,0 +1,30 @@
+.sa-college-code { display: block; font-size: 10px; color: var(--cms-muted); margin-top: 5px; }
+.sa-shell .sa-table-card .sa-actions .cms-btn { min-height: 30px; padding: 5px 9px; font-size: 11px; }
+.sa-registration-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.sa-shell .sa-registration-stat { --registration-accent:#2563eb; display:flex; align-items:center; gap:10px; min-width:0; padding:10px 12px; text-align:left; color:var(--cms-text); border:1px solid color-mix(in srgb,var(--registration-accent) 22%,var(--cms-border)); border-radius:9px; background:linear-gradient(145deg,color-mix(in srgb,var(--registration-accent) 8%,var(--cms-surface)),var(--cms-surface) 80%); box-shadow:0 2px 6px #00000006; cursor:pointer; }
+.sa-shell .sa-registration-stat.tone-amber { --registration-accent:#d48810; }
+.sa-shell .sa-registration-stat.tone-green { --registration-accent:#229653; }
+.sa-shell .sa-registration-stat.tone-red { --registration-accent:#d34b54; }
+.sa-shell .sa-registration-stat.is-selected { border-color:var(--registration-accent); box-shadow:0 0 0 1px color-mix(in srgb,var(--registration-accent) 20%,transparent); }
+.sa-shell .sa-registration-stat:focus-visible { outline:2px solid var(--registration-accent); outline-offset:3px; }
+.sa-registration-stat-icon { width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center; border-radius:8px; background:color-mix(in srgb,var(--registration-accent) 12%,var(--cms-surface)); }
+.sa-registration-stat > span:last-child { display:grid; gap:4px; }
+.sa-registration-stat small { font-size:11px; color:var(--cms-muted); font-weight:700; }
+.sa-registration-stat strong { font-size:22px; line-height:1; }
+.sa-registration-note { margin:0; font-size:11px; color:var(--cms-muted); }
+.sa-registration-filters { display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px; }
+.sa-registration-filters label { display:grid; gap:4px; color:var(--cms-muted); font-size:11px; }
+.sa-registration-filters select { min-height:36px; padding:6px 10px; border:1px solid var(--cms-border); border-radius:8px; color:var(--cms-text); background:var(--cms-surface); }
+.sa-shell .sa-registration-badge.status-pending { background:var(--cms-orange-soft,#fff3d9); color:var(--cms-orange,#b36e0a); }
+.sa-shell .sa-registration-badge.status-approved { background:var(--cms-green-soft,#e5f5ec); color:var(--cms-green,#22874c); }
+.sa-shell .sa-registration-badge.status-rejected { background:var(--cms-red-soft,#fce8eb); color:var(--cms-red,#c63b48); }
+@media(max-width:1000px) { .sa-registration-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:520px) { .sa-registration-summary { grid-template-columns:1fr; } .sa-registration-filters { width:100%; } .sa-registration-filters label { flex:1 1 150px; } .sa-registration-filters select { max-width:100%; width:100%; } }
+.sa-onboarding-next { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.sa-onboarding-details { display:grid; gap:12px; }
+.sa-onboarding-details > div { display:grid; grid-template-columns:140px minmax(0,1fr); gap:10px; border-bottom:1px solid var(--cms-border); padding-bottom:8px; }
+.sa-onboarding-details dt { color:var(--cms-muted); font-size:12px; }
+.sa-onboarding-details dd { margin:0; overflow-wrap:anywhere; font-size:13px; }
+.sa-shell .sa-registration-badge.status-active { background:var(--cms-green-soft); color:var(--cms-green); }
+.sa-shell .sa-registration-badge.status-inactive { background:var(--cms-subtle); color:var(--cms-muted); }
+@media(max-width:520px) { .sa-onboarding-details > div { grid-template-columns:1fr; gap:4px; } }

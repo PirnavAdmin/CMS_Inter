@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/modules/landing/LandingPage.jsx";
+import { PublicRouteFallback, PublicWebsitePage } from "@/modules/landing/PublicWebsitePages.jsx";
 import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
 import DashboardPage from "@/modules/admin/AdminDashboard/DashboardPage.jsx";
 import PrincipalDashboard from "@/modules/principal/PrincipalDashboard.jsx";
@@ -43,6 +44,7 @@ const LeaveTypesPage = lazy(() => import("@/modules/admin/AdminLeave/LeaveTypesP
 const AttendanceTimingConfigPage = lazy(() => import("@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx"));
 const NumberSeriesPage = lazy(() => import("@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx"));
 const TemplatesPage = lazy(() => import("@/modules/admin/AdminTemplates/TemplatesPage.jsx"));
+const OfferLetterConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/OfferLetterConfigurationPage.jsx"));
 const CredentialsGeneratorPage = lazy(() => import("@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx"));
 import PayrollPage from "@/modules/admin/AdminPayroll/PayrollPage.jsx";
 import ReimbursementPage from "@/modules/admin/AdminReimbursements/ReimbursementPage.jsx";
@@ -59,6 +61,7 @@ const SettingsFallback = () => (
   </div>
 );
 import Login from "@/modules/auth/pages/Login.jsx";
+const SuperAdminPortalRoutes = lazy(() => import("@/modules/super-admin/SuperAdminPortalRoutes.jsx"));
 import Register from "@/modules/auth/pages/Register.jsx";
 import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/modules/auth/pages/VerifyOTP.jsx";
@@ -134,7 +137,17 @@ function StudentEnrollmentRoute() {
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route path="/super-admin/*" element={<Suspense fallback={<SettingsFallback/>}><SuperAdminPortalRoutes/></Suspense>} />
       <Route path="/" element={<LandingPage />} />
+      <Route path="/about" element={<PublicWebsitePage page="about" />} />
+      <Route path="/academics" element={<PublicWebsitePage page="academics" />} />
+      <Route path="/features" element={<PublicWebsitePage page="features" />} />
+      <Route path="/admissions" element={<PublicWebsitePage page="admissions" />} />
+      <Route path="/contact" element={<PublicWebsitePage page="contact" />} />
+      <Route path="/help" element={<PublicWebsitePage page="help" />} />
+      <Route path="/privacy-policy" element={<PublicWebsitePage page="privacy-policy" />} />
+      <Route path="/terms" element={<PublicWebsitePage page="terms" />} />
+      <Route path="/404" element={<PublicRouteFallback />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Navigate to="/login" replace />} />
@@ -338,6 +351,7 @@ export default function AppRoutes() {
         {/* Reports */}
         <Route element={<ProtectedRoute requiredModule="reports-analytics" />}>
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
+          <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
         {/* Settings General & Admin Profile */}
         <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
@@ -393,6 +407,12 @@ export default function AppRoutes() {
           <Route path="/dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
           <Route path="/dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
           <Route path="/dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+        </Route>
+
+        {/* Offer Letter Configuration Module Routes */}
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="offer-letter-configuration" />}>
+          <Route path="/dashboard/settings/offer-letter-configuration" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
+          <Route path="/dashboard/settings/offer-letter" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
         </Route>
 
         {/* Credentials Generator Module Routes */}
@@ -575,9 +595,11 @@ export default function AppRoutes() {
       <Route path="/results" element={<Navigate to="/dashboard/results" replace />} />
       <Route path="/promotion" element={<Navigate to="/dashboard/promotion" replace />} />
       <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
+      <Route path="/certificates" element={<Navigate to="/dashboard/certificates" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
+      <Route path="/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<PublicRouteFallback />} />
     </Routes>
   );
 }

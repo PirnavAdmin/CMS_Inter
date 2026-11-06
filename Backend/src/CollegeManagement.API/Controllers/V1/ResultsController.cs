@@ -33,16 +33,22 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IResultService _resultService;
         private readonly ILogger<ResultController> _logger;
+        private readonly INotificationService? _notificationService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ResultController"/> class.
         /// </summary>
         /// <param name="resultService">The result service instance handling calculation and business logic.</param>
         /// <param name="logger">The logger instance.</param>
-        public ResultController(IResultService resultService, ILogger<ResultController> logger)
+        /// <param name="notificationService">The notification service instance.</param>
+        public ResultController(
+            IResultService resultService,
+            ILogger<ResultController> logger,
+            INotificationService? notificationService = null)
         {
             _resultService = resultService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -182,6 +188,22 @@ namespace CollegeManagement.API.Controllers.V1
             var published = await _resultService.PublishSectionResultsAsync(effectiveSectionId, effectiveExamId, request?.PublishDate);
             if (published)
             {
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent" },
+                            null,
+                            "Examination Results Published",
+                            $"Results for Examination #{effectiveExamId} (Section #{effectiveSectionId}) have been published. Check your grades in student portal.",
+                            "Results",
+                            effectiveExamId,
+                            "/student/results");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { success = true, message = "Section results published successfully." });
             }
             return BadRequest(new { success = false, message = "Failed to publish section results." });
@@ -225,6 +247,24 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (published)
             {
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var targetExamId = effectiveExamId;
+                        var targetCampusId = request?.CampusId > 0 ? request.CampusId : (int?)null;
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent" },
+                            targetCampusId,
+                            "Examination Results Published",
+                            $"Results for Examination #{targetExamId} have been published. Check your grades in student portal.",
+                            "Results",
+                            targetExamId,
+                            "/student/results");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { success = true, message = "Results published successfully." });
             }
             return BadRequest(new { success = false, message = "Failed to publish results." });
@@ -839,7 +879,81 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating Result ID: {ResultId}", resultId);
             var updated = await _resultService.UpdateResultAsync(resultId, request);
             if (!updated) return BadRequest(new { success = false, message = "Result cannot be updated." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent" },
+                        null,
+                        "Examination Result Updated / Republished",
+                        $"Examination Result #{resultId} has been updated/recalculated. Please check the updated memo in your portal.",
+                        "Results",
+                        resultId,
+                        "/student/results");
+                }
+                catch { }
+            }
+
             return Ok(new { success = true, message = "Result updated successfully." });
+        }
+
+        /// <summary>
+        /// Dispatches student pass/fail outcome alert to student and parents.
+        /// </summary>
+        [HttpPost("notify-pass-fail/{studentId:int}")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Exam Cell,Examination Cell")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> NotifyStudentPassFail(
+            int studentId,
+            [FromQuery] int examinationId,
+            [FromQuery] string status,
+            [FromQuery] decimal? gpa = null)
+        {
+            if (studentId <= 0 || examinationId <= 0 || string.IsNullOrWhiteSpace(status))
+                return BadRequest(new { success = false, message = "Student ID, Exam ID, and Status are required." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var isPass = status.Equals("Pass", StringComparison.OrdinalIgnoreCase);
+                    var gpaText = gpa.HasValue ? $" (GPA: {gpa.Value:F2})" : "";
+                    var title = isPass ? "Examination Result: PASS" : "Examination Result: Supplementary / Improvement Required";
+                    var studentMsg = isPass
+                        ? $"Congratulations! You have PASSED examination #{examinationId}{gpaText}. Check your marks memo in the portal."
+                        : $"Your result for examination #{examinationId} has been published: Status: {status}{gpaText}. Please consult your academic advisor.";
+                    var parentMsg = isPass
+                        ? $"Result Announcement: Your ward has PASSED examination #{examinationId}{gpaText}."
+                        : $"Result Alert: Your ward's examination #{examinationId} status is {status}{gpaText}.";
+
+                    await _notificationService.SendToStudentAsync(
+                        studentId,
+                        title,
+                        studentMsg,
+                        "Results",
+                        examinationId,
+                        "/student/results");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        null,
+                        title,
+                        parentMsg,
+                        "Results",
+                        examinationId,
+                        "/parent/results");
+
+                    return Ok(new { success = true, message = "Pass/Fail notification sent to student and parent." });
+                }
+                catch (Exception ex)
+                {
+                    return StatusCode(500, new { success = false, message = ex.Message });
+                }
+            }
+
+            return Ok(new { success = true, message = "Notification service unavailable." });
         }
     }
 }

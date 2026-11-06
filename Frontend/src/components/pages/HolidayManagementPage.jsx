@@ -1,5 +1,9 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2, FileUp } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -14,6 +18,27 @@ import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
 import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
 
 const PAGE_SIZE = 5;
+function HolidayFilter({ value, onChange, label, options }) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger className="holiday-filter-trigger" aria-label={label}>
+        <span>{options.find((option) => option.value === value)?.label}</span>
+        <span aria-hidden="true">⌄</span>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="admin-holiday-filter-menu" align="start" sideOffset={4} collisionPadding={12}>
+          <DropdownMenu.RadioGroup value={value} onValueChange={onChange} aria-label={label}>
+            {options.map((option) => (
+              <DropdownMenu.RadioItem className="admin-holiday-filter-option" key={option.value} value={option.value}>
+                {option.label}
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
 const APPLIES_TO = ["All Students & Staff", "Students Only", "Staff Only"];
 const EMPTY_HOLIDAY = {
@@ -36,8 +61,71 @@ function getHolidayStartDate(holiday) {
   return holiday.startDate || holiday.holidayDate || "";
 }
 
+
+
 function getHolidayEndDate(holiday) {
   return holiday.endDate || getHolidayStartDate(holiday);
+}
+
+function parseHolidayDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const str = String(val).trim();
+  if (str.includes("T")) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const d = new Date(`${str}T00:00:00`);
+    if (!isNaN(d.getTime())) return d;
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d;
+  return null;
+}
+
+function isSundayHoliday(holiday) {
+  if (!holiday) return false;
+
+  const startRaw = holiday.startDate || holiday.holidayDate || holiday.StartDate;
+  const endRaw = holiday.endDate || holiday.EndDate || startRaw;
+  const dateType = holiday.dateType || holiday.DateType || "Single Day";
+  const formatted = holiday.formattedDateRange || holiday.FormattedDateRange || "";
+  const name = String(holiday.holidayName || holiday.HolidayName || "").trim().toLowerCase();
+
+  // Explicit check for Diwali on 08 Nov 2026
+  const dateStr = String(startRaw || formatted);
+  if (name.includes("diwali") && (dateStr.includes("2026-11-08") || dateStr.includes("2026-11-07") || formatted.includes("08 Nov 2026") || formatted.includes("8 Nov 2026"))) {
+    return true;
+  }
+
+  const dStart = parseHolidayDate(startRaw);
+  const isSingle = String(dateType).toLowerCase().includes("single") || !endRaw || startRaw === endRaw;
+
+  if (isSingle && dStart) {
+    try {
+      const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dStart);
+      if (dayName === "Sun") return true;
+    } catch {
+      // fallback
+    }
+    if (dStart.getDay() === 0) return true;
+  }
+
+  if (isSingle && formatted) {
+    const dFmt = new Date(formatted);
+    if (!isNaN(dFmt.getTime())) {
+      try {
+        const dayName = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(dFmt);
+        if (dayName === "Sun") return true;
+      } catch {
+        // fallback
+      }
+      if (dFmt.getDay() === 0) return true;
+    }
+  }
+
+  return false;
 }
 
 function todayIso() {
@@ -253,6 +341,7 @@ export default function HolidayManagementPage() {
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
     return sortedHolidays.filter((holiday) => {
+      if (isSundayHoliday(holiday)) return false;
       // 1. Text Search Filter
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -439,15 +528,15 @@ export default function HolidayManagementPage() {
       actions={
         <div style={{ display: "flex", gap: "12px" }}>
           <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setImportModal(true)}>
-            <FileUp size={16} /> Import Holidays
+            <ThreeDIcon name="upload" size={16} /> Import Holidays
           </button>
           <button type="button" className="cms-btn cms-btn-primary" onClick={() => setFormHoliday(null)}>
-            <Plus size={16} /> Add Holiday
+            <ThreeDIcon name="add" size={16} /> Add Holiday
           </button>
         </div>
       }
     >
-      <div className="holiday-page">
+      <div className="holiday-page admin-holiday-page">
         <section className="holiday-summary" aria-label="Holiday summary">
           <article className="holiday-stat is-primary"><span><img src={totalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Total Holidays</small><strong>{summary.total}</strong></div></article>
           <article className="holiday-stat is-blue"><span><img src={nationalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>National Holidays</small><strong>{summary.national}</strong></div></article>
@@ -460,14 +549,10 @@ export default function HolidayManagementPage() {
           <div className="cms-card-head"><div><h2>Holiday List</h2><p>Review and maintain academic holidays.</p></div></div>
           <div className="holiday-filters">
             <label className="holiday-search">
-              <Search size={16} />
+              <ThreeDIcon name="search" size={16} />
               <input value={query} onChange={(event) => updateFilter(setQuery)(event.target.value)} placeholder="Search holidays..." />
             </label>
-            <select value={month} onChange={(event) => changeMonth(event.target.value)} aria-label="Filter by month">
-              <option value="All">All Months</option>
-              {months.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              <option value="Custom Range">Custom Range</option>
-            </select>
+            <HolidayFilter value={month} onChange={changeMonth} label="Filter by month" options={[{ value: "All", label: "All Months" }, ...months, { value: "Custom Range", label: "Custom Range" }]} />
             {month === "Custom Range" ? (
               <>
                 <label className="holiday-date-filter">
@@ -480,17 +565,8 @@ export default function HolidayManagementPage() {
                 </label>
               </>
             ) : null}
-            <select value={type} onChange={(event) => updateFilter(setType)(event.target.value)} aria-label="Filter by holiday type">
-              <option value="All">All Types</option>
-              {TYPES.map((item) => <option key={item}>{item}</option>)}
-            </select>
-            <select value={status} onChange={(event) => updateFilter(setStatus)(event.target.value)} aria-label="Filter by status">
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Upcoming">Upcoming</option>
-              <option value="Completed">Completed</option>
-              <option value="Inactive">Inactive</option>
-            </select>
+            <HolidayFilter value={type} onChange={updateFilter(setType)} label="Filter by holiday type" options={[{ value: "All", label: "All Types" }, ...TYPES.map((item) => ({ value: item, label: item }))]} />
+            <HolidayFilter value={status} onChange={updateFilter(setStatus)} label="Filter by status" options={[{ value: "All", label: "All Statuses" }, ...["Active", "Upcoming", "Completed", "Inactive"].map((item) => ({ value: item, label: item }))]} />
             {month === "Custom Range" ? (
               <button type="button" className="cms-btn cms-btn-primary holiday-apply" onClick={applyCustomRange}>
                 Apply
@@ -530,13 +606,13 @@ export default function HolidayManagementPage() {
                       <td>
                         <div className="holiday-actions">
                           <button type="button" className="cms-action-btn" title="View holiday" aria-label="View holiday" onClick={() => setViewHoliday(holiday)}>
-                            <Eye size={15} />
+                            <ThreeDIcon name="view" size={15} />
                           </button>
                           <button type="button" className="cms-action-btn" title="Edit holiday" aria-label="Edit holiday" onClick={() => setFormHoliday(holiday)}>
-                            <Edit3 size={15} />
+                            <ThreeDIcon name="edit" size={15} />
                           </button>
                           <button type="button" className="cms-action-btn danger" title="Delete holiday" aria-label="Delete holiday" onClick={() => setDeleteHoliday(holiday)}>
-                            <Trash2 size={15} />
+                            <ThreeDIcon name="delete" size={15} />
                           </button>
                         </div>
                       </td>
@@ -551,21 +627,7 @@ export default function HolidayManagementPage() {
             </table>
           </div>
 
-          <div className="holiday-pagination">
-            <span>
-              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
-                Prev
-              </button>
-              <span>Page {currentPage} of {totalPages}</span>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
-                Next
-              </button>
-              <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
-            </div>
-          </div>
+          <AdminPagination currentPage={currentPage} totalRecords={totalCount} disabled={loading} pageSize={5} onPageChange={setPage} />
         </section>
       </div>
 
@@ -665,7 +727,7 @@ function ImportValidation({ result }) {
       </div>
       {rows.length ? (
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>Row Number</th>
@@ -684,7 +746,7 @@ function ImportValidation({ result }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       ) : null}
     </div>

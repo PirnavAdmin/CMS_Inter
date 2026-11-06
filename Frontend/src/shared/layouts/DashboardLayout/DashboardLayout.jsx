@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -19,7 +20,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser, getAuthToken } from "@/modules/auth/authStorage.js";
 import { env } from "@/config/env.js";
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
@@ -828,8 +829,7 @@ export default function DashboardLayout({
   const userRoleStr = String(user?.role || "").trim().toLowerCase();
   const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
   const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
-  const hubConnectionRef = useRef(null);
-  const fetchLiveNotifsRef = useRef(null);
+    const fetchLiveNotifsRef = useRef(null);
 
   // Fetch live notifications count for badges
   useEffect(() => {
@@ -943,63 +943,22 @@ export default function DashboardLayout({
     setLiveNotifications([]);
   }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
 
-  // SignalR Push Connection: Persistent across campus changes with safe reconnect backoff
+  // SignalR Push Connection: Subscribed via singleton notificationHubService
   useEffect(() => {
-    let disposed = false;
-    if (!canReviewReimbursements && !canReviewCertificates) {
-      if (hubConnectionRef.current) {
-        hubConnectionRef.current.stop().catch(() => { });
-        hubConnectionRef.current = null;
-      }
-      return;
-    }
+    if (!canReviewReimbursements && !canReviewCertificates) return;
 
-    const token = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
-    if (!token || token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("test-")) return;
-
-    const base = env.useDevProxy ? "" : (env.apiBaseUrl || "").replace(/\/$/, "");
-    const connection = new HubConnectionBuilder()
-      .withUrl(`${base}/hubs/notifications`, {
-        accessTokenFactory: () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim(),
-        headers: { "ngrok-skip-browser-warning": "true" },
-      })
-      .withAutomaticReconnect([2000, 5000, 10000, 30000])
-      .configureLogging(LogLevel.None)
-      .build();
-
-    hubConnectionRef.current = connection;
-
-    connection.on("NotificationReceived", () => {
-      if (!disposed) {
-        setHasViewedNotifications(false);
-        fetchLiveNotifsRef.current?.(true);
-      }
+    const unsubscribe = notificationHubService.subscribe(() => {
+      setHasViewedNotifications(false);
+      fetchLiveNotifsRef.current?.(true);
     });
 
-    connection.start()
-      .then(() => {
-        if (!disposed && reimbursementCampusId && connection.state === "Connected") {
-          connection.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
-        }
-      })
-      .catch(() => {
-        // Graceful catch: withAutomaticReconnect will retry with backoff if server is restarting
-      });
-
-    return () => {
-      disposed = true;
-      if (hubConnectionRef.current) {
-        const conn = hubConnectionRef.current;
-        hubConnectionRef.current = null;
-        conn.stop().catch(() => { });
-      }
-    };
+    return unsubscribe;
   }, [canReviewReimbursements, canReviewCertificates]);
 
-  // Synchronize Campus Join/Leave dynamically without tearing down SignalR socket
+  // Synchronize Campus Join dynamically without tearing down SignalR socket
   useEffect(() => {
-    if (reimbursementCampusId && hubConnectionRef.current?.state === "Connected") {
-      hubConnectionRef.current.invoke("JoinCampus", Number(reimbursementCampusId)).catch(() => { });
+    if (reimbursementCampusId) {
+      notificationHubService.joinCampus(reimbursementCampusId);
     }
   }, [reimbursementCampusId]);
 
@@ -1151,6 +1110,7 @@ export default function DashboardLayout({
   };
 
   const logout = () => {
+    notificationHubService.disconnect();
     clearAuthSession();
     setProfileOpen(false);
     navigate("/login", { replace: true });
@@ -1160,6 +1120,7 @@ export default function DashboardLayout({
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
+    if (basePath === "/accountant-dashboard/payroll") return pathname === basePath || pathname === `${basePath}/`;
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/exam-cell-dashboard") return pathname === "/exam-cell-dashboard";
     if (basePath === "/non-teaching-dashboard") return pathname === "/non-teaching-dashboard" || pathname === "/non-teaching-dashboard/";
@@ -1223,7 +1184,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
+    <div className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
@@ -1597,47 +1558,7 @@ export default function DashboardLayout({
               </div>
             </div>
             <ThemeToggle variant="dashboard" />
-            {isParent ? (
-              <Link
-                to={parentStudentId ? `/parent-dashboard/notifications?studentId=${encodeURIComponent(parentStudentId)}` : "/parent-dashboard/notifications"}
-                className="cms-icon-btn"
-                style={{ textDecoration: "none" }}
-                aria-label={`${pendingActionCount} notifications`}
-                onClick={() => {
-                  setNotifOpen(false);
-                  setProfileOpen(false);
-                  closeOnMobile();
-                }}
-              >
-                <NavbarIcon src={navbarNotificationsIcon} />
-                {pendingActionCount > 0 ? (
-                  <span className="cms-notification-badge">
-                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
-                  </span>
-                ) : null}
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="cms-icon-btn"
-                aria-label={`${pendingActionCount} sample notifications`}
-                aria-expanded={notifOpen}
-                onClick={() => {
-                  setNotifOpen((open) => !open);
-                  setProfileOpen(false);
-                  if (!notifOpen) {
-                    setHasViewedNotifications(true);
-                  }
-                }}
-              >
-                <NavbarIcon src={navbarNotificationsIcon} />
-                {pendingActionCount > 0 ? (
-                  <span className="cms-notification-badge">
-                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
-                  </span>
-                ) : null}
-              </button>
-            )}
+            <NotificationBell />
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
               {activeAdminPhoto && !adminPhotoError && !isInvalidOrBrokenPhoto(activeAdminPhoto) ? (
                 <img
@@ -1656,29 +1577,7 @@ export default function DashboardLayout({
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 
-            {!isParent && notifOpen ? (
-              <div className="cms-dropdown cms-notifications-dropdown">
-                <div className="cms-dropdown-head cms-notifications-head">
-                  <div><strong>Notifications</strong><small>Sample activity</small></div>
-                </div>
-                {currentNotifications.map((notification) => (
-                  <button
-                    key={notification.id}
-                    type="button"
-                    className="cms-notif-item"
-                    onClick={() => {
-                      setNotifOpen(false);
-                      setLiveNotifications((prev) => prev.filter((n) => n.id !== notification.id));
-                      navigate(notification.to);
-                    }}
-                  >
-                    <span className="cms-notif-count">{notification.count}</span>
-                    <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            {/* Universal NotificationBell active */}
 
             {profileOpen ? (
               <div className="cms-dropdown">

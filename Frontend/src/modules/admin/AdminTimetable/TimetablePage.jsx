@@ -24,6 +24,11 @@ const timetableContextUrl = (path, context, search = "") => {
   const params = new URLSearchParams(search);
   ["modal", "structureId", "slotId", "slotDay", "slotPeriodId"].forEach((key) => params.delete(key));
   Object.keys(EMPTY).forEach((key) => { if (context?.[key]) params.set(key, String(context[key])); else params.delete(key); });
+  if (Array.isArray(context?.sectionIds)) {
+    const sectionIds = [...new Set(context.sectionIds.map(String).filter(Boolean))];
+    if (sectionIds.length) params.set("sectionIds", sectionIds.join(","));
+    else params.delete("sectionIds");
+  }
   if (context?.isPublished !== undefined) params.set("isPublished", String(Boolean(context.isPublished)));
   if (context?.workingDays?.length) params.set("workingDays", context.workingDays.join(","));
   return params.size ? `${path}?${params}` : path;
@@ -269,6 +274,37 @@ const boardMappedOptions = (options, boards, boardId, idKeys, nameKeys) => {
 };
 const structureId = (x) => pick(x, "id", "Id", "periodStructureId");
 const timetableId = (x) => pick(x, "id", "Id", "timetableId");
+const latestTimetableForContext = async (context) => {
+  const response = await apiClient.get(apiEndpoints.timetable.getAll, {
+    params: {
+      CampusId: Number(context.campusId),
+      BoardId: Number(context.boardId),
+      AcademicYearId: Number(context.academicYearId),
+      AcademicLevelId: Number(context.academicLevelId),
+      GroupId: Number(context.groupId),
+      ProgramId: Number(context.programId),
+      SectionId: Number(context.sectionId),
+      PageNumber: 1,
+      PageSize: 100,
+    },
+  });
+  if (response.data?.success === false || response.data?.isSuccess === false) {
+    throw new Error(response.data?.message || "Unable to check timetable availability.");
+  }
+  const matches = list(response.data).filter((entry) =>
+    (pick(entry, "campusId", "CampusId") == null || String(pick(entry, "campusId", "CampusId")) === String(context.campusId))
+    && String(pick(entry, "boardId", "BoardId")) === String(context.boardId)
+    && String(pick(entry, "academicYearId", "AcademicYearId")) === String(context.academicYearId)
+    && String(pick(entry, "academicLevelId", "AcademicLevelId")) === String(context.academicLevelId)
+    && String(pick(entry, "groupId", "GroupId")) === String(context.groupId)
+    && String(pick(entry, "programId", "ProgramId", "programmeId", "ProgrammeId")) === String(context.programId)
+    && String(pick(entry, "sectionId", "SectionId")) === String(context.sectionId),
+  );
+  return [...matches].sort((left, right) => {
+    const date = (entry) => Date.parse(pick(entry, "generatedAt", "GeneratedAt", "createdAt", "CreatedAt", "updatedAt", "UpdatedAt", "date", "Date") ?? "") || 0;
+    return date(right) - date(left) || Number(timetableId(right) ?? 0) - Number(timetableId(left) ?? 0);
+  })[0] ?? null;
+};
 const slotSubjectName = (slot, subjects) =>
   getTimetableSlotType(slot) === "Leisure" ? "Leisure" : pick(slot, "subjectName", "SubjectName")
   ?? pick(slot?.subject, "subjectName", "SubjectName", "name", "Name")
@@ -392,24 +428,7 @@ const periodsWithConfiguredBreaks = (periods, structurePayload) => {
   });
   return periods.flatMap((period, index) => [period, ...(breaksByPosition.get(index + 1) ?? [])]);
 };
-function TimetableWorkspaceNav({ context, onOpenGenerated, opening }) {
-  const location = useLocation();
-  return (
-    <nav className="ttm-workspace-nav" aria-label="Timetable workspace">
-      {[
-        ["/dashboard/timetable", "Overview"],
-        ["/dashboard/timetable/setup", "Period Structures"],
-        ["/dashboard/timetable/generate", "Generate Timetable"],
-        ["/dashboard/timetable/draft", "Generated Timetable"],
-      ].map(([path, label]) => onOpenGenerated && path.endsWith("/draft") ? (
-        <button key={path} type="button" disabled={opening || !context?.sectionId} onClick={onOpenGenerated}>{opening ? "Opening…" : label}</button>
-      ) : (
-        <Link key={path} to={timetableContextUrl(path, context, location.search)} state={{ timetableContext: context }} aria-current={location.pathname === path ? "page" : undefined}>{label}</Link>
-      ))}
-    </nav>
-  );
-}
-function Page({ title, subtitle, action, pageClassName = "", context, onOpenGenerated, opening, children }) {
+function Page({ title, subtitle, action, pageClassName = "", children }) {
   return (
     <DashboardLayout
       title={title}
@@ -418,7 +437,6 @@ function Page({ title, subtitle, action, pageClassName = "", context, onOpenGene
       actions={action}
     >
       <main className={`ttm-page${pageClassName ? ` ${pageClassName}` : ""}`}>
-        <TimetableWorkspaceNav context={context} onOpenGenerated={onOpenGenerated} opening={opening} />
         {children}
       </main>
     </DashboardLayout>
@@ -715,30 +733,19 @@ function useLookups(initial = {}) {
     if (!context.boardId || !context.academicYearId || !context.academicLevelId) return undefined;
     const load = async () => {
       try {
-        const response = await apiClient.get(apiEndpoints.masterGroups.list, { params: { boardId: Number(context.boardId) } });
-        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load master groups.");
+        const groupRes = await apiClient.get(apiEndpoints.groups.dropdown, {
+          params: { boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), academicLevelId: Number(context.academicLevelId) },
+        });
+        if (groupRes.data?.success === false) throw new Error(groupRes.data.message || "Unable to load groups.");
         if (cancelled) return;
-        const masters = list(response.data);
-        const masterIds = [...new Set(masters.filter(isActiveRecord).map((master) => Number(pick(master, "masterGroupId", "MasterGroupId"))).filter((id) => Number.isInteger(id) && id > 0))];
-        // Single batch fetch to prevent N+1 HTTP cascades across master groups
-        let groupsRaw = [];
-        try {
-          const groupRes = await apiClient.get(apiEndpoints.groups.list, {
-            params: { boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), academicLevelId: Number(context.academicLevelId), isActive: true },
-          });
-          if (groupRes.data?.success !== false) {
-            groupsRaw = list(groupRes.data);
-          }
-        } catch (_) {}
-        if (!groupsRaw.length && masterIds.length) {
-          const responses = await Promise.all(masterIds.map((masterGroupId) => apiClient.get(apiEndpoints.groups.list, {
-            params: { masterGroupId, boardId: Number(context.boardId), academicYearId: Number(context.academicYearId), isActive: true },
-          })));
-          if (cancelled) return;
-          if (responses.some((result) => result.data?.success === false)) throw new Error("Unable to load contextual groups.");
-          groupsRaw = responses.flatMap((result) => list(result.data));
-        }
-        const groups = validTimetableGroups(masters, groupsRaw, { ...context, groupId: selectedGroupRef.current });
+        const groupsRaw = list(groupRes.data);
+        const groups = groupsRaw.map((item) => ({
+          id: String(item.groupId ?? item.id),
+          groupId: String(item.groupId ?? item.id),
+          name: item.groupName || item.name || "-",
+          code: item.groupCode || item.code || "-",
+          ...item,
+        }));
         setData((current) => ({ ...current, groups, groupsLoading: false }));
         setValue((current) => Object.keys(context).every((key) => String(current[key]) === String(context[key]))
           && current.groupId && !groups.some((group) => group.id === String(current.groupId))
@@ -909,11 +916,11 @@ function useLookups(initial = {}) {
   };
   return { value, data, change, setValue, reloadSections };
 }
-function Context({ state, section = true, compact = false, hideGlobalContext = false }) {
+function Context({ state, section = true, compact = false, hideGlobalContext = false, disabled = false }) {
   const { value, data, change } = state;
-  const select = (label, key, values, disabled, emptyLabel = `Select ${label}`) => (
+  const select = (label, key, values, isDisabled = false, emptyLabel = `Select ${label}`) => (
     <Field label={label}>
-      <select value={value[key]} onChange={change(key)} disabled={disabled}>
+      <select className={value[key] ? "" : "ttm-placeholder"} value={value[key]} onChange={change(key)} disabled={disabled || isDisabled}>
         <option value="">{emptyLabel}</option>
         {values.map((entry) => (
           <option key={entry.id} value={entry.id}>
@@ -1525,8 +1532,9 @@ function Structures({ notify, initial }) {
   );
 }
 
-function Generate({ goDraft, notify, initial }) {
+function Generate({ notify, initial }) {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
   const state = useLookups({
@@ -1535,17 +1543,24 @@ function Generate({ goDraft, notify, initial }) {
     boardId: selectedBoardId || initial?.boardId || "",
     academicYearId: selectedAcademicYearId || initial?.academicYearId || "",
   });
-  const { value, data, setValue } = state;
+  const { value, data } = state;
   const [requirements, setRequirements] = useState({});
   const [workingDays, setWorkingDays] = useState(() =>
     (initial?.workingDays?.length ? initial.workingDays : DEFAULT_WORKING_DAYS).map((day) => Number(day) === 7 ? 0 : Number(day)),
   );
   const [capacityError, setCapacityError] = useState("");
   const [busy, setBusy] = useState(false);
-  const selectedSectionId = value.sectionId;
-  const setSelectedSectionId = useCallback((update) => setValue((current) => ({ ...current, sectionId: typeof update === "function" ? update(current.sectionId) : update })), [setValue]);
+  const [selectedSectionIds, setSelectedSectionIds] = useState(() => {
+    const ids = initial?.sectionIds ?? searchParams.get("sectionIds")?.split(",") ?? [];
+    const requestedIds = (Array.isArray(ids) ? ids : [ids]).map(String).filter(Boolean);
+    return requestedIds.length ? requestedIds : (initial?.sectionId || value.sectionId ? [String(initial?.sectionId || value.sectionId)] : []);
+  });
+  const [generationResults, setGenerationResults] = useState([]);
   const [inputErrors, setInputErrors] = useState({});
   const allocationContextRef = useRef("");
+  const sectionSelectionContextRef = useRef(null);
+  const pendingSectionAutoSelectRef = useRef(!(initial?.sectionIds?.length || searchParams.get("sectionIds")));
+  const waitingForSectionLookupRef = useRef(false);
   const allocationStateRef = useRef("");
   const manuallyEditedRef = useRef(false);
   // The periods endpoint can include break slots. Capacity is based on actual
@@ -1556,10 +1571,10 @@ function Generate({ goDraft, notify, initial }) {
     (total, weeklyPeriods) => total + (Number(weeklyPeriods) || 0),
     0,
   );
-  const selectedSection = data.sections.find((section) => String(section.id) === String(selectedSectionId)) ?? data.sections[0];
   const remainingCapacity = weeklyCapacity - totalRequiredPeriods;
   const allocationContext = [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId].join(":");
   const allocationState = `${allocationContext}:${periodsPerDay}:${data.subjects.map((subject) => subject.id).join(",")}`;
+  const selectedSections = data.sections.filter((section) => selectedSectionIds.includes(String(section.id)));
   const ready =
     value.campusId &&
     value.boardId &&
@@ -1567,7 +1582,7 @@ function Generate({ goDraft, notify, initial }) {
     value.academicLevelId &&
     value.groupId &&
     value.programId &&
-    data.sections.length &&
+    selectedSections.length &&
     !data.sectionsLoading &&
     workingDays.length;
   const toggleWorkingDay = (day) => {
@@ -1577,13 +1592,59 @@ function Generate({ goDraft, notify, initial }) {
     setCapacityError("");
   };
   useEffect(() => {
-    if (!data.sections.length) return;
-    setSelectedSectionId((current) =>
-      data.sections.some((section) => String(section.id) === String(current))
-        ? current
-        : (data.sections[0]?.id ?? ""),
-    );
-  }, [data.sections, setSelectedSectionId]);
+    if (sectionSelectionContextRef.current === null) {
+      sectionSelectionContextRef.current = allocationContext;
+      return;
+    }
+    if (sectionSelectionContextRef.current !== allocationContext) {
+      sectionSelectionContextRef.current = allocationContext;
+      waitingForSectionLookupRef.current = true;
+      pendingSectionAutoSelectRef.current = true;
+      setSelectedSectionIds([]);
+      setGenerationResults([]);
+      const params = new URLSearchParams(location.search);
+      if (params.has("sectionIds")) {
+        params.delete("sectionIds");
+        setSearchParams(params, { replace: true });
+      }
+    }
+  }, [allocationContext, location.search, setSearchParams]);
+  useEffect(() => {
+    if (!value.programId || data.sectionsError) return;
+    if (data.sectionsLoading) {
+      waitingForSectionLookupRef.current = false;
+      return;
+    }
+    if (waitingForSectionLookupRef.current || !data.sections.length) return;
+    const availableIds = new Set(data.sections.map((section) => String(section.id)));
+    const next = pendingSectionAutoSelectRef.current
+      ? data.sections.map((section) => String(section.id))
+      : selectedSectionIds.filter((sectionId) => availableIds.has(String(sectionId)));
+    if (!next.length) next.push(...data.sections.map((section) => String(section.id)));
+    pendingSectionAutoSelectRef.current = false;
+    if (next.length !== selectedSectionIds.length || next.some((sectionId, index) => sectionId !== selectedSectionIds[index])) {
+      setSelectedSectionIds(next);
+    }
+    const params = new URLSearchParams(location.search);
+    const currentIds = params.get("sectionIds")?.split(",").filter(Boolean) ?? [];
+    if (currentIds.length !== next.length || currentIds.some((sectionId, index) => sectionId !== next[index])) {
+      params.set("sectionIds", next.join(","));
+      setSearchParams(params, { replace: true });
+    }
+  }, [data.sections, data.sectionsError, data.sectionsLoading, location.search, selectedSectionIds, setSearchParams, value.programId, value.sectionId]);
+  const toggleSection = (sectionId) => {
+    const id = String(sectionId);
+    if (selectedSectionIds.includes(id) && selectedSectionIds.length === 1) return;
+    const next = selectedSectionIds.includes(id)
+      ? selectedSectionIds.filter((selectedId) => selectedId !== id)
+      : [...selectedSectionIds, id];
+    setSelectedSectionIds(next);
+    setGenerationResults([]);
+    const params = new URLSearchParams(searchParams);
+    if (next.length) params.set("sectionIds", next.join(","));
+    else params.delete("sectionIds");
+    setSearchParams(params, { replace: true });
+  };
   useEffect(() => {
     const contextChanged = allocationContextRef.current !== allocationContext;
     if (contextChanged) {
@@ -1633,14 +1694,17 @@ function Generate({ goDraft, notify, initial }) {
     if (!ready) return notify("Select a complete campus and academic context first.", "warning");
     const selectedProgram = data.programs.find((program) => String(program.id) === String(value.programId));
     const programId = Number(pick(selectedProgram?.raw, "programId", "ProgramId", "id", "Id"));
-    const sectionIds = data.sections
-      .map((section) => Number(pick(section.raw, "sectionId", "SectionId", "id", "Id", section.id)))
-      .filter((sectionId) => Number.isInteger(sectionId) && sectionId > 0);
+    const sectionsToGenerate = selectedSections
+      .map((section) => ({
+        ...section,
+        sectionId: Number(pick(section.raw, "sectionId", "SectionId", "id", "Id", section.id)),
+      }))
+      .filter((section) => Number.isInteger(section.sectionId) && section.sectionId > 0);
     if (!Number.isInteger(programId) || programId <= 0) {
       notify("Please select a valid program.", "warning");
       return;
     }
-    if (!sectionIds.length) {
+    if (!sectionsToGenerate.length) {
       notify("No sections found for the selected group and program. Create sections in Section Management first.", "warning");
       return;
     }
@@ -1656,84 +1720,61 @@ function Generate({ goDraft, notify, initial }) {
       setCapacityError("Weekly Periods must be whole numbers from 0 to the weekly capacity.");
       return;
     }
+    const subjectRequirements = data.subjects
+      .map((subject) => ({
+        subjectId: Number(subject.id),
+        weeklyPeriods: Number(requirements[subject.id] || 0),
+      }))
+      .filter((entry) => entry.weeklyPeriods > 0);
+    if (!subjectRequirements.length) {
+      notify("Enter at least one subject weekly-period requirement before generating the timetable.", "warning");
+      return;
+    }
+    let outcomes = sectionsToGenerate.map((section) => ({
+      sectionId: String(section.id),
+      name: section.name,
+      status: "pending",
+      message: "Waiting to generate.",
+    }));
+    setGenerationResults(outcomes);
+    const updateSectionResult = (sectionId, update) => {
+      outcomes = outcomes.map((entry) =>
+        entry.sectionId === String(sectionId) ? { ...entry, ...update } : entry,
+      );
+      setGenerationResults(outcomes);
+    };
     try {
       setBusy(true);
-      const subjectRequirements = data.subjects
-        .map((subject) => ({
-          subjectId: Number(subject.id),
-          weeklyPeriods: Number(requirements[subject.id] || 0),
-        }))
-        .filter((entry) => entry.weeklyPeriods > 0);
-      if (!subjectRequirements.length) {
-        notify("Enter at least one subject weekly-period requirement before generating the timetable.", "warning");
-        return;
-      }
       const staff = await campusTeachingStaff(value.campusId);
       if (!staff.length) {
-        notify("No active teaching staff are available in the selected campus. Add staff and allocate subjects before generating a timetable.", "warning");
+        const message = "No active teaching staff are available in the selected campus. Add staff and allocate subjects before generating a timetable.";
+        outcomes = outcomes.map((entry) => ({ ...entry, status: "failed", message }));
+        setGenerationResults(outcomes);
+        notify(message, "error");
         return;
       }
       const campusStaffIds = new Set(staff.map(staffIdOf));
-      for (const sectionId of sectionIds) {
-        const allocations = await Promise.all(subjectRequirements.map(async ({ subjectId }) => {
-          const response = await apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
-            params: { ...value, campusId: Number(value.campusId), programId, sectionId, subjectId },
-          });
-          return { subjectId, eligible: list(response.data).some((record) =>
-            campusMatches(record, value.campusId) && isActiveRecord(record) && campusStaffIds.has(staffIdOf(record))) };
-        }));
-        const missing = allocations.find((allocation) => !allocation.eligible);
-        if (missing) {
-          const subject = data.subjects.find((entry) => Number(entry.id) === missing.subjectId)?.name ?? missing.subjectId;
-          const section = data.sections.find((entry) => Number(entry.id) === sectionId)?.name ?? sectionId;
-          notify(`Allocate an active teacher from the selected campus to ${subject} in ${section} before generating the timetable.`, "warning");
-          return;
-        }
-      }
-      const response = await apiClient.post(
-        apiEndpoints.timetable.generate,
-        {
-          boardId: Number(value.boardId || selectedBoardId),
-          campusId: Number(value.campusId || selectedCampusId),
-          academicYearId: Number(value.academicYearId || selectedAcademicYearId),
-          academicLevelId: Number(value.academicLevelId),
-          groupId: Number(value.groupId),
-          programId,
-          p_ProgramId: programId,
-          sectionIds,
-          workingDays: workingDays.map((day) => day === 0 ? 7 : day),
-          subjectRequirements,
-        },
-        {
-          // The live endpoint reports this exact parameter name. Include it
-          // in the query collection as well as the JSON command body.
-          params: { CampusId: Number(value.campusId), p_ProgramId: programId },
-          silent: true,
-          skipErrorLog: true,
-        },
-      );
-      const result = response.data?.data ?? response.data ?? {};
-      const generatedSlots = list(result.generatedSlots);
-      if (result.isSuccess === false || Number(result.totalSlotsGenerated ?? generatedSlots.length) <= 0) {
-        notify(result.message ?? "The timetable generator did not create any slots. Check the subject requirements and faculty assignments, then try again.", "error");
-        return;
-      }
-      notify(result.message ?? "Timetable generated.");
-      // Open the generated section immediately so its returned slots can be
-      // displayed before the section endpoint finishes reflecting the draft.
-      goDraft({ ...value, sectionId: selectedSection?.id ?? value.sectionId ?? "", workingDays, generatedSlots });
-    } catch (e) {
-      const message = `${getApiErrorMessage(e)} ${e?.response?.data?.details ?? ""}`;
-      if (/already has an approved or (?:published|active) timetable schedule/i.test(message)) {
+      for (const [sectionIndex, section] of sectionsToGenerate.entries()) {
+        updateSectionResult(section.id, { status: "generating", message: "Checking allocations and generating timetable." });
         try {
-          await Promise.allSettled(sectionIds.map((secId) =>
-            apiClient.patch(`/api/v1/timetable/section/${secId}/publish`, { isPublished: false }, {
-              params: { academicYearId: Number(value.academicYearId || selectedAcademicYearId) },
-              silent: true,
-              skipErrorLog: true,
-            })
-          ));
-          const retryRes = await apiClient.post(
+          const allocations = await Promise.all(subjectRequirements.map(async ({ subjectId }) => {
+            const response = await apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
+              params: { ...value, campusId: Number(value.campusId), programId, sectionId: section.sectionId, subjectId },
+            });
+            return { subjectId, eligible: list(response.data).some((record) =>
+              campusMatches(record, value.campusId) && isActiveRecord(record) && campusStaffIds.has(staffIdOf(record))) };
+          }));
+          const missing = allocations.find((allocation) => !allocation.eligible);
+          if (missing) {
+            const subject = data.subjects.find((entry) => Number(entry.id) === missing.subjectId)?.name ?? missing.subjectId;
+            throw new Error(`Allocate an active teacher from the selected campus to ${subject} in ${section.name} before generating the timetable.`);
+          }
+          const rotation = subjectRequirements.length > 1 ? sectionIndex % subjectRequirements.length : 0;
+          const sectionRequirements = [
+            ...subjectRequirements.slice(rotation),
+            ...subjectRequirements.slice(0, rotation),
+          ];
+          const response = await apiClient.post(
             apiEndpoints.timetable.generate,
             {
               boardId: Number(value.boardId || selectedBoardId),
@@ -1743,34 +1784,54 @@ function Generate({ goDraft, notify, initial }) {
               groupId: Number(value.groupId),
               programId,
               p_ProgramId: programId,
-              sectionIds,
+              sectionIds: [section.sectionId],
               workingDays: workingDays.map((day) => day === 0 ? 7 : day),
-              subjectRequirements,
+              subjectRequirements: sectionRequirements,
             },
-            {
-              params: { CampusId: Number(value.campusId), p_ProgramId: programId },
-              silent: true,
-              skipErrorLog: true,
-            },
+            { params: { CampusId: Number(value.campusId), p_ProgramId: programId } },
           );
-          const result = retryRes.data?.data ?? retryRes.data ?? {};
-          const generatedSlots = list(result.generatedSlots);
-          notify(result.message ?? "Timetable generated successfully.");
-          goDraft({ ...value, sectionId: selectedSection?.id ?? value.sectionId ?? "", workingDays, generatedSlots });
-          return;
-        } catch (_retryErr) {
-          notify("Section already has an active schedule. Please unpublish or archive the active schedule before regenerating.", "warning");
-          return;
+          const result = response.data?.data ?? response.data ?? {};
+          const slots = list(pick(result, "generatedSlots", "GeneratedSlots"));
+          const slotCount = Number(pick(result, "totalSlotsGenerated", "TotalSlotsGenerated") ?? slots.length);
+          if (pick(result, "isSuccess", "IsSuccess") === false || slotCount <= 0 || !slots.length) {
+            throw new Error(pick(result, "message", "Message") || "The timetable generator did not create any slots for this section.");
+          }
+          if (slots.some((slot) => String(slotSectionId(slot)) !== String(section.sectionId))) {
+            throw new Error(`The timetable API returned slots for an unexpected section while generating ${section.name}.`);
+          }
+          const warnings = list(pick(result, "warnings", "Warnings")).filter((warning) =>
+            String(pick(warning, "sectionId", "SectionId")) === String(section.sectionId),
+          );
+          const warningMessage = warnings.map((warning) =>
+            pick(warning, "reason", "Reason") || `${pick(warning, "unassignedPeriodsCount", "UnassignedPeriodsCount") || 0} period(s) could not be assigned.`,
+          ).join(" ");
+          updateSectionResult(section.id, {
+            status: warnings.length ? "warning" : "success",
+            message: warnings.length
+              ? `Generated ${slotCount} slot(s) with scheduling warnings: ${warningMessage}`
+              : `Generated ${slotCount} slots successfully.`,
+          });
+        } catch (error) {
+          const details = error?.response?.data?.details;
+          const message = `${getApiErrorMessage(error)}${details ? ` ${details}` : ""}`;
+          updateSectionResult(section.id, { status: "failed", message });
         }
       }
-      notify(
-        /SaveChanges|saving the entity changes|database|duplicate|constraint/i.test(message)
-          ? "The timetable could not be saved because generated data already exists or conflicts with a database rule. Refresh the Draft screen and avoid generating the same timetable again."
-          : /LINQ|StaffSubjectAllocation|allocation/i.test(message)
-          ? "Timetable generation could not resolve staff-subject allocations. Allocate faculty to the requested subjects, then try again."
-          : message,
-        "error",
-      );
+      const failures = outcomes.filter((entry) => entry.status === "failed").length;
+      const warnings = outcomes.filter((entry) => entry.status === "warning").length;
+      if (!failures && !warnings) {
+        notify(`Timetables generated successfully for ${outcomes.length} section(s).`);
+      } else {
+        notify(
+          `Generated ${outcomes.length - failures} of ${outcomes.length} section timetable(s); ${failures} failed and ${warnings} have scheduling warnings. Review each section below.`,
+          "warning",
+        );
+      }
+    } catch (e) {
+      const message = getApiErrorMessage(e);
+      outcomes = outcomes.map((entry) => ({ ...entry, status: "failed", message }));
+      setGenerationResults(outcomes);
+      notify(message, "error");
     } finally {
       setBusy(false);
     }
@@ -1778,12 +1839,11 @@ function Generate({ goDraft, notify, initial }) {
   return (
     <Page
       title="Generate Timetable"
-      context={value}
       subtitle="Generate a conflict-free theory timetable in DRAFT state."
       action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Create Period Structure</Link></div>}
     >
       <section className="ttm-card ttm-generate-card">
-        <Context state={state} section={false} hideGlobalContext />
+        <Context state={state} section={false} hideGlobalContext disabled={busy} />
         {value.programId ? (
           <div className="ttm-generation-content">
             <section className="ttm-generate-overview">
@@ -1791,17 +1851,22 @@ function Generate({ goDraft, notify, initial }) {
                 <b id="working-days-label">Working Days</b>
                 <div className="ttm-day-toggles">
                   {WORKING_DAY_OPTIONS.map((day) => (
-                    <button type="button" key={day.value} className={workingDays.includes(day.value) ? "active" : ""} aria-pressed={workingDays.includes(day.value)} onClick={() => toggleWorkingDay(day.value)}>
+                    <button type="button" key={day.value} className={workingDays.includes(day.value) ? "active" : ""} aria-pressed={workingDays.includes(day.value)} disabled={busy} onClick={() => toggleWorkingDay(day.value)}>
                       {day.shortLabel}
                     </button>
                   ))}
                 </div>
               </div>
               <div className="ttm-generate-sections">
-                <b>Sections ({data.sections.length})</b>
+                <b>Sections ({selectedSectionIds.length} selected of {data.sections.length})</b>
                 {data.sectionsLoading ? <div className="ttm-generate-state"><SkeletonText lines={2} widths={["38%", "62%"]} /></div> : data.sectionsError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reloadSections}>Retry sections</button> : <div className="ttm-generate-section-chips">
-                  {data.sections.map((section) => <button type="button" key={section.id} className={String(section.id) === String(selectedSection?.id) ? "active" : ""} aria-pressed={String(section.id) === String(selectedSection?.id)} onClick={() => setSelectedSectionId(section.id)}>{section.name}</button>)}
+                  {data.sections.map((section) => {
+                    const selected = selectedSectionIds.includes(String(section.id));
+                    return <button type="button" key={section.id} className={selected ? "active" : ""} aria-pressed={selected} disabled={busy} onClick={() => toggleSection(section.id)}>{section.name}</button>;
+                  })}
                 </div>}
+                {!data.sections.length && !data.sectionsLoading && !data.sectionsError ? <span className="ttm-generate-state">No sections are available for the selected group and program.</span> : null}
+                {data.sections.length > 0 && !selectedSectionIds.length && !data.sectionsLoading && !data.sectionsError ? <span className="ttm-generate-state">Select one or more sections to generate.</span> : null}
               </div>
               <aside className={`ttm-generate-capacity${remainingCapacity < 0 ? " is-exceeded" : ""}`} aria-label="Weekly period capacity">
                 <b>Weekly Period Capacity</b>
@@ -1820,18 +1885,50 @@ function Generate({ goDraft, notify, initial }) {
                   <tbody>{data.subjects.length ? data.subjects.map((subject, index) => {
                     const type = pick(subject.raw, "subjectType", "SubjectType", "type", "Type") ?? "Subject";
                     const code = pick(subject.raw, "subjectCode", "SubjectCode", "code", "Code") ?? "—";
-                    return <tr key={`${subject.id}-${index}`}><td>{index + 1}</td><td>{code}</td><td>{subject.name}</td><td><span className={`ttm-subject-type ${String(type).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{type}</span></td><td><input type="number" min="0" max={weeklyCapacity} step="1" value={requirements[subject.id] ?? 0} onChange={(event) => updateRequirement(subject.id, event.target.value)} onBlur={() => commitRequirement(subject.id)} aria-invalid={Boolean(inputErrors[subject.id])} aria-label={`${subject.name} weekly periods`} />{inputErrors[subject.id] ? <small className="ttm-weekly-period-error">{inputErrors[subject.id]}</small> : null}</td></tr>;
+                    return <tr key={subject.id}><td>{index + 1}</td><td>{code}</td><td>{subject.name}</td><td><span className={`ttm-subject-type ${String(type).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{type}</span></td><td><input type="number" min="0" max={weeklyCapacity} step="1" value={requirements[subject.id] ?? 0} onChange={(event) => updateRequirement(subject.id, event.target.value)} onBlur={() => commitRequirement(subject.id)} aria-invalid={Boolean(inputErrors[subject.id])} aria-label={`${subject.name} weekly periods`} disabled={busy} />{inputErrors[subject.id] ? <small className="ttm-weekly-period-error">{inputErrors[subject.id]}</small> : null}</td></tr>;
                   }) : <tr><td colSpan="5" className="ttm-generate-no-subjects"><strong>No subjects available</strong><span>No subjects are available for this timetable context.</span></td></tr>}</tbody>
                 </table>
               </div>
               {capacityError ? <p className="ttm-validation-error ttm-capacity-error">{capacityError}</p> : null}
               <footer className="ttm-screen-actions ttm-generation-footer">
-                <button type="button" className="cms-btn cms-btn-ghost" onClick={resetRequirements}>Reset</button>
+                <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={resetRequirements}>Reset</button>
                 <Btn disabled={!ready || busy} onClick={generate}>
                   {busy ? "Generating…" : "Generate Timetable"}
                 </Btn>
               </footer>
             </section>
+            {generationResults.length ? (
+              <section className="ttm-generation-results" aria-live="polite">
+                <h3>Generation results</h3>
+                <ul>
+                  {generationResults.map((result) => {
+                    const context = {
+                      ...value,
+                      sectionId: result.sectionId,
+                      sectionIds: selectedSectionIds,
+                      workingDays,
+                    };
+                    const canView = result.status === "success" || result.status === "warning";
+                    return (
+                      <li key={result.sectionId} className={`is-${result.status}`}>
+                        <div>
+                          <strong>{result.name} — {result.status === "generating" ? "Generating" : result.status === "pending" ? "Waiting" : result.status === "success" ? "Generated successfully" : result.status === "warning" ? "Generated with warnings" : "Failed"}</strong>
+                          <p>{result.message}</p>
+                        </div>
+                        {canView ? (
+                          <Link
+                            to={timetableContextUrl("/dashboard/timetable/draft", context, location.search)}
+                            state={{ timetableContext: context }}
+                          >
+                            View timetable
+                          </Link>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ) : null}
           </div>
         ) : null}
         {!value.programId ? <footer className="ttm-screen-actions">
@@ -1856,9 +1953,60 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     remarks: pick(slot, "remarks", "Remarks") ?? "",
   });
   const [faculty, setFaculty] = useState([]);
+  const [roomAssignment, setRoomAssignment] = useState({ loading: true, roomId: "", name: "", error: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const savingRef = useRef(false);
+  const roomTouchedRef = useRef(Boolean(pick(slot, "roomId", "RoomId")));
+  useEffect(() => {
+    let cancelled = false;
+    setRoomAssignment({ loading: true, roomId: "", name: "", error: "" });
+    const sectionId = Number(context.sectionId);
+    if (!Number.isInteger(sectionId) || sectionId <= 0) {
+      setRoomAssignment({ loading: false, roomId: "", name: "", error: "Select a valid section to load its assigned room." });
+      return undefined;
+    }
+    apiClient.get(apiEndpoints.sections.getById(sectionId))
+      .then((response) => {
+        if (cancelled) return;
+        const section = response.data?.data ?? response.data;
+        if (section?.success === false || section?.isSuccess === false) {
+          throw new Error(section.message || "Unable to load the selected section.");
+        }
+        const rawRoomId = Number(pick(section, "roomId", "RoomId"));
+        const roomId = Number.isInteger(rawRoomId) && rawRoomId > 0 ? String(rawRoomId) : "";
+        const name = String(pick(section, "roomNumber", "RoomNumber", "roomName", "RoomName", "room", "Room") ?? "");
+        setRoomAssignment({ loading: false, roomId, name, error: "" });
+        if (roomId && !roomTouchedRef.current) {
+          setForm((current) => current.roomId ? current : { ...current, roomId });
+        }
+      })
+      .catch((requestError) => {
+        if (!cancelled) {
+          setRoomAssignment({ loading: false, roomId: "", name: "", error: getApiErrorMessage(requestError) });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [context.sectionId]);
+  const matchingAssignedRoom = data.rooms.find((room) =>
+    (roomAssignment.roomId && String(room.id) === roomAssignment.roomId)
+    || (roomAssignment.name && [room.name, pick(room.raw, "roomNumber", "RoomNumber", "roomCode", "RoomCode")]
+      .some((name) => String(name ?? "").toLowerCase() === roomAssignment.name.toLowerCase())),
+  );
+  const assignedRoomId = roomAssignment.roomId || matchingAssignedRoom?.id || "";
+  const assignedRoomName = roomAssignment.name || matchingAssignedRoom?.name || String(assignedRoomId);
+  const roomOptions = useMemo(() => {
+    if (!assignedRoomId) return data.rooms;
+    const assigned = { id: String(assignedRoomId), name: assignedRoomName };
+    const exists = data.rooms.some((room) => String(room.id) === String(assignedRoomId));
+    return exists
+      ? data.rooms.map((room) => String(room.id) === String(assignedRoomId) ? { ...room, name: assignedRoomName } : room)
+      : [...data.rooms, assigned];
+  }, [assignedRoomId, assignedRoomName, data.rooms]);
+  useEffect(() => {
+    if (!assignedRoomId || roomTouchedRef.current) return;
+    setForm((current) => current.roomId ? current : { ...current, roomId: String(assignedRoomId) });
+  }, [assignedRoomId]);
   useEffect(() => {
     let cancelled = false;
     setFaculty([]);
@@ -1882,6 +2030,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   }, [context, form.subjectId, leisure, notify]);
   const set = (key) => (e) => {
     setError("");
+    if (key === "roomId") roomTouchedRef.current = true;
     setForm((current) => ({ ...current, [key]: e.target.value, ...(key === "subjectId" ? { facultyId: "" } : {}) }));
   };
   const save = async () => {
@@ -1944,7 +2093,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   };
   const select = (label, key, values, optionLabel = (entry) => entry.name ?? entry.label) => (
     <Field label={label}>
-      <select value={form[key]} onChange={set(key)} disabled={saving}>
+      <select className={form[key] ? "" : "ttm-placeholder"} value={form[key]} onChange={set(key)} disabled={saving}>
         <option value="">Select {label}</option>
         {values.map((entry) => (
           <option key={entry.id ?? entry.value} value={entry.id ?? entry.value}>
@@ -1970,13 +2119,21 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
             workingDays.map((day) => ({ id: day, name: DAYS[day] })),
           )}
           {select("Period", "periodId", data.periods.filter((period) => !isBreakPeriod(period)))}
-          {select("Subject", "subjectId", data.subjects)}
-          {select("Staff", "facultyId", faculty, facultyOptionLabel)}
-          {select("Room", "roomId", data.rooms)}
+          {!leisure ? select("Subject", "subjectId", data.subjects) : null}
+          {!leisure ? select("Staff", "facultyId", faculty, facultyOptionLabel) : null}
+          {select("Room", "roomId", roomOptions)}
           <Field label="Remarks">
             <input value={form.remarks} onChange={set("remarks")} disabled={saving} />
           </Field>
         </div>
+        {!roomAssignment.loading && roomAssignment.error ? <p className="ttm-room-assignment-note" role="alert">Could not load the section's assigned room: {roomAssignment.error} Select a room manually.</p> : null}
+        {!roomAssignment.loading && !roomAssignment.error && !assignedRoomId ? (
+          <p className="ttm-room-assignment-note" role="status">
+            {roomAssignment.name
+              ? `Assigned room ${roomAssignment.name} could not be matched to an available room. Select an appropriate room.`
+              : "No room is assigned to this section. Select an appropriate room."}
+          </p>
+        ) : null}
         {error ? <p className="ttm-validation-error" role="alert">{error}</p> : null}
         <footer>
           {timetableId(slot) ? <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={deleteSlot}>Delete</Btn> : null}
@@ -2528,7 +2685,6 @@ function Draft({ initial, notify }) {
   return (
     <Page
       title="Generated Draft Grid"
-      context={value}
       subtitle="Review, validate, approve and publish the section timetable."
       pageClassName="ttm-draft-page"
     >
@@ -2856,6 +3012,36 @@ function MainTimetable({ notify }) {
   const navigate = useNavigate();
   const [opening, setOpening] = useState(false);
   const completeContext = [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId, value.sectionId].every(Boolean);
+  const contextKey = [value.campusId, value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId, value.sectionId].join(":");
+  const availabilityContext = useMemo(() => ({
+    campusId: value.campusId,
+    boardId: value.boardId,
+    academicYearId: value.academicYearId,
+    academicLevelId: value.academicLevelId,
+    groupId: value.groupId,
+    programId: value.programId,
+    sectionId: value.sectionId,
+  }), [value.academicLevelId, value.academicYearId, value.boardId, value.campusId, value.groupId, value.programId, value.sectionId]);
+  const [availability, setAvailability] = useState({ contextKey: "", status: "idle", timetable: null, error: "" });
+  const currentAvailability = availability.contextKey === contextKey
+    ? availability
+    : { contextKey, status: completeContext ? "loading" : "idle", timetable: null, error: "" };
+  useEffect(() => {
+    if (!completeContext) {
+      setAvailability({ contextKey, status: "idle", timetable: null, error: "" });
+      return undefined;
+    }
+    let active = true;
+    setAvailability({ contextKey, status: "loading", timetable: null, error: "" });
+    latestTimetableForContext(availabilityContext)
+      .then((timetable) => {
+        if (active) setAvailability({ contextKey, status: timetable ? "available" : "unavailable", timetable, error: "" });
+      })
+      .catch((error) => {
+        if (active) setAvailability({ contextKey, status: "error", timetable: null, error: getApiErrorMessage(error) });
+      });
+    return () => { active = false; };
+  }, [availabilityContext, completeContext, contextKey]);
   const openGenerated = async () => {
     if (!completeContext || opening) {
       notify("Select Board, Academic Year, Academic Level, Group, Program and Section first.");
@@ -2863,32 +3049,11 @@ function MainTimetable({ notify }) {
     }
     setOpening(true);
     try {
-      const response = await apiClient.get(apiEndpoints.timetable.getAll, {
-        params: {
-          CampusId: Number(value.campusId),
-          BoardId: Number(value.boardId),
-          AcademicYearId: Number(value.academicYearId),
-          AcademicLevelId: Number(value.academicLevelId),
-          GroupId: Number(value.groupId),
-          ProgramId: Number(value.programId),
-          SectionId: Number(value.sectionId),
-          PageNumber: 1,
-          PageSize: 100,
-        },
-      });
-      const matches = list(response.data).filter((entry) =>
-        (pick(entry, "campusId", "CampusId") == null || String(pick(entry, "campusId", "CampusId")) === String(value.campusId))
-        && String(pick(entry, "boardId", "BoardId")) === String(value.boardId)
-        && String(pick(entry, "academicYearId", "AcademicYearId")) === String(value.academicYearId)
-        && String(pick(entry, "academicLevelId", "AcademicLevelId")) === String(value.academicLevelId)
-        && String(pick(entry, "groupId", "GroupId")) === String(value.groupId)
-        && String(pick(entry, "programId", "ProgramId", "programmeId", "ProgrammeId")) === String(value.programId)
-        && String(pick(entry, "sectionId", "SectionId")) === String(value.sectionId),
-      );
-      const latest = [...matches].sort((left, right) => {
-        const date = (entry) => Date.parse(pick(entry, "generatedAt", "GeneratedAt", "createdAt", "CreatedAt", "updatedAt", "UpdatedAt", "date", "Date") ?? "") || 0;
-        return date(right) - date(left) || Number(timetableId(right) ?? 0) - Number(timetableId(left) ?? 0);
-      })[0];
+      const latest = currentAvailability.status === "available"
+        ? currentAvailability.timetable
+        : currentAvailability.status === "unavailable"
+          ? null
+          : await latestTimetableForContext(availabilityContext);
       if (!latest) {
         notify("No generated timetable was found for the selected context.");
         return;
@@ -2900,37 +3065,35 @@ function MainTimetable({ notify }) {
       setOpening(false);
     }
   };
+  const setupDisabled = ![value.academicLevelId, value.groupId, value.programId].every(Boolean);
+  const generatedDisabled = !completeContext || currentAvailability.status === "unavailable";
   return (
-    <Page title="Timetable Management" subtitle="Create, organize, and manage academic schedules." context={value} onOpenGenerated={openGenerated} opening={opening}>
+    <Page title="Timetable Management" subtitle="Create, organize, and manage academic schedules.">
       <section className="ttm-card">
         <div className="ttm-main-row">
           <Context state={state} hideGlobalContext />
         </div>
       </section>
       <div className="ttm-overview-cards">
-        <article className="ttm-overview-card">
-          <CalendarDays size={24} aria-hidden="true" />
-          <h2>Period Structures</h2>
-          <p>Organize teaching periods, timings and breaks in reusable day structures.</p>
-          <Link to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Manage structures →</Link>
-        </article>
-        <article className="ttm-overview-card">
+        <article className="ttm-overview-card ttm-overview-card-setup">
           <UsersRound size={24} aria-hidden="true" />
           <h2>Timetable Setup</h2>
           <dl>{[["Academic level", "academicLevelId", state.data.levels], ["Group", "groupId", state.data.groups], ["Programme", "programId", state.data.programs], ["Section", "sectionId", state.data.sections]].map(([label, key, rows]) => <div key={key}><dt>{label}</dt><dd>{rows.find((row) => String(row.id) === String(value[key]))?.name || "Not selected"}</dd></div>)}</dl>
-          <Link to={timetableContextUrl("/dashboard/timetable/generate", value, location.search)} state={{ timetableContext: value }}>Configure timetable →</Link>
+          {setupDisabled
+            ? <button type="button" disabled>Configure timetable →</button>
+            : <Link to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Configure timetable →</Link>}
+          {currentAvailability.status === "error" ? <small className="ttm-card-availability-error" role="alert">Availability check failed: {currentAvailability.error}</small> : null}
+          {currentAvailability.status === "unavailable" ? <small className="ttm-card-availability" role="status">No timetable exists for this context.</small> : null}
         </article>
-        <article className="ttm-overview-card">
+        <article className="ttm-overview-card ttm-overview-card-generated">
           <Eye size={24} aria-hidden="true" />
           <h2>Generated Timetable</h2>
           <p>Open the latest saved timetable for your selected academic context.</p>
-          <button type="button" disabled={!completeContext || opening} onClick={openGenerated}>{opening ? "Opening…" : "View timetable →"}</button>
-        </article>
-        <article className="ttm-overview-card">
-          <FileText size={24} aria-hidden="true" />
-          <h2>Workflow Status</h2>
-          <p>Open a generated timetable to review its saved validation, approval and publication state.</p>
-          <small>Status is available in the timetable workspace.</small>
+          <button type="button" disabled={generatedDisabled || opening} onClick={openGenerated}>
+            {opening ? "Opening…" : currentAvailability.status === "loading" ? "Checking availability…" : "View timetable →"}
+          </button>
+          {currentAvailability.status === "error" ? <small className="ttm-card-availability-error" role="alert">Availability check failed: {currentAvailability.error}</small> : null}
+          {currentAvailability.status === "unavailable" ? <small className="ttm-card-availability" role="status">No timetable exists for this context.</small> : null}
         </article>
       </div>
       <section className="ttm-workflow-guide" aria-label="Timetable workflow guide">
@@ -2995,12 +3158,14 @@ function LatestDraft({ notify }) {
   return <Draft initial={state.context} notify={notify} />;
 }
 export default function TimetablePage({ screen = "latest" }) {
-  const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const initialContext = useMemo(() => {
     const context = { ...location.state?.timetableContext };
     Object.keys(EMPTY).forEach((key) => { if (searchParams.has(key)) context[key] = searchParams.get(key); });
+    if (/^\d+(,\d+)*$/.test(searchParams.get("sectionIds") || "")) {
+      context.sectionIds = [...new Set(searchParams.get("sectionIds").split(","))];
+    }
     if (["true", "false"].includes(searchParams.get("isPublished"))) context.isPublished = searchParams.get("isPublished") === "true";
     if (/^[0-7](,[0-7])*$/.test(searchParams.get("workingDays") || "")) context.workingDays = [...new Set(searchParams.get("workingDays").split(",").map(Number))];
     return context;
@@ -3022,9 +3187,6 @@ export default function TimetablePage({ screen = "latest" }) {
         key={campusViewKey}
         notify={notify}
         initial={initialContext}
-        goDraft={(context) =>
-          navigate(timetableContextUrl("/dashboard/timetable/draft", context, location.search), { state: { timetableContext: context } })
-        }
       />
     ) : (
       <Structures key={campusViewKey} notify={notify} initial={initialContext} />

@@ -358,12 +358,18 @@ public class StudentFeeLedgerResponse
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNumber { get; set; } = string.Empty;
+    public string? RollNumber { get; set; }
+    public string? BoardName { get; set; }
+    public string? AcademicYearName { get; set; }
     public string GroupName { get; set; } = string.Empty;
     public string SectionName { get; set; } = string.Empty;
     public string PaymentPlan { get; set; } = string.Empty;
     public decimal TotalPayable { get; set; }
     public decimal TotalPaid { get; set; }
     public decimal Balance { get; set; }
+    public decimal Concession { get; set; }
+    public decimal Fine { get; set; }
+    public DateTime? NextDueDate { get; set; }
     public string Status { get; set; } = string.Empty;
 }
 

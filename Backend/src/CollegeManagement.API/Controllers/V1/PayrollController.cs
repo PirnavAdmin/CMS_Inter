@@ -1,5 +1,6 @@
-﻿using CollegeManagement.API.Filters;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.DTOs.Payroll;
+using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,10 +16,14 @@ namespace CollegeManagement.API.Controllers
     public class PayrollController : ControllerBase
     {
         private readonly IPayrollService _payrollService;
+        private readonly INotificationService? _notificationService;
 
-        public PayrollController(IPayrollService payrollService)
+        public PayrollController(
+            IPayrollService payrollService,
+            INotificationService? notificationService = null)
         {
             _payrollService = payrollService;
+            _notificationService = notificationService;
         }
 
         private int? ResolveCampusId(int? explicitlyProvided = null)
@@ -83,8 +88,6 @@ namespace CollegeManagement.API.Controllers
 
             return (staffId, isAdminOrFinance);
         }
-
-
 
         // GET: api/payroll/salary-structures
         [HttpGet("salary-structures")]
@@ -179,8 +182,6 @@ namespace CollegeManagement.API.Controllers
             });
         }
 
-
-
         // GET: api/payroll/employees
         [HttpGet("employees")]
         public async Task<IActionResult> GetEmployees(
@@ -197,8 +198,6 @@ namespace CollegeManagement.API.Controllers
 
             return Ok(result);
         }
-
-
 
         // GET: api/payroll/salary-assignments?staffId=10&status=Active
         [HttpGet("salary-assignments")]
@@ -381,8 +380,6 @@ namespace CollegeManagement.API.Controllers
             });
         }
 
-
-
         // POST: api/payroll/payslips/generate
         [HttpPost("payslips/generate")]
         [Authorize(Roles = "Admin,Super Admin,Principal,HR")]
@@ -418,14 +415,27 @@ namespace CollegeManagement.API.Controllers
             var payslipId =
                 await _payrollService.GeneratePayslipAsync(request);
 
+            if (_notificationService != null && payslipId > 0)
+            {
+                try
+                {
+                    await _notificationService.SendToStaffAsync(
+                        request.StaffId,
+                        "Salary Payslip Released",
+                        $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
+                        "Payroll",
+                        payslipId,
+                        "/dashboard/payroll/payslips");
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 PayslipId = payslipId,
                 Message = "Payslip generated successfully."
             });
         }
-
-
 
         // POST: api/payroll/payslips/generate-bulk
         [HttpPost("payslips/generate-bulk")]
@@ -473,6 +483,21 @@ namespace CollegeManagement.API.Controllers
                     .GenerateBulkPayslipsAsync(request))
                 .ToList();
 
+            if (_notificationService != null && payslipIds.Any())
+            {
+                try
+                {
+                    await _notificationService.SendToStaffListAsync(
+                        request.StaffIds,
+                        "Salary Payslip Released",
+                        $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
+                        "Payroll",
+                        null,
+                        "/dashboard/payroll/payslips");
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 PayslipIds = payslipIds,
@@ -480,8 +505,6 @@ namespace CollegeManagement.API.Controllers
                 Message = "Bulk payslips generated successfully."
             });
         }
-
-
 
         // PATCH: api/payroll/payslips/5/status
         [HttpPatch("payslips/{id}/status")]
@@ -532,14 +555,31 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (_notificationService != null && string.Equals(status, "Paid", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var slip = await _payrollService.GetPayslipByIdAsync(numericId.Value);
+                    if (slip != null && slip.StaffId > 0)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            slip.StaffId,
+                            "Salary Disbursed",
+                            $"Your salary payslip #{numericId.Value} has been marked as Paid. Net payable: ₹{slip.NetSalary:N0}.",
+                            "Payroll",
+                            numericId.Value,
+                            "/dashboard/payroll/payslips");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 Message =
                     $"Payslip status updated to {status}."
             });
         }
-
-
 
         // POST: api/payroll/payslips/5/send-email
         [HttpPost("payslips/{id}/send-email")]
@@ -581,10 +621,9 @@ namespace CollegeManagement.API.Controllers
             });
         }
 
-
-
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
+        // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
         [HttpGet("my-payslips")]
+        [HttpGet("payslips/my-payslips")]
         [BypassPermission]
         public async Task<IActionResult> GetMyPayslips(
             [FromQuery] int? payrollMonth,
@@ -619,7 +658,7 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/payroll/payslips
         [HttpGet("payslips")]
-        [HttpGet("payslips/my-payslips")]
+        [BypassPermission]
         public async Task<IActionResult> GetPayslipHistory(
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
@@ -639,18 +678,27 @@ namespace CollegeManagement.API.Controllers
             if (!IsAdminOrHr())
             {
                 var callerStaffId = GetCallerStaffId();
-                result = result.Where(p => p.StaffId == (callerStaffId ?? 0));
+                var callerEmployeeId = GetCallerEmployeeId();
+                if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                {
+                    result = result.Where(p => p.StaffId == callerStaffId.Value);
+                }
+                else if (!string.IsNullOrEmpty(callerEmployeeId))
+                {
+                    result = result.Where(p => string.Equals(p.EmployeeId, callerEmployeeId, StringComparison.OrdinalIgnoreCase));
+                }
+                else if (!string.IsNullOrEmpty(search))
+                {
+                    result = result.Where(p => string.Equals(p.EmployeeId, search, StringComparison.OrdinalIgnoreCase));
+                }
             }
 
             return Ok(result);
         }
 
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
-
         // GET: api/payroll/payslips/5
         [HttpGet("payslips/{id}")]
+        [BypassPermission]
         public async Task<IActionResult> GetPayslipById(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -693,13 +741,10 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
-
         // GET: api/payroll/payslips/{id}/pdf
         [HttpGet("payslips/{id}/pdf")]
         [HttpGet("payslips/{id}/download-pdf")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadPayslipPdf(string id)
         {
             if (string.IsNullOrWhiteSpace(id))
@@ -748,6 +793,13 @@ namespace CollegeManagement.API.Controllers
         {
             var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
             return int.TryParse(claim, out int id) ? id : null;
+        }
+
+        private string? GetCallerEmployeeId()
+        {
+            return User.FindFirst("EmployeeId")?.Value 
+                ?? User.FindFirst("employee_id")?.Value
+                ?? User.FindFirst("staff_code")?.Value;
         }
 
         // GET: api/payroll/revisions?staffId=10&status=Pending
@@ -818,6 +870,22 @@ namespace CollegeManagement.API.Controllers
             var revisionId = await _payrollService
                 .CreateSalaryRevisionAsync(request);
 
+            if (_notificationService != null && revisionId > 0)
+            {
+                try
+                {
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Admin", "Super Admin", "Accountant", "Principal" },
+                        ResolveCampusId(),
+                        "Salary Revision Requested",
+                        $"Salary revision request #{revisionId} submitted for Staff #{request.StaffId}.",
+                        "Payroll",
+                        revisionId,
+                        "/dashboard/payroll");
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 RevisionId = revisionId,
@@ -859,14 +927,31 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var revs = await _payrollService.GetSalaryRevisionsAsync(null, null, null);
+                    var rev = revs.FirstOrDefault(r => r.Id == id);
+                    if (rev != null && rev.StaffId > 0)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            rev.StaffId,
+                            "Salary Revision Approved",
+                            $"Your salary revision request has been approved effective from {rev.EffectiveFrom:yyyy-MM-dd}.",
+                            "Payroll",
+                            id,
+                            "/dashboard/payroll");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 Message = "Salary revision approved successfully."
             });
         }
-
-
-
 
         // GET: api/payroll/bonuses?staffId=10&status=Pending
         [HttpGet("bonuses")]
@@ -959,8 +1044,6 @@ namespace CollegeManagement.API.Controllers
 
             return Ok(new { Message = "Bonus approved successfully." });
         }
-
-
 
         // GET: api/payroll/advances?staffId=10&status=Pending
         [HttpGet("advances")]
@@ -1065,6 +1148,25 @@ namespace CollegeManagement.API.Controllers
                     Message = "Advance or loan not found or could not be approved."
                 });
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var adv = await _payrollService.GetAdvanceByIdAsync(id);
+                    if (adv != null && adv.StaffId > 0)
+                    {
+                        await _notificationService.SendToStaffAsync(
+                            adv.StaffId,
+                            "Salary Advance / Loan Approved",
+                            $"Your {adv.AdvanceType} request of ₹{adv.Amount} has been approved.",
+                            "Payroll",
+                            id,
+                            "/dashboard/payroll");
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { Message = "Advance or loan approved successfully." });
         }
 
@@ -1121,10 +1223,6 @@ namespace CollegeManagement.API.Controllers
             var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
         }
-
-                // GET: api/v1/Payroll/my-payslips (Staff Self-Service Endpoint)
-        [HttpGet("my-payslips")]
-        [BypassPermission]
 
         // GET: api/payroll/payslips/10/advance-repayments
         [HttpGet("payslips/{id}/advance-repayments")]

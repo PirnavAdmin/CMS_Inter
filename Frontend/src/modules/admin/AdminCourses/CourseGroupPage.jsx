@@ -81,17 +81,17 @@ const normalizeLevels = (levels) => {
     .join(", ");
 };
 const normalizeGroup = (item) => {
-  // Master identity must never fall back to a contextual GroupId.
-  if (!validId(item?.masterGroupId))
-    throw new Error("The API returned a record without a valid MasterGroupId.");
+  const id = item?.groupId ?? item?.masterGroupId ?? item?.id;
+  if (!validId(id))
+    throw new Error("The API returned a record without a valid GroupId.");
   return {
-    id: item.masterGroupId,
+    id: id,
+    groupId: id,
     boardId: String(item.boardId),
     board: item.boardName || "-",
     name: item.groupName || "-",
     code: item.groupCode || "-",
     description: item.description ?? "",
-    availableLevels: normalizeLevels(item.eligibleAcademicLevels ?? item.eligibleLevels ?? []), levels: item.eligibleAcademicLevels ?? item.eligibleLevels ?? [],
     status: item.isActive ? "Active" : "Inactive",
   };
 };
@@ -102,8 +102,8 @@ const groupFormFields = [
   { name: "status", label: "Status", type: "select", options: STATUS_OPTIONS, required: true },
   { name: "description", label: "Description", type: "textarea" },
 ];
-const toPayload = (values, programIds, masterGroupId) => ({
-  ...(!masterGroupId ? { boardId: Number(values.board) } : {}),
+const toPayload = (values, programIds) => ({
+  boardId: Number(values.board),
   groupName: values.name.trim(),
   groupCode: values.code.trim(),
   description: values.description?.trim() || null,
@@ -121,6 +121,16 @@ const loadProgramMaster = async () =>
   getCollection(requireSuccess(await apiClient.get(apiEndpoints.programs.list)).data).map(
     normalizeProgram,
   );
+const loadBoardLevels = async (boardId) => {
+  if (!validId(boardId)) throw new Error("Select a valid board to load academic levels.");
+  const response = requireSuccess(await apiClient.get(apiEndpoints.boards.getAcademicLevels, {
+    params: { boardId: Number(boardId) },
+  }));
+  const levels = getCollection(response.data);
+  if (levels.some((level) => !read(level, "academicLevelName", "AcademicLevelName", "levelName", "LevelName")))
+    throw new Error("The API returned academic levels without names.");
+  return normalizeLevels(levels);
+};
 const groupApi = {
   fetchRows: async ({ search = "", boardId = "" } = {}) => {
     if (!validId(boardId)) return [];
@@ -132,27 +142,28 @@ const groupApi = {
     return getCollection(response.data).map(normalizeGroup);
   },
   fetchRow: async (id) => {
-    if (!validId(id)) throw new Error("Invalid MasterGroupId.");
+    if (!validId(id)) throw new Error("Invalid GroupId.");
     const item = responseData(
       requireSuccess(await apiClient.get(apiEndpoints.masterGroups.getById(id))),
     );
     const group = normalizeGroup(item);
     if (Number(group.id) !== Number(id))
-      throw new Error("The API returned a different master group.");
+      throw new Error("The API returned a different group.");
     if (!Array.isArray(item.programs))
       throw new Error("The API did not return the saved default programs.");
     return { group, programs: item.programs.map(normalizeProgram) };
   },
   saveRow: async (values, id, programIds) => {
-    const payload = toPayload(values, programIds, id);
+    const payload = toPayload(values, programIds);
     const response = requireSuccess(
       id
         ? await apiClient.put(apiEndpoints.masterGroups.update(id), payload)
         : await apiClient.post(apiEndpoints.masterGroups.create, payload),
     );
-    if (!validId(responseData(response)?.masterGroupId))
+    const savedId = responseData(response)?.groupId;
+    if (!validId(savedId) || (id && Number(savedId) !== Number(id)))
       throw new Error(
-        "The save response did not confirm a MasterGroupId. Reload the list before retrying.",
+        "The save response did not confirm the GroupId. Reload the list before retrying.",
       );
     return response;
   },
@@ -183,8 +194,8 @@ export const pageConfig = {
       render: (row) => (
         <>
           {row.board}
-          <small className="group-available-levels">
-            Available Levels: {row.availableLevels || "None configured"}
+          <small className="group-available-levels" title={row.levelsError || undefined}>
+            Available Levels: {row.levelsLoading ? "Loading..." : row.levelsError ? "Unable to load levels" : row.availableLevels || "None configured for this board"}
           </small>
         </>
       ),
@@ -340,7 +351,7 @@ function ProgramsPanel({
 }
 
 function CourseGroupFormPage() {
-  // The existing route's :id now identifies a master group on this screen only.
+  // The existing route's :id now identifies a group on this screen only.
   const { id } = useParams();
   const navigate = useNavigate();
   const { selectedBoard, selectedBoardId } = useAcademicContext();
@@ -374,19 +385,7 @@ function CourseGroupFormPage() {
           id ? groupApi.fetchRow(id) : null,
         ]);
         const boardId = detail ? detail.group.boardId : selectedBoardId;
-        const levels = detail
-          ? detail.group.availableLevels
-          : validId(boardId)
-            ? normalizeLevels(
-                getCollection(
-                  requireSuccess(
-                    await apiClient.get(apiEndpoints.boards.getAcademicLevels, {
-                      params: { boardId: Number(boardId) },
-                    }),
-                  ).data,
-                ),
-              )
-            : "";
+        const levels = validId(boardId) ? await loadBoardLevels(boardId) : "";
         if (ignore) return;
         setBoards(
           uniqueByValue([
@@ -467,7 +466,7 @@ function CourseGroupFormPage() {
     try {
       await groupApi.saveRow(values, id, selectedProgramIds);
       navigate(listPath, {
-        state: { groupMessage: `Master group ${id ? "updated" : "created"} successfully.` },
+        state: { groupMessage: `Group ${id ? "updated" : "created"} successfully.` },
       });
     } catch (error) {
       showProgramError(getApiErrorMessage(error));
@@ -478,7 +477,7 @@ function CourseGroupFormPage() {
   return (
     <DashboardLayout
       title={`${mode} Group`}
-      subtitle="Configure a reusable master group and its default programs."
+      subtitle="Configure a reusable group and its default programs."
       breadcrumb={["Group Management"]}
     >
       <div className="cms-form-page course-group-form-page">
@@ -509,7 +508,7 @@ function CourseGroupFormPage() {
                   ))}
                 </div>
                 <p>
-                  Available Levels: {availableLevels || "None configured"}. Reusable across current
+                  Available Levels: {availableLevels || "None configured for this board"}. Reusable across current
                   and future academic years.
                 </p>
                 <ProgramsPanel
@@ -554,6 +553,8 @@ function CourseGroupListPage() {
   const location = useLocation();
   const { selectedBoardId } = useAcademicContext();
   const [rows, setRows] = useState([]);
+  const [boardLevels, setBoardLevels] = useState({ boardId: "", text: "", loading: true, error: "" });
+  const [levelsRetry, setLevelsRetry] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(location.state?.groupMessage || "");
@@ -563,6 +564,29 @@ function CourseGroupListPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingId, setDeletingId] = useState("");
   const [deleteError, setDeleteError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const boardId = String(selectedBoardId);
+    setBoardLevels({ boardId, text: "", loading: true, error: "" });
+    if (validId(boardId)) {
+      loadBoardLevels(boardId).then(
+        (text) => { if (active) setBoardLevels({ boardId, text, loading: false, error: "" }); },
+        (failure) => { if (active) setBoardLevels({ boardId, text: "", loading: false, error: getApiErrorMessage(failure) }); },
+      );
+    }
+    return () => { active = false; };
+  }, [selectedBoardId, levelsRetry]);
+
+  const displayedRows = useMemo(() => rows.map((row) => ({
+    ...row,
+    availableLevels: row.boardId === boardLevels.boardId ? boardLevels.text : "",
+    levelsLoading: row.boardId === String(selectedBoardId)
+      && (boardLevels.boardId !== row.boardId || boardLevels.loading),
+    levelsError: row.boardId !== String(selectedBoardId)
+      ? "This group's board does not match the selected board."
+      : boardLevels.boardId === row.boardId ? boardLevels.error : "",
+  })), [rows, selectedBoardId, boardLevels]);
 
   useEffect(() => {
     if (location.state?.groupMessage) navigate(location.pathname, { replace: true, state: null });
@@ -644,7 +668,7 @@ function CourseGroupListPage() {
     try {
       await groupApi.deactivateRow(deleteTarget.id);
       setToastType("success");
-      setToast("Master group deactivated successfully.");
+      setToast("Group deactivated successfully.");
       closeDeleteModal();
       await loadRows(search);
     } catch (err) {
@@ -676,7 +700,13 @@ function CourseGroupListPage() {
     >
       <div className="group-management">
         {!validId(selectedBoardId) ? (
-          <p>Select a Board in the top navbar to view master groups.</p>
+          <p>Select a Board in the top navbar to view groups.</p>
+        ) : null}
+        {boardLevels.boardId === String(selectedBoardId) && boardLevels.error ? (
+          <p role="alert">
+            Unable to load available academic levels: {boardLevels.error}{" "}
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setLevelsRetry((value) => value + 1)}>Retry levels</button>
+          </p>
         ) : null}
         {error ? (
           <div className="cms-card" style={{ marginBottom: 16 }}>
@@ -691,7 +721,7 @@ function CourseGroupListPage() {
         <DataTable
           title={pageConfig.title}
           columns={columns}
-          rows={rows}
+          rows={displayedRows}
           loading={loading}
           addLabel={pageConfig.addLabel}
           searchPlaceholder="Search by group name or code..."
@@ -704,7 +734,7 @@ function CourseGroupListPage() {
       </div>
       {deleteTarget ? (
         <Modal
-          title="Delete Master Group"
+          title="Delete Group"
           size="sm"
           onClose={deletingId ? () => {} : closeDeleteModal}
           footer={
@@ -760,7 +790,7 @@ function CourseGroupListPage() {
             </div>
           ) : (
             <p>
-              Are you sure you want to delete this master group? Referenced groups may require
+              Are you sure you want to delete this group? Referenced groups may require
               deactivation instead.
             </p>
           )}

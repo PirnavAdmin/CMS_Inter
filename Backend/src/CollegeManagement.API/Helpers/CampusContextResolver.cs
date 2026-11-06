@@ -1,4 +1,3 @@
-using System.Linq;
 using System.Security.Claims;
 using CollegeManagement.API.Exceptions;
 
@@ -8,30 +7,45 @@ public static class CampusContextResolver
 {
     public static int ResolveAndValidateCampusId(ClaimsPrincipal user, int? requestedCampusId)
     {
-        var isSuperAdmin = user.IsInRole("Super Admin") || user.IsInRole("SuperAdmin") || user.IsInRole("Admin") || user.IsInRole("Administrator");
+        var isPrivilegedAdmin = user.IsInRole("Super Admin") || 
+                                user.IsInRole("SuperAdmin") || 
+                                user.IsInRole("Admin") || 
+                                user.IsInRole("Administrator") || 
+                                user.IsInRole("Principal") ||
+                                user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && 
+                                    (c.Value == "Super Admin" || c.Value == "SuperAdmin" || c.Value == "Admin" || c.Value == "Administrator" || c.Value == "Principal"));
+
         var userCampusClaim = user.Claims.FirstOrDefault(c => 
             c.Type == "CampusId" || 
             c.Type == "campus_id" || 
-            c.Type == "campusId" || 
-            c.Type == "BranchId" || 
-            c.Type == "branch_id")?.Value;
+            c.Type == "campusId")?.Value;
 
         int userCampusId = int.TryParse(userCampusClaim, out int cid) ? cid : 0;
 
-        if (!isSuperAdmin)
+        if (!isPrivilegedAdmin)
         {
-            if (userCampusId <= 0)
+            // Gather all authorized campus IDs for this user
+            var authorizedCampuses = user.Claims
+                .Where(c => c.Type == "AssignedCampusId" || c.Type == "AssignedCampusIds" || c.Type == "assigned_campus_id")
+                .Select(c => int.TryParse(c.Value, out int id) ? id : 0)
+                .Where(id => id > 0)
+                .ToHashSet();
+
+            if (userCampusId > 0)
             {
-                if (requestedCampusId.HasValue && requestedCampusId.Value > 0) return requestedCampusId.Value;
-                return 1;
+                authorizedCampuses.Add(userCampusId);
             }
 
-            if (requestedCampusId.HasValue && requestedCampusId.Value > 0 && requestedCampusId.Value != userCampusId)
+            if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
             {
-                throw new ForbiddenException($"Cross-campus inspection is forbidden. Caller is bound to campus ID {userCampusId}, but requested campus ID {requestedCampusId.Value}.");
+                if (authorizedCampuses.Count > 0 && !authorizedCampuses.Contains(requestedCampusId.Value))
+                {
+                    throw new ForbiddenException($"Cross-campus access is forbidden. Caller is not authorized for requested campus ID {requestedCampusId.Value}.");
+                }
+                return requestedCampusId.Value;
             }
 
-            return userCampusId;
+            return userCampusId > 0 ? userCampusId : 1;
         }
 
         return (requestedCampusId.HasValue && requestedCampusId.Value > 0) ? requestedCampusId.Value : (userCampusId > 0 ? userCampusId : 1);

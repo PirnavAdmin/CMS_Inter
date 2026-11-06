@@ -1362,11 +1362,11 @@
 .att-month-table .att-sticky-roll { left: 0; min-width: 70px; }
 .att-month-table .att-sticky-name { left: 70px; min-width: 165px; box-shadow: 4px 0 6px rgb(15 23 42 / 5%); }
 .att-month-status { min-width: 24px; }
-.att-month-p, .is-present { background: #dff4e5; color: #167238; }
-.att-month-a, .is-absent { background: #fde4e4; color: #b42318; }
-.att-month-lv, .is-leave { background: #fff1d6; color: #9a6700; }
-.att-month-l, .is-late { background: #e9e7ff; color: #5146b8; }
-.att-month-off, .is-off { background: #f0f1ee; color: #7a8175; }
+.att-month-p, .att-month-table .is-present { background: #dff4e5; color: #167238; }
+.att-month-a, .att-month-table .is-absent { background: #fde4e4; color: #b42318; }
+.att-month-lv, .att-month-table .is-leave { background: #fff1d6; color: #9a6700; }
+.att-month-l, .att-month-table .is-late { background: #e9e7ff; color: #5146b8; }
+.att-month-off, .att-month-table .is-off { background: #f0f1ee; color: #7a8175; }
 .att-month-table .is-sunday { background: color-mix(in srgb, var(--cms-surface-alt, #f7f8ee) 88%, #d5d9d0); }
 .att-person-profile { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .att-person-profile span { color: var(--cms-muted); font-size: 13px; }
@@ -1453,7 +1453,7 @@
   border: 1px solid var(--cms-border);
   border-left: 3px solid var(--staff-summary-accent);
   border-radius: 11px;
-  background: var(--cms-surface);
+  background: var(--cms-surface) !important;
   box-shadow: 0 5px 14px rgb(42 74 35 / 6%);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }

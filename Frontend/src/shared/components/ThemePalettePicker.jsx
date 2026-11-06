@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useId } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Palette, Pipette, Check, X, Lock, Globe } from "lucide-react";
 import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
+import "./ThemePalettePicker.css";
 
 export const THEME_OPTIONS = [
   { id: "olive", name: "Current Olive", swatches: ["#617800", "#b8cb79", "#e4ecce"] },
@@ -103,7 +104,6 @@ export default function ThemePalettePicker({
     setSliderHue(hue);
     const newHex = hslToHex(hue, 95, 45);
     setCurrentHex(newHex);
-    setCustomColor(newHex);
   };
 
   const handleHexInput = (e) => {
@@ -112,7 +112,6 @@ export default function ThemePalettePicker({
     setCurrentHex(val);
     if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
       setSliderHue(hexToHue(val));
-      setCustomColor(val);
     }
   };
 
@@ -121,7 +120,22 @@ export default function ThemePalettePicker({
     const val = e.target.value;
     setCurrentHex(val);
     setSliderHue(hexToHue(val));
-    setCustomColor(val);
+  };
+
+  const handleApplyCustomColor = () => {
+    if (isThemeLocked) return;
+    let formattedHex = currentHex;
+    if (!formattedHex.startsWith("#")) {
+      formattedHex = `#${formattedHex}`;
+    }
+    if (/^#[0-9A-Fa-f]{6}$/.test(formattedHex)) {
+      setCustomColor(formattedHex);
+      setShowColorPicker(false);
+    } else if (/^#[0-9A-Fa-f]{3}$/.test(formattedHex)) {
+      const expanded = `#${formattedHex[1]}${formattedHex[1]}${formattedHex[2]}${formattedHex[2]}${formattedHex[3]}${formattedHex[3]}`;
+      setCustomColor(expanded);
+      setShowColorPicker(false);
+    }
   };
 
   const shouldRenderTrigger = !hideTrigger && showTrigger && !isThemeLocked;
@@ -277,7 +291,6 @@ export default function ThemePalettePicker({
                 style={{ "--cms-custom-preview-color": currentHex }}
                 onClick={() => {
                   if (isThemeLocked) return;
-                  setCustomColor(currentHex);
                   setShowColorPicker((prev) => !prev);
                 }}
                 disabled={isThemeLocked}
@@ -325,16 +338,21 @@ export default function ThemePalettePicker({
 
                 {/* Controls Row */}
                 <div className="cms-colour-picker-controls">
-                  <div className="cms-colour-preview-box" style={{ backgroundColor: currentHex }}>
+                  <label className="cms-colour-preview-wrap" title="Click to pick colour or use eyedropper">
+                    <span
+                      className="cms-colour-preview-badge"
+                      style={{ backgroundColor: currentHex }}
+                      aria-hidden="true"
+                    />
                     <input
                       type="color"
                       value={currentHex}
                       onChange={handleNativeColorPick}
-                      className="cms-native-color-input"
-                      title="Open native color picker"
+                      className="cms-colour-native-input"
+                      disabled={isThemeLocked}
                       aria-label="Pick custom colour"
                     />
-                  </div>
+                  </label>
 
                   <div className="cms-hex-input-wrap">
                     <span className="cms-hex-prefix">#</span>
@@ -349,6 +367,14 @@ export default function ThemePalettePicker({
                       spellCheck="false"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    className="cms-colour-apply-btn"
+                    onClick={handleApplyCustomColor}
+                  >
+                    Apply
+                  </button>
                 </div>
               </div>
             )}

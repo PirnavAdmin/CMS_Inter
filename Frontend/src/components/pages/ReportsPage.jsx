@@ -1,3 +1,7 @@
+import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
+import { useSearchParams } from "react-router-dom";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -18,31 +22,39 @@ import {
   Printer,
   RotateCcw,
   Search,
-  ShieldCheck,
-  TrendingUp,
   Trophy,
   Users,
   WalletCards,
   X,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  Legend,
-} from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import {
+  getReportBoards,
+  getReportAcademicYears,
+  getReportAcademicLevels,
+  getReportGroups,
+  getReportSections,
+  getReportsDashboard,
+  getAdmissionsDetails,
+  getAttendanceDetails,
+  getFeeCollectionDetails,
+  getDueFeesDetails,
+  getExaminationsDetails,
+  getResultsDetails,
+  getStaffWorkloadDetails,
+  getStudentStrengthDetails,
+  getPassPercentageDetails,
+  getToppersDetails,
+  getAuditLogs,
+  exportReportPdf,
+  exportReportExcel,
+} from "@/api/reportApi.js";
 import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import { Field, Modal, Toast } from "@/shared/components/Ui.jsx";
 import admissionsImage from "@/assets/reports-3d/admissions.png";
 import attendanceImage from "@/assets/reports-3d/attendance.png";
 import feeCollectionImage from "@/assets/reports-3d/fee-collection.png";
@@ -59,30 +71,17 @@ const REPORTS_API_VERSION = "1.0";
 const OVERVIEW_REPORT_TYPE = "dashboard";
 const FILTER_CACHE_TTL_MS = 5 * 60 * 1000;
 
-const REPORTS_API = {
-  filters: {
-    boards: "/api/v1/reports/filters/boards",
-    academicYears: "/api/v1/reports/filters/academic-years",
-    academicLevels: "/api/v1/reports/filters/academic-levels",
-    groups: "/api/v1/reports/filters/groups",
-    sections: "/api/v1/reports/filters/sections",
-  },
-  dashboard: "/api/v1/reports/dashboard",
-  exportPdf: "/api/v1/reports/export/pdf",
-  exportExcel: "/api/v1/reports/export/excel",
-  details: {
-    admissions: "/api/v1/reports/details/admissions",
-    attendance: "/api/v1/reports/details/attendance",
-    feeCollection: "/api/v1/reports/details/fee-collection",
-    dueFees: "/api/v1/reports/details/due-fees",
-    examinations: "/api/v1/reports/details/examinations",
-    results: "/api/v1/reports/details/results",
-    facultyWorkload: "/api/v1/reports/details/staff-workload",
-    studentStrength: "/api/v1/reports/details/student-strength",
-    passPercentage: "/api/v1/reports/details/pass-percentage",
-    toppers: "/api/v1/reports/details/toppers",
-    auditLogs: "/api/v1/reports/details/audit-logs",
-  },
+const DETAIL_API_MAP = {
+  admissions: getAdmissionsDetails,
+  attendance: getAttendanceDetails,
+  feeCollection: getFeeCollectionDetails,
+  dueFees: getDueFeesDetails,
+  examinations: getExaminationsDetails,
+  results: getResultsDetails,
+  facultyWorkload: getStaffWorkloadDetails,
+  studentStrength: getStudentStrengthDetails,
+  passPercentage: getPassPercentageDetails,
+  toppers: getToppersDetails,
 };
 
 // 10 Summary Cards Configuration
@@ -98,6 +97,16 @@ const summaryCardConfig = [
   { key: "passPercentage", sourceKey: "passPercentage", reportType: "pass-percentage", label: "Pass Percentage", icon: Percent, image: passPercentageImage, tone: "green", suffix: "%" },
   { key: "toppers", sourceKey: "toppersIdentified", reportType: "toppers", label: "Toppers Identified", icon: Trophy, image: toppersImage, tone: "amber" },
 ];
+
+function flagIsFalse(val) {
+  if (val === undefined || val === null) return false;
+  return val === false || val === 0 || val === "0" || String(val).trim().toLowerCase() === "false";
+}
+
+function flagIsTrue(val) {
+  if (val === undefined || val === null) return false;
+  return val === true || val === 1 || val === "1" || String(val).trim().toLowerCase() === "true";
+}
 
 function positiveId(value) {
   const parsed = Number(value);
@@ -420,10 +429,7 @@ function DetailDataTable({
   const renderTableContent = () => {
     if (loading) {
       return (
-        <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-          <div className="cms-spinner" style={{ margin: "0 auto 12px" }} />
-          <p>Loading {cardConfig?.label || "detail"} records...</p>
-        </div>
+        <SkeletonTable columns={6} rows={5} />
       );
     }
 
@@ -636,7 +642,7 @@ function DetailDataTable({
 
         <div className="reports-detail-search-bar">
           <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-            <Search size={14} style={{ position: "absolute", left: "10px", color: "var(--cms-muted)", pointerEvents: "none" }} />
+            <ThreeDIcon name="search" size={14} style={{ position: "absolute", left: "10px", pointerEvents: "none" }} />
             <input
               type="text"
               className="reports-search-input"
@@ -657,7 +663,7 @@ function DetailDataTable({
             disabled={exportingPdf}
             title="Export filtered records to PDF"
           >
-            <Download size={13} /> {exportingPdf ? "Exporting..." : "PDF"}
+            <ThreeDIcon name="download" size={13} /> {exportingPdf ? "Exporting..." : "PDF"}
           </button>
           <button
             className="cms-btn cms-btn-ghost"
@@ -666,7 +672,7 @@ function DetailDataTable({
             disabled={exportingExcel}
             title="Export filtered records to Excel"
           >
-            <FileSpreadsheet size={13} /> {exportingExcel ? "Exporting..." : "Excel"}
+            <ThreeDIcon name="excel" size={13} /> {exportingExcel ? "Exporting..." : "Excel"}
           </button>
           <button
             className="cms-btn cms-btn-ghost"
@@ -682,7 +688,7 @@ function DetailDataTable({
             disabled={filteredItems.length === 0}
             title="Export filtered records to CSV"
           >
-            <FileText size={13} /> CSV
+            <ThreeDIcon name="pdf" size={13} /> CSV
           </button>
         </div>
       </div>
@@ -690,34 +696,7 @@ function DetailDataTable({
       {renderTableContent()}
 
       {filteredItems.length > 0 ? (
-        <div className="reports-detail-footer">
-          <span>
-            Showing {startIndex + 1} to {Math.min(startIndex + pageSize, filteredItems.length)} of {filteredItems.length} records
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              className="cms-btn cms-btn-ghost"
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => onPageChange(safePage - 1)}
-              style={{ padding: "4px 8px" }}
-            >
-              <ChevronLeft size={14} /> Prev
-            </button>
-            <span style={{ fontSize: "12px", fontWeight: 600 }}>
-              Page {safePage} of {totalPages}
-            </span>
-            <button
-              className="cms-btn cms-btn-ghost"
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => onPageChange(safePage + 1)}
-              style={{ padding: "4px 8px" }}
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+        <AdminPagination currentPage={safePage} totalRecords={filteredItems.length} pageSize={5} onPageChange={onPageChange} />
       ) : null}
     </section>
   );
@@ -763,6 +742,10 @@ export default function ReportsPage() {
   const [yearsLoading, setYearsLoading] = useState(false);
   const [levelLoading, setLevelLoading] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState("");
+  const [sectionsError, setSectionsError] = useState("");
+  const groupScopeRef = useRef("");
+  const sectionScopeRef = useRef("");
   const [sectionsLoading, setSectionsLoading] = useState(false);
 
   const [previewing, setPreviewing] = useState("");
@@ -778,11 +761,19 @@ export default function ReportsPage() {
   const [detailError, setDetailError] = useState("");
   const [detailSearch, setDetailSearch] = useState("");
   const [detailPage, setDetailPage] = useState(1);
-  const [detailPageSize, setDetailPageSize] = useState(10);
+  const [detailPageSize, setDetailPageSize] = useState(5);
   const hasAutoGeneratedRef = useRef(false);
 
   // Top Tabs & Audit Log states
-  const [activeMainTab, setActiveMainTab] = useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeMainTab = ["audit-logs", "auditLogs"].includes(searchParams.get("tab")) ? "auditLogs" : "overview";
+  const setActiveMainTab = useCallback((tab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", tab === "auditLogs" ? "audit-logs" : "overview");
+    if (next.toString() !== searchParams.toString()) setSearchParams(next);
+  }, [searchParams, setSearchParams]);
+  const previousMainTab = useRef(null);
+  const auditRequested = useRef(false);
   const [auditLogData, setAuditLogData] = useState([]);
   const [auditLogLoading, setAuditLogLoading] = useState(false);
   const [auditLogError, setAuditLogError] = useState("");
@@ -819,29 +810,20 @@ export default function ReportsPage() {
     setYearsLoading(true);
     try {
       const [boardsRes, yearsRes, levelsRes, groupsRes, sectionsRes] = await Promise.allSettled([
-        apiClient.get(REPORTS_API.filters.boards, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicYears, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.academicLevels, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.groups, { signal: controller.signal, skipGlobalLoader: true }),
-        apiClient.get(REPORTS_API.filters.sections, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportBoards({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicYears({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicLevels({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportGroups({}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportSections({}, { signal: controller.signal, skipGlobalLoader: true }),
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
-      
+
       const newOptions = {};
       if (boardsRes.status === "fulfilled") {
         newOptions.boards = activeFilterOptions(boardsRes.value.data, ["boards", "Boards"], ["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]);
       }
       if (yearsRes.status === "fulfilled") {
         newOptions.years = activeAcademicYearOptions(yearsRes.value.data);
-      }
-      if (levelsRes.status === "fulfilled") {
-        newOptions.levels = activeFilterOptions(levelsRes.value.data, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "name", "Name", "academicLevelName"]);
-      }
-      if (groupsRes.status === "fulfilled") {
-        newOptions.groups = activeFilterOptions(groupsRes.value.data, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
-      }
-      if (sectionsRes.status === "fulfilled") {
-        newOptions.sections = activeFilterOptions(sectionsRes.value.data, ["sections", "Sections"], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
       }
 
       setMasterOptions((curr) => ({ ...curr, ...newOptions }));
@@ -875,8 +857,7 @@ export default function ReportsPage() {
     const controller = beginRequest("academicYears");
     setYearsLoading(true);
     const params = boardId ? { boardId } : {};
-    apiClient.get(REPORTS_API.filters.academicYears, {
-      params,
+    getReportAcademicYears(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
@@ -897,112 +878,153 @@ export default function ReportsPage() {
     if (rawBoardId) {
       setFilters((prev) => {
         if (prev.board === String(rawBoardId)) return prev;
-        return { ...prev, board: String(rawBoardId) };
+        return { ...prev, board: String(rawBoardId), level: "", group: "", section: "" };
       });
     }
   }, [selectedBoardId, selectedBoard]);
 
-  // Load Levels when Board changes
+  // Use the same academic identifiers and board/year group catalog as Student Management.
   useEffect(() => {
-    const boardId = positiveId(filters.board);
-    const cacheKey = boardId ? String(boardId) : "all";
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+    };
+    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0].join(":");
+    const controller = beginRequest("academicLevels");
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, levels: cached }));
-      setLevelLoading(false);
-      return;
+      setMasterOptions((current) => ({ ...current, levels: cached })); setLevelLoading(false);
+      finishRequest("academicLevels", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("academicLevels");
     setLevelLoading(true);
-    const params = boardId ? { boardId } : {};
-    apiClient.get(REPORTS_API.filters.academicLevels, {
-      params,
+    const params = scope.boardId ? { boardId: scope.boardId } : {};
+    getReportAcademicLevels(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      const levels = activeFilterOptions(res.data, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "name", "Name", "academicLevelName"]);
+      const rows = res?.data;
+      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load academic levels.");
+      const levels = activeFilterOptions(rows, ["academicLevels", "AcademicLevels"], ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.academicLevels, cacheKey, levels);
-      setMasterOptions((curr) => ({ ...curr, levels }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Academic Levels.");
+      setMasterOptions((current) => ({ ...current, levels }));
+      setFilters((current) => current.level && !levels.some((level) => level.value === String(current.level)) ? { ...current, level: "", group: "", section: "" } : current);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) setToast(getApiErrorMessage(error) || "Failed to load Academic Levels.");
     }).finally(() => {
       if (!controller.signal.aborted) setLevelLoading(false);
       finishRequest("academicLevels", controller);
     });
-  }, [beginRequest, filters.board, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
-  // Load Groups when Board, Year, or Level changes
   useEffect(() => {
-    const boardId = positiveId(filters.board);
-    const academicYearId = positiveId(filters.year);
-    const academicLevelId = positiveId(filters.level);
-    const cacheKey = `${boardId || 0}:${academicYearId || 0}:${academicLevelId || 0}`;
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+      academicLevelId: positiveId(filters.level),
+    };
+    // Groups are board/year catalog records in Student Management, not year-specific copies.
+    const cacheKey = [scope.campusId || 0, scope.boardId || 0, scope.academicYearId || 0, scope.academicLevelId || 0].join(":");
+    const controller = beginRequest("groups");
+    setGroupsError("");
+    if (groupScopeRef.current !== cacheKey) setMasterOptions((current) => ({ ...current, groups: [] }));
+    groupScopeRef.current = cacheKey;
+    const applyGroups = (groups) => {
+      setMasterOptions((current) => ({ ...current, groups }));
+      setFilters((current) => current.group && !groups.some((group) => group.value === String(current.group)) ? { ...current, group: "", section: "" } : current);
+    };
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.groups, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, groups: cached }));
-      setGroupsLoading(false);
-      return;
+      applyGroups(cached); setGroupsLoading(false); finishRequest("groups", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("groups");
     setGroupsLoading(true);
     const params = {};
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.groups, {
-      params,
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    if (scope.academicLevelId) params.academicLevelId = scope.academicLevelId;
+    getReportGroups(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      const groups = activeFilterOptions(res.data, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
+      const rows = res?.data;
+      if (rows?.success === false || rows?.Success === false) throw new Error(rows.message || rows.Message || "Unable to load groups.");
+      const groups = activeFilterOptions(rows, ["groups", "Groups"], ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.groups, cacheKey, groups);
-      setMasterOptions((curr) => ({ ...curr, groups }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Groups.");
+      applyGroups(groups);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) {
+        const message = getApiErrorMessage(error) || "Failed to load Groups.";
+        setGroupsError(message); setToast(message);
+      }
     }).finally(() => {
       if (!controller.signal.aborted) setGroupsLoading(false);
       finishRequest("groups", controller);
     });
-  }, [beginRequest, filters.board, filters.level, filters.year, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
-  // Load Sections when Group or other filters change
   useEffect(() => {
-    const groupId = positiveId(filters.group);
-    const boardId = positiveId(filters.board);
-    const academicYearId = positiveId(filters.year);
-    const academicLevelId = positiveId(filters.level);
-    const cacheKey = `${groupId || 0}:${boardId || 0}:${academicYearId || 0}:${academicLevelId || 0}`;
+    const scope = {
+      campusId: positiveId(filters.campus) || positiveId(selectedCampusId) || positiveId(selectedCampus?.id),
+      boardId: positiveId(filters.board) || positiveId(selectedBoardId) || positiveId(selectedBoard?.id),
+      academicYearId: positiveId(filters.year) || positiveId(selectedAcademicYearId) || positiveId(selectedAcademicYear?.id),
+      academicLevelId: positiveId(filters.level),
+      groupId: positiveId(filters.group),
+    };
+    const cacheKey = Object.values(scope).map((id) => id || 0).join(":");
+    const controller = beginRequest("sections");
+    setSectionsError("");
+    if (sectionScopeRef.current !== cacheKey) setMasterOptions((current) => ({ ...current, sections: [] }));
+    sectionScopeRef.current = cacheKey;
+    const applySections = (sections) => {
+      setMasterOptions((current) => ({ ...current, sections }));
+      setFilters((current) => current.section && !sections.some((section) => section.value === String(current.section)) ? { ...current, section: "" } : current);
+    };
     const cached = cachedFilterOptions(filterOptionsCacheRef.current.sections, cacheKey);
     if (cached) {
-      setMasterOptions((curr) => ({ ...curr, sections: cached }));
-      setSectionsLoading(false);
-      return;
+      applySections(cached); setSectionsLoading(false); finishRequest("sections", controller);
+      return () => controller.abort();
     }
-    const controller = beginRequest("sections");
     setSectionsLoading(true);
     const params = {};
-    if (groupId) params.groupId = groupId;
-    if (boardId) params.boardId = boardId;
-    if (academicYearId) params.academicYearId = academicYearId;
-    if (academicLevelId) params.academicLevelId = academicLevelId;
-    apiClient.get(REPORTS_API.filters.sections, {
-      params,
+    if (scope.groupId) params.groupId = scope.groupId;
+    if (scope.boardId) params.boardId = scope.boardId;
+    if (scope.academicYearId) params.academicYearId = scope.academicYearId;
+    if (scope.academicLevelId) params.academicLevelId = scope.academicLevelId;
+    getReportSections(params, {
       signal: controller.signal,
       skipGlobalLoader: true,
     }).then((res) => {
       if (controller.signal.aborted) return;
-      const sections = activeFilterOptions(res.data, ["sections", "Sections"], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
+      const responseData = res?.data;
+      if (responseData?.success === false || responseData?.Success === false) throw new Error(responseData.message || responseData.Message || "Unable to load sections.");
+      const rows = collection(responseData, ["sections", "Sections"]).filter((row) => {
+        if (flagIsFalse(read(row, "isActive", "IsActive")) || flagIsTrue(read(row, "isDeleted", "IsDeleted")) || String(read(row, "status", "Status") || "").toLowerCase() === "deleted") return false;
+        return Object.entries(scope).every(([key, expected]) => {
+          const actual = read(row, key, key[0].toUpperCase() + key.slice(1));
+          return !expected || actual == null || positiveId(actual) === expected;
+        });
+      });
+      const sections = activeFilterOptions(rows, [], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "name", "Name"]);
       cacheFilterOptions(filterOptionsCacheRef.current.sections, cacheKey, sections);
-      setMasterOptions((curr) => ({ ...curr, sections }));
-    }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Sections.");
+      applySections(sections);
+    }).catch((error) => {
+      if (!controller.signal.aborted && !isCanceledRequest(error)) {
+        const message = getApiErrorMessage(error) || "Failed to load Sections.";
+        setSectionsError(message); setToast(message);
+      }
     }).finally(() => {
       if (!controller.signal.aborted) setSectionsLoading(false);
       finishRequest("sections", controller);
     });
-  }, [beginRequest, filters.board, filters.group, filters.level, filters.year, finishRequest]);
+    return () => controller.abort();
+  }, [beginRequest, finishRequest, filters.campus, filters.board, filters.year, filters.level, filters.group, selectedCampusId, selectedCampus, selectedBoardId, selectedBoard, selectedAcademicYearId, selectedAcademicYear]);
 
   const availableCampuses = useMemo(() => {
     const list = (activeCampuses && activeCampuses.length > 0)
@@ -1020,7 +1042,7 @@ export default function ReportsPage() {
     if (rawCampusId) {
       setFilters((prev) => {
         if (prev.campus === String(rawCampusId)) return prev;
-        return { ...prev, campus: String(rawCampusId) };
+        return { ...prev, campus: String(rawCampusId), group: "", section: "" };
       });
     }
   }, [selectedCampusId, selectedCampus]);
@@ -1098,14 +1120,14 @@ export default function ReportsPage() {
     }
 
     if (match) {
-      setFilters((prev) => (prev.year === String(match.value) ? prev : { ...prev, year: String(match.value) }));
+      setFilters((prev) => (prev.year === String(match.value) ? prev : { ...prev, year: String(match.value), group: "", section: "" }));
     } else if (availableYears.length > 0 && filters.board) {
       const stillValid = availableYears.some((y) => String(y.value) === String(filters.year));
       if (!stillValid) {
-        setFilters((prev) => ({ ...prev, year: String(availableYears[0].value) }));
+        setFilters((prev) => ({ ...prev, year: String(availableYears[0].value), group: "", section: "" }));
       }
     } else if (rawYearId) {
-      setFilters((prev) => (prev.year === String(rawYearId) ? prev : { ...prev, year: String(rawYearId) }));
+      setFilters((prev) => (prev.year === String(rawYearId) ? prev : { ...prev, year: String(rawYearId), group: "", section: "" }));
     }
   }, [selectedAcademicYearId, selectedAcademicYear, availableYears, filters.board, filters.year]);
 
@@ -1139,21 +1161,21 @@ export default function ReportsPage() {
     },
     {
       name: "group",
-      label: groupsLoading ? "Group (Loading...)" : "Group",
+      label: groupsLoading ? "Group (Loading...)" : groupsError ? "Group (Unable to load)" : !masterOptions.groups.length ? "Group (No active groups)" : "Group",
       type: "select",
       options: [{ value: "", label: "All Groups" }, ...masterOptions.groups],
       disabled: groupsLoading,
     },
     {
       name: "section",
-      label: sectionsLoading ? "Section (Loading...)" : "Section",
+      label: sectionsLoading ? "Section (Loading...)" : sectionsError ? "Section (Unable to load)" : !masterOptions.sections.length ? "Section (No sections available)" : "Section",
       type: "select",
       options: [{ value: "", label: "All Sections" }, ...masterOptions.sections],
       disabled: sectionsLoading,
     },
     { name: "from", label: "From Date", type: "date" },
     { name: "to", label: "To Date", type: "date" },
-  ], [availableCampuses, availableBoards, availableYears, boardsLoading, groupsLoading, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
+  ], [availableCampuses, availableBoards, availableYears, boardsLoading, groupsLoading, groupsError, sectionsError, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
 
   const handleFilterChange = (name, value) => {
     setReportGenerated(false);
@@ -1168,7 +1190,7 @@ export default function ReportsPage() {
       if (name === "board") {
         Object.assign(next, { level: "", group: "", section: "" });
       }
-      if (name === "level") {
+      if (name === "level" || name === "year") {
         Object.assign(next, { group: "", section: "" });
       }
       if (name === "group") {
@@ -1181,8 +1203,7 @@ export default function ReportsPage() {
   const loadDetailData = useCallback(async (cardKey, activeFilters = null) => {
     const card = summaryCardConfig.find((c) => c.key === cardKey);
     if (!card) return;
-    const endpoint = REPORTS_API.details[card.key] || REPORTS_API.details[card.reportType];
-    if (!endpoint) return;
+    const apiFn = DETAIL_API_MAP[card.key] || DETAIL_API_MAP[card.reportType];
 
     setSelectedCardKey(cardKey);
     setDetailLoading(true);
@@ -1191,7 +1212,7 @@ export default function ReportsPage() {
     setDetailSearch("");
     try {
       const params = buildReportQuery(activeFilters || filters);
-      const res = await apiClient.get(endpoint, { params });
+      const res = apiFn ? await apiFn(params) : await apiClient.get(`/api/v1/reports/details/${card.reportType}`, { params });
       const rawList = res.data?.details || res.data?.results || res.data?.toppers || res.data?.items || (Array.isArray(res.data) ? res.data : []);
       setDetailData(rawList);
     } catch (err) {
@@ -1203,12 +1224,13 @@ export default function ReportsPage() {
   }, [filters]);
 
   const loadAuditLogs = useCallback(async (customFilters = null) => {
+    auditRequested.current = true;
     setAuditLogLoading(true);
     setAuditLogError("");
     setAuditLogPage(1);
     try {
       const params = buildReportQuery(customFilters || filters);
-      const res = await apiClient.get(REPORTS_API.details.auditLogs, { params });
+      const res = await getAuditLogs(params);
       const list = res.data?.records || res.data?.details || (Array.isArray(res.data) ? res.data : []);
       setAuditLogData(list);
     } catch (err) {
@@ -1218,6 +1240,12 @@ export default function ReportsPage() {
       setAuditLogLoading(false);
     }
   }, [filters]);
+
+  useEffect(() => {
+    const previous = previousMainTab.current;
+    previousMainTab.current = activeMainTab;
+    if (activeMainTab === "auditLogs" && previous !== activeMainTab && auditLogData.length === 0) loadAuditLogs();
+  }, [activeMainTab, auditLogData.length, loadAuditLogs]);
 
   const filteredAuditLogs = useMemo(() => {
     if (!Array.isArray(auditLogData)) return [];
@@ -1255,7 +1283,7 @@ export default function ReportsPage() {
     setPreviewFile(null);
     try {
       const params = buildReportQuery(activeFilters);
-      const res = await apiClient.get(REPORTS_API.dashboard, { params });
+      const res = await getReportsDashboard(params);
       setDashboardData(res.data);
       setReportGenerated(true);
       loadDetailData(selectedCardKey || "dueFees", activeFilters);
@@ -1270,9 +1298,10 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!hasAutoGeneratedRef.current && availableYears.length > 0 && filters.year) {
       hasAutoGeneratedRef.current = true;
+      if (activeMainTab === "auditLogs" && auditRequested.current) return;
       generateReport();
     }
-  }, [availableYears, filters.year, generateReport]);
+  }, [activeMainTab, availableYears, filters.year, generateReport]);
 
   const resetReports = () => {
     const defaultFilters = {
@@ -1321,11 +1350,9 @@ export default function ReportsPage() {
         exportCsv(rows, ["Metric", "Value"], `Reports-Overview-${new Date().toISOString().slice(0, 10)}.csv`);
         setToast("Overview CSV exported successfully.");
       } else {
-        const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-        const res = await apiClient.get(endpoint, {
-          params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-          responseType: "blob",
-        });
+        const res = format === "pdf"
+          ? await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters))
+          : await exportReportExcel(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
         const blob = responseBlob(res);
         const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
         downloadBlob(blob, filename);
@@ -1342,11 +1369,9 @@ export default function ReportsPage() {
     setPreviewing(format);
     setPdfPreviewLoaded(false);
     try {
-      const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-      const res = await apiClient.get(endpoint, {
-        params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-        responseType: "blob",
-      });
+      const res = format === "pdf"
+        ? await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters))
+        : await exportReportExcel(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
       const blob = responseBlob(res);
       const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       const file = { blob, filename, format, title: "Reports Overview" };
@@ -1362,10 +1387,7 @@ export default function ReportsPage() {
   const printBackendReport = async () => {
     try {
       setToast("Preparing document for printing...");
-      const res = await apiClient.get(REPORTS_API.exportPdf, {
-        params: { ...buildReportQuery(filters), reportType: OVERVIEW_REPORT_TYPE },
-        responseType: "blob",
-      });
+      const res = await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
       const blob = responseBlob(res);
       const url = URL.createObjectURL(blob);
       const iframe = document.createElement("iframe");
@@ -1404,11 +1426,9 @@ export default function ReportsPage() {
     if (exportingCards[reqKey]) return;
     setExportingCards((prev) => ({ ...prev, [reqKey]: true }));
     try {
-      const endpoint = format === "pdf" ? REPORTS_API.exportPdf : REPORTS_API.exportExcel;
-      const res = await apiClient.get(endpoint, {
-        params: { ...buildReportQuery(filters), reportType: card.reportType },
-        responseType: "blob",
-      });
+      const res = format === "pdf"
+        ? await exportReportPdf(card.reportType, buildReportQuery(filters))
+        : await exportReportExcel(card.reportType, buildReportQuery(filters));
       const blob = responseBlob(res);
       const filename = responseFilename(res, `${card.reportType}-report-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       downloadBlob(blob, filename);
@@ -1467,9 +1487,6 @@ export default function ReportsPage() {
           className={`reports-tab ${activeMainTab === "auditLogs" ? "is-active" : ""}`}
           onClick={() => {
             setActiveMainTab("auditLogs");
-            if (auditLogData.length === 0) {
-              loadAuditLogs();
-            }
           }}
         >
           Audit Logs
@@ -1514,7 +1531,7 @@ export default function ReportsPage() {
             </div>
             <div className="reports-detail-search-bar">
               <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Search size={14} style={{ position: "absolute", left: "10px", color: "var(--cms-muted)", pointerEvents: "none" }} />
+                <ThreeDIcon name="search" size={14} style={{ position: "absolute", left: "10px", pointerEvents: "none" }} />
                 <input
                   type="text"
                   className="reports-search-input"
@@ -1538,16 +1555,13 @@ export default function ReportsPage() {
                 disabled={filteredAuditLogs.length === 0}
                 title="Export audit logs to CSV"
               >
-                <FileText size={13} /> CSV
+                <ThreeDIcon name="pdf" size={13} /> CSV
               </button>
             </div>
           </div>
 
           {auditLogLoading ? (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-              <div className="cms-spinner" style={{ margin: "0 auto 12px" }} />
-              <p>Loading audit trail records...</p>
-            </div>
+            <SkeletonTable columns={9} rows={5} />
           ) : auditLogError ? (
             <div style={{ padding: "30px 20px", textAlign: "center", color: "#dc2626" }}>
               <AlertCircle size={24} style={{ margin: "0 auto 8px" }} />
@@ -1638,19 +1652,19 @@ export default function ReportsPage() {
                 <Eye size={14} /> {previewing === "pdf" ? "Loading PDF..." : "Review PDF"}
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => previewReport("excel")} disabled={previewing === "excel"}>
-                <Eye size={14} /> {previewing === "excel" ? "Loading Excel..." : "Review Excel"}
+                <ThreeDIcon name="view" size={14} /> {previewing === "excel" ? "Loading Excel..." : "Review Excel"}
               </button>
               <button className="cms-btn cms-btn-primary" type="button" onClick={() => exportOverview("pdf")} disabled={Boolean(exportingOverview)}>
-                <Download size={14} /> {exportingOverview === "pdf" ? "Exporting..." : "Export PDF"}
+                <ThreeDIcon name="download" size={14} /> {exportingOverview === "pdf" ? "Exporting..." : "Export PDF"}
               </button>
               <button className="cms-btn cms-btn-primary" type="button" onClick={() => exportOverview("excel")} disabled={Boolean(exportingOverview)}>
-                <FileSpreadsheet size={14} /> {exportingOverview === "excel" ? "Exporting..." : "Export Excel"}
+                <ThreeDIcon name="excel" size={14} /> {exportingOverview === "excel" ? "Exporting..." : "Export Excel"}
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => exportOverview("csv")} disabled={Boolean(exportingOverview)}>
-                <FileText size={14} /> CSV
+                <ThreeDIcon name="pdf" size={14} /> CSV
               </button>
               <button className="cms-btn cms-btn-ghost" type="button" onClick={printBackendReport}>
-                <Printer size={14} /> Print
+                <ThreeDIcon name="print" size={14} /> Print
               </button>
             </div>
           </div>
@@ -1699,7 +1713,7 @@ export default function ReportsPage() {
                       }}
                       disabled={Boolean(exportingCards[`${key}-pdf`])}
                     >
-                      <Download size={12} /> PDF
+                      <ThreeDIcon name="download" size={12} /> PDF
                     </button>
                     <button
                       className="cms-btn cms-btn-ghost"
@@ -1711,148 +1725,12 @@ export default function ReportsPage() {
                       }}
                       disabled={Boolean(exportingCards[`${key}-excel`])}
                     >
-                      <FileSpreadsheet size={12} /> Excel
+                      <ThreeDIcon name="excel" size={12} /> Excel
                     </button>
                   </div>
                 </article>
               );
             })}
-          </div>
-
-          {/* Intermediate Board Compliance & Exam Eligibility Norms */}
-          <section className="reports-compliance-section" style={{ marginTop: "24px" }}>
-            <div className="reports-compliance-banner-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "16px", fontWeight: 700 }}>
-                <ShieldCheck size={20} style={{ color: "#2563eb" }} />
-                Board Compliance &amp; Exam Eligibility (BIEAP / TGBIE Norms)
-              </h3>
-              <p style={{ margin: "4px 0 0", fontSize: "12px", color: "var(--cms-muted)" }}>
-                Official 75% attendance condonation threshold &amp; fee clearance status for IPE Hall Ticket dispatch
-              </p>
-            </div>
-            <div className="reports-compliance-grid" style={{ marginTop: "12px" }}>
-              <div className="reports-compliance-card tone-success">
-                <span>Board Exam Eligible (&ge;75%)</span>
-                <strong>{dashboardData.attendanceEligibleCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-warning">
-                <span>Condonation Range (65-74.9%)</span>
-                <strong>{dashboardData.attendanceCondonationCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-danger">
-                <span>Attendance Detained (&lt;65%)</span>
-                <strong>{dashboardData.attendanceDetainedCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-blue">
-                <span>Hall Ticket Clearance (No Dues)</span>
-                <strong>{dashboardData.studentsClearedCount ?? 0} Students</strong>
-              </div>
-              <div className="reports-compliance-card tone-warning">
-                <span>Pending Fee Defaulters</span>
-                <strong>{dashboardData.studentsWithDuesCount ?? 0} Students</strong>
-              </div>
-            </div>
-          </section>
-
-          {/* Visual Analytics Trends */}
-          <div className="reports-charts-container" style={{ marginTop: "24px" }}>
-            {/* Monthly Admissions Intake Bar Chart */}
-            <div className="cms-card reports-chart-card" style={{ padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--cms-heading, #172844)" }}>
-                    Monthly Admissions Intake
-                  </h4>
-                  <span style={{ fontSize: "12px", color: "var(--cms-muted, #687791)" }}>
-                    Enrollment volume trend across academic cycles
-                  </span>
-                </div>
-                <span className="reports-badge reports-badge-info" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  <TrendingUp size={12} /> {dashboardData.admissions} Total
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "240px" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={
-                      dashboardData.admissionsVsTarget?.length > 0
-                        ? dashboardData.admissionsVsTarget
-                        : [{ label: "Current", value: dashboardData.admissions }]
-                    }
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                      formatter={(val) => [`${val} Admissions`, "Intake"]}
-                    />
-                    <Bar dataKey="value" fill="#2563eb" radius={[6, 6, 0, 0]} name="Admissions" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Student Attendance Rate with 75% Board Threshold */}
-            <div className="cms-card reports-chart-card" style={{ padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <div>
-                  <h4 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "var(--cms-heading, #172844)" }}>
-                    Student Attendance Rate vs Board Threshold
-                  </h4>
-                  <span style={{ fontSize: "12px", color: "var(--cms-muted, #687791)" }}>
-                    Minimum 75% required for IPE Board Exam hall ticket
-                  </span>
-                </div>
-                <span
-                  className={`reports-badge ${
-                    (dashboardData.attendance || 0) >= 75 ? "reports-badge-success" : "reports-badge-warning"
-                  }`}
-                >
-                  Avg: {(dashboardData.attendance || 0).toFixed(1)}%
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "240px" }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={
-                      dashboardData.attendanceTrend?.length > 0
-                        ? dashboardData.attendanceTrend
-                        : [
-                            { label: "Cycle 1", value: dashboardData.attendance || 85 },
-                            { label: "Cycle 2", value: Math.max(0, (dashboardData.attendance || 85) - 3) },
-                            { label: "Current", value: dashboardData.attendance || 85 },
-                          ]
-                    }
-                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient id="attendanceGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6b7280" }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} unit="%" />
-                    <Tooltip
-                      contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                      formatter={(val) => [`${Number(val).toFixed(1)}%`, "Attendance"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#059669"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#attendanceGradient)"
-                      name="Attendance %"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </div>
 
           {/* Interactive In-Page Drilldown Table */}
@@ -1887,12 +1765,12 @@ export default function ReportsPage() {
             <>
               {pdfPreviewLoaded ? (
                 <button className="cms-btn cms-btn-ghost" type="button" onClick={printBackendReport}>
-                  <Printer size={15} /> Print PDF
+                  <ThreeDIcon name="print" size={15} /> Print PDF
                 </button>
               ) : null}
               {pdfPreviewLoaded ? (
                 <button className="cms-btn cms-btn-primary" type="button" onClick={() => downloadBlob(previewFile.blob, previewFile.filename)}>
-                  <Download size={15} /> Download PDF
+                  <ThreeDIcon name="download" size={15} /> Download PDF
                 </button>
               ) : null}
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => setPreviewFile(null)}>
@@ -1929,7 +1807,7 @@ export default function ReportsPage() {
           }
         >
           <div className="reports-excel-preview">
-            <table className="reports-top-students">
+            <PaginatedTable className="reports-top-students">
               <thead>
                 <tr>
                   {previewFile.columns.map((col) => (
@@ -1946,7 +1824,7 @@ export default function ReportsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </Modal>
       ) : null}

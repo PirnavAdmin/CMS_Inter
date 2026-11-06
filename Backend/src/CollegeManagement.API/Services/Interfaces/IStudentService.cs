@@ -112,6 +112,7 @@ namespace CollegeManagement.API.Services
         // =========================================================
 
         Task<StudentPhotoUploadResultDto> UploadPhotoAsync(int studentId, IFormFile file, CancellationToken ct = default);
+        Task<bool> RemovePhotoAsync(int studentId, CancellationToken ct = default);
         Task<StudentDocumentUploadResultDto> UploadDocumentAsync(int studentId, string documentType, IFormFile file, CancellationToken ct = default);
         Task<bool> ResetPasswordAsync(
             int studentId);

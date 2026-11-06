@@ -9,8 +9,9 @@ namespace CollegeManagement.API.DTOs.Staff
         [Required(ErrorMessage = "Staff ID is required.")]
         public int StaffId { get; set; }
 
-        [Required(ErrorMessage = "Subject ID is required.")]
         public int SubjectId { get; set; }
+
+        public string? SubjectName { get; set; }
 
         public int? AcademicYearId { get; set; }
 

@@ -55,13 +55,19 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
+            string normalizedStaffType = staffType ?? "";
+            if (normalizedStaffType.Equals("NonTeaching", StringComparison.OrdinalIgnoreCase))
+            {
+                normalizedStaffType = "Non-Teaching";
+            }
+
             var conn = await GetOpenConnectionAsync();
             var designations = await conn.QueryAsync<DesignationResponseDto>(
                 "sp_GetDesignations",
                 new
                 {
                     p_IncludeInactive = includeInactive ? 1 : 0,
-                    p_StaffType = staffType ?? "",
+                    p_StaffType = normalizedStaffType,
                     p_DepartmentId = departmentId ?? 0,
                     p_CampusId = campusId
                 },
@@ -89,11 +95,29 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DesignationResponseDto?> GetDtoByIdAsync(int id)
         {
-            var conn = await GetOpenConnectionAsync();
-            return await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
-                "sp_GetDesignationById",
-                new { p_DesignationId = id },
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
+                    "sp_GetDesignationById",
+                    new { p_DesignationId = id, p_CampusId = (int?)null },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                var desig = await _context.Designations.FindAsync(id);
+                if (desig == null) return null;
+                return new DesignationResponseDto
+                {
+                    Id = desig.Id,
+                    Name = desig.Name,
+                    DepartmentId = desig.DepartmentId,
+                    StaffType = desig.StaffType,
+                    IsActive = desig.IsActive,
+                    CreatedAt = desig.CreatedAt,
+                    UpdatedAt = desig.UpdatedAt
+                };
+            }
         }
 
         public async Task<Designation?> GetByNameAsync(string name, int? campusId = null)

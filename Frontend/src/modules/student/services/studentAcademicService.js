@@ -195,7 +195,7 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
     if (!params[key]) delete params[key];
   });
 
-  const examinationEndpoint = apiEndpoints.examinations.getAll;
+  const examinationEndpoint = studentApiEndpoints.examinations.list;
   const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
   const candidates = [];
   let previousPage = "";
@@ -216,11 +216,11 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
   const results = await Promise.all(visible.map(async (exam) => {
     const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
-    const detailResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`);
+    const detailResponse = await apiClient.get(studentApiEndpoints.examinations.getById(examinationId));
     const detail = getPayload(detailResponse.data) || {};
     let schedules = detail.schedules;
     if (!Array.isArray(schedules) || !schedules.length) {
-      const scheduleResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`);
+      const scheduleResponse = await apiClient.get(studentApiEndpoints.examinations.schedules(examinationId));
       schedules = getPayload(scheduleResponse.data);
     }
     const applicableSchedules = rows(schedules).filter(inStudentScope);
@@ -231,27 +231,38 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
 };
 
 export const getStudentAttendance = async (studentId, fromDate, toDate) => {
-  const parsedFrom = fromDate ? new Date(fromDate) : new Date();
-  const month = Number.isInteger(parsedFrom.getMonth()) ? parsedFrom.getMonth() + 1 : 0;
-  const year = parsedFrom.getFullYear() || new Date().getFullYear();
-
+  const start = String(fromDate || toDate || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const end = String(toDate || fromDate || start).slice(0, 10);
+  const startYear = Number(start.slice(0, 4));
+  const endYear = Number(end.slice(0, 4));
   try {
-    const response = await apiClient.get(`/api/v1/attendance/student/${studentId}/daily-logs`, {
-      params: { month, year },
-      skipGlobalLoader: true,
-    });
-    const payload = getPayload(response.data);
-    const rows = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.records ?? [];
-    if (Array.isArray(rows) && rows.length > 0) {
-      return rows.map((r) => ({
-        ...r,
-        attendanceDate: String(r.date || r.attendanceDate || "").slice(0, 10),
-        session: r.sessionName || r.session,
-        status: r.status,
-      }));
+    if (/^\d{4}-\d{2}-\d{2}$/.test(start) && /^\d{4}-\d{2}-\d{2}$/.test(end) && startYear <= endYear) {
+      const years = Array.from({ length: endYear - startYear + 1 }, (_, index) => startYear + index);
+      const responses = await Promise.all(years.map((year) => apiClient.get(studentApiEndpoints.attendance.dailyLogs(studentId), {
+        params: { month: 0, year },
+        skipGlobalLoader: true,
+      })));
+      const records = responses.flatMap((response) => {
+        if (response.data?.success === false || response.data?.Success === false || response.data?.status === false || response.data?.Status === false) {
+          throw new Error(response.data.message || response.data.Message || "Unable to load attendance records.");
+        }
+        const payload = getPayload(response.data);
+        const rows = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.records ?? payload?.Records ?? payload?.$values ?? [];
+        if (!Array.isArray(rows)) throw new Error("The attendance API returned an invalid response.");
+        return rows.map((row) => {
+          const date = String(row.date ?? row.Date ?? row.attendanceDate ?? row.AttendanceDate ?? "").slice(0, 10);
+          return {
+            ...row,
+            attendanceDate: date,
+            sessionName: row.sessionName ?? row.SessionName ?? row.session ?? row.Session,
+            status: row.status ?? row.Status,
+          };
+        }).filter((row) => row.attendanceDate >= start && row.attendanceDate <= end);
+      });
+      if (records.length) return records;
     }
-  } catch {
-    // Graceful fallback to search endpoint if daily-logs is unavailable
+  } catch (error) {
+    if (![404, 405, 501].includes(error?.response?.status)) throw error;
   }
 
   const response = await apiClient.get(studentApiEndpoints.attendance.search, {
@@ -261,21 +272,29 @@ export const getStudentAttendance = async (studentId, fromDate, toDate) => {
   const list = (value) => {
     const payload = getPayload(value);
     return Array.isArray(payload) ? payload
-      : payload?.records ?? payload?.items ?? payload?.attendanceRecords ?? payload?.data ?? [];
+      : payload?.records ?? payload?.Records ?? payload?.items ?? payload?.Items ?? payload?.attendanceRecords ?? payload?.AttendanceRecords ?? payload?.$values ?? payload?.data ?? payload?.Data ?? [];
   };
-  return list(response.data);
+  const records = list(response.data);
+  if (!Array.isArray(records)) throw new Error("The attendance API returned an invalid response.");
+  return records;
 };
 
 export const getPublishedStudentResults = async (student) => {
   const studentId = Number(student?.studentId);
   if (!Number.isInteger(studentId) || studentId <= 0) throw new Error('Student ID is unavailable.');
   const response = await apiClient.get(studentApiEndpoints.results.published, { params: { studentId } });
-  if (response.data?.success === false) throw new Error(response.data.message || 'Unable to load published results.');
+  if (response.data?.success === false || response.data?.Success === false) {
+    throw new Error(response.data.message || response.data.Message || 'Unable to load published results.');
+  }
   const data = getPayload(response.data);
-  const rows = Array.isArray(data) ? data : data?.items ?? data?.Items ?? data?.results ?? data?.Results;
+  const rows = Array.isArray(data)
+    ? data
+    : data?.items ?? data?.Items ?? data?.records ?? data?.Records ?? data?.results ?? data?.Results ?? data?.$values;
   if (!Array.isArray(rows)) throw new Error('The server returned an invalid published results list.');
-  if (rows.some((row) => (row.studentId ?? row.StudentId) != null && String(row.studentId ?? row.StudentId) !== String(studentId))) throw new Error('The result list does not match your student profile.');
-  return rows;
+  return rows.filter((row) => {
+    const resultStudentId = row.studentId ?? row.StudentId;
+    return resultStudentId == null || String(resultStudentId) === String(studentId);
+  });
 };
 
 export const getStudentResult = async (student, examId) => {
@@ -294,6 +313,57 @@ export const getStudentResult = async (student, examId) => {
   });
   if (response.status === 404) return null;
   return getPayload(response.data);
+};
+
+export const getPublishedStudentResultMemo = async (student, examId) => {
+  const studentId = Number(student?.studentId);
+  const examinationId = Number(examId);
+  if (!Number.isInteger(studentId) || studentId <= 0) throw new Error("Student ID is unavailable.");
+  if (!Number.isInteger(examinationId) || examinationId <= 0) throw new Error("Examination ID is unavailable.");
+  const response = await apiClient.get(studentApiEndpoints.results.publishedMemo(examinationId), {
+    params: { studentId },
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 404,
+  });
+  if (response.status === 404) return null;
+  if (response.data?.success === false) throw new Error(response.data.message || "Unable to load published marks.");
+  return getPayload(response.data);
+};
+
+export const addStudentResultSubjectGrades = async (memo, student, examId) => {
+  const subjects = memo?.subjects ?? memo?.Subjects ?? [];
+  if (!subjects.length || subjects.every((subject) => subject.grade || subject.Grade)) return memo;
+
+  const result = await getStudentResult(student, examId);
+  if (!result) return memo;
+  const resultStudentId = result.studentId ?? result.StudentId;
+  const resultExamId = result.examId ?? result.ExamId ?? result.examinationId ?? result.ExaminationId;
+  if (resultStudentId != null && String(resultStudentId) !== String(student.studentId)) {
+    throw new Error("The subject grades do not match your student profile.");
+  }
+  if (resultExamId != null && String(resultExamId) !== String(examId)) {
+    throw new Error("The subject grades do not match this examination.");
+  }
+
+  const resultSubjects = result.subjects ?? result.Subjects ?? [];
+  const readSubject = (subject, key) => subject?.[key] ?? subject?.[key[0].toUpperCase() + key.slice(1)];
+  const matchesSubject = (memoSubject, resultSubject) => {
+    const memoId = readSubject(memoSubject, "subjectId");
+    const resultId = readSubject(resultSubject, "subjectId");
+    if (memoId != null && resultId != null) return String(memoId) === String(resultId);
+    const memoCode = readSubject(memoSubject, "subjectCode");
+    const resultCode = readSubject(resultSubject, "subjectCode");
+    if (memoCode && resultCode) return String(memoCode).trim().toLowerCase() === String(resultCode).trim().toLowerCase();
+    const memoName = readSubject(memoSubject, "subjectName");
+    const resultName = readSubject(resultSubject, "subjectName");
+    return Boolean(memoName && resultName) && String(memoName).trim().toLowerCase() === String(resultName).trim().toLowerCase();
+  };
+  const updatedSubjects = subjects.map((subject) => {
+    if (subject.grade || subject.Grade) return subject;
+    const match = resultSubjects.find((resultSubject) => matchesSubject(subject, resultSubject));
+    const grade = match && readSubject(match, "grade");
+    return grade ? { ...subject, grade } : subject;
+  });
+  return memo.Subjects ? { ...memo, Subjects: updatedSubjects } : { ...memo, subjects: updatedSubjects };
 };
 
 const timetableValue = (row, key) => row?.[key] ?? row?.[key[0].toUpperCase() + key.slice(1)];

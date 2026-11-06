@@ -36,6 +36,16 @@
 .promotion-card .cms-card-head {
   align-items: flex-start;
 }
+.promotion-page .promotion-setup-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+}
+.promotion-setup-head > div { display: contents; }
+.promotion-setup-head h2 { grid-column: 1; grid-row: 1; }
+.promotion-setup-head > .cms-btn { grid-column: 2; grid-row: 1; white-space: nowrap; width: auto; margin: 0; }
+.promotion-setup-head p { grid-column: 1 / -1; grid-row: 2; margin: 0; }
 .promotion-context-wrap {
   padding: 8px 20px 12px;
 }
@@ -1109,8 +1119,14 @@
 }
 @media (max-width: 900px) {
   .promotion-context-row {
+    display: grid;
     grid-template-columns: minmax(0, 1fr) 32px minmax(0, 1fr);
   }
+  .promotion-context-board,
+  .promotion-context-year { flex-wrap: wrap; }
+  .promotion-context-label,
+  .promotion-context-board strong,
+  .promotion-context-year strong { white-space: normal; overflow-wrap: anywhere; }
   .promotion-context-board {
     grid-column: 1 / -1;
   }
@@ -1169,7 +1185,12 @@
   }
   .promotion-tabs {
     width: 100%;
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
   }
+  .promotion-tabs button { min-width: 0; white-space: normal; padding: 8px; }
   .promotion-allocation-tabs {
     width: calc(100% - 28px);
     margin: 12px 14px 10px;

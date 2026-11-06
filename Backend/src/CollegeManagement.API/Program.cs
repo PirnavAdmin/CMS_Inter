@@ -104,6 +104,8 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new FlexibleDecimalJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new FlexibleNullableDecimalJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 #endregion
@@ -155,8 +157,8 @@ builder.Services.AddSingleton<DatabaseContext>();
 
 builder.Services.AddScoped<IDbConnection>(sp =>
 {
-    var config = sp.GetRequiredService<IConfiguration>();
-    return new MySqlConnection(config.GetConnectionString("DefaultConnection"));
+    var context = sp.GetRequiredService<AppDbContext>();
+    return context.Database.GetDbConnection();
 });
 
 builder.Services.AddMemoryCache();
@@ -199,7 +201,6 @@ builder.Services.AddScoped<IStaffSettingsService, StaffSettingsService>();
 builder.Services.AddScoped<IEvaluationRepository, EvaluationRepository>();
 builder.Services.AddScoped<IStaffSubjectAllocationRepository, StaffSubjectAllocationRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
-builder.Services.AddScoped<IMasterGroupRepository, MasterGroupRepository>();
 builder.Services.AddScoped<IGroupRepository, GroupRepository>();
 builder.Services.AddScoped<CollegeManagement.API.Repositories.IProgramRepository, CollegeManagement.API.Repositories.ProgramRepository>();
 builder.Services.AddScoped<ISectionRepository, SectionRepository>();
@@ -305,9 +306,10 @@ builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 builder.Services.AddScoped<IBoardExportService, BoardExportService>();
 builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
+builder.Services.AddScoped<IStaffTransferService, StaffTransferService>();
+builder.Services.AddScoped<IStaffExperienceService, StaffExperienceService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
-builder.Services.AddScoped<IMasterGroupService, MasterGroupService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -517,6 +519,23 @@ if (args.Contains("--test-timetable"))
     return;
 }
 
+if (args.Contains("--deploy-certificate"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var success = await CollegeManagement.API.Tests.CertificateDbDeployer.DeployProceduresAsync(connStr);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-certificate"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.CertificateModuleBackendTester(connStr);
+    var success = await tester.RunAllTestsAsync();
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
 if (args.Contains("--deploy-exam-cell"))
 {
     var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
@@ -678,11 +697,40 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStaticFiles();
 
+var webRootPath = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+if (!Directory.Exists(webRootPath))
+{
+    Directory.CreateDirectory(webRootPath);
+}
+
+var staffPhotosDir = Path.Combine(webRootPath, "uploads", "staff-photos");
+if (!Directory.Exists(staffPhotosDir))
+{
+    Directory.CreateDirectory(staffPhotosDir);
+}
+
+var staffDocsDir = Path.Combine(webRootPath, "uploads", "staff-documents");
+if (!Directory.Exists(staffDocsDir))
+{
+    Directory.CreateDirectory(staffDocsDir);
+}
+
 var uploadsDir = Path.Combine(app.Environment.ContentRootPath, "Uploads");
 if (!Directory.Exists(uploadsDir))
 {
     Directory.CreateDirectory(uploadsDir);
 }
+
+var wwwrootUploads = Path.Combine(webRootPath, "uploads");
+if (Directory.Exists(wwwrootUploads))
+{
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwrootUploads),
+        RequestPath = "/uploads"
+    });
+}
+
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsDir),
@@ -811,66 +859,7 @@ try
 
     try
     {
-        await dbContext.Database.ExecuteSqlRawAsync("DROP PROCEDURE IF EXISTS `sp_GetDashboardTodaysHighlights`;");
-        await dbContext.Database.ExecuteSqlRawAsync(@"CREATE PROCEDURE `sp_GetDashboardTodaysHighlights`(
-            IN p_BoardId INT,
-            IN p_AcademicYearId INT,
-            IN p_TargetDate DATE,
-            IN p_CampusId INT
-        )
-        BEGIN
-            DECLARE v_TargetDate DATE;
-            DECLARE v_AdmissionsToday INT DEFAULT 0;
-            DECLARE v_CertificatesToday INT DEFAULT 0;
-            DECLARE v_ExamsToday INT DEFAULT 0;
-            DECLARE v_BirthdaysToday INT DEFAULT 0;
-
-            SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
-
-            -- Admissions Today
-            SELECT COUNT(*) INTO v_AdmissionsToday
-            FROM `StudentAdmissions` sa 
-            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId)
-              AND (DATE(sa.AdmissionDate) = v_TargetDate OR DATE(sa.CreatedAt) = v_TargetDate)
-              AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
-              AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
-              AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId);
-
-            -- Certificate Requests Today
-            SELECT COUNT(*) INTO v_CertificatesToday
-            FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
-            WHERE (p_CampusId IS NULL OR sa.CampusId = p_CampusId OR s.CampusId = p_CampusId)
-              AND (DATE(c.RequestDate) = v_TargetDate OR DATE(c.CreatedAt) = v_TargetDate OR DATE(c.GeneratedAt) = v_TargetDate OR DATE(c.IssueDate) = v_TargetDate)
-              AND (c.IsActive = 1 OR c.IsActive IS NULL)
-              AND (p_BoardId IS NULL OR COALESCE(sa.BoardId, s.BoardId) = p_BoardId)
-              AND (p_AcademicYearId IS NULL OR COALESCE(sa.AcademicYearId, s.AcademicYearId) = p_AcademicYearId);
-
-            -- Examinations Today
-            SELECT COUNT(*) INTO v_ExamsToday
-            FROM `Examinations` e 
-            WHERE (p_CampusId IS NULL OR e.CampusId = p_CampusId)
-              AND (e.IsActive = 1 OR e.IsActive IS NULL)
-              AND DATE(e.StartDate) <= v_TargetDate AND DATE(e.EndDate) >= v_TargetDate
-              AND (p_BoardId IS NULL OR e.BoardId = p_BoardId)
-              AND (p_AcademicYearId IS NULL OR e.AcademicYearId = p_AcademicYearId);
-
-            -- Birthdays Today
-            SELECT COUNT(*) INTO v_BirthdaysToday
-            FROM `Students` s
-            WHERE (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-              AND MONTH(s.DateOfBirth) = MONTH(v_TargetDate) AND DAY(s.DateOfBirth) = DAY(v_TargetDate)
-              AND (s.IsActive = 1 OR s.IsActive IS NULL)
-              AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-              AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId);
-
-            SELECT 
-                v_AdmissionsToday AS AdmissionsToday,
-                v_CertificatesToday AS CertificateRequestsToday,
-                v_ExamsToday AS ExaminationsToday,
-                v_BirthdaysToday AS BirthdaysToday;
-        END;");
+        // Dashboard SP already deployed in DB - commented out to prevent startup delay
         try
         {
             var colExists = await dbContext.Database.SqlQueryRaw<int>(@"
@@ -880,6 +869,31 @@ try
             {
                 await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeePaymentPlans` ADD COLUMN `UpdatedAt` datetime(6) NULL;");
             }
+
+            // Align Staff table inter-campus transfer columns
+            try
+            {
+                var isTransCol = await dbContext.Database.SqlQueryRaw<int>(@"
+                    SELECT COUNT(*) AS Value FROM information_schema.columns 
+                    WHERE table_schema = DATABASE() AND table_name = 'Staff' AND column_name = 'IsTransferred'").FirstOrDefaultAsync();
+                if (isTransCol == 0)
+                {
+                    try
+                    {
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `IsTransferred` TINYINT(1) NOT NULL DEFAULT 0;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredFromCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredToCampusId` INT NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferStatus` VARCHAR(50) NULL;");
+                        await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Staff` ADD COLUMN `TransferredAt` DATETIME NULL;");
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogWarning(ex, "Failed to align Staff transfer columns.");
+            }
+
             // Align Examination Module tables & columns
             await dbContext.Database.ExecuteSqlRawAsync(@"
                 CREATE TABLE IF NOT EXISTS `ExaminationSubjects` (
@@ -933,6 +947,27 @@ try
                 {
                     await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` ADD COLUMN `IncludedSubjectIds` TEXT NULL;");
                 }
+
+                // Align table collations to utf8mb4_unicode_ci
+                try
+                {
+//                     await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `ExamSchedules` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                try
+                {
+//                     await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Examinations` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                try
+                {
+//                     await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `InvigilatorAssignments` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;");
+                }
+                catch { }
+
+                // Auto-deploy ExaminationModule stored procedures (Commented out: already deployed to database)
             }
             catch (Exception exExamCols)
             {
@@ -1019,27 +1054,7 @@ try
                 catch { }
             }
 
-                        var marksScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "MarksModule", "02_Marks_And_Evaluation_Optimization_Alignments.sql");
-            if (File.Exists(marksScriptPath))
-            {
-                var marksSql = await File.ReadAllTextAsync(marksScriptPath);
-                var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                var matches = spRegex.Matches(marksSql);
-                foreach (System.Text.RegularExpressions.Match match in matches)
-                {
-                    string createBody = match.Groups[1].Value.Trim();
-                    string spName = match.Groups[2].Value;
-                    try
-                    {
-                        await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
-                        await dbContext.Database.ExecuteSqlRawAsync(createBody);
-                    }
-                    catch (Exception batchEx)
-                    {
-                        app.Logger.LogDebug(batchEx, "Notice executing Marks SP {SpName}.", spName);
-                    }
-                }
-            }
+                        // Auto-deploy MarksModule stored procedures (Commented out: already deployed to database)
 
             // Align Results table indexes and unified Stored Procedures
             try
@@ -1068,27 +1083,7 @@ try
                     catch { }
                 }
 
-                var resultScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "ResultModule", "01_Unified_Result_Stored_Procedures.sql");
-                if (File.Exists(resultScriptPath))
-                {
-                    var resultSql = await File.ReadAllTextAsync(resultScriptPath);
-                    var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    var matches = spRegex.Matches(resultSql);
-                    foreach (System.Text.RegularExpressions.Match match in matches)
-                    {
-                        string createBody = match.Groups[1].Value.Trim();
-                        string spName = match.Groups[2].Value;
-                        try
-                        {
-                            await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
-                            await dbContext.Database.ExecuteSqlRawAsync(createBody);
-                        }
-                        catch (Exception batchEx)
-                        {
-                            app.Logger.LogDebug(batchEx, "Notice executing Results SP {SpName}.", spName);
-                        }
-                    }
-                }
+                // Auto-deploy ResultModule stored procedures (Commented out: already deployed to database)
             }
             catch (Exception resEx)
             {
@@ -1134,27 +1129,7 @@ try
                     catch { }
                 }
 
-                var certScriptPath = Path.Combine(app.Environment.ContentRootPath, "Database", "Scripts", "StoredProcedures", "CertificateModule", "01_Unified_Certificate_Stored_Procedures.sql");
-                if (File.Exists(certScriptPath))
-                {
-                    var certSql = await File.ReadAllTextAsync(certScriptPath);
-                    var spRegex = new System.Text.RegularExpressions.Regex(@"(CREATE\s+PROCEDURE\s+`?([a-zA-Z0-9_]+)`?[\s\S]*?\bEND)\s*//", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    var matches = spRegex.Matches(certSql);
-                    foreach (System.Text.RegularExpressions.Match match in matches)
-                    {
-                        string createBody = match.Groups[1].Value.Trim();
-                        string spName = match.Groups[2].Value;
-                        try
-                        {
-                            await dbContext.Database.ExecuteSqlRawAsync(string.Concat("DROP PROCEDURE IF EXISTS `", spName, "`;"));
-                            await dbContext.Database.ExecuteSqlRawAsync(createBody);
-                        }
-                        catch (Exception batchEx)
-                        {
-                            app.Logger.LogDebug(batchEx, "Notice executing Certificate SP {SpName}.", spName);
-                        }
-                    }
-                }
+                // Auto-deploy CertificateModule stored procedures (Commented out: already deployed to database)
             }
             catch (Exception certEx)
             {

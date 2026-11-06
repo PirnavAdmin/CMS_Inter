@@ -26,6 +26,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
+        [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<PeriodResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] int? boardId = null,
@@ -39,6 +40,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(PeriodResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetById(int id)

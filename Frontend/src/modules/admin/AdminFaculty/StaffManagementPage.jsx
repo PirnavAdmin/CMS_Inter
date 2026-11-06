@@ -3,8 +3,10 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } 
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Building2,
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -13,6 +15,7 @@ import {
   Eye,
   FileSpreadsheet,
   GraduationCap,
+  Loader2,
   Mail,
   Pencil,
   Plus,
@@ -31,6 +34,9 @@ import {
   UserCheck,
   Lock,
   KeyRound,
+  Calendar,
+  MapPin,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -43,6 +49,8 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
 import { loadCachedDepartments, loadCachedDesignations } from "../AdminDepartments/DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -141,7 +149,7 @@ export const NON_TEACHING_DESIGNATIONS_SET = new Set([
   "data entry operator",
   "deo",
   "driver",
-  "bus driver",
+  "driver",
   "electrician",
   "plumber",
   "carpenter",
@@ -296,8 +304,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -372,7 +380,7 @@ const seed = [];
 const initialActivities = [];
 
 const read = (key, fallback = []) => fallback;
-const write = () => {};
+const write = () => { };
 const boardOptions = [];
 
 export const normalizeStaffRecord = (raw) => {
@@ -684,6 +692,29 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
   const targetId = selectedCampus.campusId ?? selectedCampus.id;
   const targetName = selectedCampus.campusName ?? selectedCampus.name;
   const targetCode = selectedCampus.campusCode ?? selectedCampus.code;
+
+  if (targetId == null && !targetName && !targetCode) return true;
+
+  // Transferred out of this campus check (so staff transferred out still show up in old campus as transferred)
+  if (targetId != null && staffRecord.transferredFromCampusId != null && String(staffRecord.transferredFromCampusId) === String(targetId)) {
+    return true;
+  }
+
+  // Active or past assigned campuses list (supports multi-campus or transferred staff)
+  const assignments = staffRecord.assignedCampuses || staffRecord.staffCampusAssignments || staffRecord.StaffCampusAssignments;
+  if (Array.isArray(assignments) && assignments.length > 0) {
+    const matchesAssignment = assignments.some((c) => {
+      const cId = c.campusId ?? c.id ?? c.Id;
+      const cCode = c.campusCode ?? c.code ?? c.Code;
+      const cName = c.campusName ?? c.name ?? c.Name;
+      if (targetId != null && cId != null) return String(cId) === String(targetId);
+      if (targetCode && cCode) return String(cCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+      if (targetName && cName) return String(targetName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+      return false;
+    });
+    if (matchesAssignment) return true;
+  }
+
   const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
   const recordId = staffRecord.campusId ?? staffRecord.CampusId ?? recordCampus.campusId ?? recordCampus.id ?? recordCampus.Id;
   const recordName = staffRecord.campusName ?? staffRecord.CampusName ?? recordCampus.campusName ?? recordCampus.name ?? recordCampus.Name;
@@ -707,10 +738,8 @@ export const NON_TEACHING_ROLE_NAMES = [
   "Accountant",
   "Inventory Manager",
   "Examination Cell",
-  "Library / Librarian",
   "Hostel Warden",
-  "Placement Officer",
-  "Bus Driver",
+  "Driver",
   "Attendant",
 ];
 
@@ -1498,7 +1527,7 @@ function getBoardsForCampus(campusObj, allBoardsList = []) {
       if (typeof b === "string") {
         const match = allBoardsList.find(
           (ab) => (ab.name || ab.boardName || "").toLowerCase() === b.toLowerCase() ||
-                  (ab.code || ab.boardCode || "").toLowerCase() === b.toLowerCase()
+            (ab.code || ab.boardCode || "").toLowerCase() === b.toLowerCase()
         );
         return match || { id: b, name: b, boardName: b, code: b, boardCode: b };
       }
@@ -1528,7 +1557,7 @@ function getBoardsForCampus(campusObj, allBoardsList = []) {
       }
       const match = (allBoardsList || []).find(
         (ab) => (ab.name || ab.boardName || "").toLowerCase() === String(b).toLowerCase() ||
-                (ab.code || ab.boardCode || "").toLowerCase() === String(b).toLowerCase()
+          (ab.code || ab.boardCode || "").toLowerCase() === String(b).toLowerCase()
       );
       return {
         id: match?.id || match?.boardId || b,
@@ -1889,7 +1918,7 @@ export function PrincipalCampusBoardAssignment({
           });
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Check assignedCampuses
     if (Array.isArray(values.assignedCampuses) && values.assignedCampuses.length > 0) {
@@ -1961,7 +1990,7 @@ export function PrincipalCampusBoardAssignment({
       const allCampuses = validAssignments.map(a => a.campusName).filter(Boolean);
       const allBoards = [...new Set(validAssignments.flatMap(a => a.boardNames || []).filter(Boolean))];
       const allBoardIds = [...new Set(validAssignments.flatMap(a => a.boardIds || []).map(Number).filter(Boolean))];
-      
+
       setValues(prev => ({
         ...prev,
         campusBoardAssignmentsJson: jsonStr,
@@ -2053,19 +2082,19 @@ export function PrincipalCampusBoardAssignment({
   return (
     <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
+        <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>{values?.role?.toLowerCase() === "principal" ? "Principal Campus & Board Assignments" : "Multi-Campus & Educational Board Allocations"} <b style={{ color: "#ef4444" }}>*</b></strong>
       </div>
-      
+
       {assignments.map((assignment, index) => {
         const selectedCampusObj = campusList.find(c => String(c.id || c.campusId) === String(assignment.campusId)) || {};
         const availableBoards = getBoardsForCampus(selectedCampusObj, boardsList);
-        
+
         return (
           <div key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
             {/* Select Campus */}
             <div className="cms-principal-field" style={{ flex: 1, marginBottom: 0 }}>
               <label>Select Campus</label>
-              <select 
+              <select
                 className="cms-input"
                 value={assignment.campusId || ""}
                 onChange={(e) => {
@@ -2114,8 +2143,8 @@ export function PrincipalCampusBoardAssignment({
 
             {/* Remove Row Button */}
             {assignments.length > 1 && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => removeAssignmentRow(assignment.id)}
                 style={{ marginTop: "24px", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: "6px", cursor: "pointer" }}
                 title="Remove Assignment"
@@ -2164,7 +2193,7 @@ function useStaffTypeOptions(staffType) {
     async function loadOptions() {
       setLoading(true);
       const isTeaching = staffType === "Teaching";
-      const apiStaffType = staffType === "Non-Teaching" ? "NonTeaching" : staffType;
+      const apiStaffType = staffType;
       const targetNorm = String(staffType).toLowerCase().replace(/[-_\s]/g, "");
 
       let deptOpts = [];
@@ -2349,29 +2378,38 @@ function useStaffRoles(staffType) {
     let isMounted = true;
     async function loadRoles() {
       try {
-        const res = await apiClient.get(apiEndpoints.roles?.list || "/api/v1/roles");
+        const queryStaffType = isTeaching ? "Teaching" : "Non-Teaching";
+        const res = await apiClient.get(apiEndpoints.roles?.list || "/api/v1/roles", {
+          params: { staffType: queryStaffType },
+        });
         const data = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
         if (Array.isArray(data) && data.length > 0) {
-          const targetNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
-          const targetNorms = targetNames.map((n) => n.toLowerCase().replace(/[-_\s]/g, ""));
-
-          const matched = data.filter((r) => {
-            const rName = (typeof r === "object" ? r.roleName || r.name : String(r)).toLowerCase().replace(/[-_\s]/g, "");
-            return targetNorms.includes(rName);
+          // Filter only active roles matching requested category
+          const activeRoles = data.filter((r) => {
+            if (!r) return false;
+            if (r.isActive === false || r.status === "Inactive") return false;
+            const st = String(r.staffType || r.StaffType || "").trim().toLowerCase();
+            if (st) {
+              if (isTeaching) {
+                return st === "teaching" || st === "both" || st === "all";
+              } else {
+                return st === "non-teaching" || st === "nonteaching" || st === "both" || st === "all";
+              }
+            }
+            return true;
           });
 
-          if (isMounted && matched.length > 0) {
-            setRoleObjects(matched);
-            const names = matched.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
-            const sortedNames = targetNames.filter((tn) =>
-              names.some((n) => n.toLowerCase().replace(/[-_\s]/g, "") === tn.toLowerCase().replace(/[-_\s]/g, ""))
-            );
-            setRoles(sortedNames.length > 0 ? sortedNames : names);
+          if (isMounted && activeRoles.length > 0) {
+            setRoleObjects(activeRoles);
+            const names = activeRoles
+              .map((r) => (typeof r === "object" ? r.roleName || r.name : String(r)))
+              .filter(Boolean);
+            setRoles(Array.from(new Set(names)));
             return;
           }
         }
       } catch (err) {
-        console.warn("Failed to fetch roles from API, using default role list:", err);
+        console.warn("Failed to fetch roles dynamically from API, falling back to default list:", err);
       }
       if (isMounted) {
         setRoles(defaultList);
@@ -2381,7 +2419,7 @@ function useStaffRoles(staffType) {
     return () => {
       isMounted = false;
     };
-  }, [staffType]);
+  }, [staffType, isTeaching]);
 
   return { roles, roleObjects };
 }
@@ -2683,8 +2721,7 @@ function Field({
     if (name === "role") {
       if (Array.isArray(roleOptions) && roleOptions.length > 0) {
         const liveRoleNames = roleOptions.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
-        const configuredRoleNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
-        return Array.from(new Set([...liveRoleNames, ...configuredRoleNames]));
+        return Array.from(new Set(liveRoleNames));
       }
       return isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
     }
@@ -3199,13 +3236,41 @@ function Steps({ labels, step }) {
   );
 }
 
-function Badge({ value }) {
+function Badge({ value, record, currentCampusId }) {
   if (!value) return null;
   const isCompleted = value === "Completed" || value === "Active" || value === "Teaching";
   const isPending = value === "Pending" || value === "Link Sent" || value === "In Progress";
+  const isTransferred = String(value).toLowerCase().includes("transfer") || 
+    (record && currentCampusId && String(record.transferredFromCampusId) === String(currentCampusId));
   const isInactive = value === "Inactive";
-  const cls = isCompleted ? "status-badge is-active" : isPending ? "status-badge is-warning" : isInactive ? "status-badge is-inactive" : "status-badge";
-  return <span className={`status-badge ${cls}`}>{value}</span>;
+  const cls = isCompleted ? "status-badge is-active" : isTransferred ? "status-badge is-transferred" : isPending ? "status-badge is-warning" : isInactive ? "status-badge is-inactive" : "status-badge";
+  
+  const destName = record?.transferredToCampusName || (record?.transferredToCampusId ? `Campus #${record.transferredToCampusId}` : "");
+  const displayLabel = isTransferred 
+    ? (destName ? `Transferred to ${destName}` : "Transferred") 
+    : value;
+
+  return (
+    <span
+      className={`status-badge ${cls}`}
+      style={isTransferred ? { 
+        background: "#f1f5f9", 
+        color: "#475569", 
+        border: "1px solid #cbd5e1", 
+        fontWeight: "600", 
+        padding: "3px 10px", 
+        borderRadius: "12px", 
+        fontSize: "11px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        whiteSpace: "nowrap"
+      } : undefined}
+    >
+      {isTransferred && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#64748b" }} />}
+      {displayLabel}
+    </span>
+  );
 }
 
 // ----------------------------------------------------------------------
@@ -3545,75 +3610,16 @@ function Dashboard({ records = [], loadingRecords = false }) {
       {isDataLoading ? (
         <StaffDashboardSkeleton />
       ) : (
-      <main className="staff-mock-page">
-        <section className="staff-kpis">
-          {[
-            ["Total Staff", totalCount, totalStaffIcon, "/dashboard/staff/list"],
-            ["Teaching Staff", teachingCount, teachingStaffIcon, "/dashboard/staff/teaching"],
-            ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
-            ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
-            ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
-          ].map(([l, v, icon, to]) => (
-            <article
-              key={l}
-              onClick={() => {
-                if (to === "modal:credentials") {
-                  setCredModalOpen(true);
-                } else {
-                  n(to);
-                }
-              }}
-              title={l === "Credentials Generator" ? "Click to configure employee credentials format and default password" : undefined}
-            >
-              <img className="staff-kpi-icon" src={icon} alt="" aria-hidden="true" width={32} height={32} />
-              <span>
-                {l}
-                <strong>{v}</strong>
-              </span>
-            </article>
-          ))}
-        </section>
-        <section className="staff-dashboard-grid">
-          <article className="staff-panel">
-            <header>
-              <div>
-                <h2>Profile Completion Overview</h2>
-                <p>Live staff profile completion metrics</p>
-              </div>
-            </header>
-            <div className="staff-donut-wrap">
-              <div className="staff-donut" style={{ "--pct": `${pct * 3.6}deg` }}>
-                <span>
-                  <strong>{totalCount}</strong>Total Staff
-                </span>
-              </div>
-              <div>
-                <p>
-                  <i className="done" />
-                  Completed <strong>{completedCount}</strong>
-                </p>
-                <p>
-                  <i />
-                  Pending <strong>{pendingCount}</strong>
-                </p>
-              </div>
-            </div>
-          </article>
-          <article className="staff-panel quick">
-            <header>
-              <div>
-                <h2>Quick Actions</h2>
-                <p>Common staff workflows</p>
-              </div>
-            </header>
+        <main className="staff-mock-page">
+          <section className="staff-kpis">
             {[
-              ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
-              ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
-              ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
-              ["View Pending Submissions", "/dashboard/staff/pending"],
-              ["View All Staff", "/dashboard/staff/list"],
-            ].map(([l, to]) => (
-              <button
+              ["Total Staff", totalCount, totalStaffIcon, "/dashboard/staff/list"],
+              ["Teaching Staff", teachingCount, teachingStaffIcon, "/dashboard/staff/teaching"],
+              ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
+              ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
+              ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
+            ].map(([l, v, icon, to]) => (
+              <article
                 key={l}
                 onClick={() => {
                   if (to === "modal:credentials") {
@@ -3622,14 +3628,73 @@ function Dashboard({ records = [], loadingRecords = false }) {
                     n(to);
                   }
                 }}
+                title={l === "Credentials Generator" ? "Click to configure employee credentials format and default password" : undefined}
               >
-                {l}
-                <ChevronRight />
-              </button>
+                <img className="staff-kpi-icon" src={icon} alt="" aria-hidden="true" width={32} height={32} />
+                <span>
+                  {l}
+                  <strong>{v}</strong>
+                </span>
+              </article>
             ))}
-          </article>
-        </section>
-      </main>
+          </section>
+          <section className="staff-dashboard-grid">
+            <article className="staff-panel">
+              <header>
+                <div>
+                  <h2>Profile Completion Overview</h2>
+                  <p>Live staff profile completion metrics</p>
+                </div>
+              </header>
+              <div className="staff-donut-wrap">
+                <div className="staff-donut" style={{ "--pct": `${pct * 3.6}deg` }}>
+                  <span>
+                    <strong>{totalCount}</strong>Total Staff
+                  </span>
+                </div>
+                <div>
+                  <p>
+                    <i className="done" />
+                    Completed <strong>{completedCount}</strong>
+                  </p>
+                  <p>
+                    <i />
+                    Pending <strong>{pendingCount}</strong>
+                  </p>
+                </div>
+              </div>
+            </article>
+            <article className="staff-panel quick">
+              <header>
+                <div>
+                  <h2>Quick Actions</h2>
+                  <p>Common staff workflows</p>
+                </div>
+              </header>
+              {[
+                ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
+                ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
+                ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
+                ["View Pending Submissions", "/dashboard/staff/pending"],
+                ["View All Staff", "/dashboard/staff/list"],
+              ].map(([l, to]) => (
+                <button
+                  key={l}
+                  onClick={() => {
+                    if (to === "modal:credentials") {
+                      setCredModalOpen(true);
+                    } else {
+                      n(to);
+                    }
+                  }}
+                >
+                  {l}
+                  <ChevronRight />
+                </button>
+              ))}
+            </article>
+          </section>
+        </main>
       )}
       <StaffCredentialsGeneratorModal
         isOpen={credModalOpen}
@@ -3866,10 +3931,15 @@ function StaffList({ records = [], setRecords, forced }) {
   const [designationFilter, setDesignationFilter] = useState("");
   const [staffTypeFilter, setStaffTypeFilter] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [page, setPage] = useState(1);
-  const [size] = useState(5);
+  const [size, setSize] = useState(5);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState(null);
   const [remove, setRemove] = useState(null);
+  const [listTransferTarget, setListTransferTarget] = useState(null);
+  const [showListTransferModal, setShowListTransferModal] = useState(false);
+  const { campuses } = useCampusContext();
   const [apiItems, setApiItems] = useState(null);
   const [totalApiCount, setTotalApiCount] = useState(0);
   const [loadingList, setLoadingList] = useState(true);
@@ -3902,6 +3972,8 @@ function StaffList({ records = [], setRecords, forced }) {
         const params = {
           PageNumber: page,
           PageSize: size,
+          SortBy: "Id",
+          SortOrder: "DESC",
           SearchTerm: debouncedQ || undefined,
           Department: departmentFilter || undefined,
           Designation: designationFilter || undefined,
@@ -3932,7 +4004,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, debouncedQ, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
+  }, [page, size, debouncedQ, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus, refreshKey]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {
@@ -4192,73 +4264,562 @@ function StaffList({ records = [], setRecords, forced }) {
     }
   };
 
+  // Helper to retrieve the complete staff dataset across all pages matching the active filter criteria
+  const getCompleteStaffDataset = async () => {
+    const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+    const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+    const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+    const currentTab = forced || tab;
+    const isNonTeaching = currentTab === "Non-Teaching" || (!forced && tab === "Non-Teaching") || forced === "Non-Teaching";
+    const effectiveStaffType = isNonTeaching ? "Non-Teaching" : (currentTab === "Teaching" || forced === "Teaching" ? "Teaching" : (staffTypeFilter || undefined));
+
+    let apiStaffRecords = [];
+    try {
+      const response = await apiClient.get(apiEndpoints.faculty.list, {
+        params: {
+          PageNumber: 1,
+          PageSize: 10000,
+          SearchTerm: q || undefined,
+          Department: departmentFilter || undefined,
+          Designation: designationFilter || undefined,
+          StaffType: effectiveStaffType,
+          ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
+          BoardCode: activeBoardCode || undefined,
+          BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+        },
+      });
+      if (response?.data) {
+        const items = response.data.items || response.data.data || (Array.isArray(response.data) ? response.data : []);
+        if (Array.isArray(items) && items.length > 0) {
+          apiStaffRecords = items;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn("Could not fetch full staff list from API, using local records:", fetchErr);
+    }
+
+    const itemMap = new Map();
+    (list || []).forEach((r) => {
+      if (!r) return;
+      const key = String(r.id ?? r.employeeId ?? "");
+      if (key) itemMap.set(key, r);
+      if (r.employeeId) itemMap.set(String(r.employeeId).trim().toLowerCase(), r);
+    });
+
+    const mergedList = [];
+    const seenKeys = new Set();
+
+    if (apiStaffRecords.length > 0) {
+      apiStaffRecords.forEach((apiItem) => {
+        if (!apiItem) return;
+        const idKey = apiItem.id !== undefined && apiItem.id !== null ? String(apiItem.id) : "";
+        const empKey = apiItem.employeeId ? String(apiItem.employeeId).trim().toLowerCase() : "";
+
+        const localMatch = (idKey && itemMap.get(idKey)) || (empKey && itemMap.get(empKey));
+        const finalItem = localMatch ? { ...localMatch, ...apiItem } : apiItem;
+
+        const uniqueKey = idKey || empKey || String(finalItem.id ?? finalItem.employeeId ?? "");
+        if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+          if (uniqueKey) seenKeys.add(uniqueKey);
+          if (idKey) seenKeys.add(idKey);
+          if (empKey) seenKeys.add(empKey);
+          mergedList.push(finalItem);
+        }
+      });
+    }
+
+    (list || []).forEach((r) => {
+      if (!r) return;
+      const idKey = r.id !== undefined && r.id !== null ? String(r.id) : "";
+      const empKey = r.employeeId ? String(r.employeeId).trim().toLowerCase() : "";
+
+      const isAlreadyIncluded = (idKey && seenKeys.has(idKey)) || (empKey && seenKeys.has(empKey));
+      if (!isAlreadyIncluded) {
+        const uniqueKey = idKey || empKey || String(r.id ?? r.employeeId ?? "");
+        if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+          if (uniqueKey) seenKeys.add(uniqueKey);
+          if (idKey) seenKeys.add(idKey);
+          if (empKey) seenKeys.add(empKey);
+          mergedList.push(r);
+        }
+      }
+    });
+
+    return mergedList.filter((r) => {
+      if (!r) return false;
+      if (!isStaffMatchingBoard(r, selectedBoard, boards)) return false;
+      if (!isStaffMatchingCampus(r, selectedCampus)) return false;
+      if (
+        currentTab !== "All" &&
+        (currentTab === "Pending"
+          ? r.staffType !== "Teaching" || r.profileStatus === "Completed"
+          : currentTab === "Completed"
+            ? r.profileStatus !== "Completed"
+            : r.staffType !== currentTab)
+      ) {
+        return false;
+      }
+      if (departmentFilter && r.department !== departmentFilter) return false;
+      if (designationFilter && r.designation !== designationFilter) return false;
+      if (staffTypeFilter && r.staffType !== staffTypeFilter) return false;
+
+      const staffFullName = r.fullName || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.name || "";
+      return [staffFullName, r.firstName, r.middleName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
+        String(v || "").toLowerCase().includes((q || "").toLowerCase())
+      );
+    });
+  };
+
   // GET /api/v1/staff/export-excel
   const handleExportExcel = async () => {
     setExportOpen(false);
+    const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+    const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+    const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+    const currentTab = forced || tab;
+    const effectiveStaffType = forced !== "All" && forced ? forced : (currentTab !== "All" && currentTab !== "Completed" && currentTab !== "Pending" ? currentTab : (staffTypeFilter || undefined));
+
     try {
       const response = await apiClient.get(apiEndpoints.faculty.exportExcel, {
-        params: { SearchTerm: q, Department: departmentFilter, Designation: designationFilter, StaffType: forced },
+        params: {
+          SearchTerm: q || undefined,
+          Department: departmentFilter || undefined,
+          Designation: designationFilter || undefined,
+          StaffType: effectiveStaffType,
+          BoardCode: activeBoardCode || undefined,
+          BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+        },
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Staff_Export_${new Date().toISOString().split("T")[0]}.xlsx`);
+      link.setAttribute("download", `Staff_Export_${effectiveStaffType || "All"}_${new Date().toISOString().split("T")[0]}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       setToast("Exported staff data to Excel (.xlsx) successfully.");
     } catch (err) {
-      setToast("Exported staff data to Excel successfully.");
+      console.warn("Backend Excel export endpoint unavailable, generating from full staff records:", err);
+      try {
+        const isNonTeaching = effectiveStaffType === "Non-Teaching";
+        const excelCols = isNonTeaching ? NON_TEACHING_EXCEL_COLUMNS : TEACHING_EXCEL_COLUMNS;
+        const completeRows = await getCompleteStaffDataset();
+        const excelRows = completeRows.map((r) => {
+          const rawSubs = r.allocatedSubjects ?? r.subjects;
+          const subsStr = Array.isArray(rawSubs)
+            ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean).join(", ")
+            : (typeof rawSubs === "string" ? rawSubs : "");
+
+          if (isNonTeaching) {
+            return [
+              resolveBoardCode(r, boards) || selectedBoard?.name || "Main Campus",
+              r.employeeId || "",
+              r.firstName || "",
+              r.middleName || "",
+              r.lastName || "",
+              r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "",
+              r.gender || "Other",
+              r.mobile || "",
+              r.email || "",
+              r.department || "",
+              r.designation || "",
+              r.dateOfJoining ? String(r.dateOfJoining).split("T")[0] : "",
+              r.employmentType || "Full Time",
+              r.status || "Active",
+            ];
+          }
+
+          return [
+            resolveBoardCode(r, boards) || selectedBoard?.name || "Main Campus",
+            r.employeeId || "",
+            r.firstName || "",
+            r.middleName || "",
+            r.lastName || "",
+            r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "",
+            r.gender || "Other",
+            r.mobile || "",
+            r.email || "",
+            r.department || "",
+            r.designation || "",
+            subsStr,
+            r.dateOfJoining ? String(r.dateOfJoining).split("T")[0] : "",
+            r.employmentType || "Full Time",
+            r.status || "Active",
+          ];
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet([excelCols, ...excelRows]);
+        ws["!cols"] = excelCols.map(() => ({ wch: 22 }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Staff Directory");
+        XLSX.writeFile(wb, `Staff_Export_${effectiveStaffType || "All"}_${new Date().toISOString().split("T")[0]}.xlsx`);
+        setToast("Exported staff data to Excel (.xlsx) successfully.");
+      } catch (fallbackErr) {
+        console.error("Local Excel export failed:", fallbackErr);
+        setToast("Failed to export staff data to Excel.");
+      }
     }
   };
 
-  // Download Excel Template with full 15 headings for Teaching Staff or 14 headings for Non-Teaching Staff
+  // Black-and-white professional PDF table export covering ALL staff records and complete details
+  const handleExportPdf = async () => {
+    setExportOpen(false);
+    setExportingPdf(true);
+    setToast("Preparing complete PDF export...");
+
+    try {
+      const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
+      const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+      const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
+      const currentTab = forced || tab;
+      const isNonTeaching = currentTab === "Non-Teaching" || (!forced && tab === "Non-Teaching") || forced === "Non-Teaching";
+      const staffTitle = isNonTeaching
+        ? "Non-Teaching Staff Directory"
+        : currentTab === "Teaching" || forced === "Teaching"
+          ? "Teaching Staff Directory"
+          : "Staff Directory";
+      const effectiveStaffType = isNonTeaching ? "Non-Teaching" : (currentTab === "Teaching" || forced === "Teaching" ? "Teaching" : (staffTypeFilter || undefined));
+      const boardLabel = selectedBoard?.name || selectedBoard?.code || "Main Campus";
+      const dateStr = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+      // 1. Fetch complete staff records from API across all pages (PageSize: 10000)
+      let apiStaffRecords = [];
+      try {
+        const response = await apiClient.get(apiEndpoints.faculty.list, {
+          params: {
+            PageNumber: 1,
+            PageSize: 10000,
+            SearchTerm: q || undefined,
+            Department: departmentFilter || undefined,
+            Designation: designationFilter || undefined,
+            StaffType: effectiveStaffType,
+            ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
+            BoardCode: activeBoardCode || undefined,
+            BoardId: activeBoardId || undefined,
+            CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
+          },
+        });
+        if (response?.data) {
+          const items = response.data.items || response.data.data || (Array.isArray(response.data) ? response.data : []);
+          if (Array.isArray(items) && items.length > 0) {
+            apiStaffRecords = items;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn("Could not fetch full staff list from API for PDF, using local records:", fetchErr);
+      }
+
+      // 2. Merge API items with local list for consistency and complete field coverage
+      const itemMap = new Map();
+      (list || []).forEach((r) => {
+        if (!r) return;
+        const key = String(r.id ?? r.employeeId ?? "");
+        if (key) itemMap.set(key, r);
+        if (r.employeeId) itemMap.set(String(r.employeeId).trim().toLowerCase(), r);
+      });
+
+      const mergedList = [];
+      const seenKeys = new Set();
+
+      if (apiStaffRecords.length > 0) {
+        apiStaffRecords.forEach((apiItem) => {
+          if (!apiItem) return;
+          const idKey = apiItem.id !== undefined && apiItem.id !== null ? String(apiItem.id) : "";
+          const empKey = apiItem.employeeId ? String(apiItem.employeeId).trim().toLowerCase() : "";
+
+          const localMatch = (idKey && itemMap.get(idKey)) || (empKey && itemMap.get(empKey));
+          const finalItem = localMatch ? { ...localMatch, ...apiItem } : apiItem;
+
+          const uniqueKey = idKey || empKey || String(finalItem.id ?? finalItem.employeeId ?? "");
+          if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+            if (uniqueKey) seenKeys.add(uniqueKey);
+            if (idKey) seenKeys.add(idKey);
+            if (empKey) seenKeys.add(empKey);
+            mergedList.push(finalItem);
+          }
+        });
+      }
+
+      (list || []).forEach((r) => {
+        if (!r) return;
+        const idKey = r.id !== undefined && r.id !== null ? String(r.id) : "";
+        const empKey = r.employeeId ? String(r.employeeId).trim().toLowerCase() : "";
+
+        const isAlreadyIncluded = (idKey && seenKeys.has(idKey)) || (empKey && seenKeys.has(empKey));
+        if (!isAlreadyIncluded) {
+          const uniqueKey = idKey || empKey || String(r.id ?? r.employeeId ?? "");
+          if (!uniqueKey || !seenKeys.has(uniqueKey)) {
+            if (uniqueKey) seenKeys.add(uniqueKey);
+            if (idKey) seenKeys.add(idKey);
+            if (empKey) seenKeys.add(empKey);
+            mergedList.push(r);
+          }
+        }
+      });
+
+      // 3. Filter complete dataset according to board, campus, tab, department, designation and search
+      const exportData = mergedList.filter((r) => {
+        if (!r) return false;
+        if (!isStaffMatchingBoard(r, selectedBoard, boards)) return false;
+        if (!isStaffMatchingCampus(r, selectedCampus)) return false;
+        if (
+          currentTab !== "All" &&
+          (currentTab === "Pending"
+            ? r.staffType !== "Teaching" || r.profileStatus === "Completed"
+            : currentTab === "Completed"
+              ? r.profileStatus !== "Completed"
+              : r.staffType !== currentTab)
+        ) {
+          return false;
+        }
+        if (departmentFilter && r.department !== departmentFilter) return false;
+        if (designationFilter && r.designation !== designationFilter) return false;
+        if (staffTypeFilter && r.staffType !== staffTypeFilter) return false;
+
+        const staffFullName = r.fullName || [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.name || "";
+        return [staffFullName, r.firstName, r.middleName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
+          String(v || "").toLowerCase().includes((q || "").toLowerCase())
+        );
+      });
+
+      if (exportData.length === 0) {
+        setToast("No staff records found to export for the selected criteria.");
+        return;
+      }
+
+      // 4. Construct professional Landscape A4 PDF Document
+      const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4",
+      });
+
+      // Pure Black & White Header Section
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.setTextColor(0, 0, 0);
+      doc.text("PIRNAV INTERMEDIATE COLLEGE", 8, 14);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.5);
+      doc.setTextColor(40, 40, 40);
+      doc.text(`${staffTitle} — ${boardLabel}`, 8, 20);
+
+      doc.setFontSize(8.5);
+      doc.setTextColor(70, 70, 70);
+      doc.text(`Generated on: ${dateStr} | Total Staff Records Exported: ${exportData.length}`, 8, 26);
+
+      // 5. Complete Table Headers matching full staff profile details
+      const tableHeaders = isNonTeaching
+        ? [
+          "#",
+          "Employee ID",
+          "Staff Name",
+          "Department",
+          "Designation",
+          "Board",
+          "Gender",
+          "Date of Birth",
+          "Mobile",
+          "Email",
+          "Joining Date",
+          "Experience",
+          "Employment",
+          "Location",
+          "Status",
+        ]
+        : [
+          "#",
+          "Employee ID",
+          "Staff Name",
+          "Department",
+          "Designation",
+          "Board",
+          "Subject Allocation",
+          "Gender",
+          "Date of Birth",
+          "Mobile",
+          "Email",
+          "Joining Date",
+          "Experience",
+          "Employment",
+          "Status",
+        ];
+
+      // 6. Map complete individual records to table rows
+      const tableData = exportData.map((r, idx) => {
+        const empId = r.employeeId || `STF-${idx + 1}`;
+        const name = [r.firstName, r.middleName, r.lastName].filter(Boolean).join(" ") || r.fullName || r.name || "—";
+        const dept = r.department || "—";
+        const desig = r.designation || "—";
+        const board = resolveBoardCode(r, boards) || r.boardCode || r.boardName || r.board || "—";
+        const gender = r.gender || "Other";
+        const dob = r.dateOfBirth ? String(r.dateOfBirth).split("T")[0] : "—";
+        const mobile = r.alternateMobile ? `${r.mobile || "—"}\nAlt: ${r.alternateMobile}` : (r.mobile || "—");
+        const email = r.email || "—";
+        const joining = (r.dateOfJoining || r.joiningDate) ? String(r.dateOfJoining || r.joiningDate).split("T")[0] : "—";
+        const exp = r.experience != null && r.experience !== "" ? `${Number(r.experience)} Yrs` : "0 Yrs";
+        const empType = r.employmentType || "Full Time";
+        const location = [r.city, r.state].filter(Boolean).join(", ") || "—";
+        const status = r.status || "Active";
+
+        if (isNonTeaching) {
+          return [
+            idx + 1,
+            empId,
+            name,
+            dept,
+            desig,
+            board,
+            gender,
+            dob,
+            mobile,
+            email,
+            joining,
+            exp,
+            empType,
+            location,
+            status,
+          ];
+        }
+
+        const rawSubs = r.allocatedSubjects ?? r.subjects;
+        const subsStr = Array.isArray(rawSubs)
+          ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean).join(", ")
+          : (typeof rawSubs === "string" ? rawSubs : "—");
+
+        return [
+          idx + 1,
+          empId,
+          name,
+          dept,
+          desig,
+          board,
+          subsStr || "—",
+          gender,
+          dob,
+          mobile,
+          email,
+          joining,
+          exp,
+          empType,
+          status,
+        ];
+      });
+
+      // 7. AutoTable with repeated headers across multiple pages and exact B&W styling
+      autoTable(doc, {
+        head: [tableHeaders],
+        body: tableData,
+        startY: 30,
+        showHead: "everyPage",
+        theme: "grid",
+        styles: {
+          font: "helvetica",
+          fontSize: 7.2,
+          textColor: [0, 0, 0],
+          lineColor: [140, 140, 140],
+          lineWidth: 0.2,
+          cellPadding: 2,
+          valign: "middle",
+          overflow: "linebreak",
+        },
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          fontSize: 7.2,
+          lineWidth: 0.35,
+          lineColor: [80, 80, 80],
+          valign: "middle",
+          halign: "center",
+        },
+        alternateRowStyles: {
+          fillColor: [255, 255, 255],
+        },
+        columnStyles: isNonTeaching
+          ? {
+            0: { cellWidth: 7, halign: "center" },
+            1: { cellWidth: 20 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 24 },
+            4: { cellWidth: 24 },
+            5: { cellWidth: 18 },
+            6: { cellWidth: 14, halign: "center" },
+            7: { cellWidth: 19, halign: "center" },
+            8: { cellWidth: 24 },
+            9: { cellWidth: 34 },
+            10: { cellWidth: 19, halign: "center" },
+            11: { cellWidth: 15, halign: "center" },
+            12: { cellWidth: 17, halign: "center" },
+            13: { cellWidth: 22 },
+            14: { cellWidth: 16, halign: "center" },
+          }
+          : {
+            0: { cellWidth: 7, halign: "center" },
+            1: { cellWidth: 19 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 22 },
+            4: { cellWidth: 22 },
+            5: { cellWidth: 16 },
+            6: { cellWidth: 29 },
+            7: { cellWidth: 12, halign: "center" },
+            8: { cellWidth: 18, halign: "center" },
+            9: { cellWidth: 22 },
+            10: { cellWidth: 32 },
+            11: { cellWidth: 18, halign: "center" },
+            12: { cellWidth: 14, halign: "center" },
+            13: { cellWidth: 16, halign: "center" },
+            14: { cellWidth: 14, halign: "center" },
+          },
+        margin: { top: 30, left: 7.5, right: 7.5, bottom: 13 },
+        didDrawPage: (data) => {
+          const totalPages = doc.internal.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(80, 80, 80);
+          doc.text(
+            "Pirnav College Management System — Official Staff Directory",
+            7.5,
+            doc.internal.pageSize.getHeight() - 6
+          );
+          doc.text(
+            `Page ${data.pageNumber} of ${totalPages}`,
+            doc.internal.pageSize.getWidth() - 7.5,
+            doc.internal.pageSize.getHeight() - 6,
+            { align: "right" }
+          );
+        },
+      });
+
+      const filename = `${staffTitle.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`;
+      doc.save(filename);
+      setToast(`Exported ${exportData.length} staff records to PDF successfully.`);
+    } catch (pdfErr) {
+      console.error("Failed to export complete staff PDF:", pdfErr);
+      setToast("Failed to export PDF file. Please try again.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  // Download Excel Template with full headers and 0 data rows (blank template)
   const handleExportTemplate = (typeOverride) => {
     setExportOpen(false);
     const targetType = typeOverride || (forced === "Non-Teaching" || (!forced && tab === "Non-Teaching") ? "Non-Teaching" : "Teaching");
     const columns = targetType === "Non-Teaching" ? NON_TEACHING_EXCEL_COLUMNS : TEACHING_EXCEL_COLUMNS;
 
-    const sampleRow = targetType === "Non-Teaching" ? [
-      selectedBoard?.name || selectedBoard?.code || "Main Campus", // Board Name
-      "NTC-2026-001", // Employee ID
-      "Robert", // First Name
-      "E.", // Middle Name
-      "Smith", // Last Name
-      "1990-04-12", // Date of Birth
-      "Male", // Gender
-      "9876543210", // Mobile
-      "robert.smith@example.com", // Email
-      "Administration", // Department
-      "Administrative Officer", // Designation
-      "2024-01-15", // Date of Joining
-      "Full Time", // Employment Type
-      "Active" // Status
-    ] : [
-      selectedBoard?.name || selectedBoard?.code || "Main Campus", // Board Name
-      "TCH-2026-001", // Employee ID
-      "Sarah", // First Name
-      "M.", // Middle Name
-      "Johnson", // Last Name
-      "1988-08-20", // Date of Birth
-      "Female", // Gender
-      "9876543211", // Mobile
-      "sarah.johnson@example.com", // Email
-      "Computer Science", // Department
-      "Assistant Professor", // Designation
-      "Data Structures, Database Management", // Subject Allocation
-      "2024-06-01", // Date of Joining
-      "Full Time", // Employment Type
-      "Active" // Status
-    ];
-
     try {
-      const ws = XLSX.utils.aoa_to_sheet([columns, sampleRow]);
+      // Template must contain strictly column headers only (0 sample or existing rows)
+      const ws = XLSX.utils.aoa_to_sheet([columns]);
       ws["!cols"] = columns.map(() => ({ wch: 22 }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `${targetType}_Template`);
       XLSX.writeFile(wb, `${targetType}_Staff_Import_Template.xlsx`);
-      setToast(`Downloaded ${targetType} Staff Excel Template successfully.`);
+      setToast(`Downloaded blank ${targetType} Staff Excel Template successfully.`);
     } catch (err) {
       console.error("Failed to generate Excel template:", err);
       setToast("Failed to download Excel template.");
@@ -4359,7 +4920,7 @@ function StaffList({ records = [], setRecords, forced }) {
       return [staffFullName, r.firstName, r.lastName, r.name, r.employeeId, r.email, r.mobile, r.department, r.designation, r.board, r.boardCode].some((v) =>
         String(v || "").toLowerCase().includes((q || "").toLowerCase()),
       );
-    });
+    }).sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
   }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
@@ -4498,7 +5059,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
-      return apiItems.filter((r) => isStaffMatchingCampus(r, selectedCampus)).map((r) => {
+      return apiItems.map((r) => {
         let empId = r.employeeId;
         if (!empId || typeof empId === "object" || empId === "[object Object]") {
           empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
@@ -4511,9 +5072,9 @@ function StaffList({ records = [], setRecords, forced }) {
       });
     }
     return rows.slice((page - 1) * size, page * size);
-  }, [apiItems, rows, page, size, selectedCampus]);
+  }, [apiItems, rows, page, size]);
 
-  const totalRowsCount = apiItems !== null ? (selectedCampus && shown.length === 0 ? 0 : totalApiCount) : rows.length;
+  const totalRowsCount = apiItems !== null ? totalApiCount : rows.length;
 
   return (
     <DashboardLayout
@@ -4605,7 +5166,9 @@ function StaffList({ records = [], setRecords, forced }) {
                 {exportOpen ? (
                   <div className="staff-export-options">
                     <button type="button" onClick={handleExportExcel}>Export Excel (.xlsx)</button>
-                    <button type="button" onClick={() => handleExportTemplate(forced || tab || "Teaching")}>Download Import Template</button>
+                    <button type="button" onClick={handleExportPdf} disabled={exportingPdf}>
+                      {exportingPdf ? "Exporting PDF..." : "Export PDF"}
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -4650,35 +5213,94 @@ function StaffList({ records = [], setRecords, forced }) {
                     <tr key={`staff-item-${r.id || r.employeeId || idx}`}>
                       <td>{r.employeeId}</td>
                       <td>
-                        <strong>{r.fullName || `${r.firstName || ""} ${r.lastName || ""}`}</strong>
-                        <small>{r.email}</small>
+                        {(() => {
+                          const isMulti = (Array.isArray(r.assignedCampusIds) && r.assignedCampusIds.length > 1) ||
+                            (Array.isArray(r.assignedCampuses) && r.assignedCampuses.length > 1) ||
+                            (r.campusBoardAssignmentsJson && r.campusBoardAssignmentsJson.includes('campusId'));
+                          const campusCount = r.assignedCampusIds?.length || r.assignedCampuses?.length || (isMulti ? "Multi" : 1);
+
+                          return (
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <strong>{r.fullName || `${r.firstName || ""} ${r.lastName || ""}`}</strong>
+                                {isMulti ? (
+                                  <span style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                    fontSize: "10px",
+                                    fontWeight: "700",
+                                    background: "#eff6ff",
+                                    color: "#1d4ed8",
+                                    border: "1px solid #bfdbfe",
+                                    padding: "1px 7px",
+                                    borderRadius: "10px",
+                                    whiteSpace: "nowrap"
+                                  }} title={`Teaching across ${campusCount} campuses`}>
+                                    🌐 Global ({campusCount} Campuses)
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                    fontSize: "10px",
+                                    fontWeight: "500",
+                                    background: "#f8fafc",
+                                    color: "#64748b",
+                                    border: "1px solid #e2e8f0",
+                                    padding: "1px 6px",
+                                    borderRadius: "10px",
+                                    whiteSpace: "nowrap"
+                                  }}>
+                                    📍 Single Campus
+                                  </span>
+                                )}
+                              </div>
+                              <small>{r.email}</small>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td>{resolveBoardCode(r, boards)}</td>
                       <td>{r.department}</td>
                       <td>{r.designation}</td>
                       {showStaffType ? <td><Badge value={r.staffType} /></td> : null}
-                      <td><Badge value={r.status || "Active"} /></td>
+                      <td><Badge value={r.status || "Active"} record={r} currentCampusId={activeCampusId} /></td>
                       <td>
-                        <div className="row-actions">
-                          <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
-                            <Eye />
-                          </button>
-                          <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
-                            try {
-                              const response = await apiClient.get(apiEndpoints.faculty.printPdf(r.id), { responseType: "blob" });
-                              const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
-                              window.open(url, "_blank");
-                            } catch {
-                              n(`/dashboard/staff/${r.id}`);
-                              setTimeout(() => window.print(), 300);
-                            }
-                          }}>
-                            <Printer />
-                          </button>
-                          <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
-                            <Trash2 />
-                          </button>
-                        </div>
+                        {(() => {
+                          const isTransferredOut = r.status === "Transferred" || (activeCampusId && String(r.transferredFromCampusId) === String(activeCampusId));
+                          return (
+                            <div className="row-actions">
+                              <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
+                                <Eye />
+                              </button>
+                              <button 
+                                title={isTransferredOut ? `Staff already transferred to ${r.transferredToCampusName || "another campus"}` : "Transfer Campus"} 
+                                disabled={isTransferredOut}
+                                style={isTransferredOut ? { opacity: 0.35, cursor: "not-allowed" } : undefined}
+                                onClick={() => { if (!isTransferredOut) { setListTransferTarget(r); setShowListTransferModal(true); } }}
+                              >
+                                <ArrowRightLeft />
+                              </button>
+                              <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
+                                try {
+                                  const response = await apiClient.get(apiEndpoints.faculty.printPdf(r.id), { responseType: "blob" });
+                                  const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+                                  window.open(url, "_blank");
+                                } catch {
+                                  n(`/dashboard/staff/${r.id}`);
+                                  setTimeout(() => window.print(), 300);
+                                }
+                              }}>
+                                <Printer />
+                              </button>
+                              <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
+                                <Trash2 />
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))
@@ -4693,17 +5315,90 @@ function StaffList({ records = [], setRecords, forced }) {
             </table>
           </div>
           <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
+            <div className="staff-pagination-info">
+              <span>
+                Showing {totalRowsCount > 0 ? (page - 1) * size + 1 : 0} to{" "}
+                {Math.min(page * size, totalRowsCount)} of {totalRowsCount} entries
+              </span>
+              <div className="staff-pagination-size-selector">
+                <label htmlFor="staff-page-size-select">Rows per page:</label>
+                <select
+                  id="staff-page-size-select"
+                  value={size}
+                  onChange={(e) => {
+                    const newSize = Number(e.target.value);
+                    setSize(newSize);
+                    setPage(1);
+                  }}
+                  className="staff-page-size-dropdown"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+            <div className="staff-pagination-controls">
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage(1)}
+                title="First Page"
+                className="staff-page-nav-btn"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                title="Previous Page"
+                className="staff-page-nav-btn"
+              >
                 Prev
               </button>
-              <strong>{page}</strong>
-              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(totalRowsCount / size));
+                const pageNumbers = [];
+                const maxButtons = 5;
+                let startPage = Math.max(1, page - 2);
+                let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+                if (endPage - startPage < maxButtons - 1) {
+                  startPage = Math.max(1, endPage - maxButtons + 1);
+                }
+                for (let i = startPage; i <= endPage; i++) {
+                  pageNumbers.push(i);
+                }
+                return pageNumbers.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPage(p)}
+                    className={`staff-page-number-btn ${page === p ? "is-active" : ""}`}
+                  >
+                    {p}
+                  </button>
+                ));
+              })()}
+              <button
+                type="button"
+                disabled={page * size >= totalRowsCount}
+                onClick={() => setPage((p) => p + 1)}
+                title="Next Page"
+                className="staff-page-nav-btn"
+              >
                 Next
+              </button>
+              <button
+                type="button"
+                disabled={page * size >= totalRowsCount}
+                onClick={() => setPage(Math.max(1, Math.ceil(totalRowsCount / size)))}
+                title="Last Page"
+                className="staff-page-nav-btn"
+              >
+                »
               </button>
             </div>
           </footer>
@@ -4724,6 +5419,17 @@ function StaffList({ records = [], setRecords, forced }) {
         isSubmitting={isImportSubmitting}
       />
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
+      <StaffTransferModal
+        staff={listTransferTarget}
+        campuses={campuses}
+        isOpen={showListTransferModal}
+        onClose={() => { setShowListTransferModal(false); setListTransferTarget(null); }}
+        onSuccess={(msg) => {
+          setToast(msg || "Campus transfer executed successfully.");
+          setPage(1);
+          setRefreshKey((k) => k + 1);
+        }}
+      />
     </DashboardLayout>
   );
 }
@@ -4808,6 +5514,23 @@ function TeachingForm({ records, setRecords, existing }) {
     Number(values.roleId) === 15 ||
     Number(values.roleId) === 2;
 
+  const [isGlobalStaff, setIsGlobalStaff] = useState(() => {
+    if (existing) {
+      return (
+        (Array.isArray(existing.assignedCampusIds) && existing.assignedCampusIds.length > 1) ||
+        (Array.isArray(existing.assignedCampuses) && existing.assignedCampuses.length > 1) ||
+        Boolean(existing.campusBoardAssignmentsJson)
+      );
+    }
+    return isPrincipal;
+  });
+
+  useEffect(() => {
+    if (isPrincipal && !isGlobalStaff) {
+      setIsGlobalStaff(true);
+    }
+  }, [isPrincipal]);
+
   useEffect(() => {
     if (!existing) {
       setValues((v) => ({
@@ -4823,9 +5546,9 @@ function TeachingForm({ records, setRecords, existing }) {
     }
   }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
-  // If role is changed away from Principal, reset multi-campus assignments
+  // If multi-campus is disabled and role is not Principal, reset multi-campus assignments
   useEffect(() => {
-    if (!isPrincipal && values.campusBoardAssignmentsJson) {
+    if (!isPrincipal && !isGlobalStaff && values.campusBoardAssignmentsJson) {
       setValues((v) => ({
         ...v,
         assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
@@ -4833,7 +5556,7 @@ function TeachingForm({ records, setRecords, existing }) {
         campusBoardAssignmentsJson: "",
       }));
     }
-  }, [isPrincipal, values.campusBoardAssignmentsJson, activeCampusId, activeCampusName]);
+  }, [isPrincipal, isGlobalStaff, values.campusBoardAssignmentsJson, activeCampusId, activeCampusName]);
 
   // Build the next employee ID from existing staff without advancing a series on form load.
   useEffect(() => {
@@ -4863,12 +5586,12 @@ function TeachingForm({ records, setRecords, existing }) {
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
     const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (isPrincipal ? 15 : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4)));
 
-    const hasAssignedCampuses = Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0;
+    const hasAssignedCampuses = (isGlobalStaff || isPrincipal) && Array.isArray(values.assignedCampusIds) && values.assignedCampusIds.length > 0;
     const finalAssignedCampusIds = hasAssignedCampuses
       ? [...new Set(values.assignedCampusIds.map(Number).filter(Boolean))]
       : (values.campusId ? [Number(values.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []));
 
-    const hasAssignedBoards = Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0;
+    const hasAssignedBoards = (isGlobalStaff || isPrincipal) && Array.isArray(values.assignedBoardIds) && values.assignedBoardIds.length > 0;
     const finalAssignedBoardIds = hasAssignedBoards
       ? [...new Set(values.assignedBoardIds.map(Number).filter(Boolean))]
       : (values.boardId ? [Number(values.boardId)] : (activeBoardId ? [Number(activeBoardId)] : []));
@@ -5027,7 +5750,57 @@ function TeachingForm({ records, setRecords, existing }) {
                       roleOptions={apiRoleObjects.length > 0 ? apiRoleObjects : apiRoles}
                       staffType="Teaching"
                     />
-                    {isPrincipal ? (
+                    <div style={{
+                      gridColumn: "1 / -1",
+                      margin: "8px 0 16px",
+                      padding: "14px 18px",
+                      background: (isGlobalStaff || isPrincipal) ? "#f0fdf4" : "#f8fafc",
+                      border: (isGlobalStaff || isPrincipal) ? "1.5px solid #86efac" : "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "14px"
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: (isGlobalStaff || isPrincipal) ? "#166534" : "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span>🌐 Employment Scope: Global / Multi-Campus Teaching Staff</span>
+                          {(isGlobalStaff || isPrincipal) && (
+                            <span style={{ fontSize: "11px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", padding: "1px 8px", borderRadius: "10px", fontWeight: "700" }}>
+                              Multi-Campus Active
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "12px", color: (isGlobalStaff || isPrincipal) ? "#15803d" : "#64748b", marginTop: "3px" }}>
+                          Enable this option to assign this teaching staff member across multiple campuses and boards simultaneously.
+                        </div>
+                      </div>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: isPrincipal ? "not-allowed" : "pointer", userSelect: "none" }}>
+                        <input
+                          type="checkbox"
+                          checked={isGlobalStaff || isPrincipal}
+                          disabled={isPrincipal}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIsGlobalStaff(checked);
+                            if (!checked) {
+                              setValues((v) => ({
+                                ...v,
+                                assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
+                                assignedCampuses: v.campusName ? [v.campusName] : (activeCampusName ? [activeCampusName] : []),
+                                campusBoardAssignmentsJson: "",
+                              }));
+                            }
+                          }}
+                          style={{ width: "18px", height: "18px", accentColor: "#16a34a", cursor: isPrincipal ? "not-allowed" : "pointer" }}
+                        />
+                        <span style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
+                          {isPrincipal ? "Mandatory for Principal" : "Assign Multiple Campuses"}
+                        </span>
+                      </label>
+                    </div>
+
+                    {(isGlobalStaff || isPrincipal) ? (
                       <PrincipalCampusBoardAssignment
                         values={values}
                         setValues={setValues}
@@ -6152,9 +6925,1565 @@ function Pending({ records = [], setRecords, activity }) {
 
 // ----------------------------------------------------------------------
 // ----------------------------------------------------------------------
-// STAFF DETAILS (GET /api/v1/staff/{id} & GET /api/v1/staff/{id}/print-pdf)
+
+// ----------------------------------------------------------------------
+// DYNAMIC EXPERIENCE & CAMPUS TENURE WIDGET
+// ----------------------------------------------------------------------
+function StaffExperienceWidget({ staffId }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await apiClient.get(apiEndpoints.faculty.experienceSummary(staffId));
+        if (active && res.data) {
+          setData(res.data.data || res.data);
+        }
+      } catch (e) {
+        console.error("Failed to load experience summary", e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    if (staffId) load();
+    return () => { active = false; };
+  }, [staffId]);
+
+  if (loading) {
+    return <div style={{ padding: "16px", color: "var(--cms-muted)" }}>Calculating dynamic experience intervals...</div>;
+  }
+  if (!data) return null;
+
+  return (
+    <div style={{ marginTop: "10px", marginBottom: "10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px" }}>
+      <h3 style={{ margin: "0 0 14px", fontSize: "15px", fontWeight: "700", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+        <span>🎓 Dynamic Experience & Campus Tenure Calculation</span>
+        <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px" }}>
+          Non-Overlapping Union Engine
+        </span>
+      </h3>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" }}>
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #3b82f6" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Prior External Service</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.priorExternalExperienceYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Approved external history</div>
+        </div>
+
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #10b981" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Institutional Service</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.institutionalExperienceYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Campus assignments tenure</div>
+        </div>
+
+        <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #f59e0b" }}>
+          <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>Current Campus Tenure</div>
+          <div style={{ fontSize: "20px", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>
+            {data.currentCampusTenureYears ?? 0} <span style={{ fontSize: "12px", fontWeight: "500", color: "#64748b" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>Active posting duration</div>
+        </div>
+
+        <div style={{ background: "#f0fdf4", padding: "12px 16px", borderRadius: "8px", borderLeft: "4px solid #16a34a" }}>
+          <div style={{ fontSize: "12px", color: "#15803d", fontWeight: "700" }}>Total Dynamic Experience</div>
+          <div style={{ fontSize: "22px", fontWeight: "900", color: "#15803d", marginTop: "4px" }}>
+            {data.totalDynamicExperienceYears ?? 0} <span style={{ fontSize: "13px", fontWeight: "600" }}>yrs</span>
+          </div>
+          <div style={{ fontSize: "11px", color: "#16a34a", marginTop: "2px" }}>Certified service total</div>
+        </div>
+      </div>
+
+      {Array.isArray(data.campusTenures) && data.campusTenures.length > 0 && (
+        <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed #e2e8f0" }}>
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+            Campus Tenure Breakdown:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {data.campusTenures.map((t, idx) => (
+              <span key={idx} style={{
+                background: t.isPrimary ? "#eff6ff" : "#f1f5f9",
+                border: t.isPrimary ? "1px solid #bfdbfe" : "1px solid #e2e8f0",
+                color: t.isPrimary ? "#1e40af" : "#475569",
+                padding: "3px 10px",
+                borderRadius: "6px",
+                fontSize: "12px"
+              }}>
+                <strong>{t.campusName || `Campus ${t.campusId}`}</strong>: {t.tenureYears} yrs ({t.startDate ? t.startDate.split("T")[0] : "—"} to {t.endDate ? t.endDate.split("T")[0] : "Present"})
+                {t.isPrimary && <span style={{ marginLeft: "5px", color: "#2563eb", fontWeight: "bold" }}>★ Primary</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// CAMPUS TRANSFER HISTORY COMPONENT
+// ----------------------------------------------------------------------
+function StaffTransferHistory({ staffId, refreshKey }) {
+  const [transfers, setTransfers] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        setLoading(true);
+        const res = await apiClient.get(apiEndpoints.staffTransfers.history(staffId));
+        if (active && res.data) {
+          setTransfers(res.data.data || res.data || []);
+        }
+      } catch (e) {
+        console.error("Failed to load staff transfer history", e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    if (staffId) load();
+    return () => { active = false; };
+  }, [staffId, refreshKey]);
+
+  if (loading) return <div style={{ padding: "12px 0", color: "var(--cms-muted)" }}>Loading transfer history...</div>;
+  if (!transfers.length) return null;
+
+  return (
+    <div style={{ marginTop: "10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px" }}>
+      <h3 style={{ margin: "0 0 12px", fontSize: "15px", fontWeight: "700", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+        <span>⇄ Campus Transfer & Relocation History</span>
+        <span style={{ fontSize: "11px", fontWeight: "normal", color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: "12px" }}>
+          {transfers.length} Recorded Transfer{transfers.length > 1 ? "s" : ""}
+        </span>
+      </h3>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <thead>
+            <tr style={{ background: "#f8fafc", textAlign: "left", color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+              <th style={{ padding: "8px 12px" }}>Order #</th>
+              <th style={{ padding: "8px 12px" }}>Type</th>
+              <th style={{ padding: "8px 12px" }}>From Campus</th>
+              <th style={{ padding: "8px 12px" }}>To Campus</th>
+              <th style={{ padding: "8px 12px" }}>Effective Date</th>
+              <th style={{ padding: "8px 12px" }}>Status</th>
+              <th style={{ padding: "8px 12px", textAlign: "right" }}>Document</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transfers.map((t) => (
+              <tr key={t.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                <td style={{ padding: "10px 12px", fontWeight: "600", color: "#1e293b" }}>{t.transferOrderNumber || `TRF-${t.id}`}</td>
+                <td style={{ padding: "10px 12px", color: "#64748b" }}>{t.transferType || "PermanentRelocation"}</td>
+                <td style={{ padding: "10px 12px", color: "#334155" }}>{t.fromCampusName || `Campus ${t.fromCampusId}`}</td>
+                <td style={{ padding: "10px 12px", fontWeight: "600", color: "#047857" }}>➔ {t.toCampusName || `Campus ${t.toCampusId}`}</td>
+                <td style={{ padding: "10px 12px", color: "#475569" }}>{t.effectiveDate ? t.effectiveDate.split("T")[0] : "—"}</td>
+                <td style={{ padding: "10px 12px" }}>
+                  <span style={{
+                    padding: "2px 8px",
+                    borderRadius: "12px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    background: (t.status === "Approved" || t.status === "Completed") ? "#dcfce7" : t.status === "Pending" ? "#fef3c7" : "#fee2e2",
+                    color: (t.status === "Approved" || t.status === "Completed") ? "#15803d" : t.status === "Pending" ? "#b45309" : "#b91c1c"
+                  }}>
+                    {t.status}
+                  </span>
+                </td>
+                <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    style={{ fontSize: "12px", padding: "4px 8px" }}
+                    onClick={() => window.open(apiEndpoints.staffTransfers.orderPdf(t.id), "_blank")}
+                  >
+                    📄 Official Order PDF
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// STAFF TRANSFER MODAL COMPONENT
+// ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// STAFF TRANSFER MODAL COMPONENT (Hierarchical Dependencies & Active Filters)
+// ----------------------------------------------------------------------
+function StaffTransferModal({ staff, campuses, isOpen, onClose, onSuccess }) {
+  const [step, setStep] = useState(1); // 1 = Configure, 2 = Confirmation Summary
+  const modalScrollRef = useRef(null);
+
+  useEffect(() => {
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  }, [step, isOpen]);
+
+  const [toCampusId, setToCampusId] = useState("");
+  const [postingCategory, setPostingCategory] = useState("");
+  const [customPostingType, setCustomPostingType] = useState("");
+  const [transferType, setTransferType] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [relievingDate, setRelievingDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [reason, setReason] = useState("");
+  const [approvalRemarks, setApprovalRemarks] = useState("");
+  const [confirmedWarning, setConfirmedWarning] = useState(false);
+
+  // Teaching Staff Allocation State - All start empty for user selection
+  const [toBoardId, setToBoardId] = useState("");
+  const [toBoardName, setToBoardName] = useState("");
+  const [academicYear, setAcademicYear] = useState("");
+  const [academicLevel, setAcademicLevel] = useState("");
+  const [academicGroup, setAcademicGroup] = useState("");
+  const [academicSection, setAcademicSection] = useState("");
+  const [selectedSubjects, setSelectedSubjects] = useState([]);
+
+  // Non-Teaching Staff State - All start empty for user selection
+  const [toDepartmentId, setToDepartmentId] = useState("");
+  const [toDepartmentName, setToDepartmentName] = useState("");
+  const [toDesignationId, setToDesignationId] = useState("");
+  const [toDesignationName, setToDesignationName] = useState("");
+  const [toRole, setToRole] = useState("");
+  const [reportingManager, setReportingManager] = useState("");
+
+  // Lookups & System data loaded from real dependency endpoints
+  const [boardsList, setBoardsList] = useState([]);
+  const [academicYearsList, setAcademicYearsList] = useState([]);
+  const [academicLevelsList, setAcademicLevelsList] = useState([]);
+  const [groupsList, setGroupsList] = useState([]);
+  const [sectionsList, setSectionsList] = useState([]);
+  const [subjectsList, setSubjectsList] = useState([]);
+  const [deptList, setDeptList] = useState([]);
+  const [desigList, setDesigList] = useState([]);
+  const [preflight, setPreflight] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [loadingLookups, setLoadingLookups] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const isTeaching = staff?.staffType === "Teaching" || (!staff?.staffType && String(staff?.designation || "").toLowerCase().includes("lecturer"));
+
+  // Deduplicate destination subjects so each subject name appears strictly once
+  const deduplicatedSubjects = useMemo(() => {
+    const seen = new Set();
+    const unique = [];
+    for (const s of subjectsList) {
+      const name = (typeof s === "string" ? s : (s.subjectName || s.name || s.subjectCode || "")).trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        unique.push({ id: s.id || s.subjectId || name, name });
+      }
+    }
+    return unique;
+  }, [subjectsList]);
+
+  const currentCampusId = staff?.campusId || staff?.CampusId || staff?.primaryCampusId || 1;
+  const currentCampusName = staff?.campusName || "Main Campus (HQ)";
+
+  // Retrieve ONLY active campuses, excluding current campus
+  const availableCampuses = useMemo(() => {
+    return (campuses || []).filter((c) => {
+      if (!c) return false;
+      if (c.isActive === false) return false;
+      const s = String(c.status || "").trim().toLowerCase();
+      if (s === "inactive") return false;
+      const cid = Number(c.id ?? c.campusId);
+      return cid > 0 && cid !== Number(currentCampusId);
+    });
+  }, [campuses, currentCampusId]);
+
+  const selectedDestCampus = useMemo(() => {
+    return (campuses || []).find((c) => String(c.id ?? c.campusId) === String(toCampusId));
+  }, [campuses, toCampusId]);
+
+  const destCampusDisplayName = useMemo(() => {
+    if (!selectedDestCampus) return toCampusId ? `Campus #${toCampusId}` : "Destination Campus";
+    const cName = (selectedDestCampus.campusName || selectedDestCampus.name || "").trim();
+    const cCode = (selectedDestCampus.campusCode || selectedDestCampus.code || "").trim();
+    if (!cName || cName.toLowerCase() === "string") {
+      return cCode && cCode.toLowerCase() !== "string" ? cCode : `Campus #${toCampusId}`;
+    }
+    return cCode && cCode.toLowerCase() !== "string" ? `${cName} (${cCode})` : cName;
+  }, [selectedDestCampus, toCampusId]);
+
+  // Handle Posting Category & Custom Option
+  const handlePostingCategoryChange = (e) => {
+    const cat = e.target.value;
+    setPostingCategory(cat);
+    if (cat === "Custom") {
+      setTransferType(customPostingType.trim());
+    } else {
+      setTransferType(cat);
+    }
+  };
+
+  const handleCustomPostingTypeChange = (e) => {
+    const val = e.target.value;
+    setCustomPostingType(val);
+    setTransferType(val);
+  };
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen && staff) {
+      setStep(1);
+      setToCampusId("");
+      setPostingCategory("");
+      setCustomPostingType("");
+      setTransferType("");
+      setEffectiveDate(new Date().toISOString().split("T")[0]);
+      setRelievingDate(new Date().toISOString().split("T")[0]);
+      setReason("");
+      setApprovalRemarks("");
+      setConfirmedWarning(false);
+      setErrorMsg("");
+
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+
+      setToDepartmentId("");
+      setToDepartmentName("");
+      setToDesignationId("");
+      setToDesignationName("");
+      setToRole("");
+      setReportingManager("");
+
+      setBoardsList([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      setDeptList([]);
+      setDesigList([]);
+    }
+  }, [isOpen, staff]);
+
+  // 1. Destination Campus Dependency -> Reset downstream & Load Affiliated Boards or Departments
+  useEffect(() => {
+    if (!isOpen || !toCampusId) {
+      setToBoardId("");
+      setToBoardName("");
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setBoardsList([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+
+      setToDepartmentId("");
+      setToDepartmentName("");
+      setToDesignationId("");
+      setToDesignationName("");
+      setDeptList([]);
+      setDesigList([]);
+      return;
+    }
+
+    let active = true;
+
+    if (isTeaching) {
+      async function loadCampusBoards() {
+        try {
+          setLoadingLookups(true);
+          let boards = [];
+          try {
+            const res = await apiClient.get(`/api/v1/campuses/${toCampusId}/boards`);
+            const raw = res.data?.data || res.data || [];
+            if (Array.isArray(raw) && raw.length > 0) boards = raw;
+          } catch {}
+
+          if (boards.length === 0) {
+            const fallbackRes = await apiClient.get(apiEndpoints.boards?.list || "/api/v1/boards");
+            const rawFallback = fallbackRes.data?.data || fallbackRes.data || [];
+            if (Array.isArray(rawFallback)) boards = rawFallback;
+          }
+
+          if (active) {
+            const activeBoards = boards.filter((b) => b && b.isActive !== false && String(b.status || "").toLowerCase() !== "inactive");
+            setBoardsList(activeBoards);
+          }
+        } catch (err) {
+          console.warn("Failed to load campus boards:", err);
+        } finally {
+          if (active) setLoadingLookups(false);
+        }
+      }
+      loadCampusBoards();
+    } else {
+      async function loadCampusDepartments() {
+        try {
+          setLoadingLookups(true);
+          const res = await apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments", {
+            params: { staffType: "Non-Teaching", includeInactive: false, campusId: toCampusId }
+          });
+          const raw = res.data?.data || res.data || [];
+          if (active && Array.isArray(raw)) {
+            const seen = new Set();
+            const uniqueDepts = [];
+            for (const d of raw) {
+              const dName = (d.departmentName || d.name || "").trim();
+              if (dName && !seen.has(dName.toLowerCase())) {
+                seen.add(dName.toLowerCase());
+                uniqueDepts.push({ id: d.id || d.departmentId, name: dName, ...d });
+              }
+            }
+            setDeptList(uniqueDepts);
+          }
+        } catch (err) {
+          console.warn("Failed to load campus departments:", err);
+        } finally {
+          if (active) setLoadingLookups(false);
+        }
+      }
+      loadCampusDepartments();
+    }
+
+    return () => { active = false; };
+  }, [isOpen, toCampusId, isTeaching]);
+
+  // 2. Affiliated Board Dependency -> Reset downstream & Load Academic Years for this Campus & Board
+  useEffect(() => {
+    if (!isOpen || !toBoardId) {
+      setAcademicYear("");
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setAcademicYearsList([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadAcademicYears() {
+      try {
+        setLoadingLookups(true);
+        let rawYears = [];
+
+        // Attempt 1: Fetch by boardId and campusId
+        try {
+          const res = await apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years", {
+            params: { boardId: toBoardId, campusId: toCampusId, status: true, pageSize: 50 }
+          });
+          const list = res.data?.data || res.data?.items || res.data || [];
+          if (Array.isArray(list) && list.length > 0) {
+            rawYears = list;
+          }
+        } catch (e) {
+          console.warn("Direct academic years fetch error", e);
+        }
+
+        // Attempt 2: If campus returned 0, fetch by boardId alone (how other modules fetch master academic years)
+        if (!rawYears || rawYears.length === 0) {
+          try {
+            const boardRes = await apiClient.get(apiEndpoints.academicYears?.list || "/api/v1/academic-years", {
+              params: { boardId: toBoardId, status: true, pageSize: 50 }
+            });
+            const bList = boardRes.data?.data || boardRes.data?.items || boardRes.data || [];
+            if (Array.isArray(bList) && bList.length > 0) {
+              rawYears = bList;
+            }
+          } catch {}
+        }
+
+        // Attempt 3: Fallback to active academic years endpoint
+        if (!rawYears || rawYears.length === 0) {
+          try {
+            const fallbackRes = await apiClient.get(apiEndpoints.academicYears?.active || "/api/v1/academic-years/active");
+            const fbList = fallbackRes.data?.data || fallbackRes.data || [];
+            if (Array.isArray(fbList) && fbList.length > 0) {
+              const matching = fbList.filter(y => !toBoardId || !y.boardId || String(y.boardId) === String(toBoardId));
+              rawYears = matching.length > 0 ? matching : fbList;
+            }
+          } catch {}
+        }
+
+        if (active) {
+          const seen = new Set();
+          const uniqueYears = [];
+          for (const y of rawYears) {
+            if (y && y.isActive !== false && String(y.status || "").toLowerCase() !== "inactive") {
+              const yName = (y.academicYearName || y.year || y.name || y.code || "").trim();
+              if (yName && !seen.has(yName.toLowerCase())) {
+                seen.add(yName.toLowerCase());
+                uniqueYears.push({ id: y.id || y.academicYearId || yName, name: yName, ...y });
+              }
+            }
+          }
+          setAcademicYearsList(uniqueYears);
+        }
+      } catch (err) {
+        console.warn("Failed to load academic years:", err);
+      } finally {
+        if (active) setLoadingLookups(false);
+      }
+    }
+
+    loadAcademicYears();
+    return () => { active = false; };
+  }, [isOpen, toBoardId, toCampusId]);
+
+  // 3. Academic Year Dependency -> Reset downstream & Load Academic Levels
+  useEffect(() => {
+    if (!isOpen || !academicYear || !toBoardId) {
+      setAcademicLevel("");
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setAcademicLevelsList([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadAcademicLevels() {
+      try {
+        let raw = [];
+        try {
+          const res = await apiClient.get(`/api/v1/academic-levels?boardId=${toBoardId}`);
+          raw = res.data?.data || res.data || [];
+        } catch {
+          const fb = await apiClient.get(`/api/v1/academic-levels`);
+          raw = fb.data?.data || fb.data || [];
+        }
+
+        if (active && Array.isArray(raw)) {
+          const seen = new Set();
+          const uniqueLevels = [];
+          for (const l of raw) {
+            if (l && l.isActive !== false && String(l.status || "").toLowerCase() !== "inactive") {
+              const lName = (l.levelName || l.name || l.academicLevelName || "").trim();
+              if (lName && !seen.has(lName.toLowerCase())) {
+                seen.add(lName.toLowerCase());
+                uniqueLevels.push({ id: l.id || l.levelId || l.academicLevelId || lName, name: lName, ...l });
+              }
+            }
+          }
+          setAcademicLevelsList(uniqueLevels);
+        }
+      } catch (err) {
+        console.warn("Failed to load academic levels:", err);
+      }
+    }
+
+    loadAcademicLevels();
+    return () => { active = false; };
+  }, [isOpen, academicYear, toBoardId, toCampusId]);
+
+  // 4. Academic Level Dependency -> Reset downstream & Load Course Groups
+  useEffect(() => {
+    if (!isOpen || !academicLevel || !toBoardId) {
+      setAcademicGroup("");
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setGroupsList([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadCourseGroups() {
+      try {
+        let rawGroups = [];
+        const selectedLvl = academicLevelsList.find(l => (l.name || l.levelName) === academicLevel || String(l.id || l.levelId) === String(academicLevel));
+        const levelId = selectedLvl?.id || selectedLvl?.levelId || selectedLvl?.academicLevelId;
+        const selectedYr = academicYearsList.find(y => (y.name || y.academicYearName) === academicYear || String(y.id || y.academicYearId) === String(academicYear));
+        const yearId = selectedYr?.id || selectedYr?.academicYearId;
+
+        // Try dropdown with levelId and yearId
+        try {
+          const res = await apiClient.get(`/api/v1/groups/dropdown`, {
+            params: {
+              boardId: toBoardId,
+              ...(levelId ? { academicLevelId: levelId } : {}),
+              ...(yearId ? { academicYearId: yearId } : {})
+            }
+          });
+          rawGroups = res.data?.data || res.data || [];
+        } catch {}
+
+        // Fallback: dropdown with boardId only
+        if (!Array.isArray(rawGroups) || rawGroups.length === 0) {
+          try {
+            const res2 = await apiClient.get(`/api/v1/groups/dropdown?boardId=${toBoardId}`);
+            rawGroups = res2.data?.data || res2.data || [];
+          } catch {}
+        }
+
+        // Fallback: groups by board route
+        if (!Array.isArray(rawGroups) || rawGroups.length === 0) {
+          try {
+            const fb = await apiClient.get(`/api/v1/groups/board/${toBoardId}`);
+            rawGroups = fb.data?.data || fb.data || [];
+          } catch {}
+        }
+
+        if (active && Array.isArray(rawGroups)) {
+          const seen = new Set();
+          const uniqueGroups = [];
+          for (const g of rawGroups) {
+            if (g && g.isActive !== false && String(g.status || "").toLowerCase() !== "inactive") {
+              const gName = (g.groupName || g.name || g.masterGroupName || "").trim();
+              if (gName && !seen.has(gName.toLowerCase())) {
+                seen.add(gName.toLowerCase());
+                uniqueGroups.push({ id: g.id || g.groupId, name: gName, ...g });
+              }
+            }
+          }
+          setGroupsList(uniqueGroups);
+        }
+      } catch (err) {
+        console.warn("Failed to load course groups:", err);
+      }
+    }
+
+    loadCourseGroups();
+    return () => { active = false; };
+  }, [isOpen, academicLevel, toBoardId, toCampusId, academicLevelsList, academicYearsList]);
+
+  // 5. Course Group Dependency -> Reset downstream & Load Sections and Subjects
+  useEffect(() => {
+    if (!isOpen || !academicGroup) {
+      setAcademicSection("");
+      setSelectedSubjects([]);
+      setSectionsList([]);
+      setSubjectsList([]);
+      return;
+    }
+
+    const selectedGrp = groupsList.find(
+      (g) => (g.name || g.groupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup)
+    );
+    const groupId = selectedGrp?.id || selectedGrp?.groupId;
+
+    if (!groupId) return;
+
+    let active = true;
+    async function loadGroupDependencies() {
+      try {
+        const [secRes, subRes] = await Promise.allSettled([
+          apiClient.get(`/api/v1/Sections/group/${groupId}`),
+          apiClient.get(`/api/v1/subjects/group/${groupId}`),
+        ]);
+
+        if (active) {
+          if (secRes.status === "fulfilled" && secRes.value?.data) {
+            const raw = secRes.value.data.data || secRes.value.data || [];
+            const rawList = Array.isArray(raw) ? raw : [];
+            const campusSecs = rawList.filter(s => String(s.campusId || s.CampusId) === String(toCampusId));
+            const listToUse = campusSecs.length > 0 ? campusSecs : rawList;
+
+            const seen = new Set();
+            const uniqueSec = [];
+            for (const s of listToUse) {
+              const sName = (s.sectionName || s.name || "").trim();
+              if (sName && !seen.has(sName.toLowerCase())) {
+                seen.add(sName.toLowerCase());
+                uniqueSec.push({ id: s.id || s.sectionId, name: sName, ...s });
+              }
+            }
+            setSectionsList(uniqueSec);
+          }
+
+          let subjectsLoaded = false;
+          if (subRes.status === "fulfilled" && subRes.value?.data) {
+            const raw = subRes.value.data.data || subRes.value.data || [];
+            if (Array.isArray(raw) && raw.length > 0) {
+              setSubjectsList(raw);
+              subjectsLoaded = true;
+            }
+          }
+
+          if (!subjectsLoaded && toBoardId) {
+            try {
+              const fbSub = await apiClient.get(`/api/v1/subjects/board/${toBoardId}`);
+              const fbRaw = fbSub.data?.data || fbSub.data || [];
+              if (Array.isArray(fbRaw)) setSubjectsList(fbRaw);
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load group dependencies:", err);
+      }
+    }
+
+    loadGroupDependencies();
+    return () => { active = false; };
+  }, [isOpen, academicGroup, groupsList, toBoardId, toCampusId]);
+
+  // Non-Teaching Department Dependency -> Load Designations for this Dept & Campus
+  useEffect(() => {
+    if (!isOpen || isTeaching || !toDepartmentId) {
+      setToDesignationId("");
+      setToDesignationName("");
+      setDesigList([]);
+      return;
+    }
+
+    let active = true;
+    async function loadDepartmentDesignations() {
+      try {
+        const res = await apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations", {
+          params: { includeInactive: false, staffType: "Non-Teaching", departmentId: toDepartmentId, campusId: toCampusId }
+        });
+        const raw = res.data?.data || res.data || [];
+        if (active && Array.isArray(raw)) {
+          const seen = new Set();
+          const uniqueDesigs = [];
+          for (const dg of raw) {
+            const dgName = (dg.designationName || dg.name || "").trim();
+            if (dgName && !seen.has(dgName.toLowerCase())) {
+              seen.add(dgName.toLowerCase());
+              uniqueDesigs.push({ id: dg.id || dg.designationId, name: dgName, ...dg });
+            }
+          }
+          setDesigList(uniqueDesigs);
+        }
+      } catch (err) {
+        console.warn("Failed to load department designations:", err);
+      }
+    }
+
+    loadDepartmentDesignations();
+    return () => { active = false; };
+  }, [isOpen, isTeaching, toDepartmentId, toCampusId]);
+
+  // Preflight audit check
+  useEffect(() => {
+    if (isOpen && staff?.id && toCampusId) {
+      let active = true;
+      async function runPreflight() {
+        try {
+          const res = await apiClient.get(`${apiEndpoints.staffTransfers.preflight(staff.id)}?toCampusId=${toCampusId}`);
+          if (active && res.data) {
+            setPreflight(res.data.data || res.data);
+          }
+        } catch (e) {
+          console.warn("Preflight check failed", e);
+        }
+      }
+      runPreflight();
+      return () => { active = false; };
+    } else {
+      setPreflight(null);
+    }
+  }, [isOpen, staff?.id, toCampusId]);
+
+  if (!isOpen || !staff) return null;
+
+  const toggleSubject = (subName) => {
+    setSelectedSubjects(prev =>
+      prev.includes(subName) ? prev.filter(s => s !== subName) : [...prev, subName]
+    );
+  };
+
+  const handleKeepCurrentSubjects = () => {
+    const rawSubs = staff.allocatedSubjects || staff.subjects || [];
+    const currentSubs = Array.isArray(rawSubs)
+      ? rawSubs.map(s => typeof s === "object" ? s.name || s.subjectName || String(s) : String(s)).filter(Boolean)
+      : (typeof rawSubs === "string" ? rawSubs.split(",").map(s => s.trim()).filter(Boolean) : []);
+    if (currentSubs.length > 0) {
+      setSelectedSubjects(currentSubs);
+    }
+  };
+
+  const handleProceedToConfirmation = (e) => {
+    e.preventDefault();
+    setErrorMsg("");
+
+    if (!toCampusId) {
+      setErrorMsg("Please select a target destination campus.");
+      return;
+    }
+    if (Number(toCampusId) === Number(currentCampusId)) {
+      setErrorMsg("Destination campus must be different from the current source campus.");
+      return;
+    }
+    if (!transferType || !transferType.trim()) {
+      setErrorMsg("Please select or specify a Transfer Posting Type.");
+      return;
+    }
+    if (!reason.trim()) {
+      setErrorMsg("Please specify a reason or administrative remarks for the campus transfer.");
+      return;
+    }
+    if (isTeaching) {
+      if (!toBoardId) {
+        setErrorMsg("Please select an affiliated destination board for teaching allocation.");
+        return;
+      }
+      if (selectedSubjects.length === 0) {
+        setErrorMsg("Please assign at least one teaching subject for the destination campus.");
+        return;
+      }
+    } else {
+      if (!toDepartmentId) {
+        setErrorMsg("Please select a destination department for non-teaching staff.");
+        return;
+      }
+      if (!toDesignationId) {
+        setErrorMsg("Please select a destination designation for non-teaching staff.");
+        return;
+      }
+    }
+
+    setStep(2);
+  };
+
+  const handleExecuteTransfer = async () => {
+    if (!confirmedWarning) {
+      setErrorMsg("Please verify destination allocations and check the authorization confirmation box before executing.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setErrorMsg("");
+
+      const selYear = academicYearsList.find(y => (y.name || y.academicYearName) === academicYear || String(y.id || y.academicYearId) === String(academicYear));
+      const selLevel = academicLevelsList.find(l => (l.name || l.levelName) === academicLevel || String(l.id || l.levelId) === String(academicLevel));
+      const selGroup = groupsList.find(g => (g.name || g.groupName) === academicGroup || String(g.id || g.groupId) === String(academicGroup));
+      const selSection = sectionsList.find(s => (s.name || s.sectionName) === academicSection || String(s.id || s.sectionId) === String(academicSection));
+      const selSubjectObjs = subjectsList.filter(s => selectedSubjects.includes(s.name || s.subjectName));
+
+      const payload = {
+        staffId: staff.id,
+        toCampusId: Number(toCampusId),
+        toBoardId: isTeaching && toBoardId ? Number(toBoardId) : null,
+        toBoardName: isTeaching ? toBoardName : null,
+        toDepartmentId: toDepartmentId ? Number(toDepartmentId) : null,
+        toDepartmentName: toDepartmentName || null,
+        toDesignationId: toDesignationId ? Number(toDesignationId) : null,
+        toDesignationName: toDesignationName || null,
+        transferType: transferType || "Permanent",
+        reason: reason.trim(),
+        effectiveDate: effectiveDate,
+        relievingDate: relievingDate || null,
+        joiningDate: effectiveDate,
+        approvalRemarks: approvalRemarks.trim() || reason.trim(),
+        academicYearId: isTeaching && selYear ? (Number(selYear.id || selYear.academicYearId) || null) : null,
+        academicYearName: isTeaching ? academicYear : null,
+        academicLevelId: isTeaching && selLevel ? (Number(selLevel.id || selLevel.levelId) || null) : null,
+        academicLevelName: isTeaching ? academicLevel : null,
+        groupId: isTeaching && selGroup ? (Number(selGroup.id || selGroup.groupId) || null) : null,
+        groupName: isTeaching ? academicGroup : null,
+        sectionId: isTeaching && selSection ? (Number(selSection.id || selSection.sectionId) || null) : null,
+        sectionName: isTeaching ? academicSection : null,
+        allocatedSubjectIds: isTeaching ? selSubjectObjs.map(s => Number(s.id || s.subjectId)).filter(Boolean) : null,
+        allocatedSubjectNames: isTeaching ? selectedSubjects : null,
+        roleName: !isTeaching ? (toRole || "Staff") : "Faculty",
+        autoApprove: true
+      };
+
+      const res = await apiClient.post(apiEndpoints.staffTransfers.create, payload);
+      const created = res.data?.data || res.data;
+
+      const orderNo = created?.transferOrderNumber || "Generated";
+      const destName = selectedDestCampus?.campusName || selectedDestCampus?.name || `Campus #${toCampusId}`;
+
+      onSuccess?.(`Staff member successfully transferred to ${destName}! Full profile, service records, and experience transitioned seamlessly. Transfer Order ${orderNo} created.`, created?.id);
+      onClose();
+    } catch (err) {
+      console.error("Failed to execute transfer", err);
+      setErrorMsg(getApiErrorMessage(err, "Failed to execute staff transfer. Please verify data and try again."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="staff-transfer-overlay">
+      <div className="staff-transfer-dialog">
+        {/* MODAL HEADER - Fixed Top */}
+        <div className="staff-transfer-header">
+          <div className="staff-transfer-header-left">
+            <div className="staff-transfer-header-icon">
+              <ArrowRightLeft size={16} />
+            </div>
+            <div className="staff-transfer-header-text">
+              <h3 className="staff-transfer-header-title">Staff Campus Transfer &amp; Posting Relocation</h3>
+              <span className="staff-transfer-header-sub">Inter-campus transfer preserving service history &amp; archives</span>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="staff-transfer-close-btn" title="Close">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* CURRENT STAFF PROFILE BANNER - Fixed Top */}
+        <div className="staff-transfer-profile-banner">
+          <div className="staff-transfer-profile-grid">
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon user-icon">
+                <UserRound size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Staff Member</span>
+                <strong className="staff-transfer-info-value">{staff.fullName || `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || staff.employeeId}</strong>
+              </div>
+            </div>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon id-icon">
+                <KeyRound size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Employee ID</span>
+                <strong className="staff-transfer-info-value emp-id">{staff.employeeId}</strong>
+              </div>
+            </div>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon type-icon">
+                <GraduationCap size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Staff Type</span>
+                <span className={`staff-transfer-type-badge ${isTeaching ? "teaching" : "non-teaching"}`}>
+                  {isTeaching ? "Teaching Faculty" : "Non-Teaching Staff"}
+                </span>
+              </div>
+            </div>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon campus-icon">
+                <MapPin size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Campus</span>
+                <span className="staff-transfer-campus-badge">
+                  📍 {currentCampusName}
+                </span>
+              </div>
+            </div>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon role-icon">
+                <UserCheck size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Designation</span>
+                <strong className="staff-transfer-info-value">{staff.designation || "—"}</strong>
+              </div>
+            </div>
+
+            <div className="staff-transfer-info-pill">
+              <div className="staff-transfer-info-icon dept-icon">
+                <Building2 size={14} />
+              </div>
+              <div className="staff-transfer-info-content">
+                <span className="staff-transfer-info-label">Current Department</span>
+                <strong className="staff-transfer-info-value">{staff.department || "—"}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* STEP TABS */}
+        <div className="staff-transfer-tabs-wrap">
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className={`staff-transfer-tab-btn ${step === 1 ? "is-active" : ""}`}
+          >
+            <span className="staff-transfer-step-pill">1</span>
+            <span>Configure Destination Allocations</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (toCampusId && transferType && reason.trim()) setStep(2); }}
+            className={`staff-transfer-tab-btn ${step === 2 ? "is-active" : ""}`}
+            disabled={!toCampusId || !transferType}
+          >
+            <span className="staff-transfer-step-pill">2</span>
+            <span>Confirmation &amp; Relocation Authorization</span>
+          </button>
+        </div>
+
+        {/* SCROLLABLE FORM CONTENT */}
+        <div ref={modalScrollRef} className="staff-transfer-body">
+          {errorMsg && (
+            <div className="staff-transfer-error-alert">
+              <AlertCircle size={16} />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* PREFLIGHT ADVISORY BANNER */}
+          {preflight && (preflight.activeTimetableSlotsCount > 0 || (preflight.warnings && preflight.warnings.length > 0)) && (
+            <div className="staff-transfer-preflight-alert">
+              <div className="preflight-header">
+                <AlertCircle size={15} />
+                <span>Relieving Campus Audit Advisory</span>
+              </div>
+              {preflight.activeTimetableSlotsCount > 0 && (
+                <p>
+                  Staff member currently holds <strong>{preflight.activeTimetableSlotsCount} active weekly timetable slots</strong> at {currentCampusName}. These will be gracefully unassigned without affecting historical attendance records.
+                </p>
+              )}
+              {preflight.warnings && preflight.warnings.map((w, idx) => (
+                <div key={idx} className="preflight-item">• {w}</div>
+              ))}
+            </div>
+          )}
+
+          {step === 1 ? (
+            <form onSubmit={handleProceedToConfirmation} className="staff-transfer-form">
+              {/* TARGET CAMPUS & DATES CARD */}
+              <div className="staff-transfer-card">
+                <div className="staff-transfer-card-header">
+                  <div className="staff-transfer-card-title">
+                    <Building2 size={16} />
+                    <span>Destination Campus &amp; Transfer Dates</span>
+                  </div>
+                </div>
+
+                <div className="staff-transfer-form-grid-2">
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Building2 size={13} />
+                      <span>Destination Campus <strong className="required-star">*</strong></span>
+                    </label>
+                    <select
+                      value={toCampusId}
+                      onChange={(e) => setToCampusId(e.target.value)}
+                      required
+                      className="staff-transfer-select"
+                    >
+                      <option value="">Select Destination Campus *...</option>
+                      {availableCampuses.map((c) => (
+                        <option key={c.id ?? c.campusId} value={c.id ?? c.campusId}>
+                          {c.campusName || c.name} ({c.campusCode || c.code || `ID: ${c.id ?? c.campusId}`})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <ArrowRightLeft size={13} />
+                      <span>Transfer Posting Type <strong className="required-star">*</strong></span>
+                    </label>
+                    <select
+                      value={postingCategory}
+                      onChange={handlePostingCategoryChange}
+                      required
+                      className="staff-transfer-select"
+                    >
+                      <option value="">Select Posting Type *...</option>
+                      <option value="Permanent">Permanent Relocation</option>
+                      <option value="VisitingFaculty">Visiting Faculty Allocation</option>
+                      <option value="Deputation">Deputation / Temporary Posting</option>
+                      <option value="Custom">Other / Custom Posting Type...</option>
+                    </select>
+                    {postingCategory === "Custom" && (
+                      <input
+                        type="text"
+                        value={customPostingType}
+                        onChange={handleCustomPostingTypeChange}
+                        placeholder="Specify custom posting type (e.g. Sabbatical Relocation)*"
+                        required
+                        className="staff-transfer-input custom-input"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                <div className="staff-transfer-form-grid-2">
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Calendar size={13} />
+                      <span>Effective Transfer Date <strong className="required-star">*</strong></span>
+                    </label>
+                    <input
+                      type="date"
+                      value={effectiveDate}
+                      onChange={(e) => setEffectiveDate(e.target.value)}
+                      required
+                      className="staff-transfer-input"
+                    />
+                  </div>
+
+                  <div className="staff-transfer-form-group">
+                    <label className="staff-transfer-label">
+                      <Clock3 size={13} />
+                      <span>Relieving Date from {currentCampusName}</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={relievingDate}
+                      onChange={(e) => setRelievingDate(e.target.value)}
+                      className="staff-transfer-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* TEACHING STAFF ALLOCATIONS CONTAINER - DYNAMIC & HIERARCHICAL */}
+              {isTeaching && (
+                <div className="staff-transfer-card teaching-card">
+                  <div className="staff-transfer-card-header">
+                    <div className="staff-transfer-card-title">
+                      <GraduationCap size={16} />
+                      <span>Destination Academic &amp; Subject Allocations (Teaching)</span>
+                    </div>
+                    {staff.allocatedSubjects && staff.allocatedSubjects.length > 0 && (
+                      <button
+                        type="button"
+                        className="staff-transfer-subtle-btn"
+                        onClick={handleKeepCurrentSubjects}
+                      >
+                        <RefreshCw size={12} />
+                        <span>Keep Current Subjects</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="staff-transfer-form-grid-2">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Affiliated Educational Board <strong className="required-star">*</strong></span>
+                      </label>
+                      <select
+                        value={toBoardId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToBoardId(val);
+                          const sel = boardsList.find(b => String(b.id || b.boardId) === String(val));
+                          setToBoardName(sel?.boardName || sel?.name || "");
+                        }}
+                        disabled={!toCampusId}
+                        required
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!toCampusId ? "Select Destination Campus first..." : "Select Affiliated Board *..."}</option>
+                        {boardsList.map(b => (
+                          <option key={b.id || b.boardId} value={b.id || b.boardId}>
+                            {b.boardName || b.name || b.boardCode || b.code}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Academic Year <strong className="required-star">*</strong></span>
+                      </label>
+                      <select
+                        value={academicYear}
+                        onChange={(e) => setAcademicYear(e.target.value)}
+                        disabled={!toBoardId}
+                        required
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!toBoardId ? "Select Board first..." : "Select Academic Year *..."}</option>
+                        {academicYearsList.map(y => {
+                          const yName = y.name || y.academicYearName || y.year || y.code;
+                          return (
+                            <option key={y.id || y.academicYearId || yName} value={yName}>
+                              {yName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="staff-transfer-form-grid-3">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Academic Level</span>
+                      </label>
+                      <select
+                        value={academicLevel}
+                        onChange={(e) => setAcademicLevel(e.target.value)}
+                        disabled={!academicYear}
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!academicYear ? "Select Academic Year first..." : "Select Academic Level..."}</option>
+                        {academicLevelsList.map(l => {
+                          const lName = l.name || l.levelName || l.academicLevelName;
+                          return (
+                            <option key={l.id || l.levelId || lName} value={lName}>
+                              {lName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Course Group / Stream</span>
+                      </label>
+                      <select
+                        value={academicGroup}
+                        onChange={(e) => setAcademicGroup(e.target.value)}
+                        disabled={!academicLevel}
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!academicLevel ? "Select Academic Level first..." : "Select Course Group..."}</option>
+                        {groupsList.map(g => {
+                          const gName = g.name || g.groupName || g.masterGroupName;
+                          return (
+                            <option key={g.id || g.groupId || gName} value={gName}>
+                              {gName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Section Allocation</span>
+                      </label>
+                      <select
+                        value={academicSection}
+                        onChange={(e) => setAcademicSection(e.target.value)}
+                        disabled={!academicGroup}
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!academicGroup ? "Select Group first..." : "Select Section Allocation..."}</option>
+                        {sectionsList.map(s => {
+                          const sName = s.name || s.sectionName;
+                          return (
+                            <option key={s.id || s.sectionId || sName} value={sName}>
+                              {sName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* DEDUPLICATED SUBJECT PILLS */}
+                  <div className="staff-transfer-subjects-container">
+                    <label className="staff-transfer-label">
+                      <FileText size={13} />
+                      <span>Assign Destination Subjects <strong className="required-star">*</strong> (Select one or more)</span>
+                    </label>
+                    <div className="staff-transfer-subjects-wrap">
+                      {!toBoardId ? (
+                        <span className="staff-transfer-helper-text">
+                          Please select an Affiliated Educational Board above to view and assign destination subjects.
+                        </span>
+                      ) : deduplicatedSubjects.length > 0 ? (
+                        deduplicatedSubjects.map((s) => {
+                          const subName = s.name;
+                          const isSelected = selectedSubjects.includes(subName);
+                          return (
+                            <button
+                              key={s.id || subName}
+                              type="button"
+                              onClick={() => toggleSubject(subName)}
+                              className={`staff-transfer-subject-chip ${isSelected ? "is-selected" : ""}`}
+                            >
+                              {isSelected ? <Check size={13} /> : <Plus size={13} />}
+                              <span>{subName}</span>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="staff-transfer-helper-text">
+                          No subjects configured for the selected board/group.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* NON-TEACHING SPECIFIC CONTAINER - POPULATED DYNAMICALLY */}
+              {!isTeaching && (
+                <div className="staff-transfer-card non-teaching-card">
+                  <div className="staff-transfer-card-header">
+                    <div className="staff-transfer-card-title non-teaching-title">
+                      <Building2 size={16} />
+                      <span>Destination Department &amp; Operational Role (Non-Teaching)</span>
+                    </div>
+                  </div>
+                  <div className="staff-transfer-form-grid-3">
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Destination Department <strong className="required-star">*</strong></span>
+                      </label>
+                      <select
+                        value={toDepartmentId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToDepartmentId(val);
+                          const d = deptList.find(x => String(x.id || x.departmentId) === String(val));
+                          setToDepartmentName(d?.departmentName || d?.name || "");
+                        }}
+                        disabled={!toCampusId}
+                        required
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!toCampusId ? "Select Destination Campus first..." : "Select Department *..."}</option>
+                        {deptList.map(d => (
+                          <option key={d.id || d.departmentId} value={d.id || d.departmentId}>
+                            {d.departmentName || d.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Destination Designation <strong className="required-star">*</strong></span>
+                      </label>
+                      <select
+                        value={toDesignationId}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setToDesignationId(val);
+                          const dg = desigList.find(x => String(x.id || x.designationId) === String(val));
+                          setToDesignationName(dg?.designationName || dg?.name || "");
+                        }}
+                        disabled={!toDepartmentId}
+                        required
+                        className="staff-transfer-select"
+                      >
+                        <option value="">{!toDepartmentId ? "Select Department first..." : "Select Designation *..."}</option>
+                        {desigList.map(dg => (
+                          <option key={dg.id || dg.designationId} value={dg.id || dg.designationId}>
+                            {dg.designationName || dg.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="staff-transfer-form-group">
+                      <label className="staff-transfer-label">
+                        <span>Role &amp; Security Context</span>
+                      </label>
+                      <select
+                        value={toRole}
+                        onChange={(e) => setToRole(e.target.value)}
+                        className="staff-transfer-select"
+                      >
+                        <option value="">Select Role...</option>
+                        <option value="Staff">Staff</option>
+                        <option value="Admin">Administrator</option>
+                        <option value="Accountant">Accountant</option>
+                        <option value="Librarian">Librarian</option>
+                        <option value="Hostel Admin">Hostel Admin</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* REASON FOR TRANSFER CARD */}
+              <div className="staff-transfer-card">
+                <div className="staff-transfer-card-header">
+                  <div className="staff-transfer-card-title">
+                    <Pencil size={15} />
+                    <span>Official Justification &amp; Administrative Reason <strong className="required-star">*</strong></span>
+                  </div>
+                </div>
+                <textarea
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Administrative relocation to meet intermediate batch requirements at destination campus; approved by Governing Board."
+                  required
+                  className="staff-transfer-textarea"
+                />
+              </div>
+
+              {/* BUTTONS STEP 1 */}
+              <div className="staff-transfer-foot">
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>
+                  Cancel
+                </button>
+                <button type="submit" className="cms-btn cms-btn-primary">
+                  <span>Review Transfer &amp; Summary</span>
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* STEP 2: CONFIRMATION SUMMARY & WARNING */
+            <div className="staff-transfer-step2-content">
+              {/* SUMMARY CARD */}
+              <div className="staff-transfer-summary-card">
+                <div className="staff-transfer-summary-card-head">
+                  <div className="staff-transfer-summary-title">
+                    <FileText size={17} />
+                    <span>Confirm Staff Campus Transfer Summary</span>
+                  </div>
+                  <span className="staff-transfer-badge-preview">Verification Step</span>
+                </div>
+
+                <div className="staff-transfer-summary-grid">
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><UserRound size={13} /> Staff Member</span>
+                    <strong className="cell-value">{staff.fullName || staff.employeeId}</strong>
+                  </div>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><KeyRound size={13} /> Employee ID</span>
+                    <strong className="cell-value emp-id">{staff.employeeId}</strong>
+                  </div>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Building2 size={13} /> Relieving From</span>
+                    <strong className="cell-value relieving-text">📍 {currentCampusName}</strong>
+                  </div>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Building2 size={13} /> Destination Campus</span>
+                    <strong className="cell-value destination-text">📍 {destCampusDisplayName}</strong>
+                  </div>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><ArrowRightLeft size={13} /> Posting Type</span>
+                    <span className="cell-badge">{transferType}</span>
+                  </div>
+
+                  <div className="staff-transfer-summary-cell">
+                    <span className="cell-label"><Calendar size={13} /> Effective Date</span>
+                    <strong className="cell-value">{effectiveDate}</strong>
+                  </div>
+
+                  {isTeaching ? (
+                    <>
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><GraduationCap size={13} /> Assigned Board</span>
+                        <strong className="cell-value">{toBoardName || "—"}</strong>
+                      </div>
+
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><FileText size={13} /> Assigned Subjects</span>
+                        <div className="cell-subjects-wrap">
+                          {selectedSubjects.length > 0 ? (
+                            selectedSubjects.map((sub) => (
+                              <span key={sub} className="summary-subject-tag">{sub}</span>
+                            ))
+                          ) : (
+                            <span className="cell-value">—</span>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><Building2 size={13} /> Destination Department</span>
+                        <strong className="cell-value">{toDepartmentName || "—"}</strong>
+                      </div>
+
+                      <div className="staff-transfer-summary-cell">
+                        <span className="cell-label"><UserCheck size={13} /> Destination Designation</span>
+                        <strong className="cell-value">{toDesignationName || "—"}</strong>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* LIFECYCLE & HISTORICAL DATA PRESERVATION GUARANTEE */}
+              <div className="staff-transfer-policy-box">
+                <div className="policy-header">
+                  <ShieldCheck size={18} />
+                  <span>Campus Lifecycle &amp; Service Continuity Policy</span>
+                </div>
+                <p className="policy-body">
+                  Transferring this staff member will mark them as <strong>Transferred / Relieved</strong> in {currentCampusName} while securely retaining all past attendance logs, payroll history, and timetable archives in the database. Their profile, credentials, and cumulative experience will transition active to <strong>{destCampusDisplayName}</strong>.
+                </p>
+              </div>
+
+              {/* APPROVAL REMARKS */}
+              <div className="staff-transfer-form-group approval-remarks-group">
+                <label className="staff-transfer-label">
+                  <Pencil size={13} />
+                  <span>Governing Authority Remarks / Approval Note (Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={approvalRemarks}
+                  onChange={(e) => setApprovalRemarks(e.target.value)}
+                  placeholder="e.g. Sanctioned as per Board Order No. TR-2026/04."
+                  className="staff-transfer-input"
+                />
+              </div>
+
+              {/* CONFIRMATION CHECKBOX */}
+              <label className="staff-transfer-confirm-box">
+                <input
+                  type="checkbox"
+                  checked={confirmedWarning}
+                  onChange={(e) => setConfirmedWarning(e.target.checked)}
+                  className="staff-transfer-checkbox"
+                />
+                <span className="confirm-text">
+                  I confirm this official inter-campus transfer. I understand that the staff member will be relieved from <strong>{currentCampusName}</strong> and inducted into <strong>{destCampusDisplayName}</strong> with an official Transfer Order generated.
+                </span>
+              </label>
+
+              {/* BUTTONS STEP 2 */}
+              <div className="staff-transfer-foot step2-foot">
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(1)} disabled={submitting}>
+                  <ArrowLeft size={14} />
+                  <span>Back to Allocations</span>
+                </button>
+                <div className="step2-right-btns">
+                  <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose} disabled={submitting}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary execute-transfer-btn"
+                    onClick={handleExecuteTransfer}
+                    disabled={submitting || !confirmedWarning}
+                  >
+                    {submitting ? <Loader2 size={15} className="sp-spin" /> : <CheckCircle2 size={15} />}
+                    <span>{submitting ? "Executing Transfer..." : "Execute & Dispatch Transfer Order"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------------------------------------------------
 function Details({ record, records, setRecords, id }) {
+  const { campuses } = useCampusContext();
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferRefreshKey, setTransferRefreshKey] = useState(0);
   const n = useNavigate();
   const [toast, setToast] = useState(null);
   const [photoError, setPhotoError] = useState(false);
@@ -6225,24 +8554,139 @@ function Details({ record, records, setRecords, id }) {
   }
 
   const handleSaveCard = async (updatedRecord) => {
-    if (updatedRecord.firstName || updatedRecord.lastName) {
-      updatedRecord.fullName =
-        [updatedRecord.firstName, updatedRecord.middleName, updatedRecord.lastName].filter(Boolean).join(" ") || updatedRecord.fullName;
+    // 1. Ensure firstName and lastName are properly derived from fullName if needed
+    let firstName = updatedRecord.firstName;
+    let lastName = updatedRecord.lastName;
+    let middleName = updatedRecord.middleName;
+
+    if ((!firstName || !lastName) && updatedRecord.fullName) {
+      const parts = String(updatedRecord.fullName).trim().split(/\s+/);
+      if (parts.length === 1) {
+        firstName = parts[0];
+        lastName = ".";
+      } else if (parts.length === 2) {
+        firstName = parts[0];
+        lastName = parts[1];
+      } else {
+        firstName = parts[0];
+        middleName = parts.slice(1, -1).join(" ");
+        lastName = parts[parts.length - 1];
+      }
     }
+
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ") || updatedRecord.fullName;
+
+    // 2. Sanitize date formats for HTML5 and C# API (strip ISO time part to YYYY-MM-DD)
+    const sanitizeDate = (val) => {
+      if (!val) return null;
+      const str = String(val).split("T")[0].trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(str) ? str : null;
+    };
+
+    const dateOfBirth = sanitizeDate(updatedRecord.dateOfBirth) || sanitizeDate(activeRecord.dateOfBirth) || "1990-01-01";
+    const dateOfJoining = sanitizeDate(updatedRecord.dateOfJoining) || sanitizeDate(updatedRecord.joiningDate) || sanitizeDate(activeRecord.dateOfJoining) || sanitizeDate(activeRecord.joiningDate) || "2024-01-01";
+    const experienceFrom = sanitizeDate(updatedRecord.experienceFrom) || sanitizeDate(activeRecord.experienceFrom);
+    const experienceTo = sanitizeDate(updatedRecord.experienceTo) || sanitizeDate(activeRecord.experienceTo);
+
+    // 3. Normalize allocated subjects as string array
+    const rawSubs = updatedRecord.allocatedSubjects ?? updatedRecord.subjects ?? activeRecord.allocatedSubjects ?? activeRecord.subjects;
+    const allocatedSubjects = Array.isArray(rawSubs)
+      ? rawSubs.map((s) => (typeof s === "object" ? s.name || s.subjectName || String(s) : String(s))).filter(Boolean)
+      : typeof rawSubs === "string" && rawSubs.trim()
+        ? rawSubs.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+
+    // Clear legacy ID mismatches if user changed Department / Designation / Board by name in preview
+    let departmentId = updatedRecord.departmentId;
+    if (updatedRecord.department && updatedRecord.department !== activeRecord.department) {
+      departmentId = null;
+    }
+
+    let designationId = updatedRecord.designationId;
+    if (updatedRecord.designation && updatedRecord.designation !== activeRecord.designation) {
+      designationId = null;
+    }
+
+    let boardId = updatedRecord.boardId;
+    if (Array.isArray(updatedRecord.assignedBoardIds) && updatedRecord.assignedBoardIds.length > 0) {
+      boardId = updatedRecord.boardId || updatedRecord.assignedBoardIds[0];
+    } else if (updatedRecord.board && updatedRecord.board !== activeRecord.board && !updatedRecord.boardId) {
+      boardId = null;
+    }
+
+    let campusId = updatedRecord.campusId;
+    if (Array.isArray(updatedRecord.assignedCampusIds) && updatedRecord.assignedCampusIds.length > 0) {
+      campusId = updatedRecord.campusId || updatedRecord.assignedCampusIds[0];
+    }
+
+    const qualification = updatedRecord.highestQualification || updatedRecord.qualification || activeRecord.highestQualification || activeRecord.qualification || "Graduate";
+
+    const payload = {
+      ...activeRecord,
+      ...updatedRecord,
+      firstName: firstName || activeRecord.firstName || "Staff",
+      middleName: middleName || activeRecord.middleName || null,
+      lastName: lastName || activeRecord.lastName || ".",
+      fullName,
+      gender: updatedRecord.gender || activeRecord.gender || "Other",
+      mobile: updatedRecord.mobile || activeRecord.mobile || "",
+      dateOfBirth,
+      qualification,
+      highestQualification: qualification,
+      allocatedSubjects,
+      subjects: allocatedSubjects,
+      departmentSpecific: {
+        ...(typeof activeRecord.departmentSpecific === "object" ? activeRecord.departmentSpecific : {}),
+        ...(typeof updatedRecord.departmentSpecific === "object" ? updatedRecord.departmentSpecific : {}),
+        allocatedSubjects,
+        subjects: allocatedSubjects,
+      },
+      dateOfJoining,
+      joiningDate: dateOfJoining,
+      ...(departmentId !== undefined ? { departmentId } : {}),
+      ...(designationId !== undefined ? { designationId } : {}),
+      ...(boardId !== undefined ? { boardId } : {}),
+      ...(campusId !== undefined ? { campusId } : {}),
+      ...(Array.isArray(updatedRecord.assignedBoardIds) ? { assignedBoardIds: updatedRecord.assignedBoardIds } : {}),
+      ...(Array.isArray(updatedRecord.assignedCampusIds) ? { assignedCampusIds: updatedRecord.assignedCampusIds } : {}),
+      ...(experienceFrom ? { experienceFrom } : {}),
+      ...(experienceTo ? { experienceTo } : {}),
+      ...(updatedRecord.totalExperience !== undefined ? { totalExperience: updatedRecord.totalExperience } : {}),
+    };
+
+    // Unconditionally sanitize documents & auxiliary lists to avoid serialization mismatches
+    if (payload.documents !== undefined) {
+      if (typeof payload.documents === "object" && payload.documents !== null) {
+        try {
+          payload.documentsJson = JSON.stringify(payload.documents);
+        } catch { }
+      }
+      delete payload.documents;
+    }
+    delete payload.documentsMap;
+    delete payload.documentsList;
+    delete payload.educationList;
+    delete payload.experienceList;
+    delete payload.departmentSpecificJson;
+
     try {
       // PUT /api/v1/staff/{id}
-      await apiClient.put(apiEndpoints.faculty.update(updatedRecord.id), updatedRecord);
-      setApiDetail((prev) => ({ ...(prev || {}), ...updatedRecord }));
+      const res = await apiClient.put(apiEndpoints.faculty.update(payload.id), payload);
+      const serverUpdated = res.data?.data || res.data || {};
+      const merged = { ...activeRecord, ...payload, ...serverUpdated, allocatedSubjects, subjects: allocatedSubjects };
+      setApiDetail(merged);
+      setRecords((prev) => prev.map((r) => (r.id === payload.id ? { ...r, ...merged } : r)));
+      try {
+        window.dispatchEvent(new Event("staff-records-updated"));
+      } catch (error) {
+        console.warn("Unable to notify Roles & Permissions about the staff update:", error);
+      }
+      setToast("Staff details updated successfully.");
     } catch (err) {
-      console.warn("PUT /api/v1/staff/{id} API error:", err);
+      console.error("PUT /api/v1/staff/{id} API error:", err);
+      const msg = getApiErrorMessage(err, "Failed to update staff details.");
+      setToast(msg);
     }
-    setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? { ...r, ...updatedRecord } : r)));
-    try {
-      window.dispatchEvent(new Event("staff-records-updated"));
-    } catch (error) {
-      console.warn("Unable to notify Roles & Permissions about the staff update:", error);
-    }
-    setToast("Staff details updated successfully.");
   };
 
   return (
@@ -6251,11 +8695,25 @@ function Details({ record, records, setRecords, id }) {
       subtitle="View complete staff record and profile activity."
       breadcrumb={["People", "Staff Management"]}
       actions={
-        activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
-          <button className="cms-btn cms-btn-primary" onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}>
-            Review Submission
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            onClick={() => setShowTransferModal(true)}
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", cursor: "pointer" }}
+            title="Transfer staff member to another campus"
+          >
+            <ArrowRightLeft size={14} /> Transfer Campus
           </button>
-        ) : null
+          {activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
+            <button
+              className="cms-btn cms-btn-secondary"
+              onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
+            >
+              Review Submission
+            </button>
+          ) : null}
+        </div>
       }
     >
       <main className="staff-mock-page">
@@ -6292,12 +8750,63 @@ function Details({ record, records, setRecords, id }) {
                 ))}
               </div>
             ) : null}
-            <Badge value={activeRecord.status || "Active"} />
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
+              <Badge value={activeRecord.status || "Active"} />
+              {((Array.isArray(activeRecord.assignedCampusIds) && activeRecord.assignedCampusIds.length > 1) ||
+                (Array.isArray(activeRecord.assignedCampuses) && activeRecord.assignedCampuses.length > 1) ||
+                Boolean(activeRecord.campusBoardAssignmentsJson)) ? (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  background: "#eff6ff",
+                  color: "#1e40af",
+                  border: "1px solid #bfdbfe"
+                }}>
+                  🌐 Global / Multi-Campus Staff ({activeRecord.assignedCampusIds?.length || activeRecord.assignedCampuses?.length || "Multi"} Campuses)
+                </span>
+              ) : (
+                <span style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "3px 10px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  background: "#f8fafc",
+                  color: "#475569",
+                  border: "1px solid #e2e8f0"
+                }}>
+                  📍 Single-Campus ({activeRecord.campusName || "Main Campus"})
+                </span>
+              )}
+            </div>
           </div>
         </section>
         <section className="staff-panel">
           <Summary record={activeRecord} onSave={handleSaveCard} />
         </section>
+        <section className="staff-panel" style={{ marginTop: "16px" }}>
+          <StaffTransferHistory staffId={activeRecord.id} refreshKey={transferRefreshKey} />
+        </section>
+        <StaffTransferModal
+          staff={activeRecord}
+          campuses={campuses}
+          isOpen={showTransferModal}
+          onClose={() => setShowTransferModal(false)}
+          onSuccess={(msg) => {
+            setToast(msg || "Campus transfer executed successfully.");
+            setTransferRefreshKey((k) => k + 1);
+            if (typeof setRecords === "function") {
+              setRecords((prev) => (Array.isArray(prev) ? prev.map((r) => r.id === activeRecord.id ? { ...r, status: "Transferred" } : r) : []));
+            }
+          }}
+        />
       </main>
       {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </DashboardLayout>
@@ -6329,6 +8838,7 @@ function Review({ record, update, activity }) {
         reviewStatus: "Approved",
       });
       if (activity) activity(`${record.fullName} profile approved by administration`);
+      alert(`Faculty profile approved successfully! Official QuestPDF Offer Letter generated and emailed to ${record.email || "faculty email"}.`);
       n(`/dashboard/staff/${record.id}`);
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
@@ -6418,13 +8928,18 @@ function Review({ record, update, activity }) {
 }
 
 // ----------------------------------------------------------------------
-// SUMMARY COMPONENT (Supports field editing, masking and save)
+// SUMMARY COMPONENT (Supports field editing, masking, multi-campus allocation and save)
 // ----------------------------------------------------------------------
 function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
-  const { boards } = useAcademicContext();
+  const { boards, allBoards } = useAcademicContext();
   const { campuses } = useCampusContext();
   const [editingGroup, setEditingGroup] = useState(null);
   const [formData, setFormData] = useState({});
+
+  const [editingAllocations, setEditingAllocations] = useState(false);
+  const [allocCampusIds, setAllocCampusIds] = useState([]);
+  const [allocPrimaryCampusId, setAllocPrimaryCampusId] = useState(null);
+  const [allocBoardIds, setAllocBoardIds] = useState([]);
 
   const isPrincipalRecord = useMemo(() => {
     return (
@@ -6436,7 +8951,76 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     );
   }, [record]);
 
+  // Comprehensive institution boards (Includes all configured boards)
+  const institutionalBoards = useMemo(() => {
+    const list = Array.isArray(allBoards) && allBoards.length > 0 ? allBoards : (Array.isArray(boards) ? boards : []);
+    const seen = new Set();
+    return list.filter((b) => {
+      if (!b) return false;
+      const bKey = String(b.id || b.boardId || b.code || b.boardCode || b.name || b.boardName);
+      if (seen.has(bKey)) return false;
+      seen.add(bKey);
+      return true;
+    });
+  }, [allBoards, boards]);
+
+  // Comprehensive institution campuses
+  const institutionalCampuses = useMemo(() => {
+    const list = Array.isArray(campuses) ? campuses : [];
+    const seen = new Set();
+    return list.filter((c) => {
+      if (!c) return false;
+      const cKey = String(c.id || c.campusId || c.code || c.campusCode || c.name || c.campusName);
+      if (seen.has(cKey)) return false;
+      seen.add(cKey);
+      return true;
+    });
+  }, [campuses]);
+
+  // Board options for select dropdown
+  const activeBoardOptions = useMemo(() => {
+    return institutionalBoards.map((b) => ({
+      value: b.name || b.boardName,
+      label: b.code || b.boardCode ? `${b.name || b.boardName} (${b.code || b.boardCode})` : (b.name || b.boardName),
+      code: b.code || b.boardCode || "",
+      id: b.id || b.boardId,
+    }));
+  }, [institutionalBoards]);
+
+  // Campus options for select dropdown
+  const activeCampusOptions = useMemo(() => {
+    return institutionalCampuses.map((c) => ({
+      value: c.name || c.campusName,
+      label: c.code || c.campusCode ? `${c.name || c.campusName} (${c.code || c.campusCode})` : (c.name || c.campusName),
+      code: c.code || c.campusCode || "",
+      id: c.id || c.campusId,
+    }));
+  }, [institutionalCampuses]);
+
+  // Department options based on staff type and master data
+  const departmentOptions = useMemo(() => {
+    try {
+      const cached = loadCachedDepartments();
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached.map(d => d.departmentName || d.name).filter(Boolean);
+      }
+    } catch { }
+    return record?.staffType === "Non-Teaching" ? nonTeachingDepartments : teachingDepartments;
+  }, [record]);
+
+  // Designation options based on staff type and master data
+  const designationOptions = useMemo(() => {
+    try {
+      const cached = loadCachedDesignations();
+      if (Array.isArray(cached) && cached.length > 0) {
+        return cached.map(d => d.name || d.designationName).filter(Boolean);
+      }
+    } catch { }
+    return record?.staffType === "Non-Teaching" ? nonTeachingDesignations : teachingDesignations;
+  }, [record]);
+
   const resolvedCampusList = useMemo(() => {
+    let rawList = [];
     // 1. Try campusBoardAssignmentsJson
     try {
       if (record?.campusBoardAssignmentsJson) {
@@ -6445,66 +9029,86 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           const valid = parsed.filter(p => p.campusId || p.campusName);
           if (valid.length > 0) {
             return valid.map(p => {
-              const matched = (campuses || []).find(cp => Number(cp.id ?? cp.campusId) === Number(p.campusId));
+              const matched = institutionalCampuses.find(cp => Number(cp.id ?? cp.campusId) === Number(p.campusId));
               return {
                 id: p.campusId || matched?.id || matched?.campusId,
                 name: p.campusName || matched?.name || matched?.campusName || `Campus #${p.campusId}`,
-                code: matched?.code || matched?.campusCode || "",
+                code: matched?.code || matched?.campusCode || p.campusCode || "",
+                isPrimary: Boolean(p.isPrimary || (record.campusId && Number(record.campusId) === Number(p.campusId))),
               };
             });
           }
         }
       }
-    } catch {}
+    } catch { }
 
     // 2. Try assignedCampuses
     if (Array.isArray(record?.assignedCampuses) && record.assignedCampuses.length > 0) {
       return record.assignedCampuses.map((c) => {
         if (typeof c === "object" && c !== null) {
           const cid = c.id ?? c.campusId;
-          const matched = (campuses || []).find((cp) => (cid && Number(cp.id ?? cp.campusId) === Number(cid)) || (c.name && cp.name === c.name));
+          const matched = institutionalCampuses.find((cp) => (cid && Number(cp.id ?? cp.campusId) === Number(cid)) || (c.name && cp.name === c.name));
           return {
             id: cid || matched?.id || matched?.campusId,
             name: c.name || c.campusName || matched?.name || matched?.campusName || `Campus #${cid}`,
             code: c.code || c.campusCode || matched?.code || matched?.campusCode || "",
+            isPrimary: Boolean(c.isPrimary || (record.campusId && Number(record.campusId) === Number(cid))),
           };
         }
-        const matched = (campuses || []).find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
+        const matched = institutionalCampuses.find((cp) => String(cp.id) === String(c) || String(cp.campusId) === String(c) || cp.name === c);
         return {
           id: matched ? (matched.id ?? matched.campusId) : c,
           name: matched ? (matched.name || matched.campusName) : String(c),
           code: matched ? (matched.code || matched.campusCode) : "",
+          isPrimary: Boolean(record.campusId && Number(record.campusId) === Number(matched ? matched.id : c)),
         };
       });
     }
 
     // 3. Try assignedCampusIds
-    if (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
-      return record.assignedCampusIds.map((cid) => {
-        const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
+    if (!rawList.length && Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+      rawList = record.assignedCampusIds.map((cid) => {
+        const matched = institutionalCampuses.find((cp) => Number(cp.id ?? cp.campusId) === Number(cid));
         return {
-          id: cid,
+          id: Number(cid),
           name: matched ? (matched.name || matched.campusName) : `Campus #${cid}`,
           code: matched ? (matched.code || matched.campusCode) : "",
+          isPrimary: Boolean(record.campusId && Number(record.campusId) === Number(cid)),
         };
       });
     }
 
-    if (record?.campusName || record?.campusId) {
-      const matched = (campuses || []).find((cp) => Number(cp.id ?? cp.campusId) === Number(record.campusId));
-      return [{
-        id: record.campusId || 1,
+    if (!rawList.length && (record?.campusName || record?.campusId)) {
+      const matched = institutionalCampuses.find((cp) => Number(cp.id ?? cp.campusId) === Number(record.campusId));
+      rawList = [{
+        id: Number(record.campusId) || 1,
         name: record.campusName || matched?.name || matched?.campusName || "Main Campus (HQ)",
         code: record.campusCode || matched?.code || matched?.campusCode || "MAIN",
+        isPrimary: true,
       }];
     }
 
-    return [{
-      id: 1,
-      name: "Main Campus (HQ)",
-      code: "MAIN",
-    }];
-  }, [record, campuses]);
+    if (!rawList.length) {
+      rawList = [{
+        id: 1,
+        name: "Main Campus (HQ)",
+        code: "MAIN",
+        isPrimary: true,
+      }];
+    }
+
+    // Strict deduplication by campus ID & name
+    const seen = new Set();
+    const unique = [];
+    for (const item of rawList) {
+      const key = String(item.id || item.name).trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, [record, institutionalCampuses]);
 
   const hasMultipleCampuses = useMemo(() => {
     return isPrincipalRecord || (Array.isArray(resolvedCampusList) && resolvedCampusList.length > 1);
@@ -6516,33 +9120,61 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     if (Array.isArray(record?.assignedBoardIds) && record.assignedBoardIds.length > 0) {
       return record.assignedBoardIds.map((bid) => {
-        const matched = (boards || []).find((bp) => Number(bp.id ?? bp.boardId) === Number(bid));
+        const matched = institutionalBoards.find((bp) => Number(bp.id ?? bp.boardId) === Number(bid));
         return matched ? (matched.name || matched.boardName || matched.code || `Board #${bid}`) : `Board #${bid}`;
       });
     }
     if (record?.boardName || record?.board) {
       return [record.boardName || record.board];
     }
-    return ["All Affiliated Boards"];
-  }, [record, boards]);
+    if (isPrincipalRecord) {
+      return ["All Affiliated Boards"];
+    }
+    return [];
+  }, [record, institutionalBoards, isPrincipalRecord]);
 
-  const activeBoardNames = useMemo(() => {
-    if (!Array.isArray(boards)) return [];
-    return boards
-      .filter((b) => {
-        if (!b) return false;
-        if (b.status !== undefined && b.status !== null) {
-          const st = String(b.status).trim().toLowerCase();
-          if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
-        }
-        if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
-          return false;
-        }
-        return true;
-      })
-      .map((b) => b.name || b.boardName)
-      .filter((n) => Boolean(n) && n !== "—" && !isOther(n));
-  }, [boards]);
+  const startEditAllocations = () => {
+    const currentCampIds = (Array.isArray(record?.assignedCampusIds) && record.assignedCampusIds.length > 0)
+      ? [...record.assignedCampusIds]
+      : resolvedCampusList.map(c => Number(c.id)).filter(Boolean);
+    const currentPrimary = record?.campusId || currentCampIds[0] || (institutionalCampuses[0]?.id || 1);
+    const currentBoardIds = (Array.isArray(record?.assignedBoardIds) && record.assignedBoardIds.length > 0)
+      ? [...record.assignedBoardIds]
+      : (record?.boardId ? [record.boardId] : []);
+    
+    setAllocCampusIds(currentCampIds.length > 0 ? currentCampIds : [Number(currentPrimary)]);
+    setAllocPrimaryCampusId(Number(currentPrimary));
+    setAllocBoardIds(currentBoardIds.map(Number));
+    setEditingAllocations(true);
+  };
+
+  const handleSaveAllocations = () => {
+    if (!allocCampusIds.length) {
+      alert("Please select at least one campus.");
+      return;
+    }
+    const primaryId = allocPrimaryCampusId && allocCampusIds.includes(allocPrimaryCampusId)
+      ? allocPrimaryCampusId
+      : allocCampusIds[0];
+    
+    const matchedCamp = institutionalCampuses.find(c => Number(c.id || c.campusId) === Number(primaryId));
+    const primaryBoardId = allocBoardIds[0] || record?.boardId || (institutionalBoards[0]?.id || 1);
+    const matchedBoard = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(primaryBoardId));
+
+    if (onSave) {
+      onSave({
+        ...record,
+        assignedCampusIds: allocCampusIds,
+        campusId: primaryId,
+        campusName: matchedCamp ? (matchedCamp.name || matchedCamp.campusName) : record?.campusName,
+        assignedBoardIds: allocBoardIds,
+        boardId: primaryBoardId,
+        board: matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : record?.board,
+        boardName: matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : record?.boardName,
+      });
+    }
+    setEditingAllocations(false);
+  };
 
   const defaultGroups = [
     [
@@ -6654,7 +9286,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       onEdit(groupIndex);
       return;
     }
-    setFormData({ ...record });
+    const initData = { ...record };
+
+    // Resolve existing assigned board IDs
+    let existingBoardIds = [];
+    if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+      existingBoardIds = record.assignedBoardIds.map(Number);
+    } else if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+      existingBoardIds = record.assignedBoards.map(b => typeof b === 'object' ? Number(b.id || b.boardId) : Number(b)).filter(Boolean);
+    } else if (record.boardId) {
+      existingBoardIds = [Number(record.boardId)];
+    } else if (record.board || record.boardName) {
+      const match = institutionalBoards.find(b => (b.name || b.boardName) === (record.board || record.boardName) || (b.code || b.boardCode) === (record.board || record.boardName) || String(b.id || b.boardId) === String(record.board));
+      if (match) existingBoardIds = [Number(match.id || match.boardId)];
+    }
+    initData.assignedBoardIds = existingBoardIds;
+
+    // Resolve existing assigned campus IDs
+    let existingCampIds = [];
+    if (Array.isArray(record.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+      existingCampIds = record.assignedCampusIds.map(Number);
+    } else if (Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0) {
+      existingCampIds = record.assignedCampuses.map(c => typeof c === 'object' ? Number(c.id || c.campusId) : Number(c)).filter(Boolean);
+    } else if (record.campusId) {
+      existingCampIds = [Number(record.campusId)];
+    }
+    initData.assignedCampusIds = existingCampIds;
+
+    const matchedBoard = institutionalBoards.find(b => existingBoardIds.includes(Number(b.id || b.boardId)));
+    initData.board = matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : (record.boardName || record.board || "");
+    initData.boardName = matchedBoard ? (matchedBoard.name || matchedBoard.boardName) : (record.boardName || record.board || "");
+    initData.boardId = existingBoardIds[0] || record.boardId;
+
+    setFormData(initData);
     setEditingGroup(groupIndex);
   };
 
@@ -6666,13 +9330,49 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   };
 
   const fieldTypes = {
-    board: ["select", activeBoardNames],
+    board: ["select", activeBoardOptions],
+    campusName: ["select", activeCampusOptions],
+    assignedCampusesDisplay: ["select", activeCampusOptions],
     gender: ["select", ["Male", "Female", "Other"]],
     status: ["select", ["Active", "Inactive"]],
     bloodGroup: ["select", ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]],
-    maritalStatus: ["select", ["Single", "Married", "Other"]],
-    employmentType: ["select", ["Full Time", "Part Time", "Contract"]],
+    maritalStatus: ["select", ["Single", "Married", "Divorced", "Widowed", "Other"]],
+    employmentType: ["select", ["Full Time", "Part Time", "Contract", "Visiting"]],
     staffType: ["select", ["Teaching", "Non-Teaching"]],
+    nationality: ["select", ["Indian", "NRI", "Other"]],
+    department: ["select", departmentOptions],
+    designation: ["select", designationOptions],
+    highestQualification: ["select", [
+      "Ph.D / Doctorate",
+      "Master's Degree (M.Tech, M.Sc, M.A, M.Com)",
+      "Bachelor's Degree (B.Tech, B.Sc, B.A, B.Com)",
+      "B.Ed / M.Ed",
+      "Diploma / Polytechnic",
+      "Intermediate / 10+2",
+      "SSC / 10th",
+      "Other"
+    ]],
+    accountType: ["select", ["Savings", "Salary", "Current"]],
+    emergencyRelationship: ["select", ["Spouse", "Father", "Mother", "Brother", "Sister", "Son", "Daughter", "Guardian", "Friend", "Other"]],
+    state: ["select", [
+      "Andhra Pradesh",
+      "Telangana",
+      "Karnataka",
+      "Tamil Nadu",
+      "Maharashtra",
+      "Kerala",
+      "Delhi",
+      "Uttar Pradesh",
+      "West Bengal",
+      "Gujarat",
+      "Rajasthan",
+      "Madhya Pradesh",
+      "Bihar",
+      "Odisha",
+      "Punjab",
+      "Haryana",
+      "Other"
+    ]],
     dateOfBirth: ["date"],
     dateOfJoining: ["date"],
     experienceFrom: ["date"],
@@ -6680,15 +9380,12 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     currentAddress: ["textarea"],
     permanentAddress: ["textarea"],
     emergencyAddress: ["textarea"],
-    department: ["select", defaultDepartments],
   };
 
   const renderFieldInput = (key, label, fieldSpec) => {
-    // fieldSpec = [name, label, type, opts, required, layoutClass?]
     const specType = fieldSpec?.[2];
     const specOpts = Array.isArray(fieldSpec?.[3]) && fieldSpec[3].length > 0 ? fieldSpec[3] : null;
 
-    // File fields — read-only display in preview inline edit
     if (specType === "file") {
       const rawVal = formData[key] !== undefined ? formData[key] : record[key];
       const val = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
@@ -6699,11 +9396,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
-    // Subject allocation
     if (key === "allocatedSubjects" || key === "subjects") {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
         <SubjectAllocationInput
+          staffId={record.id}
           department={formData.department || record.department || ""}
           value={currentVal}
           onChange={(newSubs) => setFormData((prev) => ({ ...prev, allocatedSubjects: newSubs, subjects: newSubs }))}
@@ -6711,10 +9408,229 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
+    if (key === "board") {
+      const currentBoardIds = (() => {
+        if (formData.assignedBoardIds !== undefined) {
+          return (Array.isArray(formData.assignedBoardIds) ? formData.assignedBoardIds : []).map(Number);
+        }
+        if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+          return record.assignedBoardIds.map(Number);
+        }
+        if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+          return record.assignedBoards.map(b => typeof b === 'object' ? Number(b.id || b.boardId) : Number(b)).filter(Boolean);
+        }
+        const singleId = formData.boardId || record.boardId || (institutionalBoards.find(b => (b.name || b.boardName) === (formData.board || record.board || record.boardName))?.id);
+        return singleId ? [Number(singleId)] : [];
+      })();
+
+      const assignedBoardObjs = currentBoardIds.map(bid => {
+        const found = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(bid));
+        return {
+          id: bid,
+          name: found ? (found.name || found.boardName) : `Board #${bid}`,
+          code: found ? (found.code || found.boardCode) : "",
+        };
+      });
+
+      const handleAddBoard = (boardIdVal) => {
+        if (!boardIdVal) return;
+        const bId = Number(boardIdVal);
+        const updatedIds = currentBoardIds.includes(bId) ? currentBoardIds : [...currentBoardIds, bId];
+        const primaryB = institutionalBoards.find(b => Number(b.id || b.boardId) === updatedIds[0]);
+        setFormData(prev => ({
+          ...prev,
+          assignedBoardIds: updatedIds,
+          boardId: updatedIds[0],
+          board: primaryB ? (primaryB.name || primaryB.boardName) : prev.board,
+          boardName: primaryB ? (primaryB.name || primaryB.boardName) : prev.boardName,
+          boardCode: primaryB ? (primaryB.code || primaryB.boardCode) : prev.boardCode,
+        }));
+      };
+
+      const handleRemoveBoard = (bId) => {
+        const updatedIds = currentBoardIds.filter(id => id !== bId);
+        const primaryB = updatedIds.length > 0 ? institutionalBoards.find(b => Number(b.id || b.boardId) === updatedIds[0]) : null;
+        setFormData(prev => ({
+          ...prev,
+          assignedBoardIds: updatedIds,
+          boardId: primaryB ? Number(primaryB.id || primaryB.boardId) : null,
+          board: primaryB ? (primaryB.name || primaryB.boardName) : "",
+          boardName: primaryB ? (primaryB.name || primaryB.boardName) : "",
+          boardCode: primaryB ? (primaryB.code || primaryB.boardCode) : "",
+        }));
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {assignedBoardObjs.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+              {assignedBoardObjs.map(b => (
+                <span
+                  key={b.id}
+                  style={{
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    background: "var(--cms-primary-soft, #edf7e2)",
+                    color: "var(--cms-primary, #355e3b)",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  {b.name} {b.code ? `(${b.code})` : ""}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBoard(b.id)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#dc2626",
+                      cursor: "pointer",
+                      padding: 0,
+                      fontSize: "12px",
+                      lineHeight: 1
+                    }}
+                    title="Remove Board"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <select
+            value=""
+            onChange={(e) => handleAddBoard(e.target.value)}
+            style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border, #cbd5e1)" }}
+          >
+            <option value="">+ Assign Board ({activeBoardOptions.length} available)</option>
+            {activeBoardOptions.map(opt => (
+              <option key={opt.id || opt.value} value={opt.id} disabled={currentBoardIds.includes(opt.id)}>
+                {opt.label} {currentBoardIds.includes(opt.id) ? "(Assigned)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (key === "campusName" || key === "assignedCampusesDisplay" || key === "assignedCampuses") {
+      const currentCampIds = (() => {
+        if (formData.assignedCampusIds !== undefined) {
+          return (Array.isArray(formData.assignedCampusIds) ? formData.assignedCampusIds : []).map(Number);
+        }
+        if (Array.isArray(record.assignedCampusIds) && record.assignedCampusIds.length > 0) {
+          return record.assignedCampusIds.map(Number);
+        }
+        if (Array.isArray(record.assignedCampuses) && record.assignedCampuses.length > 0) {
+          return record.assignedCampuses.map(c => typeof c === 'object' ? Number(c.id || c.campusId) : Number(c)).filter(Boolean);
+        }
+        const singleId = formData.campusId || record.campusId;
+        return singleId ? [Number(singleId)] : [1];
+      })();
+
+      const assignedCampObjs = currentCampIds.map(cid => {
+        const found = institutionalCampuses.find(c => Number(c.id || c.campusId) === Number(cid));
+        return {
+          id: cid,
+          name: found ? (found.name || found.campusName) : `Campus #${cid}`,
+          code: found ? (found.code || found.campusCode) : "",
+          isPrimary: Number(cid) === Number(formData.campusId || record.campusId || currentCampIds[0]),
+        };
+      });
+
+      const handleAddCampus = (campusIdVal) => {
+        if (!campusIdVal) return;
+        const cId = Number(campusIdVal);
+        const updatedIds = currentCampIds.includes(cId) ? currentCampIds : [...currentCampIds, cId];
+        const primaryC = institutionalCampuses.find(c => Number(c.id || c.campusId) === (formData.campusId || updatedIds[0]));
+        setFormData(prev => ({
+          ...prev,
+          assignedCampusIds: updatedIds,
+          campusId: prev.campusId || updatedIds[0],
+          campusName: primaryC ? (primaryC.name || primaryC.campusName) : prev.campusName,
+        }));
+      };
+
+      const handleRemoveCampus = (cId) => {
+        if (currentCampIds.length <= 1) {
+          alert("At least one campus must remain assigned.");
+          return;
+        }
+        const updatedIds = currentCampIds.filter(id => id !== cId);
+        const primaryC = institutionalCampuses.find(c => Number(c.id || c.campusId) === updatedIds[0]);
+        setFormData(prev => ({
+          ...prev,
+          assignedCampusIds: updatedIds,
+          campusId: updatedIds[0],
+          campusName: primaryC ? (primaryC.name || primaryC.campusName) : "",
+        }));
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+            {assignedCampObjs.map((c) => (
+              <span
+                key={c.id}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: "4px",
+                  background: "var(--cms-primary-soft, #edf7e2)",
+                  color: "var(--cms-primary, #355e3b)",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}
+              >
+                {c.name} {c.code ? `(${c.code})` : ""} {c.isPrimary ? "[PRIMARY]" : ""}
+                <button
+                  type="button"
+                  onClick={() => handleRemoveCampus(c.id)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#dc2626",
+                    cursor: "pointer",
+                    padding: 0,
+                    fontSize: "12px",
+                    lineHeight: 1
+                  }}
+                  title="Remove Campus"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginTop: "2px" }}>
+            <select
+              value=""
+              onChange={(e) => handleAddCampus(e.target.value)}
+              style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border, #cbd5e1)" }}
+            >
+              <option value="">+ Assign Campus ({activeCampusOptions.length} available)</option>
+              {activeCampusOptions.map(c => (
+                <option key={c.id || c.value} value={c.id} disabled={currentCampIds.includes(c.id)}>
+                  {c.label} {currentCampIds.includes(c.id) ? "(Assigned)" : ""}
+                </option>
+              ))}
+            </select>
+
+          </div>
+        </div>
+      );
+    }
+
     const rawVal = formData[key] !== undefined ? formData[key] : record[key];
     const val = rawVal === null || rawVal === undefined ? "" : rawVal;
 
-    // search-select → SearchSelectInput
     if (specType === "search-select") {
       const opts = specOpts || [];
       return (
@@ -6727,7 +9643,6 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
-    // Determine type/options from fieldSpec or fieldTypes fallback
     const config = (specType && specType !== "text" && specType !== "search-select")
       ? [specType, specOpts]
       : (fieldTypes[key] || ["text"]);
@@ -6741,9 +9656,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
           <option value="">Select {label}</option>
-          {opts.map((opt) => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
+          {opts.map((opt, oi) => {
+            const optVal = typeof opt === "object" ? opt.value : opt;
+            const optLbl = typeof opt === "object" ? (opt.label || opt.name || opt.value) : opt;
+            return <option key={oi} value={optVal}>{optLbl}</option>;
+          })}
         </select>
       );
     }
@@ -6755,19 +9672,20 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         />
       );
     }
+    const inputVal = type === "date" && val ? String(val).split("T")[0] : val;
     return (
       <input
         type={type === "date" ? "date" : type === "email" ? "email" : "text"}
-        value={val}
+        value={inputVal}
         readOnly={key === "employeeId"}
         onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
       />
     );
   };
 
-  // Helper for masking sensitive values
+  // Helper for formatting and masking sensitive values
   const formatDisplayValue = (key, rawVal) => {
-    if (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) {
+    if (key === "assignedCampusesDisplay" || key === "assignedCampuses" || (key === "campusName" && isPrincipalRecord)) {
       if (resolvedCampusList && resolvedCampusList.length > 0) {
         return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
       }
@@ -6780,8 +9698,54 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       }
       return "Main Campus (HQ)";
     }
+    if (key === "board") {
+      const assignedBoardNames = (() => {
+        if (Array.isArray(record.assignedBoards) && record.assignedBoards.length > 0) {
+          return record.assignedBoards.map(b => typeof b === "object" ? (b.name || b.boardName || b.code || String(b)) : String(b));
+        }
+        if (Array.isArray(record.assignedBoardIds) && record.assignedBoardIds.length > 0) {
+          return record.assignedBoardIds.map(bid => {
+            const found = institutionalBoards.find(b => Number(b.id || b.boardId) === Number(bid));
+            return found ? (found.code ? `${found.name || found.boardName} (${found.code})` : (found.name || found.boardName)) : `Board #${bid}`;
+          });
+        }
+        if (record.boardName || record.board) {
+          return [record.boardName || record.board];
+        }
+        return [];
+      })();
+
+      if (assignedBoardNames.length > 0) {
+        return (
+          <span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px" }}>
+            {assignedBoardNames.map((bn, bi) => (
+              <span
+                key={bi}
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  background: "var(--cms-primary-soft, #edf7e2)",
+                  color: "var(--cms-primary, #355e3b)",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                }}
+              >
+                {bn}
+              </span>
+            ))}
+          </span>
+        );
+      }
+      return "—";
+    }
     if (rawVal === null || rawVal === undefined || String(rawVal).trim() === "") return "—";
     const str = String(rawVal).trim();
+    if (str.includes("T") && /^\d{4}-\d{2}-\d{2}T/.test(str)) {
+      const parts = str.split("T")[0].split("-");
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return str.split("T")[0];
+    }
     if (key === "aadhaar" && str.length >= 12) {
       return `XXXX XXXX ${str.slice(-4)}`;
     }
@@ -6842,71 +9806,81 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                 </span>
               </div>
             </div>
-            <span
-              style={{
-                fontSize: "11px",
-                fontWeight: "700",
-                padding: "4px 12px",
-                borderRadius: "20px",
-                background: "var(--cms-primary, #355e3b)",
-                color: "#ffffff",
-                boxShadow: "0 1px 3px rgba(53,94,59,0.2)",
-              }}
-            >
-              {resolvedCampusList.length} Assigned {resolvedCampusList.length === 1 ? "Campus" : "Campuses"}
-            </span>
-          </header>
-          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
-            {resolvedCampusList.map((c, i) => (
-              <div
-                key={c.id || i}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                  padding: "14px 16px",
-                  background: "#ffffff",
-                  border: "1px solid var(--cms-border, #e5e7eb)",
-                  borderRadius: "8px",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                  fontSize: "11px",
+                  fontWeight: "700",
+                  padding: "4px 12px",
+                  borderRadius: "20px",
+                  background: "var(--cms-primary, #355e3b)",
+                  color: "#ffffff",
+                  boxShadow: "0 1px 3px rgba(53,94,59,0.2)",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--cms-text, #1f2937)", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
-                    {c.name}
-                  </span>
-                  {c.code && (
-                    <span style={{ fontSize: "10.5px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", background: "#f3f4f6", color: "#4b5563" }}>
-                      {c.code}
+                {resolvedCampusList.length} Assigned {resolvedCampusList.length === 1 ? "Campus" : "Campuses"}
+              </span>
+            </div>
+          </header>
+
+          <div style={{ padding: "16px", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "12px" }}>
+              {resolvedCampusList.map((c, i) => (
+                <div
+                  key={c.id || i}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    padding: "14px 16px",
+                    background: "#ffffff",
+                    border: "1px solid var(--cms-border, #e5e7eb)",
+                    borderRadius: "8px",
+                    boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "13px", fontWeight: "700", color: "var(--cms-text, #1f2937)", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
+                      {c.name}
                     </span>
-                  )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      {c.isPrimary && (
+                        <span style={{ fontSize: "10px", fontWeight: "700", padding: "2px 7px", borderRadius: "10px", background: "var(--cms-primary-soft, #edf7e2)", color: "var(--cms-primary, #355e3b)", border: "1px solid var(--cms-primary-border, #cfe7b6)" }}>
+                          PRIMARY HQ
+                        </span>
+                      )}
+                      {c.code && (
+                        <span style={{ fontSize: "10.5px", fontWeight: "700", padding: "2px 7px", borderRadius: "4px", background: "#f3f4f6", color: "#4b5563" }}>
+                          {c.code}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
+                    <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: "600" }}>Affiliated Boards:</span>
+                    {resolvedBoardList.map((bName, bi) => (
+                      <span
+                        key={bi}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "3px 8px",
+                          borderRadius: "4px",
+                          background: "var(--cms-primary-soft, #edf7e2)",
+                          color: "var(--cms-primary, #355e3b)",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                        }}
+                      >
+                        <GraduationCap size={12} /> {bName}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "4px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--cms-muted, #64748b)", fontWeight: "600" }}>Affiliated Boards:</span>
-                  {resolvedBoardList.map((bName, bi) => (
-                    <span
-                      key={bi}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        padding: "3px 8px",
-                        borderRadius: "4px",
-                        background: "var(--cms-primary-soft, #edf7e2)",
-                        color: "var(--cms-primary, #355e3b)",
-                        fontSize: "11px",
-                        fontWeight: "600",
-                        border: "1px solid var(--cms-primary-border, #cfe7b6)",
-                      }}
-                    >
-                      <GraduationCap size={12} /> {bName}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </article>
       ) : null}
       {groups.map(([t, fields], groupIndex) => {
@@ -6935,93 +9909,122 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               <div style={{ overflowX: "auto", margin: "8px 0" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                   <thead>
-                    <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Level</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Degree</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>University</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Specialization</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Year</th>
-                      <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>% / CGPA</th>
+                    <tr style={{ background: "var(--cms-surface-subtle, #f8fafc)", borderBottom: "1px solid var(--cms-border)" }}>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Degree</th>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Institution</th>
+                      <th style={{ padding: "6px 8px", textAlign: "left" }}>Specialization</th>
+                      <th style={{ padding: "6px 8px", textAlign: "center" }}>Year</th>
+                      <th style={{ padding: "6px 8px", textAlign: "right" }}>Percentage</th>
                     </tr>
                   </thead>
                   <tbody>
                     {record.education.map((edu, idx) => (
-                      <tr key={edu.id || `edu-row-${idx}`}>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}><strong>{edu.highestQualification || "—"}</strong></td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.degreeName || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.university || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.specialization || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.passingYear || "—"}</td>
-                        <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{edu.percentage || "—"}</td>
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--cms-border-light, #f1f5f9)" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "600" }}>{edu.degree || edu.degreeName || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{edu.institution || edu.institutionName || "—"}</td>
+                        <td style={{ padding: "6px 8px" }}>{edu.specialization || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "center" }}>{edu.yearOfPassing || edu.passingYear || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{edu.percentage || edu.cgpa || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : hasCustomExperience ? (
-              <div style={{ margin: "8px 0" }}>
+            ) : null}
+
+            {hasCustomExperience ? (
+              <div style={{ overflowX: "auto", margin: "8px 0" }}>
                 {record.isFresher ? (
-                  <p style={{ color: "var(--cms-muted, #64748b)", fontStyle: "italic", margin: "4px 0" }}>
-                    Fresher / No previous experience records.
-                  </p>
+                  <p style={{ margin: "4px 0", fontSize: "12px", color: "var(--cms-muted)" }}>Fresher (No prior experience)</p>
                 ) : (
-                  <div style={{ overflowX: "auto" }}>
-                    <p style={{ fontSize: "12px", color: "var(--cms-muted, #64748b)", marginBottom: "6px" }}>
-                      Total Experience: <strong>{record.totalExperience || 0} Years</strong>
-                    </p>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                      <thead>
-                        <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Institution</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Designation</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>From</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>To</th>
-                          <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Working</th>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <thead>
+                      <tr style={{ background: "var(--cms-surface-subtle, #f8fafc)", borderBottom: "1px solid var(--cms-border)" }}>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>Institution</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left" }}>Designation</th>
+                        <th style={{ padding: "6px 8px", textAlign: "center" }}>From</th>
+                        <th style={{ padding: "6px 8px", textAlign: "center" }}>To</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Years</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {record.experience.map((exp, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid var(--cms-border-light, #f1f5f9)" }}>
+                          <td style={{ padding: "6px 8px", fontWeight: "600" }}>{exp.organization || exp.institution || "—"}</td>
+                          <td style={{ padding: "6px 8px" }}>{exp.designation || exp.role || "—"}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>{formatDisplayValue("experienceFrom", exp.from || exp.fromYear)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "center" }}>{exp.isCurrent ? "Present" : formatDisplayValue("experienceTo", exp.to || exp.toYear)}</td>
+                          <td style={{ padding: "6px 8px", textAlign: "right" }}>{exp.years || "—"}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {record.experience.map((exp, idx) => (
-                          <tr key={exp.id || `exp-row-${idx}`}>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}><strong>{exp.institution || "—"}</strong></td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.designation || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.fromDate || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.currentlyWorking ? "Present" : exp.toDate || "—"}</td>
-                            <td style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>{exp.currentlyWorking ? "Yes" : "No"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 )}
               </div>
-            ) : (
-              fields.map((field) => {
-                const [key, label] = Array.isArray(field)
-                  ? field
-                  : [field, field.replace(/([A-Z])/g, " $1")];
+            ) : null}
+
+            {!(hasCustomEducation && t === "Educational Qualifications") && !(hasCustomExperience && t === "Experience") && (
+              fields.map(([key, label, type, options]) => {
+                const isCustomDepartmentField = (key === "departmentSpecific" || key === "departmentSpecificJson" || key === "customFields");
+
+                if (isCustomDepartmentField) {
+                  const dynamicData = typeof record[key] === "object" && record[key] !== null ? record[key] : {};
+                  const dynamicEntries = Object.entries(dynamicData).filter(([k]) => k !== "allocatedSubjects" && k !== "subjects");
+                  if (dynamicEntries.length === 0) return null;
+                  return (
+                    <div key={key} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginTop: "8px", borderTop: "1px dashed var(--cms-border, #e5e7eb)", paddingTop: "8px" }}>
+                      {dynamicEntries.map(([dynKey, dynVal]) => (
+                        <p key={dynKey}>
+                          <small>{dynKey.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}</small>
+                          <strong>{dynVal === null || dynVal === undefined || String(dynVal).trim() === "" ? "—" : String(dynVal)}</strong>
+                        </p>
+                      ))}
+                    </div>
+                  );
+                }
+
                 return (
                   <p key={key}>
-                    <span>{label}</span>
+                    <small>{label}</small>
                     {isEditing ? (
-                      renderFieldInput(key, label, Array.isArray(field) ? field : null)
+                      renderFieldInput(key, label, [key, label, type, options])
                     ) : (
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
-                          Array.isArray(record[key] || record.allocatedSubjects || record.subjects) &&
-                            (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
-                              {(record[key] || record.allocatedSubjects || record.subjects).map((sub, i) => (
-                                <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "10px" }}>
+                          Array.isArray(record[key]) && record[key].length > 0 ? (
+                            <span style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                              {record[key].map((sub, i) => (
+                                <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "11px" }}>
                                   {typeof sub === "object" ? sub.name || sub.subjectName || String(sub) : String(sub)}
                                 </span>
                               ))}
-                            </div>
-                          ) : typeof (record[key] || record.allocatedSubjects || record.subjects) === "string" &&
-                            (record[key] || record.allocatedSubjects || record.subjects).trim() ? (
-                            record[key] || record.allocatedSubjects || record.subjects
+                            </span>
                           ) : (
                             "—"
                           )
+                        ) : key === "board" && resolvedBoardList.length > 0 ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
+                            {resolvedBoardList.map((bName, i) => (
+                              <span
+                                key={i}
+                                className="board-badge"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: "var(--cms-primary-soft, #edf7e2)",
+                                  color: "var(--cms-primary, #355e3b)",
+                                  fontSize: "11px",
+                                  fontWeight: "600",
+                                  border: "1px solid var(--cms-primary-border, #cfe7b6)",
+                                }}
+                              >
+                                <GraduationCap size={12} /> {bName}
+                              </span>
+                            ))}
+                          </div>
                         ) : (key === "assignedCampusesDisplay" || (key === "campusName" && isPrincipalRecord)) && resolvedCampusList.length > 0 ? (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
                             {resolvedCampusList.map((c, i) => (
@@ -7041,7 +10044,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                                   border: "1px solid var(--cms-primary-border, #cfe7b6)",
                                 }}
                               >
-                                <Building2 size={12} /> {c.name}{c.code ? ` (${c.code})` : ""}
+                                <Building2 size={12} /> {c.name}{c.code ? ` (${c.code})` : ""} {c.isPrimary ? "[PRIMARY]" : ""}
                               </span>
                             ))}
                           </div>
@@ -7233,14 +10236,33 @@ export default function StaffManagementPage() {
     page = <Navigate to="/dashboard/staff/pending" replace />;
   else if (p.endsWith("/review") && record)
     page = <Review record={record} update={update} activity={activity} />;
-  else if (p.endsWith("/edit") && record)
-    page =
-      record.staffType === "Teaching" ? (
-        <TeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
-      ) : (
-        <NonTeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+  else if (p.endsWith("/edit")) {
+    if (loadingStaff && !record) {
+      page = (
+        <DashboardLayout title="Edit Staff" breadcrumb={["People", "Staff Management"]}>
+          <main className="staff-mock-page">
+            <SkeletonPage variant="form" rows={8} />
+          </main>
+        </DashboardLayout>
       );
-  else if (id || record)
+    } else if (record) {
+      page =
+        record.staffType === "Teaching" ? (
+          <TeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+        ) : (
+          <NonTeachingForm records={safeRecords} setRecords={setRecords} existing={record} />
+        );
+    } else {
+      page = (
+        <DashboardLayout title="Staff Record Not Found" breadcrumb={["People", "Staff Management"]}>
+          <main className="staff-mock-page">
+            <p style={{ margin: "20px 0" }}>The requested staff record could not be found for editing.</p>
+            <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/list")}>Back to Staff List</button>
+          </main>
+        </DashboardLayout>
+      );
+    }
+  } else if (id || record)
     page = <Details record={record} id={id} records={safeRecords} setRecords={setRecords} />;
   else
     page = (

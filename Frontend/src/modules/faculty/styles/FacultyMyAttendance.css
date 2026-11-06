@@ -1,5 +1,30 @@
 /* Faculty My Attendance Screen Styles - Theme Based */
 
+@media (max-width: 640px) {
+  .sp-faculty-attendance-page { min-width: 0; gap: 12px; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-attendance-top-grid,
+  .sp-faculty-attendance-page .sp-metric-cards-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
+  .sp-faculty-attendance-page .cms-card { min-width: 0; width: 100%; margin: 0; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-shift-summary-card,
+  .sp-faculty-attendance-page .sp-punch-action-card { padding: 12px !important; gap: 10px; }
+  .sp-faculty-attendance-page .sp-card-header { margin: 0; }
+  .sp-faculty-attendance-page .sp-summary-inner-box { margin: 0; padding: 10px; min-width: 0; gap: 10px; }
+  .sp-faculty-attendance-page .sp-summary-status-row { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+  .sp-faculty-attendance-page .sp-summary-metric-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .sp-faculty-attendance-page .sp-summary-col { min-width: 0; justify-content: space-between; }
+  .sp-faculty-attendance-page .sp-metric-col-label { letter-spacing: 0; font-size: 9px; }
+  .sp-faculty-attendance-page .sp-metric-col-val { font-size: 12px; overflow-wrap: anywhere; }
+  .sp-faculty-attendance-page .sp-summary-foot-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sp-faculty-attendance-page .sp-summary-foot-left,
+  .sp-faculty-attendance-page .sp-summary-foot-right { min-width: 0; flex-wrap: wrap; }
+  .sp-faculty-attendance-page .sp-punch-twin-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .sp-faculty-attendance-page .sp-twin-panel { padding: 12px; gap: 8px; min-width: 0; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-punch-pill-btn { width: 100%; min-height: 36px; justify-content: center; box-sizing: border-box; }
+  .sp-faculty-attendance-page .sp-punch-foot-hint { margin: 0; white-space: normal; }
+  .sp-faculty-attendance-page .sp-metric-kpi-card { padding: 12px !important; }
+  .sp-faculty-attendance-page .sp-kpi-content { min-width: 0; overflow-wrap: anywhere; }
+}
+
 .sp-faculty-attendance-page {
   display: flex;
   flex-direction: column;
@@ -62,7 +87,7 @@
   background: var(--cms-card-bg, #ffffff) !important;
   border: 1px solid var(--cms-border, #e5e9dc) !important;
   border-radius: 12px !important;
-  padding: 8px 14px !important;
+  padding: 12px 16px !important;
   box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
   display: flex;
   flex-direction: column;
@@ -80,10 +105,10 @@
   background: var(--cms-surface, #fafbf7);
   border: 1px solid var(--cms-border, #e7ebd9);
   border-radius: 10px;
-  padding: 6px 12px;
+  padding: 8px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   margin: auto 0;
 }
 
@@ -317,7 +342,7 @@
   background: var(--cms-card-bg, #ffffff) !important;
   border: 1px solid var(--cms-border, #e5e9dc) !important;
   border-radius: 12px !important;
-  padding: 8px 14px !important;
+  padding: 12px 16px !important;
   box-shadow: var(--cms-shadow, 0 2px 8px rgba(0, 0, 0, 0.04)) !important;
   display: flex;
   flex-direction: column;
@@ -348,14 +373,16 @@
 }
 
 .sp-twin-panel {
-  border-radius: 9px;
-  padding: 4px 6px 6px;
+  border-radius: 10px;
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 8px;
   transition: all 0.2s ease;
+  min-height: 100px;
 }
 
 .sp-twin-panel.checkin-panel {
@@ -425,11 +452,10 @@
 }
 
 .sp-twin-title {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-bottom: 1px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-bottom: 0;
 }
 
 .sp-twin-title.checkin {
@@ -536,21 +562,22 @@
   border-color: rgba(234, 179, 8, 0.45) !important;
 }
 
-/* Twin Action Pill Buttons - Compact & Responsive */
+/* Twin Action Pill Buttons - Executive & Responsive */
 .sp-punch-pill-btn {
-  width: 100%;
-  max-width: 120px;
-  padding: 5px 12px;
+  min-width: 130px;
+  min-height: 38px;
+  padding: 8px 20px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   border: none;
   cursor: pointer;
   transition: all 0.2s ease;
+  box-sizing: border-box;
 }
 
 .sp-punch-pill-btn.checkin.active {
@@ -662,9 +689,11 @@
 }
 
 .sp-punch-foot-hint {
-  font-size: 9.5px;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--cms-muted, #7b8275);
-  margin-top: 4px;
+  margin-top: 2px;
+  line-height: 1.35;
 }
 
 [data-theme="dark"] .sp-punch-foot-hint,
@@ -1257,31 +1286,9 @@
 }
 
 /* Toast Notifications */
-.sp-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: #171d15;
-  color: #ffffff !important;
-  padding: 12px 20px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-weight: 600;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  z-index: 99999;
-  max-width: 480px;
-  word-break: break-word;
-  animation: spToastSlideIn 0.25s ease;
-}
+/* removed duplicate toast override */
 
-.sp-toast.error {
-  background: #dc2626 !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-}
+/* removed duplicate toast error override */
 
 .sp-toast svg {
   flex-shrink: 0;

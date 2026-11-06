@@ -174,7 +174,7 @@
 }
 
 .faculty-leave-container .cms-table tbody tr:hover {
-  background: var(--cms-hover, color-mix(in srgb, var(--cms-primary)  0.03));
+  background: var(--cms-hover, rgba(111, 132, 0, 0.03));
 }
 
 .faculty-leave-container .cms-table td.cms-strong {
@@ -263,30 +263,9 @@
 }
 
 /* ---------- Toast Notification ---------- */
-.sp-toast {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 1000;
-  background: var(--cms-surface, #ffffff);
-  color: var(--cms-text, #10203c);
-  border: 1px solid var(--cms-border, #e4e8f0);
-  box-shadow: var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18));
-  border-radius: 12px;
-  padding: 12px 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13.5px;
-  font-weight: 500;
-  animation: cms-pop 0.2s ease;
-}
+/* removed duplicate toast override */
 
-.sp-toast.error {
-  background: var(--cms-red, #dc2626) !important;
-  border-color: rgba(255, 255, 255, 0.25) !important;
-  color: #ffffff !important;
-}
+/* removed duplicate toast error override */
 .sp-toast.error svg {
   stroke: #ffffff !important;
   color: #ffffff !important;
@@ -377,11 +356,7 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
-[data-theme="dark"] .sp-toast {
-  background: var(--cms-surface, #1e241b);
-  border-color: var(--cms-border, #2a3326);
-  color: var(--cms-text, #e6e8e3);
-}
+[data-theme="dark"] /* removed duplicate toast override */
 
 [data-theme="dark"] .leave-error-banner {
   background: rgba(217, 54, 54, 0.15);
@@ -390,8 +365,8 @@
 }
 
 [data-theme="dark"] .leave-add-custom-btn {
-  background: color-mix(in srgb, var(--cms-primary)  0.22);
-  border-color: color-mix(in srgb, var(--cms-primary)  0.4);
+  background: rgba(111, 132, 0, 0.22);
+  border-color: rgba(111, 132, 0, 0.4);
   color: #d4e157;
 }
 
@@ -546,7 +521,7 @@
 .faculty-leave-modal .cms-field select:focus,
 .faculty-leave-modal .cms-field textarea:focus {
   border-color: var(--cms-primary, #6F8400) !important;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary)  0.15) !important;
+  box-shadow: 0 0 0 3px rgba(111, 132, 0, 0.15) !important;
 }
 
 .faculty-leave-modal .cms-field textarea {
@@ -680,8 +655,8 @@
 }
 
 [data-theme="dark"] .faculty-leave-modal .leave-duration-badge {
-  background: color-mix(in srgb, var(--cms-primary)  0.18) !important;
-  border-color: color-mix(in srgb, var(--cms-primary)  0.35) !important;
+  background: rgba(111, 132, 0, 0.18) !important;
+  border-color: rgba(111, 132, 0, 0.35) !important;
   color: #d4e157 !important;
 }
 

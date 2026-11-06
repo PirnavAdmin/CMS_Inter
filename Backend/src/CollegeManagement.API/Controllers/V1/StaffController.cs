@@ -58,6 +58,27 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
             if (int.TryParse(staffClaim, out int sId) && sId > 0) return sId;
+
+            // Fallback 1: Resolve by Email claim
+            var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email || c.Type == "email")?.Value;
+            if (!string.IsNullOrWhiteSpace(emailClaim))
+            {
+                var staff = _staffRepository.GetByEmailAsync(emailClaim.Trim()).GetAwaiter().GetResult();
+                if (staff != null && staff.Id > 0) return staff.Id;
+            }
+
+            // Fallback 2: Resolve by UserId claim
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdClaim, out int uid) && uid > 0)
+            {
+                var userRepo = HttpContext.RequestServices.GetService<CollegeManagement.API.Repositories.Interfaces.IUserRepository>();
+                if (userRepo != null)
+                {
+                    var u = userRepo.GetByIdAsync(uid).GetAwaiter().GetResult();
+                    if (u?.StaffId.HasValue == true && u.StaffId.Value > 0) return u.StaffId.Value;
+                }
+            }
+
             return null;
         }
 
@@ -134,7 +155,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Restricted to Super Admin, Admin, Principal, and HR roles. Returns detailed banking and payroll information.
         /// </summary>
         [HttpGet("{id:int}/payroll-details")]
-        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR")]
+        [Authorize(Roles = "Super Admin,SuperAdmin,Admin,Principal,HR,Faculty,Staff,Teacher")]
         [ProducesResponseType(typeof(StaffPayrollDetailsDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaffPayrollDetails([FromRoute] int id)
         {
@@ -265,6 +286,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by ID.
         /// </summary>
         [HttpGet("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffById(int id)
@@ -274,7 +296,21 @@ namespace CollegeManagement.API.Controllers.V1
                 var callerId = GetCallerStaffId();
                 if (!callerId.HasValue || callerId.Value != id)
                 {
-                    return Forbid();
+                    var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                    bool hasPerm = false;
+                    if (int.TryParse(userIdClaim, out int uid))
+                    {
+                        var permRepo = HttpContext.RequestServices.GetService<IPermissionRepository>();
+                        if (permRepo != null)
+                        {
+                            hasPerm = await permRepo.HasModulePermissionAsync(uid, "staff-management", "view");
+                        }
+                    }
+
+                    if (!hasPerm)
+                    {
+                        return Forbid();
+                    }
                 }
             }
 
@@ -287,6 +323,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Get complete staff profile details by Employee ID string (e.g. PCTCH0001, PCNT0001).
         /// </summary>
         [HttpGet("by-employee-id/{employeeId}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
@@ -309,6 +346,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Universal lookup accepting either integer database ID or string Employee ID.
         /// </summary>
         [HttpGet("profile/{identifier}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
@@ -497,6 +535,7 @@ namespace CollegeManagement.API.Controllers.V1
             if (!IsAdminOrPrincipal())
             {
                 var callerId = GetCallerStaffId();
+                if (id <= 0 && callerId.HasValue) id = callerId.Value;
                 if (!callerId.HasValue || callerId.Value != id) return Forbid();
             }
 
@@ -528,6 +567,7 @@ namespace CollegeManagement.API.Controllers.V1
             if (!IsAdminOrPrincipal())
             {
                 var callerId = GetCallerStaffId();
+                if (id <= 0 && callerId.HasValue) id = callerId.Value;
                 if (!callerId.HasValue || callerId.Value != id) return Forbid();
             }
 
@@ -633,6 +673,27 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        [HttpGet("{id:int}/offer-letter-pdf")]
+        public async Task<IActionResult> DownloadOfferLetterPdf(int id)
+        {
+            if (!IsAdminOrPrincipal())
+            {
+                var callerId = GetCallerStaffId();
+                if (!callerId.HasValue || callerId.Value != id) return Forbid();
+            }
+
+            var (bytes, contentType, fileName) = await _staffService.GenerateOfferLetterPdfAsync(id);
+            return File(bytes, contentType, fileName);
+        }
+
+        [HttpGet("{id:int}/experience-summary")]
+        [BypassPermission]
+        public async Task<IActionResult> GetStaffExperienceSummary(int id)
+        {
+            var summary = await _staffService.GetStaffExperienceSummaryAsync(id);
+            return Ok(summary);
+        }
+
         /// 21. POST /api/v1/staff/{id}/documents/upload
         /// Uploads an individual document for a staff member.
         /// </summary>
@@ -887,6 +948,101 @@ namespace CollegeManagement.API.Controllers.V1
 
             var desigStaffType = isNonTeachingFallback ? "Non-Teaching" : "Teaching";
             return Ok(fallback.Select((name, i) => new { id = i + 1, name, designationName = name, code = name.ToUpperInvariant(), designationCode = name.ToUpperInvariant(), staffType = desigStaffType }));
+        }
+
+        private int GetCurrentUserId()
+        {
+            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                        ?? User.FindFirst("UserId")?.Value
+                        ?? User.FindFirst("sub")?.Value;
+            return int.TryParse(claim, out var id) ? id : 0;
+        }
+
+        /// <summary>
+        /// GET /api/v1/staff/offer-letter-workflow/config
+        /// Retrieves the current offer letter workflow configuration and email settings.
+        /// </summary>
+        [HttpGet("offer-letter-workflow/config")]
+        [Authorize]
+        public async Task<IActionResult> GetOfferLetterWorkflowConfig()
+        {
+            var config = await _staffService.GetOfferLetterWorkflowConfigAsync();
+            return Ok(config);
+        }
+
+        /// <summary>
+        /// POST /api/v1/staff/offer-letter-workflow/config
+        /// Updates the offer letter workflow preferences (Automatic vs Admin Approval).
+        /// </summary>
+        [HttpPost("offer-letter-workflow/config")]
+        [Authorize]
+        public async Task<IActionResult> SaveOfferLetterWorkflowConfig([FromBody] OfferLetterWorkflowConfigDto dto)
+        {
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+                return Forbid();
+
+            var saved = await _staffService.SaveOfferLetterWorkflowConfigAsync(dto);
+            return Ok(saved);
+        }
+
+        /// <summary>
+        /// GET /api/v1/staff/offer-letter-workflow/requests
+        /// Returns staff onboarding requests awaiting verification, approval, or in correction.
+        /// </summary>
+        [HttpGet("offer-letter-workflow/requests")]
+        [Authorize]
+        public async Task<IActionResult> GetOfferLetterOnboardingRequests([FromQuery] string? status = null, [FromQuery] int? campusId = null)
+        {
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+                return Forbid();
+
+            var list = await _staffService.GetOfferLetterOnboardingRequestsAsync(status, campusId);
+            return Ok(list);
+        }
+
+        /// <summary>
+        /// POST /api/v1/staff/{id:int}/offer-letter-workflow/verify
+        /// Marks a staff member's submitted onboarding details as verified.
+        /// </summary>
+        [HttpPost("{id:int}/offer-letter-workflow/verify")]
+        [Authorize]
+        public async Task<IActionResult> VerifyStaffOnboarding(int id, [FromBody] VerifyStaffOnboardingDto dto)
+        {
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+                return Forbid();
+
+            var result = await _staffService.VerifyStaffOnboardingAsync(id, dto, GetCurrentUserId());
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// POST /api/v1/staff/{id:int}/offer-letter-workflow/approve
+        /// Approves the onboarding request, generates the offer letter QuestPDF, and emails the employee.
+        /// </summary>
+        [HttpPost("{id:int}/offer-letter-workflow/approve")]
+        [Authorize]
+        public async Task<IActionResult> ApproveStaffOfferLetter(int id, [FromBody] ApproveStaffOfferLetterDto dto)
+        {
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+                return Forbid();
+
+            var result = await _staffService.ApproveStaffOfferLetterAsync(id, dto, GetCurrentUserId());
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// POST /api/v1/staff/{id:int}/offer-letter-workflow/reject
+        /// Rejects onboarding request (Scenario: DateChange, Correction, or Discontinue).
+        /// </summary>
+        [HttpPost("{id:int}/offer-letter-workflow/reject")]
+        [Authorize]
+        public async Task<IActionResult> RejectStaffOfferLetter(int id, [FromBody] RejectStaffOfferLetterDto dto)
+        {
+            if (!IsAdminOrPrincipal() && !User.IsInRole("HR"))
+                return Forbid();
+
+            var result = await _staffService.RejectStaffOfferLetterAsync(id, dto, GetCurrentUserId());
+            return Ok(result);
         }
     }
 }

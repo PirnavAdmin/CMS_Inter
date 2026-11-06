@@ -99,6 +99,10 @@ namespace CollegeManagement.API.Helpers
             if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 claims.Add(new Claim("StaffId", user.StaffId.Value.ToString()));
+                if (user.Staff != null && !string.IsNullOrWhiteSpace(user.Staff.ProfileStatus))
+                {
+                    claims.Add(new Claim("ProfileStatus", user.Staff.ProfileStatus));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(user.Designation))

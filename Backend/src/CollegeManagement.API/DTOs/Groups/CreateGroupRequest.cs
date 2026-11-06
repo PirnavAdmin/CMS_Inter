@@ -12,11 +12,9 @@ namespace CollegeManagement.API.DTOs.Groups
         [Range(1, int.MaxValue, ErrorMessage = "Valid BoardId is required")]
         public int BoardId { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Valid AcademicYearId is required")]
-        public int AcademicYearId { get; set; }
+        public int? AcademicYearId { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "Valid AcademicLevelId is required")]
-        public int AcademicLevelId { get; set; }
+        public int? AcademicLevelId { get; set; }
 
         [Required, MaxLength(100)]
         public string GroupName { get; set; } = string.Empty;
@@ -29,7 +27,6 @@ namespace CollegeManagement.API.DTOs.Groups
         public string? Description { get; set; }
 
         public bool IsActive { get; set; } = true;
-        public int? MasterGroupId { get; set; }
 
         [JsonPropertyName("programIds")]
         public List<int>? ProgramIds { get; set; }

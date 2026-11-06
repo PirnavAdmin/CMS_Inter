@@ -1,25 +1,15 @@
-import ThemeSettingsCard from '@/shared/components/ThemeSettingsCard.jsx';
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useCallback } from "react";
-import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff, Palette, Pipette } from "lucide-react";
+import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
-import themeLightImage from "@/assets/navbar-3d/theme-light.png";
-import { useTheme } from "@/hooks/useTheme.js";
-import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "../styles/FacultySettings.css";
 
 export default function FacultySettings() {
-  const { palette, setPalette, customColor } = useTheme();
-  const [themeModalOpen, setThemeModalOpen] = useState(false);
   const { profileData, setProfileData, notify } = useFaculty();
-  const { params, setParam } = useFacultyViewParams();
-  const modalOpen = params.get("modal") === "settings";
-  const setModalOpen = useCallback((open) => setParam("modal", open ? "settings" : null), [setParam]);
-  const activeTab = params.get("tab") === "preferences" ? "preferences" : "password";
-  const setActiveTab = (tab) => setParam("tab", tab); // "password" | "preferences"
+  const [modalOpen, setModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
 
   // Password Form State
   const [passwordForm, setPasswordForm] = useState({
@@ -128,7 +118,7 @@ export default function FacultySettings() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalOpen, savingPassword, savingPreferences, setModalOpen]);
+  }, [modalOpen, savingPassword, savingPreferences]);
 
   const handleOpenModal = (tab = "password") => {
     setActiveTab(tab);
@@ -241,7 +231,7 @@ export default function FacultySettings() {
       {/* Settings Grid with Single "General Settings" Card */}
       <div className="faculty-settings-grid">
         <article className="faculty-settings-card is-featured">
-          <div className="faculty-settings-card-body">
+          <div>
             <div className="faculty-settings-card-header">
               <div className="faculty-settings-card-icon">
                 <img
@@ -267,7 +257,6 @@ export default function FacultySettings() {
             </button>
           </div>
         </article>
-        <ThemeSettingsCard />
       </div>
 
       {/* Interactive Management Modal */}

@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 // Examination Management Component
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -36,6 +38,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
@@ -5423,7 +5426,7 @@ export default function ExaminationPage() {
               setViewMode("add");
             }}
           >
-            <Plus size={16} /> Create Examination
+            <ThreeDIcon name="add" size={16} /> Create Examination
           </button>
         )}
       </div>
@@ -5489,7 +5492,7 @@ export default function ExaminationPage() {
                 onClick={handleExportExaminationList}
                 title="Export Examination List"
               >
-                <Printer size={15} /> Export
+                <ThreeDIcon name="export" size={15} /> Export
               </button>
             </div>
           </div>
@@ -5581,7 +5584,7 @@ export default function ExaminationPage() {
                               aria-label="View Details"
                               onClick={() => handleOpenDetails(e)}
                             >
-                              <Eye size={15} />
+                              <ThreeDIcon name="view" size={15} />
                             </button>
                             {isDraft && (
                               <button
@@ -5591,7 +5594,7 @@ export default function ExaminationPage() {
                                 aria-label="Edit Examination Scope"
                                 onClick={() => handleEditExamScope(e)}
                               >
-                                <Pencil size={15} />
+                                <ThreeDIcon name="edit" size={15} />
                               </button>
                             )}
                             {(isScheduled || isCompleted) && (
@@ -5602,7 +5605,7 @@ export default function ExaminationPage() {
                                 aria-label="Print / Export Examination Schedule"
                                 onClick={() => printSchedule(e)}
                               >
-                                <Printer size={15} />
+                                <ThreeDIcon name="print" size={15} />
                               </button>
                             )}
                             {(isCancelled || isDraft) && (
@@ -5613,7 +5616,7 @@ export default function ExaminationPage() {
                                 aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
                                 onClick={() => setRemove(e)}
                               >
-                                <Trash2 size={15} />
+                                <ThreeDIcon name="delete" size={15} />
                               </button>
                             )}
                             {(isDraft || isScheduled) && (
@@ -5696,30 +5699,7 @@ export default function ExaminationPage() {
             </table>
           </div>
 
-          <div className="exam-list-pagination">
-            <span className="exam-record-summary">
-              Showing {rangeStart}–{rangeEnd} of {list.length} records
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </button>
-            <span>
-              {page} / {pages}
-            </span>
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost"
-              disabled={page === pages}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <AdminPagination currentPage={page} totalRecords={list.length} pageSize={5} onPageChange={setPage} />
         </div>
       ) : (
         <>
@@ -6277,7 +6257,7 @@ export default function ExaminationPage() {
                         printSchedule(rowExam);
                       }}
                     >
-                      <Printer size={16} aria-hidden="true" /> Print / Export Schedule
+                      <ThreeDIcon name="print" size={16} aria-hidden="true" /> Print / Export Schedule
                     </button>
                     <div className="exam-row-more-divider" />
                     <button
@@ -6293,7 +6273,7 @@ export default function ExaminationPage() {
                         setCancelExamTarget(rowExam);
                       }}
                     >
-                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                      <ThreeDIcon name="cross" size={16} aria-hidden="true" /> Cancel Examination
                     </button>
                   </>
                 )}
@@ -6308,7 +6288,7 @@ export default function ExaminationPage() {
                         handleScheduleExam(rowExam);
                       }}
                     >
-                      <CalendarDays size={16} aria-hidden="true" /> Schedule Examination
+                      <ThreeDIcon name="calendar" size={16} aria-hidden="true" /> Schedule Examination
                     </button>
                     <button
                       type="button"
@@ -6318,7 +6298,7 @@ export default function ExaminationPage() {
                         handleEditExamScope(rowExam);
                       }}
                     >
-                      <Pencil size={16} aria-hidden="true" /> Edit Examination Scope
+                      <ThreeDIcon name="edit" size={16} aria-hidden="true" /> Edit Examination Scope
                     </button>
                     <button
                       type="button"
@@ -6332,7 +6312,7 @@ export default function ExaminationPage() {
                         setCancelExamTarget(rowExam);
                       }}
                     >
-                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                      <ThreeDIcon name="cross" size={16} aria-hidden="true" /> Cancel Examination
                     </button>
                     <div className="exam-row-more-divider" />
                     <button
@@ -6344,7 +6324,7 @@ export default function ExaminationPage() {
                         setRemove(rowExam);
                       }}
                     >
-                      <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                      <ThreeDIcon name="delete" size={16} aria-hidden="true" /> Delete Examination
                     </button>
                   </>
                 )}
@@ -6359,7 +6339,7 @@ export default function ExaminationPage() {
                       setRemove(rowExam);
                     }}
                   >
-                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                    <ThreeDIcon name="delete" size={16} aria-hidden="true" /> Delete Examination
                   </button>
                 )}
               </>
@@ -9553,7 +9533,7 @@ function ScheduleSection({
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={11} style={{ marginRight: "2px" }} /> Edit Period
+                        <ThreeDIcon name="edit" size={11} style={{ marginRight: "2px" }} /> Edit Period
                       </button>
                     )}
                   </div>
@@ -9941,7 +9921,7 @@ function ScheduleSection({
                   </p>
                 </div>
 
-                <table>
+                <PaginatedTable>
                   <thead>
                     <tr>
                       <th>#</th>
@@ -9988,7 +9968,7 @@ function ScheduleSection({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
                 <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
                   <span>Printed on: {new Date().toLocaleString()}</span>
                   <span>Verified & Approved by Examination Cell</span>
@@ -10167,7 +10147,7 @@ function HallAssignmentEditor({
               onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }]);
             }}
           >
-            <Plus size={14} /> Add Room / Hall
+            <ThreeDIcon name="add" size={14} /> Add Room / Hall
           </button>
         </div>
       </div>
@@ -10280,7 +10260,7 @@ function HallAssignmentEditor({
             title="Remove room"
             onClick={() => onChange(assignments.filter((_, i) => i !== index))}
           >
-            <Trash2 size={15} />
+            <ThreeDIcon name="delete" size={15} />
           </button>
         </div>
       ))}
@@ -10507,7 +10487,7 @@ function ScheduleTable({
   }, [entries, rooms, faculty]);
 
   const [page, setPage] = useState(1);
-  const pageSize = 6;
+  const pageSize = 5;
   const pages = Math.max(1, Math.ceil(displayEntries.length / pageSize));
   const pagedEntries = displayEntries.slice((page - 1) * pageSize, page * pageSize);
   const rangeStart = displayEntries.length ? (page - 1) * pageSize + 1 : 0;
@@ -10843,10 +10823,10 @@ function ScheduleTable({
                                 title="Edit / Postpone Date"
                                 onClick={() => edit(s)}
                               >
-                                <Pencil size={15} />
+                                <ThreeDIcon name="edit" size={15} />
                               </button>
                               <button className="cms-action-btn danger" title="Remove" onClick={() => remove(s)}>
-                                <Trash2 size={15} />
+                                <ThreeDIcon name="delete" size={15} />
                               </button>
                             </>
                           )}
@@ -10881,7 +10861,7 @@ function ScheduleTable({
                                 style={{ fontSize: "12px", padding: "4px 10px" }}
                                 onClick={() => setInlineAssignments((prev) => [...prev, { hallId: "", candidateCount: "", invigilatorIds: [] }])}
                               >
-                                <Plus size={13} style={{ marginRight: "4px" }} /> Add Room
+                                <ThreeDIcon name="add" size={13} style={{ marginRight: "4px" }} /> Add Room
                               </button>
                             </div>
                           </div>
@@ -10947,33 +10927,7 @@ function ScheduleTable({
       </div>
 
       {displayEntries.length > pageSize && (
-        <div
-          className="exam-list-pagination"
-          style={{ border: "1px solid var(--cms-border)", borderRadius: "0 0 12px 12px" }}
-        >
-          <span className="exam-record-summary">
-            Showing {rangeStart}–{rangeEnd} of {displayEntries.length} records (6 per page)
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            Previous
-          </button>
-          <span>
-            {page} / {pages}
-          </span>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            disabled={page === pages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </button>
-        </div>
+        <AdminPagination currentPage={page} totalRecords={displayEntries.length} pageSize={5} onPageChange={setPage} />
       )}
     </div>
   );
@@ -11320,7 +11274,7 @@ function GlobalSchedulePreviewModal({
               disabled={loading || targetExams.length === 0}
               title="Download Excel spreadsheet matching this layout"
             >
-              <FileSpreadsheet size={16} /> Download Excel
+              <ThreeDIcon name="excel" size={16} /> Download Excel
             </button>
             <button
               type="button"
@@ -11329,7 +11283,7 @@ function GlobalSchedulePreviewModal({
               disabled={loading || targetExams.length === 0}
               title="Download PDF document matching this layout"
             >
-              <Printer size={16} /> Download PDF
+              <ThreeDIcon name="pdf" size={16} /> Download PDF
             </button>
             <button
               type="button"
@@ -11398,7 +11352,7 @@ function GlobalSchedulePreviewModal({
                     </div>
 
                     {/* Schedule Table */}
-                    <table className="ref-exam-table">
+                    <PaginatedTable className="ref-exam-table">
                       <thead>
                         <tr>
                           <th style={{ width: "24%" }}>Subject</th>
@@ -11435,7 +11389,7 @@ function GlobalSchedulePreviewModal({
                           </tr>
                         )}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
                 );
               })}

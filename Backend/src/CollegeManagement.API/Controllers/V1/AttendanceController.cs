@@ -12,6 +12,7 @@ using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,13 +33,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IAttendanceService _attendanceService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly INotificationService? _notificationService;
 
         public AttendanceController(
             IAttendanceService attendanceService,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            INotificationService? notificationService = null)
         {
             _attendanceService = attendanceService;
             _jwtTokenHelper = jwtTokenHelper;
+            _notificationService = notificationService;
         }
 
         [HttpPost("create")]
@@ -75,6 +79,44 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var affectedRows = await _attendanceService.CreateBulkAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
+
+            if (_notificationService != null && request.Students != null && request.Students.Any())
+            {
+                try
+                {
+                    var absentStudentIds = request.Students
+                        .Where(s => s.StudentId > 0 && s.Status == AttendanceStatus.Absent)
+                        .Select(s => s.StudentId)
+                        .Distinct()
+                        .ToList();
+
+                    if (absentStudentIds.Any())
+                    {
+                        var dateStr = request.AttendanceDate.ToString("yyyy-MM-dd");
+                        foreach (var sId in absentStudentIds)
+                        {
+                            await _notificationService.SendToStudentAsync(
+                                sId,
+                                "Daily Absence Notification",
+                                $"You were marked ABSENT for classes on {dateStr}.",
+                                "Attendance",
+                                null,
+                                "/student/attendance");
+
+                            await _notificationService.SendToRolesAsync(
+                                new[] { "Parent" },
+                                null,
+                                "Daily Student Absence Alert",
+                                $"Dear Parent, your ward (Student #{sId}) was marked ABSENT today ({dateStr}).",
+                                "Attendance",
+                                sId,
+                                "/parent/attendance");
+                        }
+                    }
+                }
+                catch { }
+            }
+
             return Ok(affectedRows);
         }
 
@@ -210,6 +252,44 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var count = await _attendanceService.AdminBulkSaveStudentAttendanceAsync(request, userName, userId, cancellationToken);
+
+            if (_notificationService != null && request.Attendances != null && request.Attendances.Any())
+            {
+                try
+                {
+                    var absentStudentIds = request.Attendances
+                        .Where(a => a.StudentId > 0 && (a.MorningStatus == AttendanceStatus.Absent || a.AfternoonStatus == AttendanceStatus.Absent))
+                        .Select(a => a.StudentId)
+                        .Distinct()
+                        .ToList();
+
+                    if (absentStudentIds.Any())
+                    {
+                        var dateStr = request.AttendanceDate.ToString("yyyy-MM-dd");
+                        foreach (var sId in absentStudentIds)
+                        {
+                            await _notificationService.SendToStudentAsync(
+                                sId,
+                                "Daily Absence Notification",
+                                $"You were marked ABSENT for classes on {dateStr}.",
+                                "Attendance",
+                                null,
+                                "/student/attendance");
+
+                            await _notificationService.SendToRolesAsync(
+                                new[] { "Parent" },
+                                null,
+                                "Daily Student Absence Alert",
+                                $"Dear Parent, your ward (Student #{sId}) was marked ABSENT for classes today ({dateStr}).",
+                                "Attendance",
+                                sId,
+                                "/parent/attendance");
+                        }
+                    }
+                }
+                catch { }
+            }
+
             return Ok(new { success = true, message = $"Attendance saved successfully for {count} records.", count });
         }
 
@@ -224,6 +304,53 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var results = await _attendanceService.GetAttendanceDefaultersAsync(request, cancellationToken);
             return Ok(results);
+        }
+
+        /// <summary>
+        /// Sends Attendance Shortage Alert notifications to students and parents with attendance below 75%.
+        /// </summary>
+        [HttpPost("notify-defaulters")]
+        [Authorize(Roles = "Super Admin,Admin,HOD,Principal,Faculty,Staff,Teacher")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> NotifyDefaulters(
+            [FromBody] AttendanceDefaultersRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            var results = await _attendanceService.GetAttendanceDefaultersAsync(request, cancellationToken);
+            var count = 0;
+            if (_notificationService != null && results != null)
+            {
+                foreach (var d in results)
+                {
+                    if (d.StudentId > 0)
+                    {
+                        try
+                        {
+                            await _notificationService.SendToStudentAsync(
+                                d.StudentId,
+                                "Attendance Shortage Alert",
+                                $"Attendance Alert: Your overall attendance is currently {d.AttendancePercentage:F1}%, which is below the mandatory 75% requirement.",
+                                "Attendance",
+                                d.StudentId,
+                                "/student/attendance");
+
+                            await _notificationService.SendToRolesAsync(
+                                new[] { "Parent" },
+                                null,
+                                "Attendance Shortage Alert",
+                                $"Attendance Alert: Your ward {d.StudentName} (Roll: {d.RollNumber}) has {d.AttendancePercentage:F1}% attendance, which is below the mandatory 75% requirement.",
+                                "Attendance",
+                                d.StudentId,
+                                "/parent/attendance");
+
+                            count++;
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            return Ok(new { success = true, notifiedCount = count, message = $"Attendance shortage alert dispatched to {count} students and parents." });
         }
 
         [HttpPost("summary")]
@@ -412,7 +539,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId}/yearly-overview")]
         [ProducesResponseType(typeof(YearlyOverviewResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [ParentStudentAuthorization]
         public async Task<IActionResult> GetStudentYearlyOverview(
             [FromRoute] int studentId,
@@ -449,7 +576,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId}/subjects")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [ParentStudentAuthorization]
         [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStudentSubjectAttendance(
@@ -461,7 +588,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("student/{studentId}/daily-logs")]
-        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [Authorize(Roles = "Admin,Teacher,Faculty,Teaching Staff,Staff,Student,Parent")]
         [ParentStudentAuthorization]
         [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStudentDailyPunchLogs(

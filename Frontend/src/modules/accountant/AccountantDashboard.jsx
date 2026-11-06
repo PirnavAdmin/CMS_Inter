@@ -5,19 +5,19 @@ import { Link } from "react-router-dom";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as payrollApi from "@/api/payrollApi.js";
+import { getFeeCollectionDetails } from "@/api/reportApi.js";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { attendanceService } from "@/api/attendanceService.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import StudentCard from "@/modules/student/components/StudentCard.jsx";
-import StudentDataTable from "@/modules/student/components/StudentDataTable.jsx";
-import StudentSummaryCard from "@/modules/student/components/StudentSummaryCard.jsx";
+import { AccountantCard, AccountantDataTable, AccountantSummaryCard } from "./components/AccountantUI.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import attendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import staffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
 import { getRows, getNumber, formatMoney, formatDate, normalizePayment, normalizeDue, normalizePayroll, checkedFeeData } from "./services/accountantService.js";
 import { profileValue as field } from "./utils/accountantProfileData.js";
-import { parseAccountantLeaveCategories, getApplicableAccountantLeaveCategories, getAccountantLeaveCategoryStats, accountantLeaveCategoryLabel } from "./utils/accountantLeaveStats.js";
+import { parseAccountantLeaveCategories, getApplicableAccountantLeaveCategories } from "./utils/accountantLeaveStats.js";
 
 export function accountantGreeting(hour) {
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -32,6 +32,54 @@ export function accountantRecentPayments(dashboard) {
     const first = Date.parse(a.date), second = Date.parse(b.date);
     return Number.isFinite(first) && Number.isFinite(second) ? second - first : Number.isFinite(second) ? 1 : Number.isFinite(first) ? -1 : 0;
   });
+}
+
+// Aggregate the complete scoped report, never the dashboard's limited recent list.
+export function accountantMonthlyCollections(response) {
+  const report = checkedFeeData(response);
+  const details = field(report, "details");
+  const count = getNumber(report, ["totalTransactions", "TotalTransactions", "transactions", "Transactions"]);
+  const total = getNumber(report, ["totalCollected", "TotalCollected"]);
+  if (!Array.isArray(details) || count !== details.length || total == null) throw new Error("The collection report did not return a complete transaction list and total.");
+  const seen = new Set(), months = new Map();
+  let cents = 0;
+  for (const row of details) {
+    const id = field(row, "paymentId");
+    const period = field(row, "period");
+    const paid = getNumber(row, ["paidAmount", "PaidAmount"]);
+    const collected = getNumber(row, ["collected", "Collected"]);
+    // Match ReportsController's amount selection, including signed report adjustments.
+    const amount = paid > 0 ? paid : collected;
+    if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0 || seen.has(String(Number(id))) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || amount == null || ["failed", "cancelled"].includes(String(field(row, "status")).toLowerCase())) throw new Error("The collection report contains duplicate, incomplete or unsupported transactions.");
+    seen.add(String(Number(id)));
+    const value = Math.round(amount * 100);
+    if (!Number.isSafeInteger(value) || !Number.isSafeInteger(cents + value)) throw new Error("Collection amounts could not be verified.");
+    cents += value;
+    months.set(period, (months.get(period) ?? 0) + value);
+  }
+  if (cents !== Math.round(total * 100)) throw new Error("Collection details do not match the report total.");
+  return [...months].sort(([a], [b]) => a.localeCompare(b)).map(([period, value]) => ({ period, collected: value / 100 }));
+}
+
+function MonthlyFeeChart({ state, allowed }) {
+  if (state.loading) return <SkeletonCard lines={3} />;
+  if (state.error || !state.data?.length) return <div className="accountant-home-chart-unavailable" role="status"><HomeIcon asset={adminIconAssets.financialReports} /><strong>{state.error ? "Monthly collection data unavailable" : allowed && state.data ? "No fee collections for this scope" : "Monthly collection data unavailable"}</strong><p>{state.error || (allowed && state.data ? "No reported transactions match the selected campus, board and academic year." : allowed ? "No complete monthly report was returned for the selected campus, board and academic year." : "Financial Reports view permission is required for the monthly collection report.")}</p></div>;
+  const monthLabel = period => { const [year, month] = period.split("-").map(Number); return new Date(year, month - 1, 1).toLocaleDateString("en-IN", { month: "short", year: "2-digit" }); };
+  const axisAmount = value => Math.abs(value) >= 100000 ? `₹${Number((value / 100000).toFixed(1))}L` : Math.abs(value) >= 1000 ? `₹${Number((value / 1000).toFixed(1))}k` : `₹${value}`;
+  return <div className="accountant-home-monthly-chart" role="group" aria-label="Monthly fee collections in INR, selected campus, board and academic year">
+    <div className="accountant-home-chart-plot">
+    <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <BarChart data={state.data} margin={{ top: 8, right: 6, bottom: 0, left: 0 }} accessibilityLayer>
+        <CartesianGrid vertical={false} stroke="var(--cms-border)" />
+        <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 10, fill: "var(--cms-muted)" }} tickLine={false} axisLine={{ stroke: "var(--cms-border)" }} minTickGap={12} />
+        <YAxis tickFormatter={axisAmount} tick={{ fontSize: 10, fill: "var(--cms-muted)" }} tickLine={false} axisLine={false} width={53} />
+        <Tooltip labelFormatter={monthLabel} formatter={value => [formatMoney(value), "Reported collection"]} contentStyle={{ background: "var(--cms-surface)", borderColor: "var(--cms-border)", borderRadius: 8, color: "var(--cms-text)" }} />
+        <Bar dataKey="collected" fill="var(--cms-primary)" radius={[4, 4, 0, 0]} maxBarSize={34} isAnimationActive={false} />
+      </BarChart>
+    </ResponsiveContainer>
+    </div>
+    <span className="accountant-home-chart-caption">Reported collections (INR), by payment month</span>
+  </div>;
 }
 
 export async function loadAccountantHomePersonal({ attendance, leave }) {
@@ -81,6 +129,35 @@ function HomeIcon({ asset }) {
   return typeof asset === "string" ? <img src={asset} alt="" aria-hidden="true" /> : <span aria-hidden="true" style={{ backgroundImage: `url(${asset.src})`, backgroundPosition: asset.position }} />;
 }
 
+function HomeCardTitle({ icon, children }) {
+  return <span className="accountant-home-card-title"><span className="accountant-home-card-icon"><HomeIcon asset={icon} /></span>{children}</span>;
+}
+
+function PayrollOverview({ summary }) {
+  const total = getNumber(summary, ["totalPayslips", "TotalPayslips"]);
+  const statuses = [
+    ["Paid Payslips", getNumber(summary, ["paidPayslips", "PaidPayslips"]), "#84b600"],
+    ["Pending Payslips", getNumber(summary, ["pendingPayslips", "PendingPayslips"]), "#facc15"],
+    ["On Hold", getNumber(summary, ["onHoldPayslips", "OnHoldPayslips"]), "#737373"],
+  ];
+  const validCount = value => Number.isSafeInteger(value) && value >= 0;
+  const known = statuses.reduce((sum, [, count]) => sum + (count ?? 0), 0);
+  const complete = validCount(total) && statuses.every(([, count]) => validCount(count)) && known <= total;
+  if (complete && total > known) statuses.push(["Other Statuses", total - known, "#cbd5e1"]);
+  let position = 0;
+  const stops = complete && total > 0 ? statuses.map(([, count, color]) => {
+    const start = position;
+    position += count / total * 100;
+    return `${color} ${start}% ${position}%`;
+  }).join(", ") : null;
+  return <div className="accountant-home-payroll-overview">
+    <div className="accountant-home-donut" style={stops ? { background: `conic-gradient(${stops})` } : undefined} role="img" aria-label={complete ? `${total} payslips. ${statuses.map(([label, count]) => `${label}: ${count}`).join(". ")}` : "Payroll status breakdown unavailable"}>
+      <div><span>Total</span><strong>{validCount(total) ? total : "—"}</strong><span>Payslips</span></div>
+    </div>
+    <div className="accountant-home-payroll-legend">{statuses.map(([label, count, color]) => <div key={label}><span><i style={{ background: color }} aria-hidden="true" />{label}</span><strong>{validCount(count) ? count : "Unavailable"}</strong></div>)}{!complete && <p role="status">Status breakdown unavailable.</p>}</div>
+  </div>;
+}
+
 export default function AccountantDashboard() {
   const { selectedCampusId, selectedCampus } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
@@ -90,6 +167,7 @@ export default function AccountantDashboard() {
   const canPayroll = permissions.canView("payroll");
   const canAttendance = permissions.canView("staff-attendance", "my-attendance");
   const canLeave = permissions.canView("staff-leave-management", "staff-leave");
+  const canReports = permissions.canView("reports-analytics");
   const [refresh, setRefresh] = useState(0);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(timer); }, []);
@@ -115,6 +193,8 @@ export default function AccountantDashboard() {
   const personalLoad = useCallback(() => loadAccountantHomePersonal({ attendance: canAttendance, leave: canLeave }), [canAttendance, canLeave, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
   const finance = useAccountantLoader(load);
   const personal = useAccountantLoader(personalLoad);
+  const collectionLoad = useCallback(async () => canReports ? accountantMonthlyCollections(await getFeeCollectionDetails(financeParams)) : null, [canReports, financeParams, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+  const collectionTrend = useAccountantLoader(collectionLoad);
   const data = finance.data;
   const self = personal.data;
   const profile = self?.profile;
@@ -136,47 +216,69 @@ export default function AccountantDashboard() {
   const attendanceStatus = field(self?.today, "todayStatus") || ({ punched_in: "Checked in", punched_out: "Checked out", not_punched: "Not checked in" })[field(self?.today, "status")] || field(self?.today, "status") || "No record available";
   const metrics = field(self?.attendance, "metrics");
   const metric = key => field(metrics, key) === "" ? "Unavailable" : field(metrics, key);
-  const leaves = self?.leaves;
-  const leaveCount = status => leaves ? leaves.filter(row => String(row.status).toLowerCase() === status).length : "Unavailable";
+  const pendingPayslips = getNumber(payroll, ["pendingPayslips", "PendingPayslips"]);
   const hour = now.getHours();
   const GreetingIcon = hour < 12 ? Sun : hour < 17 ? Sunset : Moon;
   const quickActions = [
-    ["Collect Student Fee", "/accountant-dashboard/fees?tab=collection", adminIconAssets.feeManagement, canFees && canHistory && permissions.canCreate("fee-management", "fee-collection"), "green"],
-    ["Payment History", "/accountant-dashboard/payments?tab=fees", adminIconAssets.paymentHistory, canHistory, "blue"],
-    ["Student Fee Ledger", "/accountant-dashboard/fees?tab=ledger", adminIconAssets.feeManagement, canFees && permissions.canView("fee-management", "student-fees"), "orange"],
-    ["Financial Reports", "/accountant-dashboard/reports", adminIconAssets.financialReports, permissions.canView("reports-analytics"), "green"],
+    ["Collect Student Fee", "/accountant-dashboard/fees?tab=collection", adminIconAssets.feeManagement, canFees && canHistory && permissions.canCreate("fee-management", "fee-collection")],
+    ["Student Fee Ledger", "/accountant-dashboard/fees?tab=ledger", adminIconAssets.feeManagement, canFees && permissions.canView("fee-management", "student-fees")],
+    ["Payment History", "/accountant-dashboard/payments?tab=fees", adminIconAssets.paymentHistory, canHistory],
+    ["Payroll", "/accountant-dashboard/payroll", adminIconAssets.payroll, canPayroll],
+    ["Financial Reports", "/accountant-dashboard/reports", adminIconAssets.financialReports, permissions.canView("reports-analytics")],
   ].filter(([, , , allowed]) => allowed);
 
   return <div className="accountant-home">
     <header className="accountant-home-welcome">
-      <div className="accountant-home-identity"><div className="accountant-home-avatar"><HomeIcon asset={staffIcon} /></div><div><h1><GreetingIcon size={22} aria-hidden="true" /> {accountantGreeting(hour)}, {name}!</h1><div className="accountant-home-pills"><span>Accountant</span>{employee && <span>ID: {employee}</span>}{department && <span>{department}</span>}{campus && <span>{campus}</span>}</div></div></div>
-      <div className="accountant-home-controls"><span><CalendarDays size={15} aria-hidden="true" />{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</span><button className="sp-btn" type="button" onClick={() => { setNow(new Date()); setRefresh(value => value + 1); }} disabled={finance.loading || personal.loading}><RefreshCw size={14} /> Refresh dashboard</button></div>
+      <div className="accountant-home-identity">
+        <div className="accountant-home-avatar"><HomeIcon asset={staffIcon} /></div>
+        <div className="accountant-home-welcome-copy">
+          <h1><GreetingIcon size={21} aria-hidden="true" /> {accountantGreeting(hour)}, {name}!</h1>
+          <div className="accountant-home-pills"><span>Accountant</span>{employee && <span>ID: {employee}</span>}{department && <span>{department}</span>}{campus && <span>{campus}</span>}</div>
+        </div>
+      </div>
+      <div className="accountant-home-controls"><span><CalendarDays size={14} aria-hidden="true" />{now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span><button className="accountant-home-refresh" type="button" onClick={() => { setNow(new Date()); setRefresh(value => value + 1); }} disabled={finance.loading || personal.loading} aria-label="Refresh dashboard" title="Refresh dashboard"><RefreshCw size={15} /><span>Refresh dashboard</span></button></div>
     </header>
     {personal.error || self?.errors.profile ? <p className="accountant-home-notice" role="status">Profile: {personal.error || self.errors.profile}</p> : null}
     <section aria-label="Financial overview" aria-busy={finance.loading}>
-      {finance.loading ? <SkeletonCard lines={3} /> : null}
       {finance.error || data?.errors.length ? <p className="accountant-home-notice" role="status"><AlertCircle size={15} /> {finance.error || data.errors.join(" ")}</p> : null}
-      <div className="accountant-home-summary"><StudentSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collected" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(collected)} note="Selected fee scope" /><StudentSummaryCard icon={adminIconAssets.feeManagement} label="Pending Dues" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(pending)} note={dues ? `${dues.length} outstanding records` : "Outstanding student balances"} tone="orange" /><StudentSummaryCard icon={adminIconAssets.paymentHistory} label="Recent Transactions" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : payments?.length ?? "Unavailable"} note="Returned recent payments; not an all-time count" tone="blue" /><StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Summary" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(payrollTotal)} note={payroll ? "Current month, selected campus" : "Available payslips, selected campus"} tone="purple" /></div>
+      <div className="accountant-home-summary">
+        <AccountantSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collected" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(collected)} note="Selected campus, board & academic year" />
+        <AccountantSummaryCard icon={adminIconAssets.feeManagement} label="Pending Dues" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(pending)} note={dues ? `${dues.length} outstanding records` : "Outstanding student balances"} tone="orange" />
+        <AccountantSummaryCard icon={adminIconAssets.payroll} label={payroll ? "Payroll (This Month)" : "Payroll (Available Records)"} value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(payrollTotal)} note={payroll ? pendingPayslips == null ? "Current month, selected campus" : `${pendingPayslips} pending payslip${pendingPayslips === 1 ? "" : "s"}` : "Monthly summary unavailable; available payslips"} tone="blue" />
+        <AccountantSummaryCard icon={adminIconAssets.paymentHistory} label="Recent Transactions" value={finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : payments?.length ?? "Unavailable"} note="Returned recent fee payments & receipts" tone="purple" />
+      </div>
     </section>
-    {quickActions.length > 0 && <section className="accountant-home-quick" aria-labelledby="accountant-home-actions-title"><div className="accountant-home-section-head"><h2 id="accountant-home-actions-title">Quick Actions</h2></div><div className="accountant-home-actions">{quickActions.map(([label, to, icon, , tone]) => <Link key={label} to={to} className={`accountant-home-action tone-${tone}`}><HomeIcon asset={icon} /><span>{label}</span><ArrowRight size={14} aria-hidden="true" /></Link>)}</div></section>}
-    <div className="accountant-home-widget-grid">
-      <StudentCard className="accountant-home-widget accountant-home-attendance-card" title="Today's Attendance" subtitle={now.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })} action={canAttendance && <Link className="sp-text-link" to="/accountant-dashboard/my-attendance">View attendance records <ArrowRight size={13} /></Link>}>
-        {canAttendance ? personal.loading ? <SkeletonCard lines={3} /> : personal.error || self?.errors.today ? <p className="accountant-home-notice" role="status">{personal.error || self.errors.today}</p> : <><div className="accountant-home-attendance"><HomeIcon asset={attendanceIcon} /><div><span className="accountant-home-eyebrow">TODAY'S STATUS</span><h3>{attendanceStatus}</h3>{field(self?.today, "shiftName") && <p>Shift: {field(self.today, "shiftName")}</p>}</div><Link className="sp-btn primary" to="/accountant-dashboard/my-attendance">Open punch controls <ArrowRight size={14} /></Link></div><dl className="accountant-home-details">{[["Check in", field(self?.today, "inTime")], ["Check out", field(self?.today, "outTime")], ["Working duration", field(self?.today, "shiftDuration")]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Unavailable"}</dd></div>)}</dl></> : <p>Attendance access is unavailable for this account.</p>}
-        {canAttendance && !personal.loading && <div className="accountant-home-records">{self?.errors.attendance ? <p role="status">Attendance summary: {self.errors.attendance}</p> : <><span>This week</span><strong>{metric("presentDays")} present days</strong><span>{metric("workingDays")} working days</span></>}</div>}
-      </StudentCard>
-      <StudentCard className="accountant-home-widget accountant-home-leave-card" title="Leave Balances & Requests" subtitle="Your eligible non-teaching leave policies" action={canLeave && <Link className="sp-text-link" to="/accountant-dashboard/leave">Manage leaves <ArrowRight size={13} /></Link>}>
-        {canLeave ? personal.loading ? <SkeletonCard lines={3} /> : personal.error ? <p className="accountant-home-notice" role="status">{personal.error}</p> : <>{self?.errors.categories ? <p className="accountant-home-notice" role="status">Leave categories: {self.errors.categories}</p> : <div className="accountant-home-leaves">{self?.categories?.length ? self.categories.map(category => { const stats = getAccountantLeaveCategoryStats(category, self.catalog, leaves || [], Boolean(leaves)); return <div key={category.leaveCategoryId}><span>{accountantLeaveCategoryLabel(category)}</span><strong>{stats.text}</strong><small>Approved days used / policy quota</small></div>; }) : <p>No eligible leave categories returned.</p>}</div>}<p className="accountant-home-caption">Individual leave balances: Unavailable. Policy quotas do not include individual allocations, accruals or carry-forward balances.</p>{self?.errors.leaves ? <p className="accountant-home-notice" role="status">Leave requests: {self.errors.leaves}</p> : <div className="accountant-home-records"><span>Pending <strong>{leaveCount("pending")}</strong></span><span>Approved <strong>{leaveCount("approved")}</strong></span><span>Rejected <strong>{leaveCount("rejected")}</strong></span></div>}</> : <p>Leave access is unavailable for this account.</p>}
-      </StudentCard>
-      <StudentCard className="accountant-home-widget accountant-home-table-widget" title="Recent Payments" subtitle="Latest saved fee transactions" action={canHistory && <Link className="sp-text-link" to="/accountant-dashboard/payments?tab=fees">View history <ArrowRight size={13} /></Link>}>
-        <StudentDataTable loading={finance.loading} columns={["Student", "Admission No", "Type", "Amount", "Date", "Status"]} statusColumns={[5]} rows={(payments || []).slice(0, 4).map(row => ({ Student: row.studentName, "Admission No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty={finance.loading ? "Loading payments..." : payments === null || payments === undefined ? "Recent payment data is unavailable." : "No payment transactions available."} />
-      </StudentCard>
-      <StudentCard className="accountant-home-widget accountant-home-table-widget" title="Pending Dues" subtitle="Outstanding student fee balances, earliest due first" action={canFees && <Link className="sp-text-link" to="/accountant-dashboard/fees?tab=ledger">Open ledger <ArrowRight size={13} /></Link>}><StudentDataTable loading={finance.loading} columns={["Student", "Admission No", "Amount", "Due Date"]} rows={(dues || []).slice(0, 4).map(row => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": row.dueDate && Number.isFinite(Date.parse(row.dueDate)) ? formatDate(row.dueDate) : "Unavailable" }))} empty={finance.loading ? "Loading dues..." : dues == null ? "Pending dues data is unavailable." : "No outstanding dues available."} /></StudentCard>
-      <StudentCard className="accountant-home-widget" title="Financial Snapshot" subtitle="Amounts shown in INR; scopes differ">
-        <dl className="accountant-home-snapshot">{[["Fee collected", collected, "Selected campus, board and academic-year fee scope"], ["Pending dues", pending, "Selected campus, board and academic-year fee scope"], ["Payroll", payrollTotal, payroll ? "Current month, selected campus" : "Available payslip records, selected campus"]].map(([label, value, scope]) => <div key={label}><dt>{label}</dt><dd>{finance.loading ? <Skeleton style={{ width: 100, height: 24 }} /> : amount(value)}</dd><small>{scope}</small></div>)}</dl>
-      </StudentCard>
-      <StudentCard className="accountant-home-widget" title="Payroll Status" subtitle="Current month, selected campus" action={canPayroll && <Link className="sp-text-link" to="/accountant-dashboard/payroll">Open payroll <ArrowRight size={13} /></Link>}>
-        {finance.loading ? <SkeletonCard lines={3} /> : <dl className="accountant-home-snapshot"><div><dt>Paid payslips</dt><dd>{getNumber(payroll, ["paidPayslips", "PaidPayslips"]) ?? "Unavailable"}</dd></div><div><dt>Pending payslips</dt><dd>{getNumber(payroll, ["pendingPayslips", "PendingPayslips"]) ?? "Unavailable"}</dd></div><div><dt>On hold</dt><dd>{getNumber(payroll, ["onHoldPayslips", "OnHoldPayslips"]) ?? "Unavailable"}</dd></div><div><dt>Total payslips</dt><dd>{getNumber(payroll, ["totalPayslips", "TotalPayslips"]) ?? "Unavailable"}</dd></div></dl>}
-      </StudentCard>
+    {quickActions.length > 0 && <section className="accountant-home-quick" aria-labelledby="accountant-home-actions-title">
+      <h2 id="accountant-home-actions-title">Quick Actions</h2>
+      <div className="accountant-home-actions">{quickActions.map(([label, to, asset]) => <Link key={label} to={to} className="accountant-home-action"><span className="accountant-home-action-icon"><HomeIcon asset={asset} /></span><span>{label}</span><ArrowRight size={17} aria-hidden="true" /></Link>)}</div>
+    </section>}
+    <div className="accountant-home-main-grid">
+      <AccountantCard className="accountant-home-widget accountant-home-attendance-card" title={<HomeCardTitle icon={attendanceIcon}>Today's Attendance</HomeCardTitle>} subtitle={now.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}>
+        {canAttendance ? personal.loading ? <SkeletonCard lines={3} /> : personal.error || self?.errors.today ? <p className="accountant-home-notice" role="status">{personal.error || self.errors.today}</p> : <>
+          <div className="accountant-home-attendance"><span className="accountant-home-attendance-icon"><HomeIcon asset={attendanceIcon} /></span><div><span className="accountant-home-eyebrow">Today's Status</span><h3>{attendanceStatus}</h3>{field(self?.today, "shiftName") && <p>Shift: {field(self.today, "shiftName")}</p>}</div><Link className="sp-btn" to="/accountant-dashboard/my-attendance">Open Punch Controls <ArrowRight size={14} /></Link></div>
+          <dl className="accountant-home-details">{[["Check In", field(self?.today, "inTime")], ["Check Out", field(self?.today, "outTime")], ["Working Duration", field(self?.today, "shiftDuration")]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Unavailable"}</dd></div>)}</dl>
+        </> : <p>Attendance access is unavailable for this account.</p>}
+        {canAttendance && !personal.loading && <div className="accountant-home-records">{self?.errors.attendance ? <p role="status">Attendance summary: {self.errors.attendance}</p> : <><span>This Week:</span><strong>{metric("presentDays")} present</strong><span className="accountant-home-record-divider" aria-hidden="true">|</span><span>{metric("workingDays")} working</span></>}</div>}
+      </AccountantCard>
+      <AccountantCard className="accountant-home-widget accountant-home-dues-card" title={<HomeCardTitle icon={adminIconAssets.feeManagement}>Pending Fee Dues</HomeCardTitle>} subtitle="Outstanding student fee balances">
+        {finance.loading ? <SkeletonCard lines={3} /> : <AccountantDataTable columns={["Student", "Adm. No", "Amount", "Due Date"]} rows={(dues || []).slice(0, 3).map(row => ({ Student: row.studentName, "Adm. No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": row.dueDate && Number.isFinite(Date.parse(row.dueDate)) ? formatDate(row.dueDate) : "Unavailable" }))} empty={dues == null ? "Pending dues data is unavailable." : "No outstanding dues available."} />}
+        {canFees && <div className="accountant-home-card-footer"><Link className="sp-text-link" to="/accountant-dashboard/fees?tab=ledger">View All Dues <ArrowRight size={15} /></Link></div>}
+      </AccountantCard>
+      <AccountantCard className="accountant-home-widget accountant-home-payroll-card" title={<HomeCardTitle icon={adminIconAssets.payroll}>Payroll Status</HomeCardTitle>} subtitle={`Current month${campus ? `, ${campus}` : ", selected campus"}`}>
+        {finance.loading ? <SkeletonCard lines={3} /> : <PayrollOverview summary={payroll} />}
+        {canPayroll && <div className="accountant-home-card-footer"><Link className="sp-text-link" to="/accountant-dashboard/payroll">Open Payroll <ArrowRight size={15} /></Link></div>}
+      </AccountantCard>
+    </div>
+    <div className="accountant-home-bottom-grid">
+      <AccountantCard className="accountant-home-widget accountant-home-collection-card" title={<HomeCardTitle icon={adminIconAssets.financialReports}>Fee Collection Overview</HomeCardTitle>} subtitle="Fee collection (INR), selected fee scope">
+        <div className="accountant-home-collection-layout">
+          <MonthlyFeeChart state={collectionTrend} allowed={canReports} />
+          <dl className="accountant-home-collection-totals">{[["Total Collected", collected, adminIconAssets.feeManagement, "green"], ["Total Pending", pending, adminIconAssets.feeManagement, "orange"]].map(([label, value, asset, tone]) => <div key={label} className={`tone-${tone}`}><span><HomeIcon asset={asset} /></span><div><dt>{label}</dt><dd>{finance.loading ? <Skeleton style={{ width: 90, height: 20 }} /> : amount(value)}</dd></div></div>)}</dl>
+        </div>
+      </AccountantCard>
+      <AccountantCard className="accountant-home-widget accountant-home-payments-card" title={<HomeCardTitle icon={adminIconAssets.paymentHistory}>Recent Payments</HomeCardTitle>} subtitle="Latest saved fee transactions" action={canHistory && <Link className="sp-text-link" to="/accountant-dashboard/payments?tab=fees">View History <ArrowRight size={15} /></Link>}>
+        {finance.loading ? <SkeletonCard lines={3} /> : <AccountantDataTable columns={["Student", "Adm. No", "Type", "Amount", "Date"]} rows={(payments || []).slice(0, 3).map(row => ({ Student: row.studentName, "Adm. No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: row.date && Number.isFinite(Date.parse(row.date)) ? formatDate(row.date) : "Unavailable" }))} empty={payments == null ? "Recent payment data is unavailable." : "No payment transactions available."} />}
+      </AccountantCard>
     </div>
   </div>;
 }

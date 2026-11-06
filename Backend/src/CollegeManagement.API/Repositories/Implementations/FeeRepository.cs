@@ -16,6 +16,11 @@ public class FeeRepository : IFeeRepository
 {
     private readonly AppDbContext _db;
     private readonly CollegeManagement.API.Services.Interfaces.INumberSeriesService _numberSeriesService;
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
 
     public FeeRepository(AppDbContext db, CollegeManagement.API.Services.Interfaces.INumberSeriesService numberSeriesService)
     {
@@ -106,7 +111,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest request)
     {
         var c = Connection();
-        string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>());
+        string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>(), _jsonOptions);
 
         using var multi = await c.QueryMultipleAsync(
             "sp_FeeStructure_Create",
@@ -128,9 +133,17 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
 
         var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
-        if (structure != null && !multi.IsConsumed)
+        if (structure != null)
         {
-            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+            if (!multi.IsConsumed)
+            {
+                structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+            }
+            if (structure.Items == null || structure.Items.Count == 0)
+            {
+                var full = await GetFeeStructureByIdAsync(structure.FeeStructureId);
+                if (full != null) return full;
+            }
         }
         return structure;
     }
@@ -553,6 +566,37 @@ public class FeeRepository : IFeeRepository
             "sp_FeePayment_GetHistoryByStudent",
             new { p_StudentId = studentId },
             commandType: CommandType.StoredProcedure);
+    }
+
+    public async Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds)
+    {
+        var ids = studentIds?.Distinct().Where(id => id > 0).ToList() ?? new List<int>();
+        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
+        if (!ids.Any()) return result;
+
+        var c = Connection();
+        try
+        {
+            var payments = await c.QueryAsync<FeePaymentResponse>(
+                "sp_FeePayment_GetBulkHistory",
+                new { p_StudentIds = string.Join(",", ids) },
+                commandType: CommandType.StoredProcedure);
+
+            var grouped = payments.GroupBy(p => p.StudentId).ToDictionary(g => g.Key, g => (IEnumerable<FeePaymentResponse>)g.ToList());
+            foreach (var id in ids)
+            {
+                result[id] = grouped.TryGetValue(id, out var list) ? list : Enumerable.Empty<FeePaymentResponse>();
+            }
+            return result;
+        }
+        catch
+        {
+            foreach (var id in ids)
+            {
+                result[id] = await GetFeePaymentsAsync(id);
+            }
+            return result;
+        }
     }
 
     public async Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id)

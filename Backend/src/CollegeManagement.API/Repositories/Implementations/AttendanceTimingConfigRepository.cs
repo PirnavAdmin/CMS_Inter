@@ -136,15 +136,33 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
         {
-            var conn = await GetOpenConnectionAsync(ct);
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(
-                    "sp_DeleteAttendanceTimingConfig",
-                    new { p_Id = id },
-                    commandType: CommandType.StoredProcedure,
-                    cancellationToken: ct));
+            try
+            {
+                var conn = await GetOpenConnectionAsync(ct);
+                // sp_DeleteAttendanceTimingConfig produces a result set via SELECT ROW_COUNT(), so ExecuteScalar reads the affected count
+                var affected = await conn.ExecuteScalarAsync<int>(
+                    new CommandDefinition(
+                        "sp_DeleteAttendanceTimingConfig",
+                        new { p_Id = id },
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: ct));
 
-            return rows > 0;
+                if (affected > 0) return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "sp_DeleteAttendanceTimingConfig failed for ID {Id}, trying EF Core delete fallback", id);
+            }
+
+            var entity = await _context.AttendanceTimingConfigs.FirstOrDefaultAsync(c => c.Id == id, ct);
+            if (entity != null)
+            {
+                _context.AttendanceTimingConfigs.Remove(entity);
+                await _context.SaveChangesAsync(ct);
+                return true;
+            }
+
+            return false;
         }
     }
 }

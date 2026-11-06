@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Check,
@@ -20,8 +19,17 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
+  Mail,
+  CheckCircle2,
+  ArrowRight,
+  Sparkles,
+  AlertTriangle,
+  Clock,
+  ShieldCheck,
+  FileSignature,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
+import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
 import { facultyMockData } from "../data/facultyMockData.js";
 import apiClient from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
@@ -54,6 +62,44 @@ const PIN_LOOKUP = {
   "110": { district: "New Delhi", state: "Delhi", country: "India" },
   "400": { district: "Mumbai", state: "Maharashtra", country: "India" },
 };
+
+
+export const INDIAN_BANKS = [
+  "State Bank of India",
+  "HDFC Bank",
+  "ICICI Bank",
+  "Punjab National Bank",
+  "Bank of Baroda",
+  "Canara Bank",
+  "Union Bank of India",
+  "Axis Bank",
+  "Kotak Mahindra Bank",
+  "IndusInd Bank",
+  "Bank of India",
+  "Central Bank of India",
+  "Indian Bank",
+  "Indian Overseas Bank",
+  "UCO Bank",
+  "Bank of Maharashtra",
+  "Punjab & Sind Bank",
+  "Federal Bank",
+  "IDBI Bank",
+  "YES Bank",
+  "South Indian Bank",
+  "Karur Vysya Bank",
+  "City Union Bank",
+  "Bandhan Bank",
+  "RBL Bank",
+  "AU Small Finance Bank",
+  "Equitas Small Finance Bank",
+  "Ujjivan Small Finance Bank",
+  "Jana Small Finance Bank",
+  "Andhra Pragathi Grameena Bank",
+  "Chaitanya Godavari Grameena Bank",
+  "Telangana Grameena Bank",
+  "Andhra Pradesh Grameena Vikas Bank",
+  "Other Banks"
+];
 
 export const PROFILE_STEPS = [
   { id: 1, title: "Personal Info", subtitle: "Personal Information" },
@@ -249,24 +295,47 @@ export default function FacultyProfile() {
     profileData,
     setProfileData,
     persistStaffProfile,
+    isEditingProfile,
+    setIsEditingProfile,
+    profileStep,
+    setProfileStep,
     initials,
     notify,
   } = useFaculty();
 
-  const { params, setParam } = useFacultyViewParams();
-  const profileStep = /^[1-6]$/.test(params.get("step") || "") ? Number(params.get("step")) : 1;
-  const isEditingProfile = params.get("mode") === "edit";
-  const setProfileStep = (value) => setParam("step", typeof value === "function" ? value(profileStep) : value);
-  const setIsEditingProfile = (value) => setParam("mode", (typeof value === "function" ? value(isEditingProfile) : value) ? "edit" : null);
-
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingStep, setIsSavingStep] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showPendingApprovalModal, setShowPendingApprovalModal] = useState(false);
+  const [isDownloadingOfferLetter, setIsDownloadingOfferLetter] = useState(false);
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
+  const [editPersonal, setEditPersonal] = useState({});
+  const [editBank, setEditBank] = useState({});
+  const [editAddress, setEditAddress] = useState({});
+
+  const isCurrentStepFilled = useMemo(() => {
+    switch (profileStep) {
+      case 1:
+        return Boolean(profileData.maritalStatus && (profileData.mobile || profileData.phone));
+      case 2:
+        return Boolean(profileData.accountNumber && profileData.ifsc);
+      case 3:
+        return Boolean((profileData.houseNumber || profileData.address) && (profileData.pin || profileData.pincode));
+      case 4:
+        return Boolean(Array.isArray(profileData.experience) && profileData.experience.length > 0);
+      case 5:
+        return Boolean(Array.isArray(profileData.documents) && profileData.documents.length > 0);
+      default:
+        return false;
+    }
+  }, [profileStep, profileData]);
 
   // Profile Photo Action Modal, Camera & Cropper state
   const [isPhotoActionModalOpen, setIsPhotoActionModalOpen] = useState(false);
-  const isViewPhotoOpen = params.get("photo") === "view";
-  const setIsViewPhotoOpen = (open) => setParam("photo", open ? "view" : null);
+  const [isViewPhotoOpen, setIsViewPhotoOpen] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
@@ -448,6 +517,8 @@ export default function FacultyProfile() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("staff_profile_photo");
       if (staffTargetId) {
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        // await syncAllSectionsToBackend(staffTargetId, profileData);
         localStorage.removeItem(`staff_profile_${staffTargetId}_photo`);
       }
       window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
@@ -532,7 +603,7 @@ export default function FacultyProfile() {
 
       // Guide border
       ctx.save();
-      ctx.strokeStyle = "var(--cms-primary)";
+      ctx.strokeStyle = "#6F8400";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(left + r, top);
@@ -675,7 +746,9 @@ export default function FacultyProfile() {
     ];
 
     const filledCount = checklist.filter(Boolean).length;
-    return Math.min(100, Math.round((filledCount / checklist.length) * 100));
+    const calculated = Math.min(100, Math.round((filledCount / checklist.length) * 100));
+    const authUser = getAuthUser();
+    return Math.max(calculated, Number(profileData.profileCompletionPercentage || profileData.profileCompletion || authUser?.profileCompletionPercentage || 0));
   }, [profileData]);
 
   const handleDownloadProfile = async () => {
@@ -1036,16 +1109,9 @@ export default function FacultyProfile() {
       1: [
         ["firstName", "First name"],
         ["lastName", "Last name"],
-        ["gender", "Gender"],
         ["maritalStatus", "Marital status"],
-        ["dob", "Date of birth"],
         ["mobile", "Phone number"],
         ["email", "Email"],
-        ["aadhaar", "Aadhaar number"],
-        ["pan", "PAN number"],
-        ["department", "Department"],
-        ["designation", "Designation"],
-        ["dateOfJoining", "Date of joining"],
       ],
       2: [
         ["bankName", "Bank name"],
@@ -1060,9 +1126,20 @@ export default function FacultyProfile() {
         ["street", "Street / area"],
       ],
     };
-    const fallbacks = { houseNumber: "address", street: "streetArea" };
+    const fallbacks = {
+      houseNumber: "address",
+      street: "streetArea",
+      dob: "dateOfBirth",
+      dateOfJoining: "joiningDate",
+      mobile: "phone",
+      pan: "panNumber",
+      aadhaar: "aadhaarNumber",
+    };
     const missing = (requiredByStep[profileStep] || [])
-      .filter(([key]) => !String(profileData[key] ?? profileData[fallbacks[key]] ?? "").trim())
+      .filter(([key]) => {
+        const val = profileData[key] ?? profileData[fallbacks[key]] ?? "";
+        return !String(val).trim();
+      })
       .map(([, label]) => label);
     if (missing.length) {
       notify(`Complete the required fields: ${missing.join(", ")}.`, "error");
@@ -1071,80 +1148,314 @@ export default function FacultyProfile() {
     return true;
   };
 
+  const getFormattedDraftPayload = (data) => {
+    const docsMap = {};
+    (data.documents || []).forEach((d, idx) => {
+      const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+      const v = String(d?.url || d?.name || "uploaded").trim();
+      if (k) docsMap[k] = v;
+    });
+
+    const expItems = (data.experience || []).map((e) => ({
+      id: e.id,
+      organization: e.institution || e.organization || e.institutionName || "",
+      institution: e.institution || e.organization || e.institutionName || "",
+      institutionName: e.institution || e.organization || e.institutionName || "",
+      designation: e.designation || "",
+      fromDate: e.fromDate || "",
+      toDate: e.toDate || "",
+      roles: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTeached: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTaught: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      totalYears: parseFloat(e.totalExp) || e.totalYears || 1.0,
+      totalExp: e.totalExp || `${e.totalYears || 1} Years`,
+      status: e.status || "Verified",
+    }));
+
+    const personal = {
+      firstName: data.firstName || "",
+      middleName: data.middleName || "",
+      lastName: data.lastName || "",
+      gender: data.gender || "",
+      dateOfBirth: data.dob || data.dateOfBirth || null,
+      maritalStatus: data.maritalStatus || "Single",
+      aadhaar: data.aadhaar || "",
+      panNumber: data.pan || data.panNumber || "",
+      pan: data.pan || data.panNumber || "",
+      bloodGroup: data.bloodGroup || "",
+      mobile: data.mobile || data.phone || "",
+      phone: data.mobile || data.phone || "",
+      phoneNumber: data.mobile || data.phone || "",
+      fatherOrHusbandName: data.fatherOrHusbandName || data.guardianName || "",
+      nationality: data.nationality || "Indian",
+    };
+
+    const bank = {
+      bankName: data.bankName || "",
+      accountHolderName: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountHolder: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountNumber: data.accountNumber || "",
+      ifscCode: data.ifsc || data.ifscCode || "",
+      ifsc: data.ifsc || data.ifscCode || "",
+      branch: data.branch || data.branchName || "",
+      branchName: data.branch || data.branchName || "",
+      accountType: data.accountType || "Salary Account",
+      panNumber: data.pan || data.panNumber || "",
+      pfNumber: data.pfNumber || data.uanNumber || "",
+      uanNumber: data.uanNumber || data.pfNumber || "",
+    };
+
+    const address = {
+      houseNumber: data.houseNumber || data.address || "",
+      street: data.street || data.streetArea || "",
+      currentAddress: [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || data.address || "",
+      permanentAddress: data.permanentAddress || [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || "",
+      city: data.city || data.cityVillage || "",
+      district: data.district || "",
+      state: data.state || "",
+      pincode: data.pin || data.pincode || "",
+      pin: data.pin || data.pincode || "",
+      country: data.country || "India",
+      alternateMobile: data.alternateMobile || "",
+    };
+
+    return { personal, bank, address, experience: expItems, documents: docsMap };
+  };
+
+  const syncAllSectionsToBackend = async (targetStaffId, currentData) => {
+    if (!targetStaffId) return;
+    const { personal, bank, address, experience, documents } = getFormattedDraftPayload(currentData);
+
+    const saveSection = async (sectionName, payload) => {
+      try {
+        const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+          sectionName,
+          ...payload,
+        });
+        const d = res?.data?.data || res?.data;
+        if (d && typeof d === "object" && (d.profileCompletionPercentage !== undefined || d.profileCompletion !== undefined)) {
+          const comp = d.profileCompletionPercentage ?? d.profileCompletion;
+          setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+        }
+      } catch (err) {
+        console.warn(`Draft save error for section ${sectionName}:`, err);
+      }
+    };
+
+    await saveSection("Personal", { personal, Personal: personal });
+    if (bank.accountNumber || bank.ifscCode || bank.bankName) {
+      await saveSection("Bank", { bank, Bank: bank });
+    }
+    if (address.houseNumber || address.street || address.city || address.pincode) {
+      await saveSection("Address", { address, Address: address });
+    }
+    if (experience.length > 0) {
+      await saveSection("Experience", { experience, Experience: experience });
+    }
+    if (Object.keys(documents).length > 0 || (currentData.documents && currentData.documents.length > 0)) {
+      await saveSection("Documents", { documents, Documents: documents });
+    }
+
+    // Composite full draft to saveProfileDraft
+    try {
+      const resComposite = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+        sectionName: "All",
+        personal,
+        Personal: personal,
+        bank,
+        Bank: bank,
+        address,
+        Address: address,
+        experience,
+        Experience: experience,
+        documents,
+        Documents: documents,
+      });
+      const compData = resComposite?.data?.data || resComposite?.data;
+      if (compData && typeof compData === "object" && (compData.profileCompletionPercentage !== undefined || compData.profileCompletion !== undefined)) {
+        const comp = compData.profileCompletionPercentage ?? compData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Composite draft save warning:", e);
+    }
+
+    // Direct Staff entity update via PUT /api/v1/staff/{id} to persist all sections directly to DB
+    try {
+      const staffUpdatePayload = {
+        ...currentData,
+        ...personal,
+        ...bank,
+        ...address,
+        dateOfBirth: currentData.dob || currentData.dateOfBirth || null,
+        joiningDate: currentData.dateOfJoining || currentData.joiningDate || null,
+        dateOfJoining: currentData.dateOfJoining || currentData.joiningDate || null,
+        documents,
+        experience: experience.length * 1.0,
+        photoPath: currentData.photoPath || currentData.photoUrl || "",
+        profileCompletionPercentage: Math.max(profileCompletion, Number(currentData.profileCompletionPercentage || 0)),
+      };
+      const putRes = await apiClient.put(apiEndpoints.faculty.update(targetStaffId), staffUpdatePayload);
+      const putData = putRes?.data?.data || putRes?.data;
+      if (putData && typeof putData === "object" && (putData.profileCompletionPercentage !== undefined || putData.profileCompletion !== undefined)) {
+        const comp = putData.profileCompletionPercentage ?? putData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Staff PUT update warning:", e);
+    }
+  };
+
   const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       if (!validateCurrentProfileStep()) return;
-      persistStaffProfile(profileData);
-
+      setIsSavingStep(true);
       try {
-        let sectionName = "";
-        let payload = {};
+        persistStaffProfile(profileData);
 
-        switch (profileStep) {
-          case 1:
-            sectionName = "Personal";
-            payload.Personal = {
-              firstName: profileData.firstName,
-              middleName: profileData.middleName,
-              lastName: profileData.lastName,
-              gender: profileData.gender,
-              dateOfBirth: profileData.dob || null,
-              maritalStatus: profileData.maritalStatus,
-              aadhaar: profileData.aadhaar,
-              panNumber: profileData.pan,
-              bloodGroup: profileData.bloodGroup,
-            };
-            break;
-          case 2:
-            sectionName = "Bank";
-            payload.Bank = {
-              bankName: profileData.bankName,
-              accountHolderName: profileData.accountHolder,
-              accountNumber: profileData.accountNumber,
-              ifscCode: profileData.ifsc,
-              branch: profileData.branch,
-              accountType: profileData.accountType,
-            };
-            break;
-          case 3:
-            sectionName = "Address";
-            payload.Address = {
-              currentAddress: profileData.houseNumber,
-              city: profileData.city,
-              district: profileData.district,
-              state: profileData.state,
-              pincode: profileData.pin,
-              country: profileData.country,
-            };
-            break;
-          case 4:
-            sectionName = "Experience";
-            payload.Experience = (profileData.experience || []).map((e) => ({
-              institutionName: e.institution,
-              designation: e.designation,
-              fromDate: e.fromDate || null,
-              toDate: e.toDate || null,
-              subjectsTaught: e.subjectsTeached,
-            }));
-            break;
-          case 5:
-            sectionName = "Documents";
-            break;
-          default:
-            break;
-        }
+      const authUser = getAuthUser() || {};
+      const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || authUser.staffId || authUser.id;
 
-        if (sectionName && profileData.id) {
-          await apiClient.post(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+      let sectionName = "";
+      let payload = {};
+
+      switch (profileStep) {
+        case 1:
+          sectionName = "Personal";
+          payload.Personal = {
+            firstName: profileData.firstName,
+            middleName: profileData.middleName,
+            lastName: profileData.lastName,
+            gender: profileData.gender,
+            dateOfBirth: profileData.dob || profileData.dateOfBirth || null,
+            maritalStatus: profileData.maritalStatus,
+            aadhaar: profileData.aadhaar,
+            panNumber: profileData.pan || profileData.panNumber,
+            pan: profileData.pan || profileData.panNumber,
+            bloodGroup: profileData.bloodGroup,
+            mobile: profileData.mobile || profileData.phone,
+            phone: profileData.mobile || profileData.phone,
+            phoneNumber: profileData.mobile || profileData.phone,
+            fatherOrHusbandName: profileData.fatherOrHusbandName || profileData.guardianName,
+            nationality: profileData.nationality || "Indian",
+          };
+          break;
+        case 2:
+          sectionName = "Bank";
+          payload.Bank = {
+            bankName: profileData.bankName,
+            accountHolderName: profileData.accountHolder || profileData.accountHolderName,
+            accountHolder: profileData.accountHolder || profileData.accountHolderName,
+            accountNumber: profileData.accountNumber,
+            ifscCode: profileData.ifsc || profileData.ifscCode,
+            ifsc: profileData.ifsc || profileData.ifscCode,
+            branch: profileData.branch || profileData.branchName,
+            branchName: profileData.branch || profileData.branchName,
+            accountType: profileData.accountType || "Savings",
+            panNumber: profileData.pan || profileData.panNumber,
+            pfNumber: profileData.pfNumber || profileData.uanNumber,
+            uanNumber: profileData.uanNumber || profileData.pfNumber,
+          };
+          break;
+        case 3:
+          sectionName = "Address";
+          payload.Address = {
+            houseNumber: profileData.houseNumber,
+            street: profileData.street || profileData.streetArea,
+            currentAddress: [profileData.houseNumber, profileData.street].filter(Boolean).join(", ") || profileData.currentAddress || profileData.address,
+            permanentAddress: profileData.permanentAddress || [profileData.houseNumber, profileData.street].filter(Boolean).join(", ") || profileData.currentAddress,
+            city: profileData.city || profileData.cityVillage,
+            district: profileData.district,
+            state: profileData.state,
+            pincode: profileData.pin || profileData.pincode,
+            pin: profileData.pin || profileData.pincode,
+            country: profileData.country || "India",
+            alternateMobile: profileData.alternateMobile,
+          };
+          break;
+        case 4:
+          sectionName = "Experience";
+          payload.Experience = (profileData.experience || []).map((e) => ({
+            id: e.id,
+            institution: e.institution || e.organization || e.institutionName || "",
+            organization: e.institution || e.organization || e.institutionName || "",
+            institutionName: e.institution || e.organization || e.institutionName || "",
+            designation: e.designation || "",
+            fromDate: e.fromDate || "",
+            toDate: e.toDate || "",
+            subjectsTeached: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+            subjectsTaught: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+            roles: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+            totalExp: e.totalExp || `${e.totalYears || 1} Years`,
+            totalYears: parseFloat(e.totalExp) || e.totalYears || 1.0,
+            status: e.status || "Verified",
+          }));
+          break;
+        case 5:
+          sectionName = "Documents";
+          payload.Documents = (profileData.documents || []).map((d) => ({
+            id: String(d.id),
+            name: d.name || d.title,
+            type: d.type,
+            format: d.format,
+            size: d.size,
+            url: d.url,
+          }));
+          break;
+        default:
+          break;
+      }
+
+      if (payload.Personal) payload.personal = payload.Personal;
+      if (payload.Bank) payload.bank = payload.Bank;
+      if (payload.Address) payload.address = payload.Address;
+      if (payload.Experience) payload.experience = payload.Experience;
+      if (payload.Documents) {
+        payload.documents = {};
+        (profileData.documents || []).forEach((d, idx) => {
+          const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+          const v = String(d?.url || d?.name || "uploaded").trim();
+          if (k) payload.documents[k] = v;
+        });
+      }
+
+      if (sectionName && targetStaffId) {
+        try {
+          const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
             sectionName,
             ...payload,
           });
+          const savedData = res?.data?.data || res?.data;
+          if (savedData && typeof savedData === "object") {
+            setProfileData((prev) => {
+              const updated = {
+                ...prev,
+                ...savedData,
+                houseNumber: savedData.houseNumber || prev.houseNumber,
+                street: savedData.street || prev.street,
+                bankName: savedData.bankName || savedData.bankDetails?.bankName || prev.bankName,
+                accountHolder: savedData.accountHolder || savedData.bankDetails?.accountHolderName || prev.accountHolder,
+                accountNumber: savedData.accountNumber || savedData.bankDetails?.accountNumber || prev.accountNumber,
+                ifsc: savedData.ifsc || savedData.bankDetails?.ifscCode || prev.ifsc,
+                branch: savedData.branch || savedData.bankDetails?.branch || prev.branch,
+                accountType: savedData.accountType || savedData.bankDetails?.accountType || prev.accountType,
+              };
+              persistStaffProfile(updated);
+              return updated;
+            });
+          }
+        } catch (e) {
+          console.error("Failed to save profile section to database:", e);
+          const errorMsg = e?.response?.data?.message || e?.response?.data?.Message || e?.message || "Failed to save section data to database.";
+          notify(`Save failed: ${errorMsg}`, "error");
+          // Prevent navigation when save fails as mandated
+          return;
         }
-      } catch (e) {
-        console.error("Failed to save profile section:", e);
       }
 
-      notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) updated!`);
+      } finally {
+        setIsSavingStep(false);
+      }
     }
     if (profileStep < 6) {
       setProfileStep((s) => s + 1);
@@ -1152,23 +1463,90 @@ export default function FacultyProfile() {
   };
 
   const handleFinalProfileSave = async () => {
+    // 50% Minimum Completion Requirement
+    if (profileCompletion < 50) {
+      setShowIncompleteModal(true);
+      notify(
+        `Minimum 50% profile completion required for final submission. Current completion: ${profileCompletion}%.`,
+        "error",
+        "Submission Incomplete"
+      );
+      return;
+    }
+
     setIsSavingProfile(true);
 
     try {
-      if (profileData.id) {
-        await apiClient.post(apiEndpoints.faculty.submitProfile(profileData.id));
+      const authUser = getAuthUser() || {};
+      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId || authUser.staffId || authUser.id;
+      let res = null;
+      if (staffTargetId) {
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        await syncAllSectionsToBackend(staffTargetId, profileData);
+        res = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        const sData = res?.data?.data || res?.data || {};
+        if (sData.profileCompletionPercentage) {
+          profileData.profileCompletionPercentage = sData.profileCompletionPercentage;
+        }
       }
-      persistStaffProfile(profileData);
+      const newStatus = res?.data?.profileStatus || res?.data?.data?.profileStatus || "PendingApproval";
+      const isCompleted = String(newStatus).toLowerCase() === "completed" || String(newStatus).toLowerCase() === "approved";
+
+      const updated = {
+        ...profileData,
+        profileStatus: newStatus,
+        status: isCompleted ? "Active" : profileData.status,
+        isOnboarded: isCompleted,
+      };
+      setProfileData(updated);
+      persistStaffProfile(updated);
       try {
         localStorage.setItem("staff_profile_submitted", "true");
       } catch { }
       setIsSavingProfile(false);
       setIsEditingProfile(false);
-      notify("Complete staff profile updated and verified successfully!");
+
+      if (!isCompleted) {
+        setShowPendingApprovalModal(true);
+        notify("Profile submitted successfully. Sent to Admin for offer letter approval.");
+      } else {
+        setShowSuccessModal(true);
+        notify("Complete staff profile updated and verified successfully!");
+      }
     } catch (e) {
       console.error("Failed to submit profile:", e);
-      notify("Failed to submit profile to server", "error");
+      const msg = e?.response?.data?.message || e?.response?.data?.Message || "Failed to submit profile to server";
+      notify(msg, "error");
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleDownloadOfferLetter = async () => {
+    const sId = profileData.id || profileData.facultyId || profileData.staffId;
+    if (!sId) {
+      notify("Staff identifier not found for downloading offer letter.", "error");
+      return;
+    }
+    setIsDownloadingOfferLetter(true);
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterPdf(sId), {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Offer_Letter_${profileData.employeeId || sId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      notify("Official Offer Letter downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to download offer letter:", err);
+      notify(err?.response?.data?.message || "Failed to download offer letter PDF. Offer letter may not be generated yet.", "error");
+    } finally {
+      setIsDownloadingOfferLetter(false);
     }
   };
 
@@ -1196,6 +1574,35 @@ export default function FacultyProfile() {
           >
             {profileCompletion}% Profile Completed
           </span>
+
+          {(String(profileData?.profileStatus || "").toLowerCase() === "completed" || String(profileData?.profileStatus || "").toLowerCase() === "approved") && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={handleDownloadOfferLetter}
+              disabled={isDownloadingOfferLetter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                boxShadow: "0 2px 8px rgba(53, 94, 59, 0.2)",
+              }}
+              title="Download Official Offer Letter PDF"
+            >
+              {isDownloadingOfferLetter ? (
+                <>
+                  <Loader2 size={14} className="spin" /> Preparing...
+                </>
+              ) : (
+                <>
+                  <FileSignature size={14} /> Download Offer Letter
+                </>
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             className="cms-btn cms-btn-secondary"
@@ -1223,6 +1630,119 @@ export default function FacultyProfile() {
           </button>
         </div>
       </div>
+
+      {/* Workflow Status Banners */}
+      {String(profileData?.profileStatus || "").toLowerCase() === "pendingapproval" && (
+        <div style={{
+          background: "#fffbeb",
+          border: "1px solid #fde68a",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#fef3c7", color: "#b45309", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Clock size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#92400e" }}>
+              Onboarding Submitted — Awaiting Admin Offer Letter Approval
+            </div>
+            <div style={{ fontSize: "13px", color: "#b45309", marginTop: "2px", lineHeight: "1.5" }}>
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "underverification" && (
+        <div style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#dbeafe", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <ShieldCheck size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#1e40af" }}>
+              Under Administrative Verification
+            </div>
+            <div style={{ fontSize: "13px", color: "#1d4ed8", marginTop: "2px", lineHeight: "1.5" }}>
+              Your submitted credentials, bank details, and identity documents are actively undergoing verification by HR Administration.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(String(profileData?.profileStatus || "").toLowerCase() === "changes required" || String(profileData?.profileStatus || "").toLowerCase() === "needscorrection") && (
+        <div style={{
+          background: "#fff1f2",
+          border: "1px solid #fecdd3",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#ffe4e6", color: "#e11d48", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <AlertTriangle size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#9f1239" }}>
+              Corrections Requested by Administration
+            </div>
+            <div style={{ fontSize: "13px", color: "#be123c", marginTop: "2px", lineHeight: "1.5" }}>
+              <strong>Admin Reason:</strong> {profileData.correctionNotes || authUser?.correctionNotes || "Please review and update requested sections."}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={() => { setIsEditingProfile(true); setProfileStep(1); }}
+            style={{ fontSize: "13px", padding: "8px 16px", background: "#e11d48", border: "none", color: "#fff" }}
+          >
+            Update Details
+          </button>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "onboarding discontinued" && (
+        <div style={{
+          background: "#f8fafc",
+          border: "1px solid #cbd5e1",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <X size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155" }}>
+              Onboarding Process Discontinued
+            </div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px", lineHeight: "1.5" }}>
+              {profileData.correctionNotes || authUser?.correctionNotes || "This onboarding request is discontinued. Please contact HR Administration."}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Staff Identity Strip with Profile Photo Edit - Compact Single-Line Layout */}
       <div className="cms-card sp-profile-summary-card">
@@ -1297,7 +1817,13 @@ export default function FacultyProfile() {
               type="button"
               key={step.id}
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
-              onClick={() => setProfileStep(step.id)}
+              onClick={() => {
+                if (isEditingProfile) {
+                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, profileData);
+                }
+                setProfileStep(step.id);
+              }}
               title={`View ${step.title}`}
             >
               <div className="sp-wizard-num">{isCompleted ? <Check size={14} /> : step.id}</div>
@@ -1319,12 +1845,7 @@ export default function FacultyProfile() {
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Personal Information</h3>
-                  <span
-                    className="cms-badge cms-badge-inactive"
-                    style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", minHeight: 20 }}
-                  >
-                    Official Record · Read Only
-                  </span>
+
                 </div>
                 <span className="cms-badge cms-badge-info">Step 1 of 6</span>
               </div>
@@ -1377,13 +1898,13 @@ export default function FacultyProfile() {
                 </div>
                 <div className="cms-field">
                   <label>
-                    Date of Birth <span className="req">*</span>
+                    Date of Birth
                   </label>
                   <input
                     type="date"
-                    value={profileData.dob || ""}
-                    readOnly
-                    disabled
+                    value={profileData.dob ? String(profileData.dob).split("T")[0] : (profileData.dateOfBirth ? String(profileData.dateOfBirth).split("T")[0] : "")}
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, dob: e.target.value, dateOfBirth: e.target.value }))}
                   />
                 </div>
                 <div className="cms-field">
@@ -1392,7 +1913,8 @@ export default function FacultyProfile() {
                   </label>
                   <SelectInput
                     value={profileData.gender || "Male"}
-                    disabled={true}
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, gender: e.target.value }))}
                     placeholder="Select Gender"
                     options={["Male", "Female", "Other"]}
                   />
@@ -1404,8 +1926,9 @@ export default function FacultyProfile() {
                     Marital Status <span className="req">*</span>
                   </label>
                   <SelectInput
-                    value={profileData.maritalStatus || "Single"}
+                    value={profileData.maritalStatus || ""}
                     disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, maritalStatus: e.target.value }))}
                     placeholder="Select Marital Status"
                     options={["Single", "Married", "Divorced", "Widowed"]}
                   />
@@ -1416,8 +1939,10 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="tel"
-                    value={profileData.mobile || ""}
+                    value={profileData.mobile || profileData.phone || ""}
                     disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, mobile: e.target.value, phone: e.target.value }))}
+                    placeholder="Enter phone number"
                   />
                 </div>
                 <div className="cms-field">
@@ -1429,6 +1954,7 @@ export default function FacultyProfile() {
                     value={profileData.email || ""}
                     readOnly
                     disabled
+                    placeholder="Email address"
                   />
                 </div>
 
@@ -1487,10 +2013,11 @@ export default function FacultyProfile() {
                 <div className="cms-field">
                   <label>Blood Group</label>
                   <SelectInput
-                    value={profileData.bloodGroup || "O-"}
-                    disabled={true}
+                    value={profileData.bloodGroup || ""}
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, bloodGroup: e.target.value }))}
                     placeholder="Select Blood Group"
-                    options={["O-", "O+", "A+", "A-", "B+", "B-", "AB+", "AB-"]}
+                    options={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]}
                   />
                 </div>
 
@@ -1507,25 +2034,25 @@ export default function FacultyProfile() {
                   />
                 </div>
                 <div className="cms-field">
-                  <label>
-                    Aadhaar Number <span className="req">*</span>
-                  </label>
+                  <label>Aadhaar Number</label>
                   <input
                     type="text"
                     maxLength={14}
                     value={profileData.aadhaar || ""}
                     disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, aadhaar: e.target.value }))}
+                    placeholder="Enter 12-digit Aadhaar number"
                   />
                 </div>
                 <div className="cms-field">
-                  <label>
-                    PAN Number <span className="req">*</span>
-                  </label>
+                  <label>PAN Number</label>
                   <input
                     type="text"
                     maxLength={10}
-                    value={profileData.pan || ""}
+                    value={profileData.pan || profileData.panNumber || ""}
                     disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, pan: e.target.value.toUpperCase(), panNumber: e.target.value.toUpperCase() }))}
+                    placeholder="Enter 10-character PAN (e.g. ABCDE1234F)"
                   />
                 </div>
               </div>
@@ -1573,7 +2100,7 @@ export default function FacultyProfile() {
                     value={profileData.accountHolder || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, accountHolder: e.target.value })}
-                    placeholder="e.g. Devendra Kumar Gummadi"
+                    placeholder="Enter account holder name"
                   />
                 </div>
                 <div className="cms-field">
@@ -1583,7 +2110,7 @@ export default function FacultyProfile() {
                     value={profileData.accountNumber || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, accountNumber: e.target.value })}
-                    placeholder="e.g. 38920194823482"
+                    placeholder="Enter account number"
                   />
                 </div>
 
@@ -1596,7 +2123,7 @@ export default function FacultyProfile() {
                     value={profileData.ifsc || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, ifsc: e.target.value.toUpperCase() })}
-                    placeholder="e.g. SBIN0001234"
+                    placeholder="Enter IFSC code (e.g. SBIN0001234)"
                   />
                 </div>
                 <div className="cms-field">
@@ -1606,7 +2133,7 @@ export default function FacultyProfile() {
                     value={profileData.branch || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, branch: e.target.value })}
-                    placeholder="e.g. Guntur Main Branch"
+                    placeholder="Enter branch name"
                   />
                 </div>
                 <div className="cms-field">
@@ -1630,7 +2157,7 @@ export default function FacultyProfile() {
                     onChange={(e) =>
                       setProfileData({ ...profileData, uanNumber: e.target.value, pfNumber: e.target.value })
                     }
-                    placeholder="e.g. 200982349812"
+                    placeholder="Enter PF / UAN number"
                   />
                 </div>
               </div>
@@ -1658,7 +2185,7 @@ export default function FacultyProfile() {
                     value={profileData.houseNumber || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, houseNumber: e.target.value })}
-                    placeholder="e.g. 15-18-387"
+                    placeholder="Enter house / flat number"
                   />
                 </div>
                 <div className="cms-field">
@@ -1670,7 +2197,7 @@ export default function FacultyProfile() {
                     value={profileData.street || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, street: e.target.value })}
-                    placeholder="e.g. Brindavan Gardens"
+                    placeholder="Enter street / locality"
                   />
                 </div>
                 <div className="cms-field">
@@ -1680,9 +2207,9 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.city || profileData.cityVillage || ""}
-                    disabled={true}
-                    readOnly
-                    placeholder="e.g. Guntur"
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, city: e.target.value, cityVillage: e.target.value }))}
+                    placeholder="Enter city / village"
                   />
                 </div>
 
@@ -1702,9 +2229,19 @@ export default function FacultyProfile() {
                     type="text"
                     maxLength={6}
                     value={profileData.pin || profileData.pincode || ""}
-                    disabled={true}
-                    readOnly
-                    placeholder="Enter 6-digit PIN (e.g. 522007)"
+                    disabled={!isEditingProfile}
+                    onChange={(e) => {
+                      const pin = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      const prefix3 = pin.slice(0, 3);
+                      const lookup = PIN_LOOKUP[prefix3];
+                      setProfileData((prev) => ({
+                        ...prev,
+                        pin,
+                        pincode: pin,
+                        ...(lookup ? { district: lookup.district, state: lookup.state, country: lookup.country } : {})
+                      }));
+                    }}
+                    placeholder="Enter 6-digit PIN code"
                   />
                 </div>
                 <div className="cms-field">
@@ -1714,9 +2251,9 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.district || ""}
-                    disabled={true}
-                    readOnly
-                    placeholder="Auto-filled from PIN (e.g. Guntur)"
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, district: e.target.value }))}
+                    placeholder="Enter district"
                   />
                 </div>
                 <div className="cms-field">
@@ -1726,9 +2263,9 @@ export default function FacultyProfile() {
                   <input
                     type="text"
                     value={profileData.state || ""}
-                    disabled={true}
-                    readOnly
-                    placeholder="Auto-filled from PIN (e.g. Andhra Pradesh)"
+                    disabled={!isEditingProfile}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, state: e.target.value }))}
+                    placeholder="Enter state"
                   />
                 </div>
 
@@ -1742,7 +2279,7 @@ export default function FacultyProfile() {
                     value={profileData.country || "India"}
                     disabled={true}
                     readOnly
-                    placeholder="e.g. India"
+                    placeholder="India"
                   />
                 </div>
               </div>
@@ -1784,7 +2321,7 @@ export default function FacultyProfile() {
                       value={newExp.institution}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, institution: e.target.value })}
-                      placeholder="e.g. Sri Chaitanya Junior College"
+                      placeholder="Enter institution / college name"
                     />
                   </div>
                   <div className="cms-field">
@@ -1794,7 +2331,7 @@ export default function FacultyProfile() {
                       value={newExp.designation}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, designation: e.target.value })}
-                      placeholder="e.g. Lecturer Mathematics"
+                      placeholder="Enter designation / position"
                     />
                   </div>
                   <div className="cms-field">
@@ -1837,7 +2374,7 @@ export default function FacultyProfile() {
                       value={newExp.totalExp}
                       disabled={!isEditingProfile}
                       onChange={(e) => setNewExp({ ...newExp, totalExp: e.target.value })}
-                      placeholder="e.g. 2"
+                      placeholder="Years of experience"
                     />
                   </div>
                 </div>
@@ -1946,6 +2483,10 @@ export default function FacultyProfile() {
                                   const updated = safeExperience.filter((item) => item.id !== x.id);
                                   setProfileData({ ...profileData, experience: updated });
                                   persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+   
+   
                                   notify("Experience record removed.");
                                 }}
                                 title="Delete Experience"
@@ -2082,6 +2623,8 @@ export default function FacultyProfile() {
                             const updatedDocs = [...safeDocuments, docRecord];
                             setProfileData({ ...profileData, documents: updatedDocs });
                             persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                             if (docFileRef.current) docFileRef.current.value = "";
                             notify("Document uploaded successfully!");
@@ -2167,6 +2710,8 @@ export default function FacultyProfile() {
                                     const updated = safeDocuments.filter((item) => item.id !== d.id);
                                     setProfileData({ ...profileData, documents: updated });
                                     persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
                                     notify("Document removed.");
                                   }}
                                   title="Delete Document"
@@ -2185,7 +2730,67 @@ export default function FacultyProfile() {
             </div>
           )}
 
-          {/* STEP 6: PREVIEW */}
+          {/* Universal Navigation Footer for Steps 1 through 5 */}
+          {profileStep < 6 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 24,
+                paddingTop: 18,
+                borderTop: "1px solid var(--cms-border)",
+              }}
+            >
+              {profileStep > 1 ? (
+                <button
+                  type="button"
+                  className="sp-btn-prev"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "0 22px",
+                    height: "38px",
+                    fontWeight: 600,
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    background: "#ffffff",
+                    border: "1px solid var(--cms-border, #cbd5e1)",
+                    color: "var(--cms-text, #1e293b)",
+                  }}
+                  onClick={() => setProfileStep((s) => Math.max(1, s - 1))}
+                >
+                  <ChevronLeft size={16} /> Previous
+                </button>
+              ) : (
+                <div />
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  style={{
+                    padding: "0 22px",
+                    height: "38px",
+                    borderRadius: "8px",
+                    fontWeight: 600,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                  disabled={isSavingStep}
+                  onClick={handleSaveAndNext}
+                >
+                  {isSavingStep && <Loader2 size={16} className="animate-spin" />}
+                  <span>{isSavingStep ? "Saving..." : (profileStep === 5 ? "Save & Review" : "Save & Next")}</span>
+                  {!isSavingStep && <ChevronRight size={16} />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 6: PREVIEW (Review & Submit with strict in-place inline editing) */}
           {profileStep === 6 && (
             <div>
               <div style={{ marginBottom: 22 }}>
@@ -2193,21 +2798,92 @@ export default function FacultyProfile() {
                   Review &amp; Submit
                 </h3>
                 <p style={{ margin: 0, color: "var(--cms-muted, #64748b)", fontSize: 13 }}>
-                  Review the saved employee details below before final submission.
+                  Review the saved employee details below before final submission. Click Edit on any card to modify approved fields in place.
                 </p>
               </div>
 
-              {/* 1. Personal Information Section */}
+              {/* 1. Personal Information Section (Exact same grid & boxes, Official Record label removed) */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
                   <h4 className="sp-preview-title">Personal Information</h4>
-                  <span
-                    className="cms-badge cms-badge-inactive"
-                    style={{ fontSize: 11, fontWeight: 600, padding: "3px 9px", minHeight: 22 }}
-                  >
-                    Official Record · Read Only
-                  </span>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {editingSection !== "personal" ? (
+                      <button
+                        type="button"
+                        className="sp-preview-edit-pill"
+                        onClick={() => {
+                          setEditPersonal({
+                            maritalStatus: profileData.maritalStatus || "Single",
+                            mobile: profileData.mobile || profileData.phone || "",
+                            bloodGroup: profileData.bloodGroup || "",
+                            aadhaar: profileData.aadhaar || "",
+                            pan: profileData.pan || profileData.panNumber || "",
+                            dob: profileData.dob || profileData.dateOfBirth || "",
+                          });
+                          setEditingSection("personal");
+                        }}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "#f1f5f9", color: "#475569" }}
+                          onClick={() => setEditingSection(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "var(--cms-primary, #355e3b)", color: "#ffffff" }}
+                          onClick={async () => {
+                            const updated = {
+                              ...profileData,
+                              maritalStatus: editPersonal.maritalStatus,
+                              mobile: editPersonal.mobile,
+                              phone: editPersonal.mobile,
+                              bloodGroup: editPersonal.bloodGroup,
+                              aadhaar: editPersonal.aadhaar,
+                              pan: editPersonal.pan,
+                              panNumber: editPersonal.pan,
+                              dob: editPersonal.dob,
+                              dateOfBirth: editPersonal.dob,
+                            };
+                            setProfileData(updated);
+                            persistStaffProfile(updated);
+                            try {
+                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) {
+                                await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+                                  sectionName: "Personal",
+                                  Personal: {
+                                    maritalStatus: editPersonal.maritalStatus,
+                                    mobile: editPersonal.mobile,
+                                    phone: editPersonal.mobile,
+                                    bloodGroup: editPersonal.bloodGroup,
+                                    aadhaar: editPersonal.aadhaar,
+                                    panNumber: editPersonal.pan,
+                                    pan: editPersonal.pan,
+                                    dateOfBirth: editPersonal.dob,
+                                  },
+                                });
+                              }
+                            } catch {}
+                            setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            notify("Personal details updated successfully.");
+                          }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className="sp-preview-grid">
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">EMPLOYEE ID</div>
@@ -2219,7 +2895,18 @@ export default function FacultyProfile() {
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">DATE OF BIRTH</div>
-                    <div className="sp-preview-value">{profileData.dob || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "personal" && (!profileData.dob && !profileData.dateOfBirth) ? (
+                        <input
+                          type="date"
+                          className="sp-inline-input"
+                          value={editPersonal.dob ? String(editPersonal.dob).split("T")[0] : ""}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, dob: e.target.value }))}
+                        />
+                      ) : (
+                        profileData.dob ? String(profileData.dob).split("T")[0] : (profileData.dateOfBirth ? String(profileData.dateOfBirth).split("T")[0] : "—")
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">GENDER</div>
@@ -2227,11 +2914,35 @@ export default function FacultyProfile() {
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">MARITAL STATUS</div>
-                    <div className="sp-preview-value">{profileData.maritalStatus || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "personal" ? (
+                        <select
+                          className="sp-inline-select"
+                          value={editPersonal.maritalStatus || "Single"}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, maritalStatus: e.target.value }))}
+                        >
+                          {["Single", "Married", "Divorced", "Widowed"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : (
+                        profileData.maritalStatus || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">PHONE NUMBER</div>
-                    <div className="sp-preview-value">{profileData.mobile || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "personal" ? (
+                        <input
+                          type="tel"
+                          className="sp-inline-input"
+                          value={editPersonal.mobile || ""}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, mobile: e.target.value }))}
+                          placeholder="Phone number"
+                        />
+                      ) : (
+                        profileData.mobile || profileData.phone || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">EMAIL</div>
@@ -2240,16 +2951,40 @@ export default function FacultyProfile() {
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">AADHAAR NUMBER</div>
                     <div className="sp-preview-value">
-                      {profileData.aadhaar
-                        ? profileData.aadhaar.length >= 12
-                          ? `XXXX XXXX ${profileData.aadhaar.slice(-4)}`
-                          : profileData.aadhaar
-                        : "—"}
+                      {editingSection === "personal" ? (
+                        <input
+                          type="text"
+                          maxLength={14}
+                          className="sp-inline-input"
+                          value={editPersonal.aadhaar || ""}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, aadhaar: e.target.value }))}
+                          placeholder="12-digit Aadhaar"
+                        />
+                      ) : (
+                        profileData.aadhaar
+                          ? profileData.aadhaar.length >= 12
+                            ? `XXXX XXXX ${profileData.aadhaar.slice(-4)}`
+                            : profileData.aadhaar
+                          : "—"
+                      )}
                     </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">PAN NUMBER</div>
-                    <div className="sp-preview-value">{profileData.pan || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "personal" ? (
+                        <input
+                          type="text"
+                          maxLength={10}
+                          className="sp-inline-input"
+                          value={editPersonal.pan || ""}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, pan: e.target.value.toUpperCase() }))}
+                          placeholder="10-digit PAN"
+                        />
+                      ) : (
+                        profileData.pan || profileData.panNumber || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">DEPARTMENT</div>
@@ -2261,7 +2996,7 @@ export default function FacultyProfile() {
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">DATE OF JOINING</div>
-                    <div className="sp-preview-value">{profileData.dateOfJoining || "—"}</div>
+                    <div className="sp-preview-value">{profileData.dateOfJoining ? String(profileData.dateOfJoining).split("T")[0] : (profileData.joiningDate ? String(profileData.joiningDate).split("T")[0] : "—")}</div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">EXPERIENCE (YEARS)</div>
@@ -2271,7 +3006,20 @@ export default function FacultyProfile() {
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">BLOOD GROUP</div>
-                    <div className="sp-preview-value">{profileData.bloodGroup || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "personal" ? (
+                        <select
+                          className="sp-inline-select"
+                          value={editPersonal.bloodGroup || ""}
+                          onChange={(e) => setEditPersonal((prev) => ({ ...prev, bloodGroup: e.target.value }))}
+                        >
+                          <option value="">Select</option>
+                          {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : (
+                        profileData.bloodGroup || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box full">
                     <div className="sp-preview-label">ADDRESS</div>
@@ -2292,117 +3040,519 @@ export default function FacultyProfile() {
                 </div>
               </section>
 
-              {/* 2. Bank Details Section */}
+              {/* 2. Bank Details Section (Exact same grid & boxes) */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
                   <h4 className="sp-preview-title">Bank Details</h4>
-                  <button
-                    type="button"
-                    className="sp-preview-edit-pill"
-                    onClick={() => {
-                      setIsEditingProfile(true);
-                      setProfileStep(2);
-                    }}
-                  >
-                    Edit
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {editingSection !== "bank" ? (
+                      <button
+                        type="button"
+                        className="sp-preview-edit-pill"
+                        onClick={() => {
+                          setEditBank({
+                            accountHolder: profileData.accountHolder || "",
+                            bankName: profileData.bankName || "",
+                            accountNumber: profileData.accountNumber || "",
+                            accountType: profileData.accountType || "Salary Account",
+                            ifsc: profileData.ifsc || "",
+                            branch: profileData.branch || "",
+                            uanNumber: profileData.uanNumber || profileData.pfNumber || "",
+                          });
+                          setEditingSection("bank");
+                        }}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "#f1f5f9", color: "#475569" }}
+                          onClick={() => setEditingSection(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "var(--cms-primary, #355e3b)", color: "#ffffff" }}
+                          onClick={async () => {
+                            if (!editBank.accountNumber || !editBank.ifsc) {
+                              notify("Please fill in Account Number and IFSC Code.", "error");
+                              return;
+                            }
+                            const updated = {
+                              ...profileData,
+                              accountHolder: editBank.accountHolder,
+                              bankName: editBank.bankName,
+                              accountNumber: editBank.accountNumber,
+                              accountType: editBank.accountType,
+                              ifsc: editBank.ifsc,
+                              branch: editBank.branch,
+                              uanNumber: editBank.uanNumber,
+                              pfNumber: editBank.uanNumber,
+                            };
+                            setProfileData(updated);
+                            persistStaffProfile(updated);
+                            try {
+                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) {
+                                await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+                                  sectionName: "Bank",
+                                  Bank: {
+                                    accountHolderName: editBank.accountHolder,
+                                    accountHolder: editBank.accountHolder,
+                                    bankName: editBank.bankName,
+                                    accountNumber: editBank.accountNumber,
+                                    accountType: editBank.accountType,
+                                    ifscCode: editBank.ifsc,
+                                    ifsc: editBank.ifsc,
+                                    branch: editBank.branch,
+                                    uanNumber: editBank.uanNumber,
+                                    pfNumber: editBank.uanNumber,
+                                  },
+                                });
+                              }
+                            } catch {}
+                            setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            notify("Bank details updated successfully.");
+                          }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className="sp-preview-grid">
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">ACCOUNT HOLDER NAME</div>
-                    <div className="sp-preview-value">{profileData.accountHolder || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.accountHolder || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountHolder: e.target.value }))}
+                          placeholder="Account holder name"
+                        />
+                      ) : (
+                        profileData.accountHolder || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">BANK NAME</div>
-                    <div className="sp-preview-value">{profileData.bankName || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.bankName || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, bankName: e.target.value }))}
+                          placeholder="Bank name"
+                        />
+                      ) : (
+                        profileData.bankName || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">ACCOUNT NUMBER</div>
                     <div className="sp-preview-value">
-                      {profileData.accountNumber ? `••••••${String(profileData.accountNumber).slice(-4)}` : "—"}
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.accountNumber || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountNumber: e.target.value }))}
+                          placeholder="Account number"
+                        />
+                      ) : (
+                        profileData.accountNumber ? `••••••${String(profileData.accountNumber).slice(-4)}` : "—"
+                      )}
                     </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">ACCOUNT TYPE</div>
-                    <div className="sp-preview-value">{profileData.accountType || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <select
+                          className="sp-inline-select"
+                          value={editBank.accountType || "Salary Account"}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountType: e.target.value }))}
+                        >
+                          {["Salary Account", "Savings Account", "Current Account"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : (
+                        profileData.accountType || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">IFSC CODE</div>
-                    <div className="sp-preview-value">{profileData.ifsc || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.ifsc || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, ifsc: e.target.value.toUpperCase() }))}
+                          placeholder="IFSC code"
+                        />
+                      ) : (
+                        profileData.ifsc || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">BRANCH NAME</div>
-                    <div className="sp-preview-value">{profileData.branch || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.branch || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, branch: e.target.value }))}
+                          placeholder="Branch name"
+                        />
+                      ) : (
+                        profileData.branch || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box full">
                     <div className="sp-preview-label">PF NUMBER / UAN</div>
-                    <div className="sp-preview-value">{profileData.uanNumber || profileData.pfNumber || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "bank" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editBank.uanNumber || ""}
+                          onChange={(e) => setEditBank((prev) => ({ ...prev, uanNumber: e.target.value }))}
+                          placeholder="PF / UAN number"
+                        />
+                      ) : (
+                        profileData.uanNumber || profileData.pfNumber || "—"
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
 
-              {/* 3. Address Information Section */}
+              {/* 3. Address Information Section (Exact same grid & boxes) */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
                   <h4 className="sp-preview-title">Address Information</h4>
-                  <button
-                    type="button"
-                    className="sp-preview-edit-pill"
-                    onClick={() => {
-                      setIsEditingProfile(true);
-                      setProfileStep(3);
-                    }}
-                  >
-                    Edit
-                  </button>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    {editingSection !== "address" ? (
+                      <button
+                        type="button"
+                        className="sp-preview-edit-pill"
+                        onClick={() => {
+                          setEditAddress({
+                            houseNumber: profileData.houseNumber || profileData.address || "",
+                            street: profileData.street || profileData.streetArea || "",
+                            city: profileData.city || profileData.cityVillage || "",
+                            pin: profileData.pin || profileData.pincode || "",
+                            district: profileData.district || "",
+                            state: profileData.state || "",
+                            country: profileData.country || "India",
+                          });
+                          setEditingSection("address");
+                        }}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "#f1f5f9", color: "#475569" }}
+                          onClick={() => setEditingSection(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="sp-preview-edit-pill"
+                          style={{ background: "var(--cms-primary, #355e3b)", color: "#ffffff" }}
+                          onClick={async () => {
+                            const updated = {
+                              ...profileData,
+                              houseNumber: editAddress.houseNumber,
+                              address: editAddress.houseNumber,
+                              street: editAddress.street,
+                              streetArea: editAddress.street,
+                              city: editAddress.city,
+                              cityVillage: editAddress.city,
+                              pin: editAddress.pin,
+                              pincode: editAddress.pin,
+                              district: editAddress.district,
+                              state: editAddress.state,
+                              country: editAddress.country,
+                            };
+                            setProfileData(updated);
+                            persistStaffProfile(updated);
+                            try {
+                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) {
+                                await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+                                  sectionName: "Address",
+                                  Address: {
+                                    houseNumber: editAddress.houseNumber,
+                                    street: editAddress.street,
+                                    currentAddress: [editAddress.houseNumber, editAddress.street].filter(Boolean).join(", "),
+                                    city: editAddress.city,
+                                    pincode: editAddress.pin,
+                                    pin: editAddress.pin,
+                                    district: editAddress.district,
+                                    state: editAddress.state,
+                                    country: editAddress.country,
+                                  },
+                                });
+                              }
+                            } catch {}
+                            setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            notify("Address updated successfully.");
+                          }}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className="sp-preview-grid">
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">HOUSE NUMBER</div>
-                    <div className="sp-preview-value">{profileData.houseNumber || profileData.address || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.houseNumber || ""}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, houseNumber: e.target.value }))}
+                          placeholder="House / flat number"
+                        />
+                      ) : (
+                        profileData.houseNumber || profileData.address || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">STREET / AREA</div>
-                    <div className="sp-preview-value">{profileData.street || profileData.streetArea || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.street || ""}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, street: e.target.value }))}
+                          placeholder="Street / area"
+                        />
+                      ) : (
+                        profileData.street || profileData.streetArea || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">CITY / VILLAGE</div>
-                    <div className="sp-preview-value">{profileData.city || profileData.cityVillage || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.city || ""}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, city: e.target.value }))}
+                          placeholder="City / village"
+                        />
+                      ) : (
+                        profileData.city || profileData.cityVillage || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">PINCODE</div>
-                    <div className="sp-preview-value">{profileData.pin || profileData.pincode || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          maxLength={6}
+                          className="sp-inline-input"
+                          value={editAddress.pin || ""}
+                          onChange={(e) => {
+                            const pVal = e.target.value.replace(/\D/g, "").slice(0, 6);
+                            setEditAddress((prev) => {
+                              const up = { ...prev, pin: pVal };
+                              if (pVal.length >= 3 && PIN_LOOKUP[pVal.slice(0, 3)]) {
+                                up.district = PIN_LOOKUP[pVal.slice(0, 3)].district;
+                                up.state = PIN_LOOKUP[pVal.slice(0, 3)].state;
+                              }
+                              return up;
+                            });
+                          }}
+                          placeholder="6-digit PIN"
+                        />
+                      ) : (
+                        profileData.pin || profileData.pincode || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">DISTRICT</div>
-                    <div className="sp-preview-value">{profileData.district || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.district || ""}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, district: e.target.value }))}
+                          placeholder="District"
+                        />
+                      ) : (
+                        profileData.district || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box">
                     <div className="sp-preview-label">STATE</div>
-                    <div className="sp-preview-value">{profileData.state || "—"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.state || ""}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, state: e.target.value }))}
+                          placeholder="State"
+                        />
+                      ) : (
+                        profileData.state || "—"
+                      )}
+                    </div>
                   </div>
                   <div className="sp-preview-box full">
                     <div className="sp-preview-label">COUNTRY</div>
-                    <div className="sp-preview-value">{profileData.country || "India"}</div>
+                    <div className="sp-preview-value">
+                      {editingSection === "address" ? (
+                        <input
+                          type="text"
+                          className="sp-inline-input"
+                          value={editAddress.country || "India"}
+                          onChange={(e) => setEditAddress((prev) => ({ ...prev, country: e.target.value }))}
+                          placeholder="Country"
+                        />
+                      ) : (
+                        profileData.country || "India"
+                      )}
+                    </div>
                   </div>
                 </div>
               </section>
 
-              {/* 4. Experience Section */}
+              {/* 4. Experience Section (Preserved layout with inline add & delete) */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
-                  <h4 className="sp-preview-title">Experience</h4>
+                  <h4 className="sp-preview-title">Experience ({safeExperience.length})</h4>
                   <button
                     type="button"
                     className="sp-preview-edit-pill"
                     onClick={() => {
-                      setIsEditingProfile(true);
-                      setProfileStep(4);
+                      setEditingSection(editingSection === "experience" ? null : "experience");
                     }}
                   >
-                    Edit
+                    {editingSection === "experience" ? "Done" : "Edit / Add"}
                   </button>
                 </div>
+
+                {editingSection === "experience" && (
+                  <div style={{ background: "var(--cms-subtle, #f8fafc)", padding: "18px", borderRadius: "12px", border: "1px solid var(--cms-border)", marginBottom: "16px" }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "var(--cms-text)" }}>Add New Experience</div>
+                    <div className="sp-grid-3" style={{ marginBottom: "12px" }}>
+                      <div className="cms-field">
+                        <label>Institution / College Name</label>
+                        <input
+                          type="text"
+                          value={newExp.institution}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, institution: e.target.value }))}
+                          placeholder="e.g. Sri Chaitanya Junior College"
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>Designation</label>
+                        <input
+                          type="text"
+                          value={newExp.designation}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, designation: e.target.value }))}
+                          placeholder="e.g. Lecturer Mathematics"
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>From Date</label>
+                        <input
+                          type="date"
+                          value={newExp.fromDate}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, fromDate: e.target.value }))}
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>To Date</label>
+                        <input
+                          type="date"
+                          value={newExp.toDate}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, toDate: e.target.value }))}
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>Subjects Taught</label>
+                        <input
+                          type="text"
+                          value={newExp.subjectsTeached}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, subjectsTeached: e.target.value }))}
+                          placeholder="e.g. Mathematics"
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>Total Experience (Years)</label>
+                        <input
+                          type="number"
+                          value={newExp.totalExp}
+                          onChange={(e) => setNewExp((prev) => ({ ...prev, totalExp: e.target.value }))}
+                          placeholder="e.g. 2"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      style={{ fontSize: 13, padding: "7px 16px" }}
+                      onClick={() => {
+                        if (!newExp.institution) {
+                          notify("Please enter Institution name.", "error");
+                          return;
+                        }
+                        const rec = { ...newExp, id: Date.now() };
+                        const updated = [...safeExperience, rec];
+                        setProfileData({ ...profileData, experience: updated });
+                        persistStaffProfile({ ...profileData, experience: updated });
+                        setNewExp({ institution: "", designation: "", fromDate: "", toDate: "", subjectsTeached: "", totalExp: "" });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+                        notify("Experience added.");
+                      }}
+                    >
+                      + Add Experience
+                    </button>
+                  </div>
+                )}
+
                 {!safeExperience.length ? (
                   <div
                     style={{
@@ -2419,7 +3569,27 @@ export default function FacultyProfile() {
                 ) : (
                   safeExperience.map((exp, idx) => (
                     <div key={exp.id || idx} className="sp-preview-subcard">
-                      <div className="sp-preview-subcard-title">Experience {idx + 1}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div className="sp-preview-subcard-title">Experience {idx + 1}</div>
+                        {editingSection === "experience" && (
+                          <button
+                            type="button"
+                            className="cms-action-btn"
+                            style={{ color: "var(--cms-red)" }}
+                            onClick={() => {
+                              const updated = safeExperience.filter((item) => item.id !== exp.id);
+                              setProfileData({ ...profileData, experience: updated });
+                              persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+                              notify("Experience record removed.");
+                            }}
+                            title="Delete Experience"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        )}
+                      </div>
                       <div className="sp-preview-grid">
                         <div className="sp-preview-box">
                           <div className="sp-preview-label">COMPANY / INSTITUTION NAME</div>
@@ -2451,7 +3621,7 @@ export default function FacultyProfile() {
                 )}
               </section>
 
-              {/* 5. Uploaded Documents Section */}
+              {/* 5. Uploaded Documents Section (Preserved layout with inline upload & delete) */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
                   <h4 className="sp-preview-title">Uploaded Documents ({safeDocuments.length})</h4>
@@ -2459,13 +3629,90 @@ export default function FacultyProfile() {
                     type="button"
                     className="sp-preview-edit-pill"
                     onClick={() => {
-                      setIsEditingProfile(true);
-                      setProfileStep(5);
+                      setEditingSection(editingSection === "documents" ? null : "documents");
                     }}
                   >
-                    Edit
+                    {editingSection === "documents" ? "Done" : "Edit / Upload"}
                   </button>
                 </div>
+
+                {editingSection === "documents" && (
+                  <div style={{ background: "var(--cms-subtle, #f8fafc)", padding: "18px", borderRadius: "12px", border: "1px solid var(--cms-border)", marginBottom: "16px" }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "var(--cms-text)" }}>Upload New Document</div>
+                    <div className="sp-grid-3" style={{ marginBottom: "12px" }}>
+                      <div className="cms-field">
+                        <label>Document Type</label>
+                        <SelectInput
+                          value={newDoc.type || "Aadhaar Card Copy"}
+                          onChange={(e) => setNewDoc((prev) => ({ ...prev, type: e.target.value }))}
+                          options={[
+                            "Aadhaar Card Copy",
+                            "PAN Card Copy",
+                            "10th Standard Marks Sheet",
+                            "Intermediate / 10+2 Certificate",
+                            "Degree Certificate",
+                            "Relieving Letter from Previous College",
+                            "Cancelled Cheque / Bank Passbook",
+                            "Other",
+                          ]}
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>Document Title</label>
+                        <input
+                          type="text"
+                          value={newDoc.title}
+                          onChange={(e) => setNewDoc((prev) => ({ ...prev, title: e.target.value }))}
+                          placeholder="e.g. Official Relieving Letter"
+                        />
+                      </div>
+                      <div className="cms-field">
+                        <label>Select File</label>
+                        <input
+                          type="file"
+                          ref={docFileRef}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setNewDoc((prev) => ({ ...prev, file, title: prev.title || file.name }));
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      style={{ fontSize: 13, padding: "7px 16px" }}
+                      onClick={() => {
+                        if (!newDoc.file) {
+                          notify("Please select a file to upload.", "error");
+                          return;
+                        }
+                        const docRecord = {
+                          id: Date.now(),
+                          name: newDoc.title || newDoc.file.name,
+                          type: newDoc.type || "Aadhaar Card Copy",
+                          size: `${(newDoc.file.size / (1024 * 1024)).toFixed(1)} MB`,
+                          date: new Date().toISOString().split("T")[0],
+                          status: "Uploaded",
+                          url: URL.createObjectURL(newDoc.file),
+                        };
+                        const updatedDocs = [...safeDocuments, docRecord];
+                        setProfileData({ ...profileData, documents: updatedDocs });
+                        persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
+                        setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
+                        if (docFileRef.current) docFileRef.current.value = "";
+                        notify("Document uploaded successfully!");
+                      }}
+                    >
+                      + Upload Document
+                    </button>
+                  </div>
+                )}
+
                 {!safeDocuments.length ? (
                   <div
                     style={{
@@ -2482,7 +3729,27 @@ export default function FacultyProfile() {
                 ) : (
                   safeDocuments.map((doc, idx) => (
                     <div key={doc.id || idx} className="sp-preview-subcard">
-                      <div className="sp-preview-subcard-title">Document {idx + 1}</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                        <div className="sp-preview-subcard-title">Document {idx + 1}</div>
+                        {editingSection === "documents" && (
+                          <button
+                            type="button"
+                            className="cms-action-btn"
+                            style={{ color: "var(--cms-red)" }}
+                            onClick={() => {
+                              const updated = safeDocuments.filter((item) => item.id !== doc.id);
+                              setProfileData({ ...profileData, documents: updated });
+                              persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
+                              notify("Document removed.");
+                            }}
+                            title="Delete Document"
+                          >
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        )}
+                      </div>
                       <div className="sp-preview-grid">
                         <div className="sp-preview-box">
                           <div className="sp-preview-label">DOCUMENT TYPE</div>
@@ -2497,35 +3764,11 @@ export default function FacultyProfile() {
                           <div className="sp-preview-value">{doc.format || doc.type || "PDF"}</div>
                         </div>
                         <div className="sp-preview-box">
-                          <div className="sp-preview-label">SIZE</div>
-                          <div className="sp-preview-value">{doc.size || "—"}</div>
-                        </div>
-                        <div className="sp-preview-box full">
-                          <div className="sp-preview-label">FILE</div>
-                          <div>
-                            <a
-                              href={doc.url || "#"}
-                              onClick={(e) => {
-                                if (!doc.url) {
-                                  e.preventDefault();
-                                  notify(`Viewing document ${doc.name}...`);
-                                } else {
-                                  window.open(doc.url, "_blank");
-                                }
-                              }}
-                              style={{
-                                color: "var(--cms-primary, #6F8400)",
-                                fontWeight: 700,
-                                textDecoration: "none",
-                                fontSize: 14,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 6,
-                                cursor: "pointer",
-                              }}
-                            >
-                              <Eye size={15} /> View Document
-                            </a>
+                          <div className="sp-preview-label">STATUS</div>
+                          <div className="sp-preview-value">
+                            <span className="cms-badge cms-badge-active" style={{ fontSize: 11, minHeight: 20 }}>
+                              {doc.status || "Verified"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -2534,12 +3777,35 @@ export default function FacultyProfile() {
                 )}
               </section>
 
-              {/* Preview Footer */}
+              {/* Bottom Actions for Step 6 */}
               <div
-                className="sp-preview-footer"
-                style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12 }}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: 24,
+                  paddingTop: 18,
+                  borderTop: "1px solid var(--cms-border)",
+                }}
               >
-                <button type="button" className="sp-btn-back" onClick={() => setProfileStep(5)}>
+                <button
+                  type="button"
+                  className="sp-btn-prev"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "0 22px",
+                    height: "38px",
+                    fontWeight: 600,
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    background: "#ffffff",
+                    border: "1px solid var(--cms-border, #cbd5e1)",
+                    color: "var(--cms-text, #1e293b)",
+                  }}
+                  onClick={() => setProfileStep(5)}
+                >
                   <ChevronLeft size={16} /> Back
                 </button>
                 <button
@@ -2553,431 +3819,333 @@ export default function FacultyProfile() {
               </div>
             </div>
           )}
-
-          {/* Stepper Footer for Steps 1 through 5 */}
-          {/* Stepper Footer for Steps 1 through 5 */}
-          {profileStep < 6 && (
-            <div
-              className="sp-wizard-footer"
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                width: "100%",
-                marginTop: 24,
-                paddingTop: 18,
-                borderTop: "1px solid var(--cms-border)",
-              }}
-            >
-              {profileStep > 1 ? (
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-ghost"
-                  style={{
-                    background: "var(--cms-surface, #ffffff)",
-                    border: "1px solid var(--cms-border, #d1d5db)",
-                    color: "var(--cms-text, #1e293b)",
-                    padding: "0 22px",
-                    height: "38px",
-                    fontWeight: 600,
-                    borderRadius: "8px",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => setProfileStep((s) => Math.max(1, s - 1))}
-                >
-                  <ChevronLeft size={16} /> Previous
-                </button>
-              ) : (
-                <div />
-              )}
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                {isEditingProfile ? (
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    style={{
-                      padding: "0 22px",
-                      height: "38px",
-                      borderRadius: "8px",
-                      fontWeight: 600,
-                    }}
-                    onClick={handleSaveAndNext}
-                  >
-                    {profileStep === 1 ? "Next" : "Update & Next"} <ChevronRight size={16} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    style={{
-                      padding: "0 22px",
-                      height: "38px",
-                      borderRadius: "8px",
-                      fontWeight: 600,
-                    }}
-                    onClick={() => setProfileStep((s) => Math.min(6, s + 1))}
-                  >
-                    Next <ChevronRight size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* 0. Profile Photo Action Options Modal (Reference Style Compact Modal) */}
-      {isPhotoActionModalOpen && (
-        <div className="sp-modal-overlay" onClick={() => setIsPhotoActionModalOpen(false)}>
-          <div className="sp-photo-action-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sp-photo-action-header">
-              <span className="sp-photo-action-header-title">Profile Photo</span>
-              <button
-                type="button"
-                className="sp-modal-close-btn"
-                onClick={() => setIsPhotoActionModalOpen(false)}
-                title="Close"
-              >
-                <X size={16} />
-              </button>
+    
+      {/* Profile Submission Success Modal */}
+      {showSuccessModal && (
+        <div
+          className="sp-modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: "20px"
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              padding: "36px 30px",
+              maxWidth: "460px",
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              animation: "fadeIn 0.2s ease-out"
+            }}
+          >
+            <div
+              style={{
+                width: "60px",
+                height: "60px",
+                borderRadius: "50%",
+                background: "#ecfdf5",
+                color: "#059669",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <CheckCircle2 size={36} strokeWidth={2.2} />
+            </div>
+            <h3 style={{ margin: "0 0 10px", fontSize: "21px", fontWeight: 700, color: "#0f172a" }}>
+              Official Appointment &amp; Offer Letter Dispatched!
+            </h3>
+            
+            {/* Registered Email Delivery Pill */}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "7px",
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                color: "#166534",
+                padding: "6px 14px",
+                borderRadius: "20px",
+                fontSize: "13px",
+                fontWeight: "600",
+                margin: "0 auto 16px",
+                maxWidth: "100%",
+                wordBreak: "break-all"
+              }}
+            >
+              <Mail size={15} />
+              <span>Sent to: {profileData?.email || getAuthUser()?.email || "registered email"}</span>
             </div>
 
-            {/* Profile Avatar Center View matching reference */}
-            <div className="sp-photo-action-preview">
-              <div className="sp-photo-action-avatar">
-                {profileData.photoUrl ? (
-                  <img src={profileData.photoUrl} alt={profileData.fullName} />
-                ) : (
-                  <User size={46} strokeWidth={1.7} className="sp-profile-user-icon" />
-                )}
-              </div>
-              <div className="sp-photo-action-name">{profileData.fullName || "Faculty Member"}</div>
-              <div className="sp-photo-action-subtitle">
-                {profileData.designation ? `${profileData.designation} · ${profileData.department || "Faculty"}` : "Faculty Member"}
-              </div>
-            </div>
+            <p style={{ margin: "0 0 24px", fontSize: "14px", color: "#475569", lineHeight: 1.6 }}>
+              Your official appointment and offer letter has been generated from the institutional template and sent to your registered email: <strong style={{ color: "#0f172a" }}>{profileData?.email || getAuthUser()?.email || "xyz@gmail.com"}</strong>.
+              <br /><br />
+              Please relogin to access your complete Staff Portal with your assigned classes, subjects, and timetable.
+            </p>
 
-            {/* 4 Photo Actions matching user reference */}
-            <div className="sp-photo-action-menu">
-              <button
-                type="button"
-                className={`sp-photo-action-item ${!profileData.photoUrl ? "disabled" : ""}`}
-                onClick={() => {
-                  if (!profileData.photoUrl) {
-                    notify("No photo uploaded yet.", "info");
-                    return;
-                  }
-                  setIsPhotoActionModalOpen(false);
-                  setIsViewPhotoOpen(true);
-                }}
-              >
-                <div className="sp-photo-action-icon-wrap">
-                  <Eye size={18} />
-                </div>
-                <div className="sp-photo-action-item-text">
-                  <span className="sp-photo-action-label">View photo</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="sp-photo-action-item"
-                onClick={() => {
-                  setIsPhotoActionModalOpen(false);
-                  setIsCameraModalOpen(true);
-                }}
-              >
-                <div className="sp-photo-action-icon-wrap">
-                  <Camera size={18} />
-                </div>
-                <div className="sp-photo-action-item-text">
-                  <span className="sp-photo-action-label">Take photo</span>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                className="sp-photo-action-item"
-                onClick={() => {
-                  setIsPhotoActionModalOpen(false);
-                  avatarRef.current?.click();
-                }}
-              >
-                <div className="sp-photo-action-icon-wrap">
-                  <Folder size={18} />
-                </div>
-                <div className="sp-photo-action-item-text">
-                  <span className="sp-photo-action-label">Upload photo</span>
-                </div>
-              </button>
-
-              <div className="sp-photo-action-divider" />
-
-              <button
-                type="button"
-                className={`sp-photo-action-item danger ${!profileData.photoUrl ? "disabled" : ""}`}
-                onClick={() => {
-                  if (!profileData.photoUrl) {
-                    notify("No photo to remove.", "info");
-                    return;
-                  }
-                  setIsPhotoActionModalOpen(false);
-                  handleRemovePhoto();
-                }}
-              >
-                <div className="sp-photo-action-icon-wrap">
-                  <Trash2 size={18} />
-                </div>
-                <div className="sp-photo-action-item-text">
-                  <span className="sp-photo-action-label">Remove photo</span>
-                </div>
-              </button>
-            </div>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{
+                width: "100%",
+                padding: "13px 20px",
+                fontSize: "15px",
+                fontWeight: 600,
+                borderRadius: "10px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(53, 94, 59, 0.25)"
+              }}
+              onClick={() => {
+                clearAuthSession();
+                window.location.href = "/login";
+              }}
+            >
+              <span>Go to Login &amp; Access Portal</span>
+              <ArrowRight size={16} />
+            </button>
           </div>
         </div>
       )}
 
-      {/* 1. View Photo Lightbox Modal */}
-      {isViewPhotoOpen && (
-        <div className="sp-modal-overlay" onClick={() => setIsViewPhotoOpen(false)}>
-          <div className="sp-photo-view-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header">
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Eye size={17} style={{ color: "var(--cms-primary)" }} />
-                <h3 className="sp-modal-title">Profile Photo</h3>
+      {/* Profile Submission Sent for Admin Approval Modal */}
+      {showPendingApprovalModal && (
+        <div
+          className="sp-modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: "20px"
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              padding: "36px 30px",
+              maxWidth: "480px",
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              animation: "fadeIn 0.2s ease-out"
+            }}
+          >
+            <div
+              style={{
+                width: "60px",
+                height: "60px",
+                borderRadius: "50%",
+                background: "#fef3c7",
+                color: "#d97706",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <Clock size={36} strokeWidth={2.2} />
+            </div>
+            <h3 style={{ margin: "0 0 10px", fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>
+              Submitted for Admin Approval
+            </h3>
+
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                color: "#334155",
+                padding: "16px",
+                borderRadius: "12px",
+                fontSize: "14px",
+                lineHeight: "1.6",
+                textAlign: "left",
+                margin: "0 0 24px"
+              }}
+            >
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{
+                width: "100%",
+                padding: "12px 20px",
+                fontSize: "15px",
+                fontWeight: 600,
+                borderRadius: "10px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer"
+              }}
+              onClick={() => setShowPendingApprovalModal(false)}
+            >
+              Acknowledge &amp; Return to Profile
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Incomplete (Under 50%) Guidance Modal */}
+      {showIncompleteModal && (
+        <div
+          className="sp-modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: "20px"
+          }}
+          onClick={() => setShowIncompleteModal(false)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              padding: "32px 28px",
+              maxWidth: "460px",
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              animation: "fadeIn 0.2s ease-out"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "50%",
+                background: "#fef3c7",
+                color: "#d97706",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <AlertTriangle size={28} strokeWidth={2.2} />
+            </div>
+
+            <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
+              Submission Incomplete
+            </h3>
+
+            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#64748b", lineHeight: 1.5 }}>
+              Institutional onboarding bylaws require a minimum of <strong>50% profile completion</strong> before official submission and Offer Letter generation.
+            </p>
+
+            {/* Visual Progress Bar Card */}
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                borderRadius: "10px",
+                padding: "16px",
+                marginBottom: "22px",
+                textAlign: "left"
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>Current Progress</span>
+                <span style={{
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  color: profileCompletion >= 50 ? "var(--cms-primary, #355e3b)" : "#d97706"
+                }}>
+                  {profileCompletion}% / 50%
+                </span>
               </div>
-              <button
-                type="button"
-                className="sp-modal-close-btn"
-                onClick={() => setIsViewPhotoOpen(false)}
-                title="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="sp-photo-view-body">
-              {activePhotoUrl && !photoLoadError ? (
-                <img
-                  src={activePhotoUrl}
-                  alt={profileData.fullName || "Profile Photo"}
-                  className="sp-photo-view-img"
-                  onError={() => setPhotoLoadError(true)}
+              <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden", position: "relative" }}>
+                <div
+                  style={{
+                    width: `${Math.min(profileCompletion, 100)}%`,
+                    height: "100%",
+                    background: profileCompletion >= 50 ? "var(--cms-primary, #355e3b)" : "#f59e0b",
+                    borderRadius: "4px",
+                    transition: "width 0.3s ease"
+                  }}
                 />
-              ) : (
-                <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-                  <TransparentAvatar size={80} style={{ margin: "0 auto 12px" }} />
-                  <div>No photo uploaded yet.</div>
-                </div>
-              )}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#94a3b8", marginTop: "4px" }}>
+                <span>0%</span>
+                <span style={{ fontWeight: 700, color: "#d97706" }}>▲ 50% Required</span>
+                <span>100%</span>
+              </div>
             </div>
-            <div className="sp-modal-footer">
+
+            <div style={{ display: "flex", gap: "10px" }}>
               <button
                 type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={() => {
-                  setIsViewPhotoOpen(false);
-                  avatarRef.current?.click();
-                }}
-              >
-                <Folder size={14} /> Change Photo
-              </button>
-              <button
-                type="button"
-                className="cms-btn cms-btn-secondary"
-                onClick={() => setIsViewPhotoOpen(false)}
+                className="cms-btn cms-btn-ghost"
+                style={{ flex: 1, padding: "10px", fontSize: "13px" }}
+                onClick={() => setShowIncompleteModal(false)}
               >
                 Close
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Camera Capture Modal */}
-      {isCameraModalOpen && (
-        <div className="sp-modal-overlay" onClick={() => setIsCameraModalOpen(false)}>
-          <div className="sp-camera-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header">
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Camera size={17} style={{ color: "var(--cms-primary)" }} />
-                <h3 className="sp-modal-title">Take Profile Photo</h3>
-              </div>
-              <button
-                type="button"
-                className="sp-modal-close-btn"
-                onClick={() => setIsCameraModalOpen(false)}
-                title="Close"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="sp-camera-body">
-              {isCameraLoading && (
-                <div className="sp-camera-loading">
-                  <Loader2 size={28} className="spin" style={{ color: "var(--cms-primary)" }} />
-                  <span>Starting camera...</span>
-                </div>
-              )}
-              {cameraError ? (
-                <div className="sp-camera-error">
-                  <p style={{ margin: 0, fontSize: 13 }}>{cameraError}</p>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    style={{ marginTop: 12 }}
-                    onClick={() => {
-                      setCameraError("");
-                      setIsCameraLoading(true);
-                      setIsCameraModalOpen(false);
-                      setTimeout(() => setIsCameraModalOpen(true), 120);
-                    }}
-                  >
-                    <RefreshCw size={14} /> Retry Camera
-                  </button>
-                </div>
-              ) : (
-                <div className="sp-camera-viewport">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="sp-camera-video"
-                  />
-                  <div className="sp-camera-guide-box" />
-                </div>
-              )}
-            </div>
-            <div className="sp-modal-footer">
-              <button
-                type="button"
-                className="cms-btn cms-btn-secondary"
-                onClick={() => setIsCameraModalOpen(false)}
-              >
-                Cancel
-              </button>
-              {!cameraError && (
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-primary"
-                  onClick={handleCaptureFromCamera}
-                  disabled={isCameraLoading}
-                >
-                  <Camera size={15} /> Capture Photo
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Interactive Crop Modal */}
-      {isCropModalOpen && rawImageToCrop && (
-        <div
-          className="sp-modal-overlay"
-          onClick={() => {
-            setIsCropModalOpen(false);
-            setRawImageToCrop(null);
-          }}
-        >
-          <div className="sp-crop-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header">
-              <h3 className="sp-modal-title">Crop Profile Photo</h3>
-              <button
-                type="button"
-                className="sp-modal-close-btn"
-                onClick={() => {
-                  setIsCropModalOpen(false);
-                  setRawImageToCrop(null);
-                }}
-                title="Cancel"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="sp-crop-body">
-              <p className="sp-crop-instructions">
-                Drag to reposition · Use zoom &amp; rotate to fit inside the frame
-              </p>
-              <div
-                className="sp-crop-canvas-wrapper"
-                onMouseDown={handleCropMouseDown}
-                onMouseMove={handleCropMouseMove}
-                onMouseUp={handleCropMouseUp}
-                onMouseLeave={handleCropMouseUp}
-                onTouchStart={handleCropTouchStart}
-                onTouchMove={handleCropTouchMove}
-                onTouchEnd={handleCropTouchEnd}
-              >
-                <canvas
-                  ref={cropCanvasRef}
-                  width={300}
-                  height={300}
-                  className="sp-crop-canvas"
-                />
-              </div>
-
-              {/* Crop Controls */}
-              <div className="sp-crop-controls">
-                <div className="sp-crop-zoom-group">
-                  <ZoomOut size={15} style={{ color: "var(--cms-muted)" }} />
-                  <input
-                    type="range"
-                    min="1"
-                    max="3"
-                    step="0.05"
-                    value={cropZoom}
-                    onChange={(e) => setCropZoom(parseFloat(e.target.value))}
-                    className="sp-crop-slider"
-                  />
-                  <ZoomIn size={15} style={{ color: "var(--cms-muted)" }} />
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
-                  <button
-                    type="button"
-                    className="sp-crop-control-btn"
-                    onClick={() => setCropRotation((r) => (r + 90) % 360)}
-                    title="Rotate 90° Clockwise"
-                  >
-                    <RotateCw size={14} /> Rotate
-                  </button>
-                  <button
-                    type="button"
-                    className="sp-crop-control-btn"
-                    onClick={() => {
-                      setCropZoom(1);
-                      setCropPan({ x: 0, y: 0 });
-                      setCropRotation(0);
-                    }}
-                    title="Reset Alignment"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="sp-modal-footer">
-              <button
-                type="button"
-                className="cms-btn cms-btn-secondary"
-                onClick={() => {
-                  setIsCropModalOpen(false);
-                  setRawImageToCrop(null);
-                }}
-              >
-                Cancel
-              </button>
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
-                onClick={handleApplyCrop}
+                style={{
+                  flex: 2,
+                  padding: "10px",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  borderRadius: "8px"
+                }}
+                onClick={() => {
+                  setShowIncompleteModal(false);
+                  setProfileStep(2); // Jump to Bank Details
+                }}
               >
-                <Check size={15} /> Save Photo
+                Complete Details &rarr;
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+</div>
   );
 }

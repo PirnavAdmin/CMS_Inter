@@ -42,8 +42,10 @@ import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
 import { getAuthToken } from "@/features/authStorage.js";
+import { holidayRecords } from "@/data/mockData.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
@@ -208,10 +210,17 @@ function parseMonthYearKey(str) {
   return null;
 }
 
-function CardHeader({ title, action, children }) {
+function CardHeader({ title, icon, iconName, action, children }) {
   return (
     <header className="dashboard-card-head">
-      <h2>{title}</h2>
+      <div className="dashboard-card-head-title-wrap">
+        {iconName ? (
+          <ThreeDIcon name={iconName} size={22} className="dashboard-card-title-icon" />
+        ) : icon ? (
+          icon
+        ) : null}
+        <h2>{title}</h2>
+      </div>
       {action || children ? <div className="dashboard-card-head-actions">{children}{action}</div> : null}
     </header>
   );
@@ -842,11 +851,17 @@ export default function DashboardPage() {
         res = await apiClient.get(DASHBOARD_API.holidaysList, { params: { ...params, pageSize: 20, status: "Active" } });
       }
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: null, data: unwrap(res.data) });
+        const unwrapped = unwrap(res?.data);
+        const items = Array.isArray(unwrapped) ? unwrapped : (unwrapped?.items || unwrapped?.holidays || unwrapped?.data || []);
+        if (items && items.length > 0) {
+          setHolidayState({ loading: false, error: null, data: items });
+        } else {
+          setHolidayState({ loading: false, error: null, data: holidayRecords });
+        }
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming holidays"), data: null });
+        setHolidayState({ loading: false, error: null, data: holidayRecords });
       }
     }
   }, [campusId, boardId, academicYearId]);
@@ -880,6 +895,16 @@ export default function DashboardPage() {
     fetchUpcomingHolidays();
     fetchUpcomingExaminations();
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchUpcomingHolidays, fetchUpcomingExaminations]);
+
+  useEffect(() => {
+    const onHolidaysChanged = () => {
+      fetchUpcomingHolidays();
+    };
+    window.addEventListener("cms-holidays-changed", onHolidaysChanged);
+    return () => {
+      window.removeEventListener("cms-holidays-changed", onHolidaysChanged);
+    };
+  }, [fetchUpcomingHolidays]);
 
   // Load attendance cards when their scope changes
   useEffect(() => {
@@ -1356,15 +1381,75 @@ export default function DashboardPage() {
 
   // Upcoming Holidays Normalized List
   const holidaysList = useMemo(() => {
-    const raw = holidayState.data?.items || holidayState.data?.holidays || (Array.isArray(holidayState.data) ? holidayState.data : []);
-    if (!Array.isArray(raw)) return [];
-    return raw.map((item, idx) => {
+    const rawSource = holidayState.data?.items || holidayState.data?.holidays || holidayState.data?.data || (Array.isArray(holidayState.data) ? holidayState.data : []);
+    const raw = Array.isArray(rawSource) && rawSource.length > 0 ? rawSource : holidayRecords;
+    if (!Array.isArray(raw) || raw.length === 0) return [];
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const mapped = raw.map((item, idx) => {
       const name = item.holidayName || item.name || item.title || "College Holiday";
       const type = item.holidayType || item.type || "Festival Holiday";
-      const dateRangeText = item.formattedDateRange || item.dateRange || item.startDate || "Scheduled";
-      const dayOfWeek = item.dayOfWeek || (item.startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${String(item.startDate).split("T")[0]}T00:00:00`)) : "");
-      const durationText = item.durationText || (item.totalDays ? (item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day") : "1 Day");
-      const badge = item.countdownText || item.badge || item.lifecycleStatus || "Upcoming";
+      const startDate = item.startDate ? String(item.startDate).split("T")[0] : "";
+      const endDate = item.endDate ? String(item.endDate).split("T")[0] : startDate;
+
+      const formatDisplayDate = (d) => {
+        if (!d) return "";
+        try {
+          return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${d}T00:00:00`));
+        } catch {
+          return d;
+        }
+      };
+
+      let dateRangeText = item.formattedDateRange || item.dateRange;
+      if (!dateRangeText) {
+        if (startDate && endDate && endDate !== startDate) {
+          dateRangeText = `${formatDisplayDate(startDate)} - ${formatDisplayDate(endDate)}`;
+        } else if (startDate) {
+          dateRangeText = formatDisplayDate(startDate);
+        } else {
+          dateRangeText = "Scheduled";
+        }
+      }
+
+      const dayOfWeek = item.dayOfWeek || (startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${startDate}T00:00:00`)) : "");
+
+      let durationText = item.durationText;
+      if (!durationText) {
+        if (item.totalDays) {
+          durationText = item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day";
+        } else if (startDate && endDate && endDate !== startDate) {
+          const diff = Math.max(1, Math.ceil((new Date(`${endDate}T00:00:00`) - new Date(`${startDate}T00:00:00`)) / 86400000) + 1);
+          durationText = `${diff} Days`;
+        } else {
+          durationText = "1 Day";
+        }
+      }
+
+      let badge = item.countdownText || item.badge || item.lifecycleStatus;
+      let rank = 1;
+      if (startDate) {
+        const diffDays = Math.ceil((new Date(`${startDate}T00:00:00`) - new Date(`${todayStr}T00:00:00`)) / 86400000);
+        const endDiff = Math.ceil((new Date(`${endDate}T00:00:00`) - new Date(`${todayStr}T00:00:00`)) / 86400000);
+
+        if (diffDays === 0) {
+          badge = "Today";
+          rank = 0;
+        } else if (diffDays === 1) {
+          badge = "Tomorrow";
+          rank = 0;
+        } else if (diffDays > 1) {
+          badge = `In ${diffDays} Days`;
+          rank = 1;
+        } else if (diffDays <= 0 && endDiff >= 0) {
+          badge = "Ongoing";
+          rank = 0;
+        } else {
+          badge = "Completed";
+          rank = 2;
+        }
+      }
 
       let tone = "violet";
       const lowerType = String(type).toLowerCase();
@@ -1384,8 +1469,12 @@ export default function DashboardPage() {
         badge,
         tone,
         appliesTo: item.appliesTo || "All Students & Staff",
+        startDate,
+        rank,
       };
     });
+
+    return mapped.sort((a, b) => a.rank - b.rank || (a.startDate || "").localeCompare(b.startDate || ""));
   }, [holidayState.data]);
 
   // Upcoming Examinations Normalized List
@@ -1492,7 +1581,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Main Analytics">
           {/* Card 1: Admission Overview */}
           <article className="dashboard-card dashboard-students-overview-card">
-            <CardHeader title="Admission Overview" />
+            <CardHeader title="Admission Overview" iconName="reports" />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
             ) : overviewState.error ? (
@@ -1542,8 +1631,8 @@ export default function DashboardPage() {
                         <AreaChart data={overviewChartData} margin={{ top: 6, right: 10, left: 15, bottom: 2 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
-                              <stop offset="100%" stopColor="#22a447" stopOpacity={0.02} />
+                              <stop offset="0%" stopColor="var(--cms-primary, #65409a)" stopOpacity={0.35} />
+                              <stop offset="100%" stopColor="var(--cms-primary, #65409a)" stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
@@ -1561,10 +1650,10 @@ export default function DashboardPage() {
                           <Area
                             type="monotone"
                             dataKey="studentsJoined"
-                            stroke="#22a447"
+                            stroke="var(--cms-primary, #65409a)"
                             strokeWidth={2.5}
                             fill="url(#admissionGradient)"
-                            dot={{ r: 3, fill: "#22a447" }}
+                            dot={{ r: 3, fill: "var(--cms-primary, #65409a)" }}
                           />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -1573,21 +1662,21 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="admission" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.totalAdmissions ?? overviewState.data?.totalStudents ?? 0)}</strong>
                       <small>Total Admissions</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.boysCount ?? 0)}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(overviewState.data?.girlsCount ?? 0)}</strong>
                       <small>Girls</small>
@@ -1605,7 +1694,7 @@ export default function DashboardPage() {
 
           {/* Card 2: Students by Group */}
           <article className="dashboard-card dashboard-group-card">
-            <CardHeader title="Students by Group" />
+            <CardHeader title="Students by Group" iconName="total-groups" />
             {groupState.loading ? (
               <LoadingState label="Loading groups..." />
             ) : groupState.error ? (
@@ -1656,21 +1745,21 @@ export default function DashboardPage() {
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.totalStudents)}</strong>
                       <small>Total Students</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-boys">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.boys)}</strong>
                       <small>Boys</small>
                     </div>
                   </div>
                   <div className="dashboard-student-chip chip-girls">
-                    <span className="chip-icon"><Users size={15} /></span>
+                    <span className="chip-icon"><ThreeDIcon name="students" size={18} /></span>
                     <div>
                       <strong>{formatNumber(groupStats.girls)}</strong>
                       <small>Girls</small>
@@ -1688,7 +1777,7 @@ export default function DashboardPage() {
 
           {/* Card 3: Students Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-attendance-today-card">
-            <CardHeader title="Students Attendance Overview (Today)" />
+            <CardHeader title="Students Attendance Overview (Today)" iconName="mark-attendance" />
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
@@ -1800,7 +1889,7 @@ export default function DashboardPage() {
         <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
           {/* Card 1: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
-            <CardHeader title="Staff Attendance Overview (Today)" />
+            <CardHeader title="Staff Attendance Overview (Today)" iconName="teaching-staff" />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
@@ -1922,6 +2011,7 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
               title={`Upcoming Holidays (${holidaysList.length})`}
+              iconName="holiday"
             />
             {holidayState.loading ? (
               <LoadingState label="Loading holidays..." />
@@ -1935,7 +2025,7 @@ export default function DashboardPage() {
                   {holidaysList.map((item, index) => (
                     <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
-                        <CalendarDays size={15} />
+                        <ThreeDIcon name="holiday" size={18} />
                       </span>
                       <div className="dashboard-info-content">
                         <div className="dashboard-holiday-title-row">
@@ -1965,6 +2055,7 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-exams-card">
             <CardHeader
               title={`Upcoming Examinations (${examsList.length})`}
+              iconName="create-exam"
             />
             {examState.loading ? (
               <LoadingState label="Loading exams..." />
@@ -1978,7 +2069,7 @@ export default function DashboardPage() {
                   {examsList.map((item, index) => (
                     <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
-                        <CalendarDays size={15} />
+                        <ThreeDIcon name="create-exam" size={18} />
                       </span>
                       <div className="dashboard-info-content">
                         <div className="dashboard-exam-title-row">

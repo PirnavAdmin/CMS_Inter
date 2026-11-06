@@ -138,7 +138,29 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return null;
-            var t = await _repository.GetByCodeAsync(templateCode.Trim(), campusId, ct);
+            var code = templateCode.Trim();
+            var t = await _repository.GetByCodeAsync(code, campusId, ct);
+            if (t == null)
+            {
+                var alias = code.ToUpperInvariant().Replace("-", "_") switch
+                {
+                    "BONAFIDE_CERT" or "BONAFIDE" or "CERTIFICATE_BONAFIDE" => "BC",
+                    "CONDUCT_CERT" or "CONDUCT" or "CERTIFICATE_CONDUCT" => "CC",
+                    "STUDY_CERT" or "STUDY" or "CERTIFICATE_STUDY" => "SC",
+                    "TRANSFER_CERT" or "TRANSFER" or "CERTIFICATE_TRANSFER" => "TC",
+                    "CUSTOM_CERT" or "OTHER_CERT" or "OTHER" or "CERTIFICATE_OTHERS" => "OC",
+                    "BC" => "BONAFIDE_CERT",
+                    "CC" => "CONDUCT_CERT",
+                    "SC" => "STUDY_CERT",
+                    "TC" => "TRANSFER_CERT",
+                    "OC" => "CUSTOM_CERT",
+                    _ => null
+                };
+                if (!string.IsNullOrEmpty(alias))
+                {
+                    t = await _repository.GetByCodeAsync(alias, campusId, ct);
+                }
+            }
             return t == null ? null : MapToDto(t);
         }
 
@@ -345,6 +367,9 @@ namespace CollegeManagement.API.Services.Implementations
                 ["{{academic_level}}"] = academicLevel,
                 ["{{group_name}}"] = groupName,
                 ["{{section_name}}"] = sectionName,
+                ["{{section}}"] = sectionName,
+                ["{{group}}"] = groupName,
+                ["{{custom_body}}"] = !string.IsNullOrWhiteSpace(request.Remarks) ? request.Remarks : string.Empty,
                 ["{{academic_year}}"] = academicYear,
                 ["{{dob}}"] = dob,
                 ["{{date_of_birth}}"] = dob,

@@ -1,0 +1,195 @@
+.get-in-touch-backdrop {
+  position: fixed;
+  z-index: 19999;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  scrollbar-width: none;
+  padding: 24px;
+  background: rgba(20, 30, 22, .48);
+  -webkit-backdrop-filter: blur(5px);
+  backdrop-filter: blur(5px);
+  animation: get-in-touch-backdrop-in .2s ease both;
+}
+.get-in-touch-dialog {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(280px, .58fr) minmax(0, 1fr);
+  width: min(960px, 100%);
+  height: min(690px, calc(100dvh - 80px));
+  max-height: calc(100dvh - 80px);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  scrollbar-width: none;
+  border: 1px solid rgba(255, 255, 255, .82);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(12, 29, 18, .32);
+  animation: get-in-touch-dialog-in .24s cubic-bezier(.2, .75, .3, 1) both;
+  outline: none;
+}
+.get-in-touch-backdrop.is-closing { animation: get-in-touch-backdrop-out .19s ease both; }
+.get-in-touch-dialog.is-closing { animation: get-in-touch-dialog-out .19s ease both; }
+.get-in-touch-close {
+  position: absolute;
+  z-index: 3;
+  top: 13px;
+  right: 13px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #e4e9e1;
+  border-radius: 50%;
+  color: #344332;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 2px 9px rgba(26, 42, 28, .08);
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+.get-in-touch-close:hover { background: #edf4e8; transform: rotate(5deg); }
+.get-in-touch-close:focus-visible, .get-in-touch-submit:focus-visible { outline: 3px solid rgba(86, 128, 58, .35); outline-offset: 3px; }
+.get-in-touch-aside {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 32px clamp(25px, 3vw, 42px);
+  background: linear-gradient(150deg, #e5f0dc 0%, #f5f9ef 68%, #e8f2e1 100%);
+}
+.get-in-touch-aside::after { position: absolute; right: -63px; bottom: -98px; width: 220px; height: 250px; border-radius: 54% 46% 0 0; background: rgba(181, 210, 165, .25); content: ""; transform: rotate(-23deg); }
+.get-in-touch-logo { position: relative; z-index: 1; width: min(208px, 78%); height: 48px; flex: 0 0 48px; object-fit: contain; object-position: left center; }
+.get-in-touch-script { position: relative; z-index: 1; margin-top: 18px; color: #557d48; font-family: Georgia, "Times New Roman", serif; font-size: clamp(25px, 2.5vw, 32px); font-style: italic; }
+.get-in-touch-aside h2 { position: relative; z-index: 1; max-width: 330px; margin: 5px 0 12px; color: #1d3021; font-family: Georgia, "Times New Roman", serif; font-size: clamp(30px, 3vw, 39px); line-height: 1.04; letter-spacing: -.035em; }
+.get-in-touch-aside h2 em { display: block; color: #5b844a; font-style: normal; }
+.get-in-touch-aside > p { position: relative; z-index: 1; max-width: 360px; margin: 0; color: #526151; font-size: 14px; line-height: 1.6; }
+.get-in-touch-contact-list { position: relative; z-index: 1; display: grid; gap: 15px; margin-top: 22px; }
+.get-in-touch-contact-list > a, .get-in-touch-contact-list > div { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.get-in-touch-contact-list > a > span:first-child, .get-in-touch-contact-list > div > span:first-child { display: grid; width: 46px; height: 46px; place-items: center; border: 1px solid rgba(82, 126, 66, .18); border-radius: 50%; color: #fff; background: #5c844d; box-shadow: 0 7px 16px rgba(57, 94, 48, .18); }
+.get-in-touch-contact-list > a:hover > span:first-child { background: #426b37; }
+.get-in-touch-contact-list > a > span:last-child, .get-in-touch-contact-list > div > span:last-child { display: grid; min-width: 0; gap: 3px; }
+.get-in-touch-contact-list strong { color: #253628; font-size: 12px; }
+.get-in-touch-contact-list b { overflow-wrap: anywhere; color: #253628; font-size: 13px; font-weight: 700; line-height: 1.35; }
+.get-in-touch-campus { position: relative; z-index: 1; display: block; width: 100%; height: clamp(105px, 16vh, 158px); flex: 0 0 auto; margin-top: auto; border-radius: 12px 12px 4px 4px; object-fit: cover; object-position: center 56%; -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, .22) 18%, #000 58%); mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, .22) 18%, #000 58%); }
+.get-in-touch-form-panel { min-width: 0; overflow: hidden; padding: 38px clamp(28px, 3vw, 42px) 24px; background: #fff; }
+.get-in-touch-form-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-right: 42px; }
+.get-in-touch-form-heading > span { display: grid; width: 56px; height: 56px; flex: 0 0 56px; place-items: center; border-radius: 50%; color: #527c43; background: #eef5e9; }
+.get-in-touch-form-heading h3 { margin: 0 0 4px; color: #1d3026; font-size: clamp(21px, 2vw, 25px); letter-spacing: -.025em; }
+.get-in-touch-form-heading p { margin: 0; color: #5d665f; font-size: 14px; line-height: 1.5; }
+.get-in-touch-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; column-gap: 18px; row-gap: 10px; }
+.get-in-touch-control { display: grid; min-width: 0; align-content: start; gap: 7px; }
+.get-in-touch-control > label { margin: 0; color: #29322b; font-size: 13px; font-weight: 750; }
+.get-in-touch-control > label i { color: #527c43; font-style: normal; }
+.get-in-touch-control.is-full { grid-column: 1 / -1; }
+.get-in-touch-field { position: relative; min-width: 0; }
+.get-in-touch-field > svg { position: absolute; z-index: 1; top: 14px; left: 13px; color: #628158; pointer-events: none; }
+.get-in-touch-field input, .get-in-touch-field select, .get-in-touch-field textarea { display: block; width: 100%; min-height: 42px; box-sizing: border-box; padding: 9px 12px 9px 39px; border: 1px solid #d7ddd7; border-radius: 10px; color: #26332a; background: #fff; font: inherit; font-size: 13px; transition: border-color .16s ease, box-shadow .16s ease, background .16s ease; }
+.get-in-touch-field select { appearance: auto; color: #6b746c; }
+.get-in-touch-field input::placeholder, .get-in-touch-field textarea::placeholder { color: #909790; }
+.get-in-touch-field textarea { min-height: 70px; padding-top: 11px; resize: vertical; }
+.get-in-touch-field:focus-within input, .get-in-touch-field:focus-within select, .get-in-touch-field:focus-within textarea { border-color: #75a267; outline: 0; background: #fcfefb; box-shadow: 0 0 0 3px rgba(103, 151, 84, .14); }
+.get-in-touch-field [aria-invalid="true"] { border-color: #bd5a55; }
+.get-in-touch-field:has(textarea) > svg { top: 14px; }
+.get-in-touch-error { display: block; margin: 4px 1px 2px; color: #a53d38; font-size: 11px; line-height: 1.4; }
+.get-in-touch-demo-note, .get-in-touch-success, .get-in-touch-submit { grid-column: 1 / -1; }
+.get-in-touch-demo-note { display: flex; align-items: center; gap: 11px; margin: 2px 0 0; padding: 9px 12px; border-radius: 11px; color: #45643c; background: #f0f6ec; }
+.get-in-touch-demo-note > svg { flex: 0 0 auto; }
+.get-in-touch-demo-note span { display: grid; gap: 2px; }
+.get-in-touch-demo-note strong { font-size: 12px; }
+.get-in-touch-demo-note small { color: #62715f; font-size: 11px; line-height: 1.4; }
+.get-in-touch-success { margin: 0; padding: 11px 13px; border: 1px solid #c8ddbd; border-radius: 10px; color: #365a2d; background: #f2f8ee; font-size: 13px; line-height: 1.5; }
+.get-in-touch-submit { display: flex; min-height: 46px; align-items: center; justify-content: center; gap: 10px; margin-top: 1px; border: 0; border-radius: 10px; color: #fff; background: linear-gradient(100deg, #648e54, #527e46); box-shadow: 0 8px 17px rgba(67, 108, 53, .18); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+.get-in-touch-submit:hover { background: linear-gradient(100deg, #557d48, #416c38); box-shadow: 0 11px 22px rgba(67, 108, 53, .24); transform: translateY(-1px); }
+.get-in-touch-direct { margin: 8px 0 0; color: #747d75; font-size: 12px; text-align: center; }
+.get-in-touch-direct a { color: #527e46; font-weight: 800; text-decoration: none; }
+.get-in-touch-direct a:hover { text-decoration: underline; }
+
+@keyframes get-in-touch-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes get-in-touch-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes get-in-touch-dialog-in { from { opacity: 0; transform: translateY(10px) scale(.975); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes get-in-touch-dialog-out { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(7px) scale(.985); } }
+@media (max-width: 850px) {
+  .get-in-touch-backdrop { padding: 18px; }
+  .get-in-touch-dialog { grid-template-columns: minmax(230px, .58fr) minmax(0, 1fr); max-height: calc(100dvh - 36px); }
+  .get-in-touch-aside { padding: 25px 24px; }
+  .get-in-touch-form-panel { padding: 38px 27px 22px; }
+  .get-in-touch-form { column-gap: 13px; }
+}
+@media (max-width: 640px) {
+  .get-in-touch-backdrop { display: block; overflow-y: auto; padding: 10px; }
+  .get-in-touch-dialog { display: block; width: 100%; height: auto; max-height: calc(100dvh - 20px); overflow-y: auto; border-radius: 18px; scrollbar-width: none; }
+  .get-in-touch-close { position: sticky; top: 9px; float: right; margin: 9px 9px -49px 0; }
+  .get-in-touch-aside { min-height: 0; padding: 20px 20px 19px; }
+  .get-in-touch-logo { width: 145px; height: 42px; }
+  .get-in-touch-script { margin-top: 16px; font-size: 25px; }
+  .get-in-touch-aside h2 { max-width: 100%; margin: 4px 0 8px; padding-right: 38px; font-size: 29px; }
+  .get-in-touch-aside > p { max-width: 100%; padding-right: 4px; font-size: 13px; }
+  .get-in-touch-contact-list { grid-template-columns: 1fr; gap: 10px; margin-top: 15px; padding-bottom: 0; }
+  .get-in-touch-contact-list > a, .get-in-touch-contact-list > div { grid-template-columns: 38px minmax(0, 1fr); gap: 9px; }
+  .get-in-touch-contact-list > a > span:first-child, .get-in-touch-contact-list > div > span:first-child { width: 38px; height: 38px; }
+  .get-in-touch-contact-list strong { font-size: 11px; }
+  .get-in-touch-contact-list b { font-size: 12px; }
+  .get-in-touch-campus { width: 100%; height: 120px; margin-top: 15px; }
+  .get-in-touch-form-panel { overflow: visible; padding: 23px 20px 20px; }
+  .get-in-touch-form-heading { gap: 12px; margin-bottom: 16px; padding-right: 0; }
+  .get-in-touch-form-heading > span { width: 45px; height: 45px; flex-basis: 45px; }
+  .get-in-touch-form-heading h3 { font-size: 20px; }
+  .get-in-touch-form-heading p { font-size: 12px; }
+  .get-in-touch-form { column-gap: 10px; row-gap: 5px; }
+  .get-in-touch-control > label { font-size: 12px; }
+  .get-in-touch-field input, .get-in-touch-field select { min-height: 45px; padding-left: 34px; font-size: 12px; }
+  .get-in-touch-field > svg { top: 13px; left: 11px; width: 15px; height: 15px; }
+  .get-in-touch-field textarea { min-height: 82px; padding-left: 34px; font-size: 12px; }
+  .get-in-touch-submit { min-height: 50px; }
+}
+@media (max-width: 480px) {
+  .get-in-touch-form { grid-template-columns: 1fr; }
+  .get-in-touch-control, .get-in-touch-control.is-full, .get-in-touch-demo-note, .get-in-touch-success, .get-in-touch-submit { grid-column: 1; }
+}
+.get-in-touch-backdrop *, .get-in-touch-backdrop { scrollbar-width: none; -ms-overflow-style: none; }
+.get-in-touch-backdrop::-webkit-scrollbar, .get-in-touch-backdrop *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+html:has(.get-in-touch-backdrop), body:has(.get-in-touch-backdrop) { overflow: hidden !important; }
+@media (max-height: 700px) and (min-width: 641px) {
+  .get-in-touch-backdrop { padding: 12px; }
+  .get-in-touch-dialog { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  .get-in-touch-aside { padding: 17px 24px; }
+  .get-in-touch-logo { height: 36px; flex-basis: 36px; }
+  .get-in-touch-script { margin-top: 8px; font-size: 24px; }
+  .get-in-touch-aside h2 { margin: 3px 0 6px; font-size: 29px; }
+  .get-in-touch-aside > p { font-size: 12px; line-height: 1.4; }
+  .get-in-touch-contact-list { gap: 8px; margin-top: 10px; }
+  .get-in-touch-contact-list > a, .get-in-touch-contact-list > div { grid-template-columns: 36px minmax(0, 1fr); gap: 9px; }
+  .get-in-touch-contact-list > a > span:first-child, .get-in-touch-contact-list > div > span:first-child { width: 36px; height: 36px; }
+  .get-in-touch-contact-list b { font-size: 12px; }
+  .get-in-touch-campus { height: 74px; }
+  .get-in-touch-form-panel { padding: 20px 28px 10px; }
+  .get-in-touch-form-heading { gap: 10px; margin-bottom: 10px; }
+  .get-in-touch-form-heading > span { width: 42px; height: 42px; flex-basis: 42px; }
+  .get-in-touch-form-heading h3 { font-size: 20px; }
+  .get-in-touch-form-heading p { font-size: 12px; }
+  .get-in-touch-form { row-gap: 6px; }
+  .get-in-touch-control { gap: 4px; }
+  .get-in-touch-control > label { font-size: 12px; }
+  .get-in-touch-field input, .get-in-touch-field select { min-height: 38px; padding-block: 7px; }
+  .get-in-touch-field > svg { top: 11px; }
+  .get-in-touch-field textarea { min-height: 54px; padding-top: 8px; }
+  .get-in-touch-demo-note { padding: 6px 10px; }
+  .get-in-touch-demo-note small { font-size: 10px; }
+  .get-in-touch-submit { min-height: 40px; }
+  .get-in-touch-direct { margin-top: 4px; }
+}
+@media (max-height: 520px) and (min-width: 641px) {
+  .get-in-touch-campus { display: none; }
+  .get-in-touch-contact-list { gap: 6px; margin-top: 8px; }
+  .get-in-touch-aside h2 { font-size: 25px; }
+  .get-in-touch-form-heading { margin-bottom: 7px; }
+  .get-in-touch-field textarea { min-height: 42px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .get-in-touch-backdrop, .get-in-touch-dialog { animation-duration: .01ms !important; }
+  .get-in-touch-close, .get-in-touch-field input, .get-in-touch-field select, .get-in-touch-field textarea, .get-in-touch-submit { transition-duration: .01ms !important; }
+}

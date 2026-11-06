@@ -87,14 +87,41 @@
   color: var(--cms-text);
 }
 [data-theme="dark"] option { background: var(--cms-surface); color: var(--cms-text); }
-@media (max-width: 1200px) {
-  .cms-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1024px) {
+  .cms-form-grid.cols-3,
+  .cms-form-grid.cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cms-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .cms-form-grid,
   .cms-form-grid.cols-3,
+  .cms-form-grid.cols-4,
   .cms-filters {
     grid-template-columns: 1fr;
   }
-  .cms-form-actions .cms-btn { flex: 1; justify-content: center; }
+  .cms-form-actions {
+    width: 100%;
+  }
+  .cms-form-actions .cms-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+@media (max-width: 480px) {
+  .cms-field label {
+    font-size: 12px;
+  }
+  .cms-field input,
+  .cms-field select,
+  .cms-field textarea {
+    font-size: 13px;
+  }
+  .cms-form-actions .cms-btn {
+    width: 100%;
+    flex: 1 1 100%;
+  }
 }

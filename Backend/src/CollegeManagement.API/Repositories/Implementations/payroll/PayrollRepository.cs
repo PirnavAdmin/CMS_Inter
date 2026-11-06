@@ -1,18 +1,96 @@
 ﻿using System.Data;
+using System.Data.Common;
 using System.Text.RegularExpressions;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations.Payroll
 {
     public class PayrollRepository : IPayrollRepository
     {
-        private readonly IDbConnection _dbConnection;
+        private readonly AppDbContext? _context;
+        private readonly IDbConnection? _rawConnection;
+
+        public PayrollRepository(AppDbContext context)
+        {
+            _context = context;
+        }
 
         public PayrollRepository(IDbConnection dbConnection)
         {
-            _dbConnection = dbConnection;
+            _rawConnection = dbConnection;
+        }
+
+        public PayrollRepository(AppDbContext context, IDbConnection dbConnection)
+        {
+            _context = context;
+            _rawConnection = dbConnection;
+        }
+
+        private async Task<IDbConnection> GetOpenConnectionAsync()
+        {
+            if (_context != null)
+            {
+                var conn = _context.Database.GetDbConnection();
+                if (conn.State == ConnectionState.Broken || conn.State == ConnectionState.Closed)
+                {
+                    try { await conn.CloseAsync(); } catch { }
+                    await _context.Database.OpenConnectionAsync();
+                }
+                else if (conn.State != ConnectionState.Open)
+                {
+                    await _context.Database.OpenConnectionAsync();
+                }
+                return conn;
+            }
+
+            if (_rawConnection != null)
+            {
+                if (_rawConnection.State != ConnectionState.Open)
+                {
+                    if (_rawConnection is DbConnection dbConn)
+                        await dbConn.OpenAsync();
+                    else
+                        _rawConnection.Open();
+                }
+                return _rawConnection;
+            }
+
+            throw new InvalidOperationException("No database connection available.");
+        }
+
+        private async Task<T> ExecuteWithRetryAsync<T>(Func<IDbConnection, Task<T>> queryFunc)
+        {
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await queryFunc(conn);
+            }
+            catch (Exception ex) when (_context != null && (ex is MySqlConnector.MySqlException || ex.Message.Contains("MySQL hosts") || ex.Message.Contains("Fatal error")))
+            {
+                var conn = _context.Database.GetDbConnection();
+                try { await conn.CloseAsync(); } catch { }
+                await _context.Database.OpenConnectionAsync();
+                return await queryFunc(conn);
+            }
+        }
+
+        private Task<T> QuerySingleAsync<T>(string sql, object? param = null, CommandType commandType = CommandType.StoredProcedure)
+        {
+            return ExecuteWithRetryAsync(conn => conn.QuerySingleAsync<T>(sql, param, commandType: commandType));
+        }
+
+        private Task<IEnumerable<T>> QueryAsync<T>(string sql, object? param = null, CommandType commandType = CommandType.StoredProcedure)
+        {
+            return ExecuteWithRetryAsync(conn => conn.QueryAsync<T>(sql, param, commandType: commandType));
+        }
+
+        private Task<T?> QueryFirstOrDefaultAsync<T>(string sql, object? param = null, CommandType commandType = CommandType.StoredProcedure)
+        {
+            return ExecuteWithRetryAsync(conn => conn.QueryFirstOrDefaultAsync<T>(sql, param, commandType: commandType));
         }
 
 
@@ -49,7 +127,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 request.InsuranceOtherDeduction);
             parameters.Add("p_Status", request.Status);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollSalaryStructure_Create",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -65,7 +143,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
 
-            return await _dbConnection.QueryAsync<SalaryStructureDto>(
+            return await QueryAsync<SalaryStructureDto>(
                 "sp_PayrollSalaryStructure_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -78,8 +156,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
             parameters.Add("p_Id", id);
 
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<SalaryStructureDto>(
+            return await QueryFirstOrDefaultAsync<SalaryStructureDto>(
                     "sp_PayrollSalaryStructure_GetById",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -120,7 +197,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", request.Status);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollSalaryStructure_Update",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -135,7 +212,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Id", id);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollSalaryStructure_Delete",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -157,7 +234,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Search", search);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<PayrollEmployeeDto>(
+            return await QueryAsync<PayrollEmployeeDto>(
                 "sp_PayrollEmployee_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -173,7 +250,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<SalaryAssignmentDto>(
+            return await QueryAsync<SalaryAssignmentDto>(
                 "sp_PayrollStaffSalary_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -183,7 +260,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
-            return await _dbConnection.QueryFirstOrDefaultAsync<SalaryAssignmentDto>(
+            return await QueryFirstOrDefaultAsync<SalaryAssignmentDto>(
                 "sp_PayrollStaffSalary_GetById",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -208,7 +285,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_PANNumber", request.PANNumber ?? request.PanNumber);
             parameters.Add("p_UANNumber", request.UANNumber ?? request.UanNumber);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollStaffSalary_Assign",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -235,7 +312,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_UANNumber", request.UANNumber ?? request.UanNumber);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollStaffSalary_Update",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -250,7 +327,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Id", id);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollStaffSalary_Delete",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -268,7 +345,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollStaffSalary_UpdateStatus",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -291,7 +368,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 "p_PayrollYear",
                 request.PayrollYear);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollPayslip_Generate",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -317,7 +394,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                     request.PayrollYear);
 
                 var payslipId =
-                    await _dbConnection.QuerySingleAsync<int>(
+                    await QuerySingleAsync<int>(
                         "sp_PayrollPayslip_Generate",
                         parameters,
                         commandType: CommandType.StoredProcedure);
@@ -340,7 +417,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
 
             var affectedRows =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollPayslip_UpdateStatus",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -357,8 +434,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
             parameters.Add("p_PayslipId", payslipId);
 
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<PayslipEmailDetailsDto>(
+            return await QueryFirstOrDefaultAsync<PayslipEmailDetailsDto>(
                     "sp_PayrollPayslip_GetEmailDetails",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -425,7 +501,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Year", year);
             parameters.Add("p_Month", month);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<int?>(
+            return await QueryFirstOrDefaultAsync<int?>(
                 "sp_PayrollPayslip_ResolveId",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -449,7 +525,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Search", search);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<PayslipDto>(
+            return await QueryAsync<PayslipDto>(
                 "sp_PayrollPayslip_GetHistory",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -464,8 +540,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
             parameters.Add("p_PayslipId", payslipId);
 
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<PayslipDto>(
+            return await QueryFirstOrDefaultAsync<PayslipDto>(
                     "sp_PayrollPayslip_GetById",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -491,7 +566,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 request.EffectiveFrom.Date);
             parameters.Add("p_Reason", request.Reason);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollSalaryRevision_Create",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -510,8 +585,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection
-                .QueryAsync<SalaryRevisionDto>(
+            return await QueryAsync<SalaryRevisionDto>(
                     "sp_PayrollSalaryRevision_GetAll",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -528,7 +602,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_ApprovedBy", approvedBy);
 
             var result =
-                await _dbConnection.QuerySingleAsync<int>(
+                await QuerySingleAsync<int>(
                     "sp_PayrollSalaryRevision_Approve",
                     parameters,
                     commandType: CommandType.StoredProcedure);
@@ -553,7 +627,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_BonusYear", request.BonusYear);
             parameters.Add("p_Reason", request.Reason);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollBonus_Create",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -570,7 +644,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<BonusDto>(
+            return await QueryAsync<BonusDto>(
                 "sp_PayrollBonus_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -582,7 +656,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<BonusDto>(
+            return await QueryFirstOrDefaultAsync<BonusDto>(
                 "sp_PayrollBonus_GetById",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -597,7 +671,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_BonusId", bonusId);
             parameters.Add("p_ApprovedBy", approvedBy);
 
-            var result = await _dbConnection.QuerySingleAsync<int>(
+            var result = await QuerySingleAsync<int>(
                 "sp_PayrollBonus_Approve",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -622,7 +696,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_StartMonth", request.StartMonth);
             parameters.Add("p_StartYear", request.StartYear);
 
-            return await _dbConnection.QuerySingleAsync<int>(
+            return await QuerySingleAsync<int>(
                 "sp_PayrollAdvance_Create",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -639,7 +713,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_Status", status);
             parameters.Add("p_CampusId", campusId);
 
-            return await _dbConnection.QueryAsync<AdvanceDto>(
+            return await QueryAsync<AdvanceDto>(
                 "sp_PayrollAdvance_GetAll",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -650,7 +724,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
 
-            return await _dbConnection.QueryFirstOrDefaultAsync<AdvanceDto>(
+            return await QueryFirstOrDefaultAsync<AdvanceDto>(
                 "sp_PayrollAdvance_GetById",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -665,7 +739,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_AdvanceId", advanceId);
             parameters.Add("p_ApprovedBy", approvedBy);
 
-            var result = await _dbConnection.QuerySingleAsync<int>(
+            var result = await QuerySingleAsync<int>(
                 "sp_PayrollAdvance_Approve",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -680,7 +754,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             var parameters = new DynamicParameters();
             parameters.Add("p_StaffId", staffId);
 
-            return await _dbConnection.QueryAsync<AdvanceBalanceDto>(
+            return await QueryAsync<AdvanceBalanceDto>(
                 "sp_PayrollAdvance_GetBalance",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -695,7 +769,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_AdvanceId", advanceId);
 
-            return await _dbConnection.QueryAsync<AdvanceRepaymentDto>(
+            return await QueryAsync<AdvanceRepaymentDto>(
                 "sp_PayrollAdvance_GetRepaymentHistory",
                 parameters,
                 commandType: CommandType.StoredProcedure);
@@ -707,7 +781,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_PayrollYear", year);
 
-            return await _dbConnection.QuerySingleAsync<StaffPayrollSummaryDto>(
+            return await QuerySingleAsync<StaffPayrollSummaryDto>(
                 "sp_Payroll_GetStaffSummary", parameters,
                 commandType: CommandType.StoredProcedure);
         }
@@ -719,7 +793,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_PayrollMonth", month);
             parameters.Add("p_PayrollYear", year);
             parameters.Add("p_CampusId", campusId);
-            return await _dbConnection.QuerySingleAsync<MonthlyPayrollSummaryDto>(
+            return await QuerySingleAsync<MonthlyPayrollSummaryDto>(
                 "sp_Payroll_GetMonthlySummary", parameters,
                 commandType: CommandType.StoredProcedure);
         }
@@ -729,7 +803,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_PayslipId", payslipId);
-            return await _dbConnection.QueryAsync<PayslipAdvanceRepaymentDto>(
+            return await QueryAsync<PayslipAdvanceRepaymentDto>(
                 "sp_PayrollAdvance_GetByPayslip",
                 parameters,
                 commandType: CommandType.StoredProcedure);

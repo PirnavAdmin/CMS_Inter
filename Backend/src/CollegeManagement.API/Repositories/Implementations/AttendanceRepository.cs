@@ -51,11 +51,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", request.CampusId ?? 0);
-            parameters.Add("p_BoardId", request.BoardId ?? 0);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
-            parameters.Add("p_GroupId", request.GroupId ?? 0);
-            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_BoardId", (request.BoardId.HasValue && request.BoardId.Value > 0) ? request.BoardId.Value : (int?)null);
+            parameters.Add("p_AcademicYearId", (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) ? request.AcademicYearId.Value : (int?)null);
+            parameters.Add("p_AcademicLevelId", (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) ? request.AcademicLevelId.Value : (int?)null);
+            parameters.Add("p_GroupId", (request.GroupId.HasValue && request.GroupId.Value > 0) ? request.GroupId.Value : (int?)null);
+            parameters.Add("p_SectionId", (request.SectionId.HasValue && request.SectionId.Value > 0) ? request.SectionId.Value : (int?)null);
             parameters.Add("p_SubjectId", request.SubjectId ?? 0);
             parameters.Add("p_FacultyId", request.FacultyId ?? 0);
             parameters.Add("p_StudentId", request.StudentId ?? 0);
@@ -299,12 +299,12 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", request.CampusId ?? 0);
-            parameters.Add("p_BoardId", request.BoardId ?? 0);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
-            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_BoardId", (request.BoardId.HasValue && request.BoardId.Value > 0) ? request.BoardId.Value : (int?)null);
+            parameters.Add("p_AcademicYearId", (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) ? request.AcademicYearId.Value : (int?)null);
+            parameters.Add("p_AcademicLevelId", (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) ? request.AcademicLevelId.Value : (int?)null);
+            parameters.Add("p_GroupId", (request.GroupId.HasValue && request.GroupId.Value > 0) ? request.GroupId.Value : (int?)null);
             parameters.Add("p_ProgramId", request.ProgramId ?? 0);
-            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_SectionId", (request.SectionId.HasValue && request.SectionId.Value > 0) ? request.SectionId.Value : (int?)null);
             parameters.Add("p_StudentId", request.StudentId ?? 0);
             parameters.Add("p_AttendanceDate", date);
             parameters.Add("p_Session", request.Session.HasValue ? (int)request.Session.Value : 0);
@@ -334,11 +334,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             var json = JsonSerializer.Serialize(items);
             var parameters = new DynamicParameters();
             parameters.Add("p_AttendanceDate", date);
-            parameters.Add("p_BoardId", request.BoardId ?? 0);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
-            parameters.Add("p_GroupId", request.GroupId ?? 0);
-            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_BoardId", (request.BoardId.HasValue && request.BoardId.Value > 0) ? request.BoardId.Value : (int?)null);
+            parameters.Add("p_AcademicYearId", (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) ? request.AcademicYearId.Value : (int?)null);
+            parameters.Add("p_AcademicLevelId", (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) ? request.AcademicLevelId.Value : (int?)null);
+            parameters.Add("p_GroupId", (request.GroupId.HasValue && request.GroupId.Value > 0) ? request.GroupId.Value : (int?)null);
+            parameters.Add("p_SectionId", (request.SectionId.HasValue && request.SectionId.Value > 0) ? request.SectionId.Value : (int?)null);
             parameters.Add("p_UserId", userId ?? 0);
             parameters.Add("p_UserName", userName ?? "Admin");
             parameters.Add("p_ItemsJson", json);
@@ -357,12 +357,12 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", request.CampusId ?? 0);
-            parameters.Add("p_BoardId", request.BoardId ?? 0);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
-            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_BoardId", (request.BoardId.HasValue && request.BoardId.Value > 0) ? request.BoardId.Value : (int?)null);
+            parameters.Add("p_AcademicYearId", (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) ? request.AcademicYearId.Value : (int?)null);
+            parameters.Add("p_AcademicLevelId", (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) ? request.AcademicLevelId.Value : (int?)null);
+            parameters.Add("p_GroupId", (request.GroupId.HasValue && request.GroupId.Value > 0) ? request.GroupId.Value : (int?)null);
             parameters.Add("p_ProgramId", request.ProgramId ?? 0);
-            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_SectionId", (request.SectionId.HasValue && request.SectionId.Value > 0) ? request.SectionId.Value : (int?)null);
             parameters.Add("p_Month", request.Month ?? 0);
             parameters.Add("p_Year", request.Year ?? 0);
             parameters.Add("p_Threshold", (decimal)request.Threshold);
@@ -429,12 +429,12 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", request.CampusId ?? 0);
-            parameters.Add("p_BoardId", request.BoardId ?? 0);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_BoardId", (request.BoardId.HasValue && request.BoardId.Value > 0) ? request.BoardId.Value : (int?)null);
+            parameters.Add("p_AcademicYearId", (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) ? request.AcademicYearId.Value : (int?)null);
+            parameters.Add("p_AcademicLevelId", (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) ? request.AcademicLevelId.Value : (int?)null);
             parameters.Add("p_ProgramId", request.ProgramId ?? 0);
-            parameters.Add("p_GroupId", request.GroupId ?? 0);
-            parameters.Add("p_SectionId", request.SectionId ?? 0);
+            parameters.Add("p_GroupId", (request.GroupId.HasValue && request.GroupId.Value > 0) ? request.GroupId.Value : (int?)null);
+            parameters.Add("p_SectionId", (request.SectionId.HasValue && request.SectionId.Value > 0) ? request.SectionId.Value : (int?)null);
             parameters.Add("p_StudentId", request.StudentId ?? 0);
             parameters.Add("p_Month", targetMonth);
             parameters.Add("p_Year", targetYear);

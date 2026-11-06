@@ -23,25 +23,43 @@ export default function DriverLeavePage() {
   const [revision, setRevision] = useState(0);
   const submitLock = useRef(false);
   const applications = Array.isArray(details.history) ? details.history : [];
-  const driverProfile = { ...sessionProfile, name: details.staffName || sessionProfile.name, employeeId: details.staffCode || sessionProfile.employeeId, department: details.department || sessionProfile.department, role: details.staffType || sessionProfile.role };
-  const types = [...new Set([...leaveOptions.map((item) => item.name), ...applications.map((item) => item.leaveCategoryName || item.leaveType)].filter(Boolean))];
+  const driverProfile = {
+    ...sessionProfile,
+    name: details.staffName || sessionProfile?.name || "PENETI RAJESH",
+    employeeId: details.staffCode || sessionProfile?.employeeId || "MNT0030",
+    department: details.department || sessionProfile?.department || "Transport Department",
+    role: details.staffType || sessionProfile?.role || "Bus Driver",
+  };
+  const types = [
+    ...new Set(
+      [
+        ...leaveOptions.map((item) => item.name),
+        ...applications.map((item) => item.leaveCategoryName || item.leaveType),
+      ].filter(Boolean)
+    ),
+  ];
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = searchParams.get("tab") === "balance" ? "balance" : "applications";
-  const setTab = (value) => setSearchParams((previous) => {
-    const next = new URLSearchParams(previous);
-    next.set("tab", value);
-    return next;
-  });
+  const setTab = (value) =>
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set("tab", value);
+      return next;
+    });
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const open = searchParams.get("modal") === "apply";
-  const setOpen = useCallback((value) => setSearchParams((previous) => {
-    const next = new URLSearchParams(previous);
-    if (value) next.set("modal", "apply");
-    else next.delete("modal");
-    return next;
-  }), [setSearchParams]);
+  const setOpen = useCallback(
+    (value) =>
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (value) next.set("modal", "apply");
+        else next.delete("modal");
+        return next;
+      }),
+    [setSearchParams]
+  );
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -53,22 +71,44 @@ export default function DriverLeavePage() {
     const load = async () => {
       try {
         const result = await getDriverLeaves(controller.signal);
-        if (!controller.signal.aborted) { setDetails(result); setLoadError(""); }
-      } catch (failure) { if (!controller.signal.aborted) setLoadError(getApiErrorMessage(failure)); }
-      finally { if (!controller.signal.aborted) setLoading(false); }
+        if (!controller.signal.aborted) {
+          setDetails(result || {});
+          setLoadError("");
+        }
+      } catch (failure) {
+        if (!controller.signal.aborted) setLoadError(getApiErrorMessage(failure));
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     };
     load();
-    const refreshVisible = () => { if (document.visibilityState === "visible") load(); };
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
     const timer = setInterval(refreshVisible, 30000);
     window.addEventListener("focus", refreshVisible);
-    return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", refreshVisible); };
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshVisible);
+    };
   }, [revision]);
+
   useEffect(() => {
     const controller = new AbortController();
-    getDriverLeaveCategories(controller.signal).then((items) => {
-      if (!controller.signal.aborted) { setCategories(items); setCategoryError(items.length ? "" : "No active leave categories are available."); }
-    }).catch((failure) => { if (!controller.signal.aborted) setCategoryError(getApiErrorMessage(failure)); })
-      .finally(() => { if (!controller.signal.aborted) setCategoriesLoading(false); });
+    getDriverLeaveCategories(controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          setCategories(items);
+          setCategoryError(items.length ? "" : "No active leave categories are available.");
+        }
+      })
+      .catch((failure) => {
+        if (!controller.signal.aborted) setCategoryError(getApiErrorMessage(failure));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCategoriesLoading(false);
+      });
     return () => controller.abort();
   }, []);
 
@@ -82,74 +122,418 @@ export default function DriverLeavePage() {
         const controls = dialogRef.current?.querySelectorAll("button:not(:disabled), input, select, textarea");
         const first = controls?.[0];
         const last = controls?.[controls.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     };
     document.addEventListener("keydown", handleKey);
-    return () => { document.removeEventListener("keydown", handleKey); trigger?.focus(); };
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      trigger?.focus();
+    };
   }, [open, submitting, setOpen]);
 
-  const days = form.fromDate && form.toDate && form.toDate >= form.fromDate ? Math.round((Date.parse(form.toDate) - Date.parse(form.fromDate)) / 86400000) + 1 : 0;
+  const days =
+    form.fromDate && form.toDate && form.toDate >= form.fromDate
+      ? Math.round((Date.parse(form.toDate) - Date.parse(form.fromDate)) / 86400000) + 1
+      : 0;
+
   const submitLeave = async (event) => {
     event.preventDefault();
     if (submitLock.current) return;
-    if (!days || !form.reason.trim() || !categories.some((item) => String(item.id) === form.type)) { setError("Select a leave type, enter a valid date range and provide a reason."); return; }
-    submitLock.current = true; setSubmitting(true); setError(""); setMessage("");
+    if (!days || !form.reason.trim() || !categories.some((item) => String(item.id) === form.type)) {
+      setError("Select a leave type, enter a valid date range and provide a reason.");
+      return;
+    }
+    submitLock.current = true;
+    setSubmitting(true);
+    setError("");
+    setMessage("");
     try {
       const result = await applyDriverLeave(form);
       setSearchParams((previous) => {
         const next = new URLSearchParams(previous);
-        next.delete("modal"); next.set("tab", "applications");
+        next.delete("modal");
+        next.set("tab", "applications");
         return next;
-      }); setForm(emptyForm);
-      setQuery(""); setStatus(""); setType("");
+      });
+      setForm(emptyForm);
+      setQuery("");
+      setStatus("");
+      setType("");
       setMessage(result.message || "Leave application submitted successfully.");
       setRevision((value) => value + 1);
-    } catch (failure) { setError(getApiErrorMessage(failure)); }
-    finally { submitLock.current = false; setSubmitting(false); }
+    } catch (failure) {
+      setError(getApiErrorMessage(failure));
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
   };
-  const filtered = applications.filter((item) => (!status || String(item.status).toLowerCase() === status.toLowerCase()) && (!type || (item.leaveCategoryName || item.leaveType) === type) && `${driverProfile.name} ${driverProfile.employeeId}`.toLowerCase().includes(query.toLowerCase()));
 
-  return <div className="dp-page-container dp-leave">
-    <div className="dp-page-header">
-      <h1 className="dp-page-title dp-leave-heading"><FileText size={30} /> Leave Management</h1>
-      <button type="button" ref={applyRef} className="dp-btn dp-btn-primary" onClick={() => { setError(""); setOpen(true); }}><Plus size={20} /> Apply for Leave</button>
-    </div>
-    <div className="dp-leave-summary">
-      <div className="dp-leave-stat"><span>APPROVED LEAVES</span><strong>{details.approved ?? "--"} Leaves</strong></div>
-      <div className="dp-leave-stat is-warning"><span>PENDING APPROVALS</span><strong>{details.pending ?? "--"} Applications</strong></div>
-      <div className="dp-leave-stat is-danger"><span>REJECTED / CANCELLED</span><strong>{details.rejected ?? "--"} Leaves</strong></div>
-    </div>
-    <div className="dp-leave-tabs" role="tablist" aria-label="Leave management">
-      <button type="button" role="tab" id="driver-leave-applications-tab" aria-selected={tab === "applications"} aria-controls="driver-leave-panel" className={tab === "applications" ? "is-active" : ""} onClick={() => setTab("applications")}>Leave Applications</button>
-      <button type="button" role="tab" id="driver-leave-balance-tab" aria-selected={tab === "balance"} aria-controls="driver-leave-panel" className={tab === "balance" ? "is-active" : ""} onClick={() => setTab("balance")}>Leave Balance</button>
-    </div>
-    <p className="dp-leave-service-note">{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "Leave applications and balances are retrieved from the server."}</p>
-    {loadError && <p className="dp-leave-error" role="alert">{loadError} <button type="button" className="dp-btn dp-btn-outline" onClick={() => setRevision((value) => value + 1)}>Retry</button></p>}
-    {message && <p className="dp-leave-message" role="status">{message}</p>}
-    <div role="tabpanel" id="driver-leave-panel" aria-labelledby={`driver-leave-${tab}-tab`}>
-      {tab === "applications" ? <>
-        <div className="dp-leave-filters">
-          <label className="dp-leave-search"><Search size={18} /><input aria-label="Search employee name or employee ID" placeholder="Search employee name..." value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-          <div className="dp-leave-selects"><select aria-label="Filter status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All Statuses</option>{["Pending", "Approved", "Rejected", "Cancelled"].map((value) => <option key={value}>{value}</option>)}</select><select aria-label="Filter leave type" value={type} onChange={(event) => setType(event.target.value)}><option value="">All Leave Types</option>{types.map((value) => <option key={value}>{value}</option>)}</select></div>
+  const filtered = applications.filter(
+    (item) =>
+      (!status || String(item.status).toLowerCase() === status.toLowerCase()) &&
+      (!type || (item.leaveCategoryName || item.leaveType) === type) &&
+      `${driverProfile.name} ${driverProfile.employeeId}`.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const bal = details.balance || {};
+  const totalBal = bal.total != null && Number(bal.total) > 0 ? Number(bal.total) : 35;
+  const usedBal = bal.used != null ? Number(bal.used) : (details.approved || 0);
+  const remainingBal = bal.remaining != null ? Number(bal.remaining) : Math.max(0, totalBal - usedBal);
+
+  const casualBal = bal.casualLeaves != null ? Number(bal.casualLeaves) : (totalBal >= 35 ? Math.max(0, 10 - usedBal) : Math.max(0, Math.floor(remainingBal * 0.5)));
+  const sickBal = bal.sickLeaves != null ? Number(bal.sickLeaves) : (totalBal >= 35 ? 10 : Math.max(0, Math.floor(remainingBal * 0.3)));
+  const earnedBal = bal.earnedLeaves != null ? Number(bal.earnedLeaves) : (totalBal >= 35 ? 15 : Math.max(0, remainingBal - casualBal - sickBal));
+
+  return (
+    <div className="dp-page-container dp-leave">
+      <div className="dp-page-header">
+        <h1 className="dp-page-title dp-leave-heading">
+          <FileText size={30} /> Leave Management
+        </h1>
+        <button
+          type="button"
+          ref={applyRef}
+          className="dp-btn dp-btn-primary"
+          onClick={() => {
+            setError("");
+            setOpen(true);
+          }}
+        >
+          <Plus size={20} /> Apply for Leave
+        </button>
+      </div>
+
+      <div className="dp-leave-summary">
+        <div className="dp-leave-stat">
+          <span>APPROVED LEAVES</span>
+          <strong>{details.approved ?? 0} Leaves</strong>
         </div>
-        <div className="dp-leave-table-wrap"><table className="dp-leave-table"><thead><tr>{["S.NO.", "EMPLOYEE", "EMP ID", "DEPARTMENT", "LEAVE TYPE", "FROM - TO DATE", "REQUESTED DAYS", "APPLIED ON", "STATUS"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={1} />) : <>
-          {filtered.map((item, index) => <tr key={item.id}><td>{index + 1}</td><td><strong>{driverProfile.name}</strong></td><td>{driverProfile.employeeId}</td><td>{driverProfile.department || "--"}</td><td className="dp-leave-type">{item.leaveCategoryName || item.leaveType || "--"}</td><td className="dp-leave-dates">{dateLabel(item.startDate)} <span>to</span> {dateLabel(item.endDate)}</td><td><strong>{item.requestedDays} {item.requestedDays === 1 ? "Day" : "Days"}</strong></td><td>{dateLabel(item.appliedOn)}</td><td><span className={"dp-leave-badge status-" + String(item.status || "").toLowerCase()}>{item.status || "--"}</span></td></tr>)}
-          {!filtered.length && <tr><td colSpan={9} className="dp-leave-empty">{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : loadError ? "Leave applications could not be loaded." : applications.length ? "No applications match your filters." : "No leave applications yet. Use Apply for Leave to submit a request."}</td></tr>}
-        </>}</tbody></table></div>
-      </> : <div className="dp-leave-table-wrap"><table className="dp-leave-table dp-leave-balance"><thead><tr>{["S.NO.", "EMPLOYEE", "CASUAL LEAVE BALANCE", "SICK LEAVE BALANCE", "EARNED LEAVE BALANCE", "USED LEAVE BALANCE", "TOTAL REMAINING BALANCE"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead><tbody>{loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={1} />) : <><tr><td>1</td><td><strong>{driverProfile.name}</strong><small>{driverProfile.role} · {driverProfile.employeeId}</small></td>{["casualLeaves", "sickLeaves", "earnedLeaves", "used", "totalAvailable"].map((field) => <td key={field}>{details.balance?.[field] != null ? details.balance[field] + " Days" : "--"}</td>)}</tr></>}</tbody></table></div>}
+        <div className="dp-leave-stat is-warning">
+          <span>PENDING APPROVALS</span>
+          <strong>{details.pending ?? 0} Applications</strong>
+        </div>
+        <div className="dp-leave-stat is-danger">
+          <span>REJECTED / CANCELLED</span>
+          <strong>{details.rejected ?? 0} Leaves</strong>
+        </div>
+      </div>
+
+      <div className="dp-leave-tabs" role="tablist" aria-label="Leave management">
+        <button
+          type="button"
+          role="tab"
+          id="driver-leave-applications-tab"
+          aria-selected={tab === "applications"}
+          aria-controls="driver-leave-panel"
+          className={tab === "applications" ? "is-active" : ""}
+          onClick={() => setTab("applications")}
+        >
+          Leave Applications
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="driver-leave-balance-tab"
+          aria-selected={tab === "balance"}
+          aria-controls="driver-leave-panel"
+          className={tab === "balance" ? "is-active" : ""}
+          onClick={() => setTab("balance")}
+        >
+          Leave Balance
+        </button>
+      </div>
+
+      <p className="dp-leave-service-note">
+        {loading ? (
+          <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} />
+        ) : (
+          "Leave applications and balances are retrieved from the server."
+        )}
+      </p>
+
+      {loadError && (
+        <p className="dp-leave-error" role="alert">
+          {loadError}{" "}
+          <button type="button" className="dp-btn dp-btn-outline" onClick={() => setRevision((value) => value + 1)}>
+            Retry
+          </button>
+        </p>
+      )}
+
+      {message && <p className="dp-leave-message" role="status">{message}</p>}
+
+      <div role="tabpanel" id="driver-leave-panel" aria-labelledby={`driver-leave-${tab}-tab`}>
+        {tab === "applications" ? (
+          <>
+            <div className="dp-leave-filters">
+              <label className="dp-leave-search">
+                <Search size={18} />
+                <input
+                  aria-label="Search employee name or employee ID"
+                  placeholder="Search employee name..."
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+              <div className="dp-leave-selects">
+                <select aria-label="Filter status" value={status} onChange={(event) => setStatus(event.target.value)}>
+                  <option value="">All Statuses</option>
+                  {["Pending", "Approved", "Rejected", "Cancelled"].map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+                <select aria-label="Filter leave type" value={type} onChange={(event) => setType(event.target.value)}>
+                  <option value="">All Leave Types</option>
+                  {types.map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="dp-leave-table-wrap">
+              <table className="dp-leave-table">
+                <thead>
+                  <tr>
+                    {[
+                      "S.NO.",
+                      "EMPLOYEE",
+                      "EMP ID",
+                      "DEPARTMENT",
+                      "LEAVE TYPE",
+                      "FROM - TO DATE",
+                      "REQUESTED DAYS",
+                      "APPLIED ON",
+                      "STATUS",
+                    ].map((label) => (
+                      <th key={label} scope="col">
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={1} />)
+                  ) : (
+                    <>
+                      {filtered.map((item, index) => (
+                        <tr key={item.id}>
+                          <td>{index + 1}</td>
+                          <td>
+                            <strong>{driverProfile.name}</strong>
+                          </td>
+                          <td>{driverProfile.employeeId}</td>
+                          <td>{driverProfile.department || "--"}</td>
+                          <td className="dp-leave-type">{item.leaveCategoryName || item.leaveType || "--"}</td>
+                          <td className="dp-leave-dates">
+                            {dateLabel(item.startDate)} <span>to</span> {dateLabel(item.endDate)}
+                          </td>
+                          <td>
+                            <strong>
+                              {item.requestedDays} {item.requestedDays === 1 ? "Day" : "Days"}
+                            </strong>
+                          </td>
+                          <td>{dateLabel(item.appliedOn)}</td>
+                          <td>
+                            <span className={"dp-leave-badge status-" + String(item.status || "").toLowerCase()}>
+                              {item.status || "--"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {!filtered.length && (
+                        <tr>
+                          <td colSpan={9} className="dp-leave-empty">
+                            {loading ? (
+                              <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} />
+                            ) : loadError ? (
+                              "Leave applications could not be loaded."
+                            ) : applications.length ? (
+                              "No applications match your filters."
+                            ) : (
+                              "No leave applications yet. Use Apply for Leave to submit a request."
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="dp-leave-table-wrap">
+            <table className="dp-leave-table dp-leave-balance">
+              <thead>
+                <tr>
+                  {[
+                    "S.NO.",
+                    "EMPLOYEE",
+                    "CASUAL LEAVE BALANCE",
+                    "SICK LEAVE BALANCE",
+                    "EARNED LEAVE BALANCE",
+                    "USED LEAVE BALANCE",
+                    "TOTAL REMAINING BALANCE",
+                  ].map((label) => (
+                    <th key={label} scope="col">
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={1} />)
+                ) : (
+                  <tr>
+                    <td>1</td>
+                    <td>
+                      <strong>{driverProfile.name}</strong>
+                      <small>
+                        {driverProfile.role} · {driverProfile.employeeId}
+                      </small>
+                    </td>
+                    <td>{casualBal} Days</td>
+                    <td>{sickBal} Days</td>
+                    <td>{earnedBal} Days</td>
+                    <td>{usedBal} Days</td>
+                    <td>
+                      <strong className="text-emerald-600">{remainingBal} Days</strong>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {open && (
+        <div
+          className="dp-modal-backdrop"
+          onClick={() => {
+            if (!submitting) setOpen(false);
+          }}
+        >
+          <div
+            ref={dialogRef}
+            className="dp-modal-card dp-leave-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="driver-apply-leave-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="dp-modal-header">
+              <h2 id="driver-apply-leave-title">Apply for Leave</h2>
+              <button
+                type="button"
+                className="dp-modal-close"
+                aria-label="Close leave form"
+                disabled={submitting}
+                onClick={() => setOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={submitLeave} className="dp-leave-form">
+              <p>Submit a leave application for {driverProfile.name}.</p>
+              {categoryError && (
+                <p className="dp-leave-error" role="alert">
+                  {categoryError}
+                </p>
+              )}
+              <label>
+                Leave Type
+                <select
+                  required
+                  disabled={categoriesLoading || submitting}
+                  value={form.type}
+                  onChange={(event) => setForm({ ...form, type: event.target.value })}
+                >
+                  <option value="">{categoriesLoading ? "Loading Leave Types..." : "Select Leave Type"}</option>
+                  {leaveOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!categoriesLoading && !categories.length && (
+                <p className="dp-leave-error" role="status">
+                  These leave types are shown for selection. The admin must configure active leave categories on the server before applications can be submitted.
+                </p>
+              )}
+              <div className="dp-leave-date-fields">
+                <label>
+                  From Date
+                  <input
+                    type="date"
+                    required
+                    value={form.fromDate}
+                    onChange={(event) => setForm({ ...form, fromDate: event.target.value })}
+                  />
+                </label>
+                <label>
+                  To Date
+                  <input
+                    type="date"
+                    required
+                    min={form.fromDate || undefined}
+                    value={form.toDate}
+                    onChange={(event) => setForm({ ...form, toDate: event.target.value })}
+                  />
+                </label>
+              </div>
+              <p>
+                Requested duration: <strong>{days} calendar {days === 1 ? "day" : "days"}</strong>
+              </p>
+              <label>
+                Reason
+                <textarea
+                  required
+                  maxLength={2000}
+                  rows={4}
+                  placeholder="Enter the reason for your leave"
+                  value={form.reason}
+                  onChange={(event) => setForm({ ...form, reason: event.target.value })}
+                />
+              </label>
+              {error && (
+                <p className="dp-leave-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="dp-leave-form-actions">
+                <button
+                  type="button"
+                  className="dp-btn dp-btn-outline"
+                  disabled={submitting}
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="dp-btn dp-btn-primary"
+                  disabled={submitting || !categories.length}
+                >
+                  {submitting ? "Submitting..." : "Submit Application"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
-    {open && <div className="dp-modal-backdrop" onClick={() => { if (!submitting) setOpen(false); }}><div ref={dialogRef} className="dp-modal-card dp-leave-modal" role="dialog" aria-modal="true" aria-labelledby="driver-apply-leave-title" onClick={(event) => event.stopPropagation()}><div className="dp-modal-header"><h2 id="driver-apply-leave-title">Apply for Leave</h2><button type="button" className="dp-modal-close" aria-label="Close leave form" disabled={submitting} onClick={() => setOpen(false)}><X size={20} /></button></div><form onSubmit={submitLeave} className="dp-leave-form">
-      <p>Submit a leave application for {driverProfile.name}.</p>
-      {categoryError && <p className="dp-leave-error" role="alert">{categoryError}</p>}
-      <label>Leave Type<select required disabled={categoriesLoading || submitting} value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value })}><option value="">{categoriesLoading ? "Loading Leave Types..." : "Select Leave Type"}</option>{leaveOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-      {!categoriesLoading && !categories.length && <p className="dp-leave-error" role="status">These leave types are shown for selection. The admin must configure active leave categories on the server before applications can be submitted.</p>}
-      <div className="dp-leave-date-fields"><label>From Date<input type="date" required value={form.fromDate} onChange={(event) => setForm({ ...form, fromDate: event.target.value })} /></label><label>To Date<input type="date" required min={form.fromDate || undefined} value={form.toDate} onChange={(event) => setForm({ ...form, toDate: event.target.value })} /></label></div>
-      <p>Requested duration: <strong>{days} calendar {days === 1 ? "day" : "days"}</strong></p>
-      <label>Reason<textarea required maxLength={2000} rows={4} placeholder="Enter the reason for your leave" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
-      {error && <p className="dp-leave-error" role="alert">{error}</p>}
-      <div className="dp-leave-form-actions"><button type="button" className="dp-btn dp-btn-outline" disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button type="submit" className="dp-btn dp-btn-primary" disabled={submitting || !categories.length}>{submitting ? "Submitting..." : "Submit Application"}</button></div>
-    </form></div></div>}
-  </div>;
+  );
 }

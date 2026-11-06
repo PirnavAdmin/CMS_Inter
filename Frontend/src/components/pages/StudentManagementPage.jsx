@@ -1,7 +1,10 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
+import { CheckCircle2, ChevronDown, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -105,6 +108,72 @@ const selectOptions = (items, idKeys, labelKeys) => list(items).map((item) => ({
   value: String(value(item, ...idKeys) ?? ""),
   label: String(value(item, ...labelKeys) ?? ""),
 })).filter((item) => item.value && item.label);
+
+function StudentSelect({ label, value, options = [], onChange, disabled = false, emptyLabel = `All ${label}s` }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef(null);
+
+  const selected = options.find((opt) => String(opt.value) === String(value));
+
+  useEffect(() => {
+    const handleOutsideClick = (event) => {
+      if (!root.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", handleOutsideClick);
+    return () => document.removeEventListener("pointerdown", handleOutsideClick);
+  }, []);
+
+  const choose = (val) => {
+    onChange(val);
+    setOpen(false);
+  };
+
+  return (
+    <div className="cms-field student-custom-select-field" ref={root} data-open={open}>
+      <span>{label}</span>
+      <div className="student-custom-select-wrap">
+        <button
+          type="button"
+          className="student-custom-select-trigger"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => !disabled && setOpen((prev) => !prev)}
+        >
+          <span className={selected ? "student-custom-select-value" : "student-custom-select-placeholder"}>
+            {selected ? selected.label : emptyLabel}
+          </span>
+          <ChevronDown className="student-custom-select-chevron" size={16} aria-hidden="true" />
+        </button>
+        {open && !disabled && (
+          <div className="student-custom-select-options" role="listbox">
+            <button
+              type="button"
+              role="option"
+              aria-selected={!value}
+              className={!value ? "is-active" : ""}
+              onClick={() => choose("")}
+            >
+              <strong>{emptyLabel}</strong>
+            </button>
+            {options.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                role="option"
+                aria-selected={String(item.value) === String(value)}
+                className={String(item.value) === String(value) ? "is-active" : ""}
+                onClick={() => choose(item.value)}
+              >
+                <strong>{item.label}</strong>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function StudentManagementPage() {
   const location = useLocation();
@@ -473,26 +542,21 @@ export default function StudentManagementPage() {
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
           ].map(([label, key, options, disabled]) => (
-            <label className="cms-field" key={key}>
-              <span>{label}</span>
-              <select
-                value={filters[key]}
-                onChange={(event) => updateFilter(key, event.target.value)}
-                disabled={disabled}
-              >
-                <option value="">All {label}s</option>
-                {options.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-            </label>
+            <StudentSelect
+              key={key}
+              label={label}
+              value={filters[key]}
+              options={options}
+              disabled={disabled}
+              onChange={(val) => updateFilter(key, val)}
+            />
           ))}
           </div>
         </div>
         <div className="student-management-search-row">
           <div className="cms-card-body student-management-toolbar">
             <label className="student-management-search">
-              <Search size={18} />
+              <ThreeDIcon name="search" size={18} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -501,9 +565,9 @@ export default function StudentManagementPage() {
             </label>
           </div>
           <div className="student-management-actions">
-            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><Download size={16} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
-            <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><FileUp size={16} /> Import Students</button>
-            <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}>Credentials</button>
+            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><ThreeDIcon name="excel" size={18} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
+            <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><ThreeDIcon name="upload" size={18} /> Import Students</button>
+            <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}><ThreeDIcon name="certificates" size={18} /> Credentials</button>
           </div>
         </div>
         <div className="cms-table-wrap student-management-table-wrap">
@@ -561,10 +625,10 @@ export default function StudentManagementPage() {
                             exportStudents("pdf", s);
                           }}
                         >
-                          <FileText size={16} />
+                          <ThreeDIcon name="pdf" size={18} />
                         </button>
                         <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
-                          <Eye size={16} />
+                          <ThreeDIcon name="view" size={18} />
                         </Link>
                         <button
                           type="button"
@@ -575,7 +639,7 @@ export default function StudentManagementPage() {
                             setFileAction({ kind: "document", student: s });
                           }}
                         >
-                          <Upload size={16} />
+                          <ThreeDIcon name="upload" size={18} />
                         </button>
                       </div>
                     </td>
@@ -591,16 +655,7 @@ export default function StudentManagementPage() {
             </tbody>
           </table>
         </div>
-        {!loading && <footer className="student-management-pagination">
-          <span>
-            Showing {rows.length ? (currentPage - 1) * pageSize + 1 : 0}-{rows.length ? Math.min((currentPage - 1) * pageSize + rows.length, studentTotalCount) : 0} of {studentTotalCount} students
-          </span>
-          <div className="student-management-pagination-actions">
-            <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
-            <span>Page {currentPage} of {totalPages}</span>
-            <button disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
-          </div>
-        </footer>}
+        {!loading && <AdminPagination currentPage={currentPage} totalRecords={studentTotalCount} pageSize={5} onPageChange={setPage} />}
       </section>
       {importOpen && (
         <Modal
@@ -663,7 +718,7 @@ export default function StudentManagementPage() {
             <section className="student-credentials-about" aria-label="About the Credential PDF">
               <h3>About the Credential PDF</h3>
               <ul>
-                {["Student Name", "Admission No / Login ID", "Academic Details", "Temporary Password", "First-login password change notice"].map((item) => <li key={item}><CheckCircle2 size={16} aria-hidden="true" />{item}</li>)}
+                {["Student Name", "Admission No / Login ID", "Academic Details", "Temporary Password", "First-login password change notice"].map((item) => <li key={item}><ThreeDIcon name="check" size={16} aria-hidden="true" />{item}</li>)}
               </ul>
             </section>
           </div>
@@ -688,5 +743,5 @@ function ImportValidation({ result, onCredentials, downloading }) {
   const total = value(result, "totalRows", "TotalRows", "totalCount", "TotalCount") ?? rows.length;
   const valid = value(result, "validRows", "ValidRows", "validCount", "ValidCount", "successfulRows", "SuccessfulRows") ?? "—";
   const invalid = value(result, "invalidRows", "InvalidRows", "invalidCount", "InvalidCount", "failedRows", "FailedRows") ?? "—";
-  return <div className="student-import-results"><div className="student-import-summary"><span>Total Rows <b>{total}</b></span><span>Valid Rows <b>{valid}</b></span><span>Invalid Rows <b>{invalid}</b></span></div>{rows.length ? <div className="cms-table-wrap"><table className="cms-table"><thead><tr><th>Row Number</th><th>Admission No</th><th>Student Name</th><th>Status</th><th>Errors</th></tr></thead><tbody>{rows.map((row, index) => <tr key={value(row, "rowNumber", "RowNumber", "row", "Row") ?? index}><td>{value(row, "rowNumber", "RowNumber", "row", "Row") ?? index + 1}</td><td>{value(row, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "—"}</td><td>{value(row, "studentName", "StudentName", "name", "Name") ?? "—"}</td><td>{value(row, "status", "Status", "isValid", "IsValid") === false ? "Invalid" : value(row, "status", "Status") ?? "Valid"}</td><td>{Array.isArray(value(row, "errors", "Errors")) ? value(row, "errors", "Errors").join(", ") : value(row, "errors", "Errors", "error", "Error") ?? "—"}</td></tr>)}</tbody></table></div> : null}{value(result, "importedRows", "ImportedRows", "success", "Success") ? <button className="cms-btn cms-btn-ghost" type="button" disabled={downloading} onClick={onCredentials}>{downloading ? "Downloading..." : "Download Credentials PDF"}</button> : null}</div>;
+  return <div className="student-import-results"><div className="student-import-summary"><span>Total Rows <b>{total}</b></span><span>Valid Rows <b>{valid}</b></span><span>Invalid Rows <b>{invalid}</b></span></div>{rows.length ? <div className="cms-table-wrap"><PaginatedTable className="cms-table"><thead><tr><th>Row Number</th><th>Admission No</th><th>Student Name</th><th>Status</th><th>Errors</th></tr></thead><tbody>{rows.map((row, index) => <tr key={value(row, "rowNumber", "RowNumber", "row", "Row") ?? index}><td>{value(row, "rowNumber", "RowNumber", "row", "Row") ?? index + 1}</td><td>{value(row, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "—"}</td><td>{value(row, "studentName", "StudentName", "name", "Name") ?? "—"}</td><td>{value(row, "status", "Status", "isValid", "IsValid") === false ? "Invalid" : value(row, "status", "Status") ?? "Valid"}</td><td>{Array.isArray(value(row, "errors", "Errors")) ? value(row, "errors", "Errors").join(", ") : value(row, "errors", "Errors", "error", "Error") ?? "—"}</td></tr>)}</tbody></PaginatedTable></div> : null}{value(result, "importedRows", "ImportedRows", "success", "Success") ? <button className="cms-btn cms-btn-ghost" type="button" disabled={downloading} onClick={onCredentials}>{downloading ? "Downloading..." : "Download Credentials PDF"}</button> : null}</div>;
 }

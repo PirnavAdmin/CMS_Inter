@@ -1,3 +1,5 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -46,6 +48,22 @@ import {
   CreditCard,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import campusHeroImg from "@/assets/campus-hero.jpg";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getAuthUser } from "@/features/authStorage.js";
@@ -256,71 +274,10 @@ const DEFAULT_HOSTEL_STAFF = [];
 function HostelPagination({
   currentPage,
   totalItems,
-  pageSize = 10,
+  pageSize = 5,
   onPageChange,
   itemLabel = "records",
-}) {
-  if (!totalItems || totalItems <= 0) return null;
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const currentPageClamped = Math.min(Math.max(1, currentPage), totalPages);
-  const startIndex = (currentPageClamped - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalItems);
-
-  const visiblePages = (() => {
-    if (totalPages <= 1) return [1];
-    if (totalPages === 2) return [1, 2];
-
-    let blockStart = Math.floor((currentPageClamped - 1) / 2) * 2 + 1;
-    if (blockStart >= totalPages) {
-      blockStart = Math.max(1, totalPages - 1);
-    }
-    const pages = [blockStart];
-    if (blockStart + 1 <= totalPages) {
-      pages.push(blockStart + 1);
-    }
-    return pages;
-  })();
-
-  return (
-    <div className="cms-pagination cms-hostel-pagination-attached">
-      <span className="cms-page-info">
-        Showing <strong>{startIndex + 1}</strong> to <strong>{endIndex}</strong> of <strong>{totalItems}</strong> {itemLabel}
-        {totalPages > 1 && (
-          <span style={{ marginLeft: 6, fontWeight: 500, color: "var(--cms-muted)" }}>
-            (Page {currentPageClamped} of {totalPages})
-          </span>
-        )}
-      </span>
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped <= 1}
-        onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
-      >
-        Prev
-      </button>
-      {visiblePages.map((p) => (
-        <button
-          key={p}
-          type="button"
-          className={`cms-page-btn ${p === currentPageClamped ? "is-active" : ""}`}
-          onClick={() => onPageChange(p)}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        type="button"
-        className="cms-page-btn"
-        disabled={currentPageClamped >= totalPages}
-        onClick={() => onPageChange(Math.min(totalPages, currentPageClamped + 1))}
-      >
-        Next
-      </button>
-    </div>
-  );
-}
+}) { return <AdminPagination className="cms-hostel-pagination-attached" currentPage={currentPage} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} unit={itemLabel} />; }
 
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
@@ -360,6 +317,10 @@ export default function HostelPage() {
   const [dashBlockSearch, setDashBlockSearch] = useState("");
   const [dashSelectedBlockId, setDashSelectedBlockId] = useState("");
   const [dashBlockPage, setDashBlockPage] = useState(1);
+  const [isDashRefreshing, setIsDashRefreshing] = useState(false);
+  const [dashLastUpdated, setDashLastUpdated] = useState(() =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
 
   // ── API-backed State Initialization ─────────────────────────────────
   const [blocks, setBlocks] = useState([]);
@@ -1347,7 +1308,7 @@ export default function HostelPage() {
   const [reportCategoryFilter, setReportCategoryFilter] = useState("");
   const [reportSearch, setReportSearch] = useState("");
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(10);
+  const [reportPageSize, setReportPageSize] = useState(5);
 
   useEffect(() => {
     setReportPage(1);
@@ -3897,7 +3858,7 @@ export default function HostelPage() {
       return String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch;
     });
 
-    const pageSize = 10;
+    const pageSize = 5;
     const totalPages = Math.ceil(filteredDashBlocks.length / pageSize) || 1;
     const currentBlocksPage = filteredDashBlocks.slice(
       (dashBlockPage - 1) * pageSize,
@@ -3925,7 +3886,7 @@ export default function HostelPage() {
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
-              <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
+              <ThreeDIcon name="building" size={24} />
               <span>Hostel Management Dashboard</span>
             </div>
             <p className="cms-dash-header-sub">
@@ -3951,7 +3912,7 @@ export default function HostelPage() {
           {/* Card 1: TOTAL HOSTELS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Building2 size={20} />
+              <ThreeDIcon name="building" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3968,7 +3929,7 @@ export default function HostelPage() {
           {/* Card 2: TOTAL CAPACITY */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <BedDouble size={20} />
+              <ThreeDIcon name="hostel" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3985,7 +3946,7 @@ export default function HostelPage() {
           {/* Card 3: OCCUPANCY RATE */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Clock size={20} />
+              <ThreeDIcon name="timetable" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4002,7 +3963,7 @@ export default function HostelPage() {
           {/* Card 4: OCCUPIED BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <Users size={20} />
+              <ThreeDIcon name="students" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4036,7 +3997,7 @@ export default function HostelPage() {
           {/* Card 6: HOSTELLERS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <UserCheck size={20} />
+              <ThreeDIcon name="staff" size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4575,7 +4536,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 blocks per page)
-    const blocksPerPage = 10;
+    const blocksPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / blocksPerPage));
     const currentPageClamped = Math.min(Math.max(1, blocksCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * blocksPerPage;
@@ -4596,7 +4557,7 @@ export default function HostelPage() {
             className="cms-btn cms-btn-primary"
             onClick={() => setModal({ isOpen: true, type: "block", mode: "add", data: null })}
           >
-            <Plus size={15} /> Add Block
+            <ThreeDIcon name="add" size={16} /> Add Block
           </button>
         </div>
         <div className="cms-card-body">
@@ -4647,7 +4608,7 @@ export default function HostelPage() {
                   ]);
                 }}
               >
-                <Download size={15} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -4738,7 +4699,7 @@ export default function HostelPage() {
                               title="View details"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "view", data: b })}
                             >
-                              <Eye size={14} />
+                              <ThreeDIcon name="view" size={16} />
                             </button>
                             <button
                               type="button"
@@ -4746,7 +4707,7 @@ export default function HostelPage() {
                               title="Edit block"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "edit", data: b })}
                             >
-                              <Edit3 size={14} />
+                              <ThreeDIcon name="edit" size={16} />
                             </button>
                             <button
                               type="button"
@@ -4754,7 +4715,7 @@ export default function HostelPage() {
                               title="Delete block"
                               onClick={() => handleDeleteBlock(b)}
                             >
-                              <Trash2 size={14} />
+                              <ThreeDIcon name="delete" size={16} />
                             </button>
                           </div>
                         </td>
@@ -4802,7 +4763,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 categories per page)
-    const categoriesPerPage = 10;
+    const categoriesPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / categoriesPerPage));
     const currentPageClamped = Math.min(Math.max(1, categoriesCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * categoriesPerPage;
@@ -4830,7 +4791,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "roomType", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <Plus size={16} /> Add Room Type
+            <ThreeDIcon name="add" size={16} /> Add Room Type
           </button>
         </div>
 
@@ -4894,7 +4855,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                   >
-                    <Eye size={13} />
+                    <ThreeDIcon name="view" size={16} />
                   </button>
                   <button
                     type="button"
@@ -4903,7 +4864,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                   >
-                    <Edit3 size={13} />
+                    <ThreeDIcon name="edit" size={16} />
                   </button>
                   <button
                     type="button"
@@ -4912,7 +4873,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => handleDeleteCategory(cat)}
                   >
-                    <Trash2 size={13} />
+                    <ThreeDIcon name="delete" size={16} />
                   </button>
                 </div>
               </div>
@@ -4983,7 +4944,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -5067,7 +5028,7 @@ export default function HostelPage() {
                           title="View category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                         >
-                          <Eye size={14} />
+                          <ThreeDIcon name="view" size={16} />
                         </button>
                         <button
                           type="button"
@@ -5075,7 +5036,7 @@ export default function HostelPage() {
                           title="Edit category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                         >
-                          <Edit3 size={14} />
+                          <ThreeDIcon name="edit" size={16} />
                         </button>
                         <button
                           type="button"
@@ -5083,7 +5044,7 @@ export default function HostelPage() {
                           title="Delete category"
                           onClick={() => handleDeleteCategory(cat)}
                         >
-                          <Trash2 size={14} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       </div>
                     </td>
@@ -5219,7 +5180,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested)
-    const roomsPerPage = 10;
+    const roomsPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / roomsPerPage));
     const currentPageClamped = Math.min(Math.max(1, roomsCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * roomsPerPage;
@@ -5249,7 +5210,7 @@ export default function HostelPage() {
               onClick={() => setModal({ isOpen: true, type: "room", mode: "add", data: null })}
               style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 20px", boxShadow: "0 4px 12px rgba(82, 110, 52, 0.2)" }}
             >
-              <Plus size={16} /> Add New Room
+              <ThreeDIcon name="add" size={16} /> Add New Room
             </button>
           </div>
         </div>
@@ -5547,7 +5508,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -5736,7 +5697,7 @@ export default function HostelPage() {
                             title="View details"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "view", data: { ...room, roomBeds, roomAllocs } })}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={16} />
                           </button>
                           <button
                             type="button"
@@ -5744,7 +5705,7 @@ export default function HostelPage() {
                             title="Edit room"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "edit", data: room })}
                           >
-                            <Edit3 size={14} />
+                            <ThreeDIcon name="edit" size={16} />
                           </button>
                           <button
                             type="button"
@@ -5752,7 +5713,7 @@ export default function HostelPage() {
                             title="Delete room"
                             onClick={() => handleDeleteRoom(room)}
                           >
-                            <Trash2 size={14} />
+                            <ThreeDIcon name="delete" size={16} />
                           </button>
                         </div>
                       </td>
@@ -5805,7 +5766,7 @@ export default function HostelPage() {
     const isHostelSelected = !filterHostelWarden || filterHostelWarden === "all" || Boolean(filterHostelWarden);
 
     // Pagination (10 wardens per page)
-    const wardensPerPage = 10;
+    const wardensPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / wardensPerPage));
     const currentPageClamped = Math.min(Math.max(1, wardensCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * wardensPerPage;
@@ -5829,7 +5790,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "warden", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <Plus size={16} /> Assign Warden
+            <ThreeDIcon name="add" size={16} /> Assign Warden
           </button>
         </div>
 
@@ -5903,7 +5864,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <Download size={14} /> Export
+                <ThreeDIcon name="download" size={16} /> Export
               </button>
             </div>
           </div>
@@ -6057,7 +6018,7 @@ export default function HostelPage() {
                           title="View details"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "view", data: w })}
                         >
-                          <Eye size={14} />
+                          <ThreeDIcon name="view" size={16} />
                         </button>
                         <button
                           type="button"
@@ -6065,7 +6026,7 @@ export default function HostelPage() {
                           title="Edit warden"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "edit", data: w })}
                         >
-                          <Edit3 size={14} />
+                          <ThreeDIcon name="edit" size={16} />
                         </button>
                         <button
                           type="button"
@@ -6073,7 +6034,7 @@ export default function HostelPage() {
                           title="Remove warden"
                           onClick={() => handleDeleteWarden(w)}
                         >
-                          <Trash2 size={14} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       </div>
                     </td>
@@ -6198,7 +6159,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested: Previous, 1, 2, Next)
-    const allocsPerPage = 10;
+    const allocsPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / allocsPerPage));
     const currentPageClamped = Math.min(Math.max(1, allocCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * allocsPerPage;
@@ -6223,7 +6184,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "allocation", mode: "add", data: null })}
             style={{ borderRadius: 9999, height: 36, padding: "0 18px", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            <Plus size={16} /> Allocate Room &amp; Bed
+            <ThreeDIcon name="add" size={16} /> Allocate Room &amp; Bed
           </button>
         </div>
 
@@ -6577,7 +6538,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const outpassPerPage = 10;
+    const outpassPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / outpassPerPage));
     const currentPageClamped = Math.min(Math.max(1, outpassCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * outpassPerPage;
@@ -6607,7 +6568,7 @@ export default function HostelPage() {
               gap: 6,
             }}
           >
-            <Plus size={16} /> Apply Outpass / Leave
+            <ThreeDIcon name="add" size={16} /> Apply Outpass / Leave
           </button>
         </div>
 
@@ -6671,7 +6632,7 @@ export default function HostelPage() {
                 ])
               }
             >
-              <Download size={14} /> Export
+              <ThreeDIcon name="download" size={16} /> Export
             </button>
           </div>
         </div>
@@ -6789,7 +6750,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn view"
                               title="View details"
                             >
-                              <Eye size={15} />
+                              <ThreeDIcon name="view" size={16} />
                             </button>
                             <button
                               type="button"
@@ -6797,7 +6758,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn delete"
                               title="Delete Record"
                             >
-                              <Trash2 size={15} />
+                              <ThreeDIcon name="delete" size={16} />
                             </button>
                           </div>
                         </td>
@@ -6852,7 +6813,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const transferPerPage = 10;
+    const transferPerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / transferPerPage));
     const currentPageClamped = Math.min(Math.max(1, transferCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * transferPerPage;
@@ -6877,7 +6838,7 @@ export default function HostelPage() {
             className="cms-transfer-btn-pill"
             onClick={() => setModal({ isOpen: true, type: "transfer", mode: "add", data: null })}
           >
-            <Plus size={16} /> Request Transfer / Vacate
+            <ThreeDIcon name="add" size={16} /> Request Transfer / Vacate
           </button>
         </div>
 
@@ -7089,7 +7050,7 @@ export default function HostelPage() {
                             className="cms-outpass-action-btn view"
                             title="View details"
                           >
-                            <Eye size={15} />
+                            <ThreeDIcon name="view" size={16} />
                           </button>
                           <button
                             type="button"
@@ -7097,7 +7058,7 @@ export default function HostelPage() {
                             title="Delete Record"
                             onClick={() => handleDeleteTransfer(t)}
                           >
-                            <Trash2 size={15} />
+                            <ThreeDIcon name="delete" size={16} />
                           </button>
                         </div>
                       </td>
@@ -7156,7 +7117,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 students per page)
-    const attendancePerPage = 10;
+    const attendancePerPage = 5;
     const totalPages = Math.max(1, Math.ceil(filtered.length / attendancePerPage));
     const currentPageClamped = Math.min(Math.max(1, attendanceCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * attendancePerPage;
@@ -7796,7 +7757,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View Student Attendance Log"
                               >
-                                <Eye size={13} /> View
+                                <ThreeDIcon name="view" size={16} /> View
                               </button>
                             </td>
                           </tr>
@@ -7890,7 +7851,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View detailed logs"
                               >
-                                <Eye size={13} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
+                                <ThreeDIcon name="view" size={16} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
                               </button>
                             </td>
                           </tr>
@@ -8367,7 +8328,7 @@ export default function HostelPage() {
               className="cms-report-btn-print"
               onClick={handlePrintReport}
             >
-              <Printer size={15} /> Print
+              <ThreeDIcon name="print" size={16} /> Print
             </button>
             <button
               type="button"
@@ -8381,7 +8342,7 @@ export default function HostelPage() {
               className="cms-report-btn-download"
               onClick={handleDownloadReport}
             >
-              <Download size={15} /> Download
+              <ThreeDIcon name="download" size={16} /> Download
             </button>
           </div>
         </div>
@@ -8587,7 +8548,7 @@ export default function HostelPage() {
                 style={{ height: 32, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8 }}
                 onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "add", data: revenueStudentRecords[0] || null })}
               >
-                <Plus size={14} />
+                <ThreeDIcon name="add" size={16} />
                 Record Fee Payment
               </button>
             )}
@@ -9699,7 +9660,7 @@ function StudentAttendanceModal({
 
         {/* Detailed Records Table */}
         <div className="cms-hostel-compact-card" style={{ maxHeight: 320, overflowY: "auto" }}>
-          <table className="cms-hostel-compact-table">
+          <PaginatedTable className="cms-hostel-compact-table">
             <thead>
               <tr>
                 <th>DATE</th>
@@ -9791,7 +9752,7 @@ function StudentAttendanceModal({
                 })
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         {/* Modal Footer */}
@@ -9803,7 +9764,7 @@ function StudentAttendanceModal({
               className="cms-btn cms-btn-primary"
               style={{ borderRadius: 8, height: 34, fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              <Save size={14} /> Save Active Changes
+              <ThreeDIcon name="check" size={14} /> Save Active Changes
             </button>
           )}
           <button
@@ -10669,7 +10630,7 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                                     title="Delete category"
                                     onClick={() => handleRemoveCustomCategory(fc.floorIndex, ca.id)}
                                   >
-                                    <Trash2 size={16} />
+                                    <ThreeDIcon name="delete" size={16} />
                                   </button>
                                 </div>
                               ))}
@@ -13605,7 +13566,7 @@ function RoomModal({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <Plus size={16} /> + Add Room
+                    <ThreeDIcon name="add" size={16} /> + Add Room
                   </button>
                 </div>
               </div>
@@ -13857,7 +13818,7 @@ function RoomModal({
                             boxShadow: "0 1px 4px rgba(82, 110, 52, 0.2)",
                           }}
                         >
-                          <Plus size={14} /> Add
+                          <ThreeDIcon name="add" size={16} /> Add
                         </button>
                       </div>
                     </div>
@@ -13879,7 +13840,7 @@ function RoomModal({
                       </div>
                     ) : (
                       <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--cms-border)" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+                        <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
                           <thead>
                             <tr style={{ background: "var(--cms-subtle)", borderBottom: "1px solid var(--cms-border)" }}>
                               <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 28 }}>#</th>
@@ -14136,14 +14097,14 @@ function RoomModal({
                                         alignItems: "center",
                                       }}
                                     >
-                                      <Trash2 size={15} />
+                                      <ThreeDIcon name="delete" size={16} />
                                     </button>
                                   </td>
                                 </tr>
                               );
                             })}
                           </tbody>
-                        </table>
+                        </PaginatedTable>
                       </div>
                     )}
 
@@ -16732,7 +16693,7 @@ function TransferModal({
                 color: "#fff",
               }}
             >
-              <Save size={14} />
+              <ThreeDIcon name="check" size={14} />
               {isSubmitting ? "Saving..." : "Save Payment Receipt"}
             </button>
           </div>

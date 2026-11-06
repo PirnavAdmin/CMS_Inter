@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
@@ -35,6 +37,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, Modal, Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonPage, SkeletonRow, SkeletonText, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -296,8 +299,8 @@ export const nonTeachingDesignationMap = {
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
   "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
   Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
-  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
-  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transport: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
+  Transportation: ["Transport Manager", "Transport Coordinator", "Transport Incharge", "Driver"],
   Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
   HR: ["HR Manager", "HR Executive", "Office Assistant"],
@@ -710,8 +713,7 @@ export const NON_TEACHING_ROLE_NAMES = [
   "Library / Librarian",
   "Hostel Warden",
   "Placement Officer",
-  "Bus Driver",
-  "Attendant",
+    "Attendant",
 ];
 
 const teachingFields = [
@@ -1065,7 +1067,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           if (inputEl) inputEl.focus();
         }}
       >
-        <Search className="staff-search-icon" aria-hidden="true" size={13} />
+        <Search3DIcon className="staff-search-icon" size={14} />
         <input
           type="text"
           value={search}
@@ -1378,7 +1380,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
           if (input) input.focus();
         }}
       >
-        <Search className="subject-search-icon" size={13} />
+        <Search3DIcon className="subject-search-icon" size={14} />
         {selectedSubjects.map((sub, idx) => (
           <span key={`${sub}-${idx}`} className="subject-pill">
             {sub}
@@ -1663,7 +1665,7 @@ function PrincipalMultiSelectInput({
           if (inp) inp.focus();
         }}
       >
-        <Search className="staff-search-icon" size={13} aria-hidden="true" />
+        <Search3DIcon className="staff-search-icon" size={14} />
 
         {selectedValues.map((item, idx) => {
           const itemKey = typeof item === "object" ? (item.value || item.id || item.name || idx) : item;
@@ -2051,7 +2053,7 @@ export function PrincipalCampusBoardAssignment({
   };
 
   return (
-    <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
+    <div className="staff-campus-assignments" style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
       </div>
@@ -2061,7 +2063,7 @@ export function PrincipalCampusBoardAssignment({
         const availableBoards = getBoardsForCampus(selectedCampusObj, boardsList);
         
         return (
-          <div key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
+          <div className="staff-campus-assignment-row" key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
             {/* Select Campus */}
             <div className="cms-principal-field" style={{ flex: 1, marginBottom: 0 }}>
               <label>Select Campus</label>
@@ -3537,7 +3539,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
           <SkeletonButton width={105} />
         ) : (
           <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add")}>
-            <Plus /> Add Staff
+            <ThreeDIcon name="add" size={16} /> Add Staff
           </button>
         )
       }
@@ -3729,7 +3731,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
             </button>
           </div>
           <div className="staff-import-search">
-            <Search size={14} />
+            <Search3DIcon size={14} />
             <input
               type="text"
               placeholder="Search in imported rows..."
@@ -3741,7 +3743,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
 
         {/* Table preview */}
         <div className="staff-import-table-wrap">
-          <table className="staff-import-table">
+          <PaginatedTable className="staff-import-table">
             <thead>
               <tr>
                 <th style={{ width: "50px" }}>Row</th>
@@ -3811,7 +3813,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         {/* Footer actions */}
@@ -3832,7 +3834,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
               </>
             ) : (
               <>
-                <Upload size={16} /> Import {validCount} Valid Record{validCount !== 1 ? "s" : ""}
+                <ThreeDIcon name="upload" size={16} /> Import {validCount} Valid Record{validCount !== 1 ? "s" : ""}
               </>
             )}
           </button>
@@ -4566,7 +4568,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 </select>
               ) : null}
             </div>
-            <div className="staff-toolbar-actions">
+            <div className={`staff-toolbar-actions ${forced === "Non-Teaching" || (!forced && tab === "Non-Teaching") ? "non-teaching-toolbar-actions" : ""}`}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
@@ -4574,7 +4576,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 title="Download Excel template for adding staff"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <Download size={15} /> Download Template
+                <ThreeDIcon name="download" size={15} /> Download Template
               </button>
               <button
                 type="button"
@@ -4583,7 +4585,7 @@ function StaffList({ records = [], setRecords, forced }) {
                 title="Upload Excel and validate records before importing"
                 style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                <Upload size={16} /> Import Excel
+                <ThreeDIcon name="upload" size={16} /> Import Excel
               </button>
               <div className="staff-export-menu">
                 <button
@@ -4591,7 +4593,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   className="cms-btn cms-btn-ghost"
                   onClick={() => setExportOpen((open) => !open)}
                 >
-                  <FileSpreadsheet /> Export
+                  <ThreeDIcon name="excel" size={16} /> Export
                 </button>
                 {exportOpen ? (
                   <div className="staff-export-options">
@@ -4613,7 +4615,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   )
                 }
               >
-                <Plus /> Add Staff
+                <ThreeDIcon name="add" size={16} /> Add Staff
               </button>
             </div>
           </div>
@@ -4652,7 +4654,7 @@ function StaffList({ records = [], setRecords, forced }) {
                       <td>
                         <div className="row-actions">
                           <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
-                            <Eye />
+                            <ThreeDIcon name="view" size={15} />
                           </button>
                           <button title="Print QuestPDF (GET /api/v1/staff/{id}/print-pdf)" onClick={async () => {
                             try {
@@ -4664,10 +4666,10 @@ function StaffList({ records = [], setRecords, forced }) {
                               setTimeout(() => window.print(), 300);
                             }
                           }}>
-                            <Printer />
+                            <ThreeDIcon name="print" size={15} />
                           </button>
                           <button title="Delete Staff (DELETE /api/v1/staff/{id})" onClick={() => setRemove(r)}>
-                            <Trash2 />
+                            <ThreeDIcon name="delete" size={15} />
                           </button>
                         </div>
                       </td>
@@ -4683,21 +4685,7 @@ function StaffList({ records = [], setRecords, forced }) {
               </tbody>
             </table>
           </div>
-          <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * size + 1 : 0} to{" "}
-              {Math.min(page * size, totalRowsCount)} of {totalRowsCount}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
-                Prev
-              </button>
-              <strong>{page}</strong>
-              <button disabled={page * size >= totalRowsCount} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </button>
-            </div>
-          </footer>
+          <AdminPagination currentPage={page} totalRecords={totalRowsCount} pageSize={5} onPageChange={setPage} />
         </section>
       </main>
       {remove ? (
@@ -5885,7 +5873,7 @@ function Pending({ records = [], setRecords, activity }) {
     });
   }, [mergedTeachingList, tab]);
 
-  const pageSize = 10;
+  const pageSize = 5;
   const shown = rows.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
@@ -6094,7 +6082,7 @@ function Pending({ records = [], setRecords, activity }) {
                               style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                               onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}/review`)}
                             >
-                              <UserCheck size={13} /> Review Submission
+                              <ThreeDIcon name="check" size={13} /> Review Submission
                             </button>
                           ) : (
                             <button
@@ -6114,7 +6102,7 @@ function Pending({ records = [], setRecords, activity }) {
                             title="View Details"
                             onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}`)}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={14} />
                           </button>
                         </div>
                       </td>
@@ -6124,16 +6112,7 @@ function Pending({ records = [], setRecords, activity }) {
               </tbody>
             </table>
           </div>
-          <footer className="staff-pagination">
-            <span>
-              Showing {shown.length ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, rows.length)} of {rows.length}
-            </span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Prev</button>
-              <strong>{page}</strong>
-              <button disabled={page * pageSize >= rows.length} onClick={() => setPage((current) => current + 1)}>Next</button>
-            </div>
-          </footer>
+          <AdminPagination currentPage={page} totalRecords={rows.length} pageSize={5} onPageChange={setPage} />
         </section>
       </main>
       {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
@@ -6912,11 +6891,11 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               {!isEditing ? (
                 onSave || onEdit ? (
                   <button type="button" onClick={() => startEdit(groupIndex)}>
-                    <Pencil /> Edit
+                    <ThreeDIcon name="edit" size={14} /> Edit
                   </button>
                 ) : onPrint ? (
                   <button type="button" onClick={() => onPrint(groupIndex)}>
-                    <Printer /> Print
+                    <ThreeDIcon name="print" size={14} /> Print
                   </button>
                 ) : null
               ) : null}
@@ -6924,7 +6903,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
 
             {hasCustomEducation ? (
               <div style={{ overflowX: "auto", margin: "8px 0" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                   <thead>
                     <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
                       <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Level</th>
@@ -6947,7 +6926,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             ) : hasCustomExperience ? (
               <div style={{ margin: "8px 0" }}>
@@ -6960,7 +6939,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                     <p style={{ fontSize: "12px", color: "var(--cms-muted, #64748b)", marginBottom: "6px" }}>
                       Total Experience: <strong>{record.totalExperience || 0} Years</strong>
                     </p>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                    <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                       <thead>
                         <tr style={{ background: "var(--cms-bg, #f8fafc)", textAlign: "left" }}>
                           <th style={{ padding: "6px 8px", border: "1px solid var(--cms-border, #e2e8f0)" }}>Institution</th>
@@ -6981,7 +6960,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </PaginatedTable>
                   </div>
                 )}
               </div>

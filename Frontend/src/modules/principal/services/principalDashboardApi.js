@@ -189,7 +189,7 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
   };
 
   const studentTotal = principalData.studentCount ?? numberOf(summary, ["totalStudents", "TotalStudents", "studentCount", "StudentCount"]);
-  const staffTotal = principalData.staffCount ?? (summary.totalStaff || (summary.teachingStaff + summary.nonTeachingStaff));
+  const staffTotal = principalData.staffCount ?? (summary.totalStaff || ((Number(summary.teachingStaff) || 0) + (Number(summary.nonTeachingStaff) || 0)) || 0);
 
   const backendFee = principalData.fees || {};
   const feeCollected = numberOf(backendFee, ["collected", "totalCollected", "Collected", "totalPaid", "TotalPaid"], 0);
@@ -235,7 +235,7 @@ export async function getPrincipalDashboardData({ campusId, boardId, academicYea
       chart: feeChart,
     },
     activeClasses: principalData.activeClasses ?? numberOf(summary, ["totalSections", "TotalSections", "sectionsCount", "SectionsCount"]),
-    upcomingExamCount: exams.length || principalData.upcomingExamCount || 0,
+    upcomingExamCount: principalData.upcomingExamCount ?? exams.length ?? 0,
     admissions: principalData.admissions ?? numberOf(summary, ["admissions", "Admissions"]),
   };
 }

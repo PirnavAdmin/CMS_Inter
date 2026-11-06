@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Users,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, Toast, Skeleton } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -603,7 +605,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                             }
                           }}
                         >
-                          <Trash2 size={16} />
+                          <ThreeDIcon name="delete" size={16} />
                         </button>
                       )}
                     </div>
@@ -641,7 +643,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                     onClick={() => navigate(`/dashboard/settings/number-series/${series.id}`)}
                     title="View details and generated history"
                   >
-                    <Eye size={15} />
+                    <ThreeDIcon name="view" size={15} />
                     <span>Details</span>
                   </button>
                 </div>
@@ -757,7 +759,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
               className="cms-btn cms-btn-primary"
               onClick={() => navigate(`/dashboard/settings/number-series/${currentSeries.id}/edit`)}
             >
-              <Edit3 size={16} />
+              <ThreeDIcon name="edit" size={16} />
               <span>Edit Series</span>
             </button>
           </div>
@@ -824,12 +826,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                >
-                  <option value={5}>5 rows</option>
-                  <option value={10}>10 rows</option>
-                  <option value={25}>25 rows</option>
-                  <option value={50}>50 rows</option>
-                </select>
+                ><option value={5}>5</option></select>
               </div>
             </div>
 
@@ -861,30 +858,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
             </div>
 
             {/* PAGINATION FOOTER */}
-            <div className="ns-pagination-bar">
-              <span className="ns-page-info">
-                Showing {filteredHistory.length ? (currentPage - 1) * pageSize + 1 : 0} to{" "}
-                {Math.min(currentPage * pageSize, filteredHistory.length)} of {filteredHistory.length} entries
-              </span>
-
-              <div className="ns-page-btns">
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <span className="ns-page-num">Page {currentPage} of {totalPages}</span>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <AdminPagination currentPage={currentPage} totalRecords={filteredHistory.length} pageSize={5} onPageChange={setCurrentPage} />
           </div>
         </div>
       </div>

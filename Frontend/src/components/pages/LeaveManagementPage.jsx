@@ -1,8 +1,11 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2, Plus, Calendar, AlertCircle, RefreshCw, X, ChevronLeft, ChevronRight } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -46,8 +49,8 @@ const manage = (request) => {
 
 function LeaveStatus({ status }) {
   const normalized = String(status || "").toLowerCase();
-  const Icon = normalized === "approved" ? CheckCircle2 : normalized === "rejected" ? XCircle : Clock3;
-  return <span className={`leave-detail-status ${normalized}`}><Icon size={15} />{status}</span>;
+  const iconName = normalized === "approved" ? "check" : normalized === "rejected" ? "cross" : "clock";
+  return <span className={`leave-detail-status ${normalized}`}><ThreeDIcon name={iconName} size={15} />{status}</span>;
 }
 
 function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected, reviewing = false }) {
@@ -249,7 +252,7 @@ function AffectedClasses({ leave, records = [], close, assign }) {
       </div>
 
       <div className="att-scroll leave-sub-scroll">
-        <table className="cms-table leave-sub-table">
+        <PaginatedTable className="cms-table leave-sub-table">
           <thead>
             <tr>
               {["Period", "Time", "Program / Group", "Section", "Subject", "Original Faculty", "Status", "Action"].map(head => (
@@ -305,7 +308,7 @@ function AffectedClasses({ leave, records = [], close, assign }) {
               })
             )}
           </tbody>
-        </table>
+        </PaginatedTable>
       </div>
     </Modal>
   );
@@ -511,117 +514,7 @@ function TablePagination({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50],
   unit = "records"
-}) {
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safePage = Math.min(Math.max(1, currentPage), totalPages);
-
-  const start = totalItems === 0 ? 0 : (safePage - 1) * pageSize + 1;
-  const end = Math.min(safePage * pageSize, totalItems);
-
-  const getPageNumbers = () => {
-    if (totalPages <= 7) {
-      return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-    const pages = [];
-    if (safePage <= 4) {
-      for (let i = 1; i <= 5; i++) pages.push(i);
-      pages.push("...");
-      pages.push(totalPages);
-    } else if (safePage >= totalPages - 3) {
-      pages.push(1);
-      pages.push("...");
-      for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      pages.push("...");
-      pages.push(safePage - 1);
-      pages.push(safePage);
-      pages.push(safePage + 1);
-      pages.push("...");
-      pages.push(totalPages);
-    }
-    return pages;
-  };
-
-  if (totalItems === 0) return null;
-
-  return (
-    <div className="cms-pagination leave-pagination-bar">
-      <div className="leave-pagination-left">
-        <span className="cms-page-info">
-          Showing <strong>{start}–{end}</strong> of <strong>{totalItems}</strong> {unit}
-        </span>
-      </div>
-
-      <div className="leave-pagination-right">
-        {onPageSizeChange && (
-          <div className="leave-page-size-wrap">
-            <span className="leave-page-size-label">Rows per page:</span>
-            <select
-              className="leave-page-size-select"
-              value={pageSize}
-              onChange={(e) => {
-                onPageSizeChange(Number(e.target.value));
-                onPageChange(1);
-              }}
-              aria-label="Rows per page"
-            >
-              {pageSizeOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="leave-pagination-nav">
-          <button
-            type="button"
-            className="cms-page-btn"
-            disabled={safePage <= 1}
-            onClick={() => onPageChange(Math.max(1, safePage - 1))}
-            aria-label="Previous page"
-          >
-            <ChevronLeft size={16} />
-            <span className="leave-btn-text">Previous</span>
-          </button>
-
-          <div className="leave-page-numbers">
-            {getPageNumbers().map((p, idx) =>
-              p === "..." ? (
-                <span key={`dots-${idx}`} className="leave-pagination-dots">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={p}
-                  type="button"
-                  className={`cms-page-btn ${safePage === p ? "is-active" : ""}`}
-                  onClick={() => onPageChange(p)}
-                  aria-current={safePage === p ? "page" : undefined}
-                >
-                  {p}
-                </button>
-              )
-            )}
-          </div>
-
-          <button
-            type="button"
-            className="cms-page-btn"
-            disabled={safePage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
-            aria-label="Next page"
-          >
-            <span className="leave-btn-text">Next</span>
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+}) { return <AdminPagination currentPage={currentPage} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} unit={unit} />; }
 
 function LeaveHistory({ onSelect }) {
   const campusCtx = useCampusContext();
@@ -644,7 +537,7 @@ function LeaveHistory({ onSelect }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("All Status");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(5);
 
   const people = useMemo(() => {
     return historyData.filter(person => {
@@ -833,7 +726,7 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
       <section className="history-leaves">
         <h4>Leave History</h4>
         <div className="leave-history-table-wrap">
-          <table className="cms-table leave-history-table">
+          <PaginatedTable className="cms-table leave-history-table">
             <thead>
               <tr>
                 {["Leave Type", "From Date", "To Date", "Days", "Status"].map(head => (
@@ -876,7 +769,7 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       </section>
     </Modal>
@@ -937,7 +830,7 @@ export default function LeaveManagementPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [requestPage, setRequestPage] = useState(1);
-  const [requestPageSize, setRequestPageSize] = useState(10);
+  const [requestPageSize, setRequestPageSize] = useState(5);
 
   useEffect(() => {
     if (tabParam === "history") {
@@ -1814,7 +1707,7 @@ export default function LeaveManagementPage() {
                   <h3>Leave Applications History</h3>
                 </div>
                 <div className="leave-history-table-wrap">
-                  <table className="cms-table">
+                  <PaginatedTable className="cms-table">
                     <thead>
                       <tr>
                         <th>TYPE</th>
@@ -1885,7 +1778,7 @@ export default function LeaveManagementPage() {
                         ))
                       )}
                     </tbody>
-                  </table>
+                  </PaginatedTable>
                 </div>
               </div>
             </div>
@@ -1893,7 +1786,12 @@ export default function LeaveManagementPage() {
             <>
               {/* Stat Summary Cards */}
               <section className="att-summary att-leave-summary">
-                {["Total Requests", "Pending Review", "Approved", "Rejected"].map(label => {
+                {[
+                  { label: "Total Requests", icon: "leaves" },
+                  { label: "Pending Review", icon: "clock" },
+                  { label: "Approved", icon: "check" },
+                  { label: "Rejected", icon: "cross" },
+                ].map(({ label, icon }) => {
                   let count = 0;
                   if (label === "Total Requests") count = currentTabRequests.length;
                   else if (label === "Pending Review") count = currentTabRequests.filter(r => r.status === "Pending").length;
@@ -1901,9 +1799,12 @@ export default function LeaveManagementPage() {
                   else if (label === "Rejected") count = currentTabRequests.filter(r => r.status === "Rejected").length;
 
                   return (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <b>{count}</b>
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <ThreeDIcon name={icon} size={28} />
+                      <div>
+                        <span>{label}</span>
+                        <b>{count}</b>
+                      </div>
                     </div>
                   );
                 })}
@@ -1912,7 +1813,7 @@ export default function LeaveManagementPage() {
               {/* Filter Bar */}
               <div className="leave-filter-bar">
                 <div className="leave-search-box">
-                  <Search size={16} />
+                  <ThreeDIcon name="search" size={16} />
                   <input
                     type="text"
                     placeholder="Search faculty name, ID, department..."
@@ -2000,7 +1901,7 @@ export default function LeaveManagementPage() {
                                   {openingRequestId === rid ? (
                                     <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite" }} />
                                   ) : (
-                                    <Eye size={16} />
+                                    <ThreeDIcon name="view" size={16} />
                                   )}
                                 </button>
                               </td>
@@ -2013,58 +1914,7 @@ export default function LeaveManagementPage() {
                 </div>
 
                 {/* Pagination Controls */}
-                <div className="leave-pagination-bar">
-                  <div className="leave-record-summary">
-                    Showing {startRecord}–{endRecord} of {totalRequestsCount} records
-                  </div>
-                  <div className="leave-pagination-controls">
-                    <span className="leave-page-size-label">Per page:</span>
-                    <select
-                      className="leave-page-size-select"
-                      value={isCustomPageSize ? "custom" : requestsPageSize}
-                      onChange={handlePageSizeChange}
-                      aria-label="Records per page"
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    {isCustomPageSize && (
-                      <input
-                        type="number"
-                        min="1"
-                        max="500"
-                        className="leave-page-size-custom-input"
-                        value={customPageSizeInput}
-                        onChange={handleCustomPageSizeInput}
-                        placeholder="Qty"
-                        title="Enter custom records per page"
-                        aria-label="Custom records per page"
-                      />
-                    )}
-                    <button
-                      type="button"
-                      className="leave-page-nav-btn"
-                      onClick={() => setRequestsPage((p) => Math.max(1, p - 1))}
-                      disabled={safeRequestsPage <= 1}
-                    >
-                      Previous
-                    </button>
-                    <span className="leave-page-counter">
-                      {safeRequestsPage} / {totalRequestsPages}
-                    </span>
-                    <button
-                      type="button"
-                      className="leave-page-nav-btn"
-                      onClick={() => setRequestsPage((p) => Math.min(totalRequestsPages, p + 1))}
-                      disabled={safeRequestsPage >= totalRequestsPages}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+                <AdminPagination currentPage={requestsPage} totalRecords={totalRequestsCount} pageSize={5} onPageChange={setRequestsPage} />
               </section>
             </>
           )}

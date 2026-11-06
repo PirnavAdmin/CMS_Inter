@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Eye,
@@ -733,12 +734,7 @@ function BulkRoomAllocationPreview({ allocations, requested, errors, onChange, p
           );
         })}
       </div>
-      <div className="cms-bulk-room-pagination">
-        <span>Showing {start + 1}–{Math.min(start + BULK_ROOM_PAGE_SIZE, allocations.length)} of {allocations.length} rooms</span>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={page === 1} onClick={() => setPage((current) => current - 1)}>Previous</button>
-        <strong>{page} / {totalPages}</strong>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={page === totalPages} onClick={() => setPage((current) => current + 1)}>Next</button>
-      </div>
+      <AdminPagination currentPage={page} totalRecords={allocations.length} pageSize={5} onPageChange={setPage} />
     </section>
   );
 }
@@ -2437,78 +2433,7 @@ export default function SectionManagementPage() {
                 </div>
 
                 {/* Room Pagination */}
-                <div className="cms-sec-pagination">
-                  <span className="cms-sec-record-summary">
-                    Showing {shownRooms.length ? (roomPage - 1) * roomPageSize + 1 : 0}–
-                    {Math.min(roomPage * roomPageSize, filteredRooms.length)} of {filteredRooms.length} records
-                  </span>
-
-                  <div className="cms-sec-page-size-wrap">
-                    <span className="cms-sec-page-size-label">Per page:</span>
-                    <select
-                      className="cms-sec-page-size-select"
-                      aria-label="Rooms per page"
-                      value={isCustomRoomPage ? "custom" : roomPageSize}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setIsCustomRoomPage(true);
-                          setCustomRoomPageInput(String(roomPageSize));
-                        } else {
-                          setIsCustomRoomPage(false);
-                          setRoomPageSize(Number(val));
-                          setRoomPage(1);
-                        }
-                      }}
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    {isCustomRoomPage && (
-                      <input
-                        type="number"
-                        min="1"
-                        max="200"
-                        className="cms-sec-page-size-custom-input"
-                        value={customRoomPageInput}
-                        placeholder="Qty"
-                        aria-label="Custom rooms per page"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomRoomPageInput(val);
-                          const num = parseInt(val, 10);
-                          if (Number.isInteger(num) && num > 0) {
-                            setRoomPageSize(num);
-                            setRoomPage(1);
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    disabled={roomPage === 1}
-                    onClick={() => setRoomPage((p) => p - 1)}
-                  >
-                    Previous
-                  </button>
-                  <span>
-                    {roomPage} / {roomPages}
-                  </span>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    disabled={roomPage === roomPages}
-                    onClick={() => setRoomPage((p) => p + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
+                <AdminPagination currentPage={roomPage} totalRecords={filteredRooms.length} pageSize={5} onPageChange={setRoomPage} />
               </div>
             ) : (
               /* ROOM FULL SCREEN FORM VIEW */
@@ -3019,78 +2944,7 @@ export default function SectionManagementPage() {
                 </div>
 
                 {/* Section Pagination */}
-                <div className="cms-sec-pagination">
-                  <span className="cms-sec-record-summary">
-                    Showing {shownSections.length ? (page - 1) * sectionPageSize + 1 : 0}–
-                    {Math.min(page * sectionPageSize, filteredSections.length)} of {filteredSections.length} records
-                  </span>
-
-                  <div className="cms-sec-page-size-wrap">
-                    <span className="cms-sec-page-size-label">Per page:</span>
-                    <select
-                      className="cms-sec-page-size-select"
-                      aria-label="Sections per page"
-                      value={isCustomSectionPage ? "custom" : sectionPageSize}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "custom") {
-                          setIsCustomSectionPage(true);
-                          setCustomSectionPageInput(String(sectionPageSize));
-                        } else {
-                          setIsCustomSectionPage(false);
-                          setSectionPageSize(Number(val));
-                          setPage(1);
-                        }
-                      }}
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={25}>25</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                    {isCustomSectionPage && (
-                      <input
-                        type="number"
-                        min="1"
-                        max="200"
-                        className="cms-sec-page-size-custom-input"
-                        value={customSectionPageInput}
-                        placeholder="Qty"
-                        aria-label="Custom sections per page"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setCustomSectionPageInput(val);
-                          const num = parseInt(val, 10);
-                          if (Number.isInteger(num) && num > 0) {
-                            setSectionPageSize(num);
-                            setPage(1);
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    disabled={page === 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    Previous
-                  </button>
-                  <span>
-                    {page} / {sectionPages}
-                  </span>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    disabled={page === sectionPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
+                <AdminPagination currentPage={page} totalRecords={filteredSections.length} pageSize={5} onPageChange={setPage} />
               </div>
             ) : (
               /* SECTION FULL SCREEN FORM VIEW */

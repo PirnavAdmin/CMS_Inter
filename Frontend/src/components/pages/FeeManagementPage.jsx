@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { STUDENT_FEES_UPDATED_EVENT } from "@/features/promotion/services/promotionStore.js";
 import {
@@ -25,6 +27,7 @@ import {
   Tooltip,
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -1509,7 +1512,7 @@ function SummaryCard({ icon: Icon, label, value, hint, tone, onClick }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag className={`cms-fee-stat tone-${tone} ${onClick ? "is-clickable" : ""}`} type={onClick ? "button" : undefined} onClick={onClick}>
-      <span className="cms-fee-stat-icon"><Icon size={16} /></span>
+      <span className="cms-fee-stat-icon"><ThreeDIcon icon={Icon} size={28} /></span>
       <div>
         <span className="cms-fee-stat-label">{label}</span>
         <strong className="cms-fee-stat-value">{value}</strong>
@@ -1537,22 +1540,7 @@ function SelectFilter({ label, value, options, onChange }) {
   );
 }
 
-function TablePagination({ page, pageSize = PAGE_SIZE, totalItems, onPageChange }) {
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const start = totalItems ? ((page - 1) * pageSize) + 1 : 0;
-  const end = Math.min(page * pageSize, totalItems);
-
-  return (
-    <div className="cms-fee-pagination">
-      <span className="cms-fee-pagination-info">Showing {start}-{end} of {totalItems}</span>
-      <div className="cms-fee-pagination-actions">
-        <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>Previous</button>
-        <button className="cms-btn cms-btn-primary cms-fee-mini-btn" type="button" aria-current="page">{page}</button>
-        <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={page >= totalPages} onClick={() => onPageChange(Math.min(totalPages, page + 1))}>Next</button>
-      </div>
-    </div>
-  );
-}
+function TablePagination({ page, pageSize = PAGE_SIZE, totalItems, onPageChange }) { return <AdminPagination currentPage={page} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} />; }
 
 /* ------------------------------- Overview ------------------------------- */
 const normalizeDueRows = (rows) => rows
@@ -1770,9 +1758,9 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
       <div className="cms-card cms-fee-overview-card" ref={overviewRef}>
         <div className="cms-card-head">
           <h2>Fee Management Overview</h2>
-          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><Printer size={14} /> Export</button> : null}
-          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><Printer size={14} /> Export</button> : null}
-          {overviewTab === "recent" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><Printer size={14} /> Export</button> : null}
+          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><ThreeDIcon name="print" size={14} /> Export</button> : null}
+          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><ThreeDIcon name="print" size={14} /> Export</button> : null}
+          {overviewTab === "recent" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><ThreeDIcon name="print" size={14} /> Export</button> : null}
         </div>
         <div className="cms-card-body cms-fee-overview-shell">
           <div className="cms-fee-overview-tabs" role="tablist" aria-label="Fee Management Overview">
@@ -1785,7 +1773,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
                 className={`cms-fee-overview-tab ${overviewTab === id ? "is-active" : ""}`}
                 onClick={() => setOverviewTab(id)}
               >
-                <Icon size={15} />
+                <ThreeDIcon icon={Icon} size={16} />
                 {label}
               </button>
             ))}
@@ -2284,7 +2272,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Applicable Fee Breakdown</h3>
             <div className="cms-table-wrap">
-              <table className="cms-table cms-fee-breakdown-table">
+              <PaginatedTable className="cms-table cms-fee-breakdown-table">
                 <colgroup>
                   <col className="cms-fee-breakdown-type-col" />
                   <col className="cms-fee-breakdown-money-col" />
@@ -2315,7 +2303,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                     <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
-              </table>
+              </PaginatedTable>
             </div>
           </section>
 
@@ -2323,7 +2311,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             <section className="cms-fee-block">
               <h3>Fee Schedule</h3>
               <div className="cms-table-wrap">
-                <table className="cms-table">
+                <PaginatedTable className="cms-table">
                   <thead>
                     <tr><th>Fee Schedule</th><th>Due Date</th><th className="num">Amount</th><th className="num">Paid</th><th className="num">Balance</th><th>Status</th></tr>
                   </thead>
@@ -2339,7 +2327,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </section>
           ) : null}
@@ -2347,7 +2335,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Payment History</h3>
             <div className="cms-table-wrap">
-              <table className="cms-table">
+              <PaginatedTable className="cms-table">
                 <thead>
                   <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Action</th></tr>
                 </thead>
@@ -2361,13 +2349,13 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       <td>{formatDate(txn.date)}</td>
                       <td>
                         <button className="cms-action-btn" title="View receipt" onClick={() => viewReceipt(txn)}>
-                          <Eye size={15} />
+                          <ThreeDIcon name="view" size={16} />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PaginatedTable>
             </div>
           </section>
       </div>
@@ -2528,10 +2516,10 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
                 <td>
                   <div className="cms-actions">
                     <button className="cms-action-btn" title="View fee account" aria-label="View fee account" onClick={() => onView(item.id)}>
-                      <Eye size={15} />
+                      <ThreeDIcon name="view" size={16} />
                     </button>
                     <button className="cms-action-btn" title="Print fee statement" aria-label="Print fee statement" onClick={() => onPrint(item.id)}>
-                      <Printer size={15} />
+                      <ThreeDIcon name="print" size={16} />
                     </button>
                   </div>
                 </td>
@@ -2925,7 +2913,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
           <span>{values.academicYear} / {values.group || "Group"} / {programOptions.find((item) => item.value === values.programId)?.label || "Program"}</span>
         </div>
         <div className="cms-table-wrap cms-fee-config-wrap">
-          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-fee-types-table">
+          <PaginatedTable className="cms-table cms-fee-config-table cms-fee-setup-table cms-fee-types-table">
             <colgroup>
               <col style={{ width: "34%" }} />
               <col style={{ width: "22%" }} />
@@ -2971,7 +2959,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
         <div className="cms-fee-progress-head">
           <span>Total Active Fees</span>
@@ -3111,7 +3099,7 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
           <h2>Fee Types</h2>
           <p>Manage the reusable master list of fee types.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fee Type</button>
+        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><ThreeDIcon name="add" size={14} /> Add Fee Type</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         <div className="cms-table-wrap cms-fee-config-wrap">
@@ -3127,8 +3115,8 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
                   <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit fee type" aria-label="Edit fee type" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn" title="Delete fee type" aria-label="Delete fee type" disabled={deletingId === item.id} onClick={() => deleteType(item)}><Trash2 size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Edit fee type" aria-label="Edit fee type" onClick={() => setFormItem(item)}><ThreeDIcon name="edit" size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Delete fee type" aria-label="Delete fee type" disabled={deletingId === item.id} onClick={() => deleteType(item)}><ThreeDIcon name="delete" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3272,7 +3260,7 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
           <h2>Scholarships</h2>
           <p>Manage scholarship and concession schemes available for student fee assignments.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Scholarship</button>
+        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><ThreeDIcon name="add" size={14} /> Add Scholarship</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         <div className="cms-table-wrap">
@@ -3294,8 +3282,8 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
                   <td className="cms-fee-value-col">{scholarshipValueLabel(item)}</td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit scholarship" aria-label="Edit scholarship" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn" title="Delete scholarship" aria-label="Delete scholarship" disabled={deletingId === item.id} onClick={() => deleteScholarship(item)}><Trash2 size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Edit scholarship" aria-label="Edit scholarship" onClick={() => setFormItem(item)}><ThreeDIcon name="edit" size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Delete scholarship" aria-label="Delete scholarship" disabled={deletingId === item.id} onClick={() => deleteScholarship(item)}><ThreeDIcon name="delete" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3472,7 +3460,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
           <h2>Fine</h2>
           <p>Configure overdue fee fine rules for unpaid fee schedules.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fine Rule</button>
+        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><ThreeDIcon name="add" size={14} /> Add Fine Rule</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -3492,8 +3480,8 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
                   <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn delete" title="Deactivate fine rule" aria-label="Deactivate fine rule" disabled={deletingId === String(item.id)} onClick={() => deleteFineRule(item)}><Trash2 size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><ThreeDIcon name="edit" size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate fine rule" aria-label="Deactivate fine rule" disabled={deletingId === String(item.id)} onClick={() => deleteFineRule(item)}><ThreeDIcon name="delete" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3670,7 +3658,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Fee Structure</h2>
-        <button className="cms-btn cms-btn-primary" onClick={openAddStructure}><Plus size={14} /> Add Fee Structure</button>
+        <button className="cms-btn cms-btn-primary" onClick={openAddStructure}><ThreeDIcon name="add" size={14} /> Add Fee Structure</button>
       </div>
       <div className="cms-table-wrap">
         <table className="cms-table cms-fee-setup-table cms-fee-structure-table">
@@ -3732,9 +3720,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
                   <td className="num cms-fee-total-col">{formatCurrency(activeTotal)}</td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button className="cms-action-btn" title="Edit fee structure" aria-label="Edit fee structure" disabled={loadingEditId === row.id} onClick={() => editStructure(row)}><Pencil size={15} /></button>
+                      <button className="cms-action-btn" title="Edit fee structure" aria-label="Edit fee structure" disabled={loadingEditId === row.id} onClick={() => editStructure(row)}><ThreeDIcon name="edit" size={15} /></button>
                       <button className="cms-action-btn" title="Copy fee structure" aria-label="Copy fee structure" onClick={() => copyStructure(row)}><Copy size={15} /></button>
-                      <button className="cms-action-btn" title="Delete fee structure" aria-label="Delete fee structure" disabled={deletingId === row.id} onClick={() => deleteStructure(row)}><Trash2 size={15} /></button>
+                      <button className="cms-action-btn" title="Delete fee structure" aria-label="Delete fee structure" disabled={deletingId === row.id} onClick={() => deleteStructure(row)}><ThreeDIcon name="delete" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3871,7 +3859,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
           <h2>Hostel Fees</h2>
           <p>Dedicated hostel fee configuration, separate from normal Fee Types.</p>
         </div>
-        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!blockOptions.length || !roomTypeOptions.length || loading}><Plus size={14} /> Add Hostel Fee</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!blockOptions.length || !roomTypeOptions.length || loading}><ThreeDIcon name="add" size={14} /> Add Hostel Fee</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -3902,8 +3890,8 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
                   <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn delete" title="Deactivate hostel fee" aria-label="Deactivate hostel fee" disabled={deletingId === String(item.id)} onClick={() => deleteConfig(item)}><Trash2 size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><ThreeDIcon name="edit" size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate hostel fee" aria-label="Deactivate hostel fee" disabled={deletingId === String(item.id)} onClick={() => deleteConfig(item)}><ThreeDIcon name="delete" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -4062,7 +4050,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
           <h2>Transport Fees</h2>
           <p>Route and pickup-point based transport fare configuration.</p>
         </div>
-        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!routes.length || loading}><Plus size={14} /> Add Transport Fee</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!routes.length || loading}><ThreeDIcon name="add" size={14} /> Add Transport Fee</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -4091,7 +4079,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
                   <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit transport fee" aria-label="Edit transport fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Edit transport fee" aria-label="Edit transport fee" onClick={() => openEdit(item)}><ThreeDIcon name="edit" size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -4348,7 +4336,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
                 <td>{row.reference || "-"}</td>
                 <td><PaymentStatusBadge status={row.status || "Paid"} /></td>
                 <td>
-                  <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ReceiptText size={15} /></button>
+                  <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ThreeDIcon name="reimbursement" size={16} /></button>
                 </td>
               </tr>
             ))}

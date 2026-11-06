@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -33,6 +35,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { getAuthUser } from "@/features/authStorage.js";
 import * as reimbursementService from "@/services/reimbursementService.js";
@@ -51,7 +55,7 @@ import "./ReimbursementPage.css";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/jpg"];
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 export default function ReimbursementPage({ isAccountantView = false }) {
   // ── Authentication & Profile Context ──────────────────────────────
@@ -1268,7 +1272,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                               setPreviewDocModalOpen(true);
                             }}
                           >
-                            <Eye size={14} /> Preview
+                            <ThreeDIcon name="view" size={14} /> Preview
                           </button>
                           <button
                             type="button"
@@ -1276,7 +1280,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             title="Remove file"
                             onClick={handleRemoveFile}
                           >
-                            <Trash2 size={14} /> Remove
+                            <ThreeDIcon name="delete" size={14} /> Remove
                           </button>
                         </div>
                       </div>
@@ -1333,7 +1337,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     onClick={handleOpenPreviewModal}
                     disabled={isSubmitting}
                   >
-                    <Eye size={15} /> Preview Claim
+                    <ThreeDIcon name="view" size={15} /> Preview Claim
                   </button>
                   <button
                     type="submit"
@@ -1376,7 +1380,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
             {/* Filters */}
             <div className="reimb-table-filters">
               <div className="reimb-search-wrap">
-                <Search size={14} className="reimb-search-icon" />
+                <Search3DIcon size={14} className="reimb-search-icon" />
                 <input
                   type="text"
                   placeholder="Search by ID, name, dept, purpose..."
@@ -1438,7 +1442,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                 onClick={handleExportCsv}
                 title="Export filtered claims to CSV"
               >
-                <Download size={13} /> Export CSV
+                <ThreeDIcon name="csv" size={13} /> Export CSV
               </button>
             </div>
           </div>
@@ -1603,7 +1607,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                             title="View Claim Details & Timeline"
                             onClick={() => handleOpenClaimDetails(claim)}
                           >
-                            <Eye size={14} />
+                            <ThreeDIcon name="view" size={14} />
                           </button>
 
                           {/* View Proof Document */}
@@ -1682,40 +1686,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
           {/* Pagination Footer */}
           {totalPages > 1 && (
-            <div className="reimb-pagination">
-              <span>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1} to{" "}
-                {Math.min(currentPage * PAGE_SIZE, filteredClaims.length)} of {filteredClaims.length} claims
-              </span>
-              <div className="reimb-pagination-btns">
-                <button
-                  type="button"
-                  className="reimb-page-btn"
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                {Array.from({ length: totalPages }).map((_, i) => (
-                  <button
-                    key={i + 1}
-                    type="button"
-                    className={`reimb-page-btn ${currentPage === i + 1 ? "is-active" : ""}`}
-                    onClick={() => setCurrentPage(i + 1)}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="reimb-page-btn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <AdminPagination currentPage={currentPage} totalRecords={filteredClaims.length} pageSize={5} onPageChange={setCurrentPage} />
           )}
         </div>
       )}
@@ -1883,7 +1854,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                       style={{ padding: "4px 10px", fontSize: 12 }}
                       onClick={() => setPreviewDocModalOpen(true)}
                     >
-                      <Eye size={13} /> View Receipt
+                      <ThreeDIcon name="view" size={13} /> View Receipt
                     </button>
                   </div>
                 </div>
@@ -2338,7 +2309,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     className="reimb-btn reimb-btn-secondary"
                     style={{ textDecoration: "none" }}
                   >
-                    <Download size={14} /> Download Receipt
+                    <ThreeDIcon name="download" size={14} /> Download Receipt
                   </a>
                 )}
                 <button
@@ -2399,7 +2370,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
               </p>
 
               <div style={{ overflowX: "auto" }}>
-                <table className="reimb-table">
+                <PaginatedTable className="reimb-table">
                   <thead>
                     <tr>
                       <th>Account Ref</th>
@@ -2443,7 +2414,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                       ))
                     )}
                   </tbody>
-                </table>
+                </PaginatedTable>
               </div>
             </div>
           </Modal>
@@ -2673,7 +2644,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                         style={{ padding: "4px 10px", fontSize: 12, flexShrink: 0 }}
                         onClick={() => setPreviewDraftDocModalOpen(true)}
                       >
-                        <Eye size={13} /> View Receipt
+                        <ThreeDIcon name="view" size={13} /> View Receipt
                       </button>
                     )}
                   </div>
@@ -2722,7 +2693,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
                     className="reimb-btn reimb-btn-secondary"
                     style={{ textDecoration: "none" }}
                   >
-                    <Download size={14} /> Download Receipt
+                    <ThreeDIcon name="download" size={14} /> Download Receipt
                   </a>
                 )}
                 <button

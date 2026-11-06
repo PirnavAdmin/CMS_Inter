@@ -39,6 +39,7 @@ public interface IFeeRepository
 
     Task<FeePaymentResponse?> CreateFeePaymentAsync(CreateFeePaymentRequest request);
     Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int studentId);
+    Task<Dictionary<int, IEnumerable<FeePaymentResponse>>> GetBulkFeePaymentsAsync(IEnumerable<int> studentIds);
     Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int feePaymentId);
     Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber);
 

@@ -276,27 +276,8 @@
 }
 
 /* Toast */
-.sp-toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background: var(--cms-text, #10203c);
-  color: #fff;
-  padding: 12px 18px;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  z-index: 1000;
-  animation: cms-pop 0.2s ease;
-}
-.sp-toast.error {
-  background: var(--cms-red, #dc2626) !important;
-  color: #ffffff !important;
-}
+/* removed duplicate toast override */
+/* removed duplicate toast error override */
 .sp-toast.error svg {
   stroke: #ffffff !important;
   color: #ffffff !important;
@@ -339,6 +320,6 @@
   border-color: var(--cms-border);
 }
 [data-theme="dark"] .empty-past-icon {
-  background: color-mix(in srgb, var(--cms-primary)  0.2);
+  background: rgba(111, 132, 0, 0.2);
   color: var(--cms-primary);
 }

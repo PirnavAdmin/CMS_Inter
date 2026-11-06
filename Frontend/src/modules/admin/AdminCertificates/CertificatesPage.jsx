@@ -7,5 +7,5 @@ export const pageConfig = {
 };
 
 export default function AdminCertificatesPage() {
-  return <CertificatesManagementView Layout={DashboardLayout} pageSize={10} />;
+  return <CertificatesManagementView Layout={DashboardLayout} pageSize={5} />;
 }

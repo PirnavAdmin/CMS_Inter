@@ -43,16 +43,28 @@ export default function DriverDashboard() {
   // Global shared state for students & active trip
   const [students, setStudents] = useState([]);
   const [activeTripState, setActiveTripState] = useState({
-    morningTripStatus: "In Progress",
-    eveningTripStatus: "Pending",
+    morningTripStatus: "Scheduled",
+    eveningTripStatus: "Scheduled",
   });
 
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const { getStudents } = await import("../../api/transportDriverApi.js");
-        const res = await getStudents();
-        const payload = res.data?.data ?? res.data ?? {};
+        const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
+        const [res, tripsRes] = await Promise.allSettled([getStudents(), getTrips()]);
+        const resVal = res.status === "fulfilled" ? res.value : null;
+        if (tripsRes.status === "fulfilled") {
+          const tPayload = tripsRes.value?.data?.data?.trips || tripsRes.value?.data?.trips || tripsRes.value?.trips || {};
+          const mTrip = tPayload.morningTrip;
+          const eTrip = tPayload.eveningTrip;
+          if (mTrip || eTrip) {
+            setActiveTripState({
+              morningTripStatus: mTrip?.status || "Scheduled",
+              eveningTripStatus: eTrip?.status || "Scheduled",
+            });
+          }
+        }
+        const payload = resVal?.data?.data ?? resVal?.data ?? {};
         const studentList = payload.students ?? (Array.isArray(payload) ? payload : null);
         if (studentList) {
           setStudents(studentList);
@@ -125,7 +137,7 @@ export default function DriverDashboard() {
       )}
 
       {activeTab === "route" && (
-        <DriverRoutePage onNavigateTab={handleSelectTab} />
+        <DriverRoutePage onNavigateTab={handleSelectTab} students={students} onUpdateStatus={handleUpdateStudentStatus} onBatchBoardStop={handleBatchBoardStop} activeTripState={activeTripState} />
       )}
 
       {activeTab === "trips" && (

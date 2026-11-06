@@ -188,15 +188,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var deleted = await _timingConfigService.DeleteConfigAsync(id, ct);
-                if (!deleted)
-                {
-                    return NotFound(new
-                    {
-                        success = false,
-                        message = $"Timing configuration with ID {id} was not found."
-                    });
-                }
+                await _timingConfigService.DeleteConfigAsync(id, ct);
 
                 return Ok(new
                 {

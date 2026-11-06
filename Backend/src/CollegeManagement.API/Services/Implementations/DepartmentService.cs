@@ -234,6 +234,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var seenDeptNamesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenDeptCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var seenDesigKeysInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // =========================================================================
@@ -295,7 +296,7 @@ namespace CollegeManagement.API.Services.Implementations
                             else staffType = "Both";
                         }
 
-                        // Determine Status
+                        // Determine and validate Status
                         bool isActive = true;
                         if (!string.IsNullOrWhiteSpace(status))
                         {
@@ -304,6 +305,23 @@ namespace CollegeManagement.API.Services.Implementations
                                 status.Equals("false", StringComparison.OrdinalIgnoreCase))
                             {
                                 isActive = false;
+                            }
+                            else if (status.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
+                                     status.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                                     status.Equals("true", StringComparison.OrdinalIgnoreCase))
+                            {
+                                isActive = true;
+                            }
+                            else
+                            {
+                                result.Errors.Add(new MasterImportRowError
+                                {
+                                    RowNumber = rowNumber,
+                                    ItemName = deptName,
+                                    ErrorMessage = $"Invalid status '{status}'. Status must be 'Active' or 'Inactive'."
+                                });
+                                result.FailedRowsCount++;
+                                continue;
                             }
                         }
 
@@ -316,12 +334,36 @@ namespace CollegeManagement.API.Services.Implementations
                         }
                         if (deptCode.Length > 20) deptCode = deptCode.Substring(0, 20);
 
-                        // Detect in-file duplicate
-                        if (seenDeptNamesInFile.Contains(deptName))
+                        // In-file duplicate code check
+                        if (seenDeptCodesInFile.Contains(deptCode))
                         {
                             result.DuplicateCount++;
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = deptName,
+                                ErrorMessage = $"Duplicate department code '{deptCode}' found in the file."
+                            });
+                            result.FailedRowsCount++;
+                            continue;
                         }
-                        seenDeptNamesInFile.Add(deptName);
+                        seenDeptCodesInFile.Add(deptCode);
+
+                        // In-file duplicate department name check
+                        var inFileNameKey = $"{deptName}_{staffType}".ToLower();
+                        if (seenDeptNamesInFile.Contains(inFileNameKey))
+                        {
+                            result.DuplicateCount++;
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = deptName,
+                                ErrorMessage = $"Duplicate department '{deptName}' found in the file."
+                            });
+                            result.FailedRowsCount++;
+                            continue;
+                        }
+                        seenDeptNamesInFile.Add(inFileNameKey);
 
                         try
                         {
@@ -422,11 +464,22 @@ namespace CollegeManagement.API.Services.Implementations
                             continue;
                         }
 
-                        // Resolve Department reference
+                        // Resolve and validate Department reference
                         int? deptId = null;
                         string matchedDeptStaffType = string.Empty;
 
-                        if (!string.IsNullOrWhiteSpace(deptRef))
+                        if (string.IsNullOrWhiteSpace(deptRef))
+                        {
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = desigName,
+                                ErrorMessage = "Department is required."
+                            });
+                            result.FailedRowsCount++;
+                            continue;
+                        }
+                        else
                         {
                             Department? matchedDept = null;
                             if (resolvedDeptsByName.TryGetValue(deptRef, out var foundByName))
@@ -446,6 +499,27 @@ namespace CollegeManagement.API.Services.Implementations
 
                             if (matchedDept != null)
                             {
+                                // Check staff type compatibility
+                                if (!string.IsNullOrWhiteSpace(defaultStaffType) &&
+                                    !string.IsNullOrWhiteSpace(matchedDept.StaffType) &&
+                                    !matchedDept.StaffType.Equals("Both", StringComparison.OrdinalIgnoreCase) &&
+                                    !defaultStaffType.Equals("Both", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    var normDeptStaffType = matchedDept.StaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                                    var normDefaultStaffType = defaultStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                                    if (normDeptStaffType != normDefaultStaffType)
+                                    {
+                                        result.Errors.Add(new MasterImportRowError
+                                        {
+                                            RowNumber = rowNumber,
+                                            ItemName = desigName,
+                                            ErrorMessage = $"Department '{matchedDept.DepartmentName}' belongs to {matchedDept.StaffType} Staff, but this import is for {defaultStaffType} Staff."
+                                        });
+                                        result.FailedRowsCount++;
+                                        continue;
+                                    }
+                                }
+
                                 deptId = matchedDept.DepartmentId;
                                 matchedDeptStaffType = matchedDept.StaffType;
                             }
@@ -455,7 +529,7 @@ namespace CollegeManagement.API.Services.Implementations
                                 {
                                     RowNumber = rowNumber,
                                     ItemName = desigName,
-                                    ErrorMessage = $"Department '{deptRef}' does not exist for Designation '{desigName}'."
+                                    ErrorMessage = $"Referenced department '{deptRef}' does not exist in the system."
                                 });
                                 result.FailedRowsCount++;
                                 continue;
@@ -709,7 +783,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Sheet 2: Designations (4 fields: Designation Code, Designation Name, Department Name, Status)
             var desigWs = workbook.Worksheets.Add("Designations");
-            var desigHeaders = new[] { "Designation Code", "Designation Name", "Department Name", "Status" };
+            var desigHeaders = new[] { "Designation Code", "Designation Name", "Department", "Status" };
             ApplyHeaderStyle(desigWs, desigHeaders);
 
             using var ms = new MemoryStream();

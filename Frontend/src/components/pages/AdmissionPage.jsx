@@ -1,4 +1,27 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+
+function AdmissionFilter({ field, value, onChange }) {
+  const options = [{ value: "", label: `Select ${field.label}` }, ...field.options.map((option) => typeof option === "string" ? { value: option, label: option } : { ...option, value: String(option.value) })];
+  return (
+    <div className="cms-field">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger className="admission-filter-trigger" aria-label={field.label}>
+          <span>{options.find((option) => option.value === String(value ?? ""))?.label || `Select ${field.label}`}</span><span aria-hidden="true">⌄</span>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content className="admission-filter-menu" align="start" sideOffset={4} collisionPadding={12}>
+            <DropdownMenu.RadioGroup value={String(value ?? "")} onValueChange={(next) => onChange(field.name, next)} aria-label={field.label}>
+              {options.map((option) => <DropdownMenu.RadioItem className="admission-filter-option" key={option.value} value={option.value}>{option.label}</DropdownMenu.RadioItem>)}
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
+  );
+}
 import {
   BookOpen,
   BadgeCheck,
@@ -26,6 +49,8 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import AdmissionRequests from "@/components/pages/AdmissionRequests.jsx";
 import { appendReferralFields, mapAdmissionReferral } from "./admissionReferral.js";
 import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
@@ -822,7 +847,7 @@ const toFeeAssignmentPlanName = (plan) => {
   if (normalized === "Installment Payment") return "Installment Payment";
   return "";
 };
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 const ADMISSION_EXPORT_COLUMNS = [
   "Admission No",
   "Student Name",
@@ -2684,7 +2709,7 @@ function FacilityFeesTable({ feeItems }) {
     <section className="cms-fee-block">
       <h3>Applicable Facility Fees</h3>
       <div className="cms-fee-scroll">
-        <table className="cms-fee-table">
+        <PaginatedTable className="cms-fee-table">
           <thead>
             <tr>
               <th>Fee Type</th>
@@ -2703,7 +2728,7 @@ function FacilityFeesTable({ feeItems }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </PaginatedTable>
       </div>
     </section>
   );
@@ -2719,7 +2744,7 @@ function FeeItemsTable({ feeItems, errors, onChange, readOnly = false }) {
 
   return (
     <div className="cms-fee-scroll">
-      <table className="cms-fee-table">
+      <PaginatedTable className="cms-fee-table">
         <thead>
           <tr>
             <th>Apply</th>
@@ -2755,7 +2780,7 @@ function FeeItemsTable({ feeItems, errors, onChange, readOnly = false }) {
             <td className="num">{formatCurrency(feeItems.filter((item) => item.selected).reduce((sum, item) => sum + item.originalAmount, 0))}</td>
           </tr>
         </tfoot>
-      </table>
+      </PaginatedTable>
       {errors.feeItems ? <span className="cms-error">{errors.feeItems}</span> : null}
     </div>
   );
@@ -2794,7 +2819,7 @@ function ConcessionPanel({ fee, values, errors, onChange, scholarships, readOnly
 function InstallmentScheduleTable({ schedule, editable, onChange }) {
   return (
     <div className="cms-fee-scroll">
-      <table className="cms-fee-table">
+      <PaginatedTable className="cms-fee-table">
         <thead>
           <tr>
             <th>Course Fee Schedule</th>
@@ -2849,7 +2874,7 @@ function InstallmentScheduleTable({ schedule, editable, onChange }) {
             <td colSpan={4} />
           </tr>
         </tfoot>
-      </table>
+      </PaginatedTable>
     </div>
   );
 }
@@ -2978,7 +3003,7 @@ function FeePreview({ fee, values }) {
         <div className="cms-fee-preview-schedule">
           <h4>Selected Fee Items</h4>
           <div className="cms-fee-scroll">
-            <table className="cms-fee-table">
+            <PaginatedTable className="cms-fee-table">
               <thead>
                 <tr><th>Fee Type</th><th className="num">Amount</th></tr>
               </thead>
@@ -2990,7 +3015,7 @@ function FeePreview({ fee, values }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </div>
       ) : null}
@@ -2998,7 +3023,7 @@ function FeePreview({ fee, values }) {
         <div className="cms-fee-preview-schedule">
           <h4>Facility Fees</h4>
           <div className="cms-fee-scroll">
-            <table className="cms-fee-table">
+            <PaginatedTable className="cms-fee-table">
               <thead>
                 <tr><th>Fee Type</th><th>Plan</th><th>Details</th><th className="num">Amount</th></tr>
               </thead>
@@ -3012,7 +3037,7 @@ function FeePreview({ fee, values }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </div>
       ) : null}
@@ -4381,7 +4406,7 @@ export default function AdmissionPage() {
       academicLevelId: values.level || undefined,
       isActive: true,
     };
-    apiClient.get(apiEndpoints.groups.getAll, { params })
+    apiClient.get(apiEndpoints.groups.dropdown, { params: { ...params, academicLevelId: values.level || undefined } })
       .then((response) => {
         if (ignore) return;
         const groups = getCollection(response.data)
@@ -5661,10 +5686,10 @@ export default function AdmissionPage() {
         actions={(
           <div className="cms-admission-form-actions">
             <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
-              <ClipboardList size={15} /> Admission Requests
+              <ThreeDIcon name="certificates" size={15} /> Admission Requests
             </button>
             <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
-              <Plus size={15} /> Add New Admission
+              <ThreeDIcon name="add" size={15} /> Add New Admission
             </button>
           </div>
         )}
@@ -5672,7 +5697,7 @@ export default function AdmissionPage() {
         <div className="cms-card cms-admission-list-card">
           <div className="cms-admission-toolbar">
             <div className="cms-search cms-admission-search">
-              <Search size={16} />
+              <Search3DIcon size={16} />
               <input
                 value={search}
                 placeholder="Search by student name or admission number"
@@ -5683,9 +5708,9 @@ export default function AdmissionPage() {
               />
             </div>
             <div className="cms-admission-filters">
-              <Field field={{ name: "year", label: "Academic Year", type: "select", options: academicYearFilterOptions }} value={filters.year} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
-              <Field field={{ name: "group", label: "Group", type: "select", options: groupFilterOptions }} value={filters.group} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
-              <Field field={{ name: "status", label: "Status", type: "select", options: admissionStatusFilterOptions }} value={filters.status} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
+              <AdmissionFilter field={{ name: "year", label: "Academic Year", type: "select", options: academicYearFilterOptions }} value={filters.year} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
+              <AdmissionFilter field={{ name: "group", label: "Group", type: "select", options: groupFilterOptions }} value={filters.group} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
+              <AdmissionFilter field={{ name: "status", label: "Status", type: "select", options: admissionStatusFilterOptions }} value={filters.status} onChange={(name, value) => { setFilters((current) => ({ ...current, [name]: value })); setPage(1); }} />
             </div>
             <div
               className="cms-admission-export-control"
@@ -5700,15 +5725,15 @@ export default function AdmissionPage() {
                 aria-expanded={exportOpen}
                 onClick={() => setExportOpen((open) => !open)}
               >
-                <Download size={15} /> Export <ChevronDown size={14} />
+                <ThreeDIcon name="export" size={15} /> Export <ChevronDown size={14} />
               </button>
               {exportOpen ? (
                 <div className="cms-admission-export-menu" role="menu" aria-label="Admission export options">
                   <button type="button" role="menuitem" onClick={exportAdmissionsExcel}>
-                    <FileSpreadsheet size={15} /> Export Excel
+                    <ThreeDIcon name="excel" size={15} /> Export Excel
                   </button>
                   <button type="button" role="menuitem" onClick={exportAdmissionsPdf}>
-                    <FileText size={15} /> Export PDF
+                    <ThreeDIcon name="pdf" size={15} /> Export PDF
                   </button>
                 </div>
               ) : null}
@@ -5759,21 +5784,21 @@ export default function AdmissionPage() {
                     <td>
                       <div className="cms-actions cms-admission-actions">
                         <button type="button" className="cms-action-btn view" title={isApprovedAdmission ? "View admission" : "View / edit admission"} aria-label={isApprovedAdmission ? "View admission" : "View or edit admission"} disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
-                          <Eye size={15} />
+                          <ThreeDIcon name="view" size={15} />
                         </button>
                         {!isApprovedAdmission && row.status === "Pending" ? (
                           <button type="button" className="cms-action-btn edit" title="Verify admission" aria-label="Verify admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row, allSteps.length - 1)}>
-                            <BadgeCheck size={15} />
+                            <ThreeDIcon name="check" size={15} />
                           </button>
                         ) : null}
                         {!isApprovedAdmission && row.status === "Verified" ? (
                           <button type="button" className="cms-action-btn edit" title="Approve admission" aria-label="Approve admission" disabled={actionBusy === `Approved-${row.id}`} onClick={() => setApproveTarget(row)}>
-                            <Check size={15} />
+                            <ThreeDIcon name="check" size={15} />
                           </button>
                         ) : null}
                         {!isApprovedAdmission && (row.status === "Pending" || row.status === "Verified") ? (
                           <button type="button" className="cms-action-btn danger" title="Reject admission" aria-label="Reject admission" disabled={actionBusy === `Rejected-${row.id}`} onClick={() => setRejectTarget(row)}>
-                            <X size={15} />
+                            <ThreeDIcon name="cross" size={15} />
                           </button>
                         ) : null}
                       </div>
@@ -5787,15 +5812,7 @@ export default function AdmissionPage() {
             </table>
           </div>
 
-          <div className="cms-pagination">
-            <span className="cms-page-info">
-              Showing {displayedAdmissions.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}-
-              {Math.min(currentPage * PAGE_SIZE, displayedAdmissions.length)} of {displayedAdmissions.length} admissions
-            </span>
-            <button className="cms-page-btn" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
-            <button className="cms-page-btn is-active" type="button" aria-current="page">{currentPage}</button>
-            <button className="cms-page-btn" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
-          </div>
+<AdminPagination currentPage={currentPage} totalRecords={displayedAdmissions.length} pageSize={5} onPageChange={setPage} />
         </div>
 
         {approveTarget ? (
@@ -5856,7 +5873,7 @@ export default function AdmissionPage() {
       actions={(
         <div className="cms-admission-form-actions">
           <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
-            <ClipboardList size={15} /> Admission Requests
+            <ThreeDIcon name="certificates" size={15} /> Admission Requests
           </button>
           <div className="cms-admission-main-tabs" role="tablist" aria-label="Admission form steps">
             {admissionMainTabs.map((tab) => {
@@ -5870,7 +5887,7 @@ export default function AdmissionPage() {
                   className={`cms-admission-main-tab ${activeMainStep === tab.step ? "is-active" : ""} ${tab.step < activeMainStep ? "is-done" : ""}`}
                   onClick={() => goToStep(tab.step)}
                 >
-                  <TabIcon size={14} />
+                  <ThreeDIcon icon={TabIcon} size={15} />
                   <span>{tab.title}</span>
                 </button>
               );
@@ -5994,7 +6011,7 @@ export default function AdmissionPage() {
           </button>
           {isPreview ? (
             <button type="button" className="cms-btn cms-btn-ghost" onClick={downloadAdmissionPreview}>
-              <Download size={14} /> Download
+              <ThreeDIcon name="download" size={14} /> Download
             </button>
           ) : null}
           {!readOnlyAdmission && !isPreview ? (

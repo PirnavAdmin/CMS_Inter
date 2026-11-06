@@ -1,5 +1,23 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+
+function TransportFilterSelect({ value, onChange, options, label }) {
+  const normalized = options.map((option) => option && typeof option === "object" ? { ...option, value: String(option.value) } : { value: String(option), label: option });
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger className="cms-transport-filter-trigger" aria-label={label}>
+      <span>{normalized.find((option) => option.value === String(value))?.label || label}</span><span aria-hidden="true">⌄</span>
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      <DropdownMenu.Content className="cms-transport-filter-menu" align="start" sideOffset={4} collisionPadding={12}>
+        <DropdownMenu.RadioGroup value={String(value)} onValueChange={onChange} aria-label={label}>
+          {normalized.map((option, index) => <DropdownMenu.RadioItem className="cms-transport-filter-option" key={`${option.value}-${index}`} value={option.value}>{option.label}</DropdownMenu.RadioItem>)}
+        </DropdownMenu.RadioGroup>
+      </DropdownMenu.Content>
+    </DropdownMenu.Portal>
+  </DropdownMenu.Root>;
+}
 import {
   AlertTriangle,
   ArrowRight,
@@ -27,6 +45,8 @@ import {
   Wrench,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { ConfirmDialog, FormModal, Modal, SkeletonTable, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
@@ -219,7 +239,7 @@ function TransportTabs({ tabs, active, onChange, compact = false }) {
         const Icon = tab.icon;
         return (
           <button key={tab.id} type="button" className={`cms-transport-tab ${active === tab.id ? "is-active" : ""}`} onClick={() => onChange(tab.id)}>
-            {Icon ? <Icon size={15} /> : null}
+            {Icon ? <ThreeDIcon icon={Icon} size={16} /> : null}
             <span>{tab.label}</span>
           </button>
         );
@@ -231,7 +251,7 @@ function TransportTabs({ tabs, active, onChange, compact = false }) {
 function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
   return (
     <div className={`cms-transport-stat tone-${tone}`}>
-      <span className="cms-transport-stat-icon">{Icon ? <Icon size={20} /> : null}</span>
+      <span className="cms-transport-stat-icon">{Icon ? <ThreeDIcon icon={Icon} size={28} /> : null}</span>
       <span>
         <small>{label}</small>
         <strong>{value}</strong>
@@ -245,29 +265,29 @@ function Toolbar({ query, onQuery, filters, onAdd, onExport, onPdfExport, onPrin
   return (
     <div className={`cms-transport-toolbar ${className}`.trim()}>
       <label className="cms-transport-search">
-        <Search size={16} />
+        <Search3DIcon size={16} />
         <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search transport records..." />
       </label>
       {filters ? <div className="cms-transport-filters">{filters}</div> : null}
       <div className="cms-transport-toolbar-actions">
         {onPrint ? (
           <button type="button" className="cms-btn cms-btn-ghost" title="Print report" onClick={onPrint}>
-            <Printer size={16} /> Print
+            <ThreeDIcon name="print" size={16} /> Print
           </button>
         ) : null}
         {onPdfExport ? (
           <button type="button" className="cms-btn cms-btn-ghost" title="Export report to PDF" onClick={onPdfExport}>
-            <Download size={16} /> Export PDF
+            <ThreeDIcon name="pdf" size={16} /> Export PDF
           </button>
         ) : null}
         {onExport ? (
           <button type="button" className="cms-btn cms-btn-ghost" title="Export to CSV" onClick={onExport}>
-            <Download size={16} /> Export CSV
+            <ThreeDIcon name="csv" size={16} /> Export CSV
           </button>
         ) : null}
         {onAdd ? (
           <button type="button" className="cms-btn cms-btn-primary" onClick={onAdd}>
-            <Plus size={16} /> {addLabel}
+            <ThreeDIcon name="add" size={16} /> {addLabel}
           </button>
         ) : null}
       </div>
@@ -343,15 +363,12 @@ function TableSection({
           onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
         />
       ) : (
-        <select
+        <TransportFilterSelect
           value={filterValues[filter.name] || "All"}
-          onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
-        >
-          {filter.options.map((option, optionIndex) => {
-            const normalized = option && typeof option === "object" ? option : { value: option, label: option };
-            return <option key={`${normalized.value}-${optionIndex}`} value={normalized.value}>{normalized.label}</option>;
-          })}
-        </select>
+          onChange={(value) => onFilterChange?.(filter.name, value)}
+          options={filter.options}
+          label={filter.label}
+        />
       )}
     </label>
   )) : null;
@@ -394,9 +411,9 @@ function TableSection({
                   ))}
                   {hasRowActions ? <td>
                     <div className="cms-transport-actions">
-                      {onView ? <button type="button" className="cms-action-btn" title="View details" onClick={() => onView(row)}><Eye size={15} /></button> : null}
-                      {onEdit ? <button type="button" className="cms-action-btn" title="Edit" onClick={() => onEdit(row)}><Edit3 size={15} /></button> : null}
-                      {onDelete ? <button type="button" className="cms-action-btn danger" title="Delete" onClick={() => onDelete(row)}><Trash2 size={15} /></button> : null}
+                      {onView ? <button type="button" className="cms-action-btn" title="View details" onClick={() => onView(row)}><ThreeDIcon name="view" size={14} /></button> : null}
+                      {onEdit ? <button type="button" className="cms-action-btn" title="Edit" onClick={() => onEdit(row)}><ThreeDIcon name="edit" size={14} /></button> : null}
+                      {onDelete ? <button type="button" className="cms-action-btn danger" title="Delete" onClick={() => onDelete(row)}><ThreeDIcon name="delete" size={14} /></button> : null}
                     </div>
                   </td> : null}
                 </tr>
@@ -409,13 +426,7 @@ function TableSection({
           </table>
         </div>
         {visibleRows.length ? (
-          <div className="cms-transport-pagination">
-            <span>Page {currentPage} of {totalPages} - {visibleRows.length} record{visibleRows.length === 1 ? "" : "s"}</span>
-            <div>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
-            </div>
-          </div>
+          <AdminPagination currentPage={currentPage} totalRecords={visibleRows.length} pageSize={5} onPageChange={setPage} />
         ) : null}
       </div>
     </div>
@@ -509,7 +520,7 @@ function AddPickupPointsModal({ routes, pickupPoints, isSaving, onCancel, onSave
               </section>
             ))}
           </div>
-          <button type="button" className="transport-pickup-add-field" onClick={() => setPoints((current) => [...current, blankPoint()])}><Plus size={16} /> Add Pickup Point Field</button>
+          <button type="button" className="transport-pickup-add-field" onClick={() => setPoints((current) => [...current, blankPoint()])}><ThreeDIcon name="add" size={16} /> Add Pickup Point Field</button>
         </fieldset>
         <div className="transport-pickup-footer">
           <button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={() => onCancel(savedCount > 0)}>Cancel</button>
@@ -2657,7 +2668,7 @@ function TransportContextPage({ navigation, onNavigate }) {
                       <span className="cms-transport-trip-actions">
                         <StatusBadge value={trip.status} />
                         <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
-                          <Eye size={14} /> Details
+                          <ThreeDIcon name="view" size={14} /> Details
                         </button>
                       </span>
                     </div>

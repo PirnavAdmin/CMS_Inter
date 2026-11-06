@@ -179,10 +179,7 @@ export default function TransportManagerMyAttendance() {
     if (typeof setPunchState === "function") {
       setPunchState(next);
     }
-    try {
-      localStorage.setItem("staff_punch_state", JSON.stringify(next));
-      window.dispatchEvent(new Event("storage"));
-    } catch {}
+
   }, []);
 
   const fetchTodayStatus = useCallback(async () => {

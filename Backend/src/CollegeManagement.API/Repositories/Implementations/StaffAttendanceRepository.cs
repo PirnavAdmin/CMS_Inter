@@ -331,22 +331,62 @@ namespace CollegeManagement.API.Repositories.Implementations
             public int CampusId { get; set; }
             public int DepartmentId { get; set; }
             public byte StaffType { get; set; }
-            public TimeSpan WorkStartTime { get; set; }
-            public TimeSpan WorkEndTime { get; set; }
-            public TimeSpan LateThreshold { get; set; }
-            public TimeSpan EarlyCheckoutThreshold { get; set; }
+            public object? WorkStartTime { get; set; }
+            public object? WorkEndTime { get; set; }
+            public object? LateThreshold { get; set; }
+            public object? EarlyCheckoutThreshold { get; set; }
             public int GracePeriodMinutes { get; set; }
+
+            public TimeSpan ParsedWorkStartTime => ParseTimeSpan(WorkStartTime, new TimeSpan(9, 0, 0));
+            public TimeSpan ParsedWorkEndTime => ParseTimeSpan(WorkEndTime, new TimeSpan(16, 30, 0));
+            public TimeSpan ParsedLateThreshold => ParseTimeSpan(LateThreshold, new TimeSpan(9, 15, 0));
+            public TimeSpan ParsedEarlyCheckoutThreshold => ParseTimeSpan(EarlyCheckoutThreshold, new TimeSpan(16, 30, 0));
+
+            private static TimeSpan ParseTimeSpan(object? val, TimeSpan defaultVal)
+            {
+                if (val == null || val == DBNull.Value) return defaultVal;
+                if (val is TimeSpan ts) return ts;
+                var str = val.ToString();
+                if (string.IsNullOrWhiteSpace(str)) return defaultVal;
+                if (TimeSpan.TryParse(str, out var parsed)) return parsed;
+                if (DateTime.TryParse(str, out var dt)) return dt.TimeOfDay;
+                return defaultVal;
+            }
         }
 
         private class TodayAttendanceRow
         {
+            public DateTime AttendanceDate { get; set; }
             public int StaffAttendanceId { get; set; }
             public byte Status { get; set; }
-            public TimeSpan? InTime { get; set; }
-            public TimeSpan? OutTime { get; set; }
+            public object? InTime { get; set; }
+            public object? OutTime { get; set; }
             public byte VerificationMethod { get; set; }
             public string? DeviceId { get; set; }
             public string? Remarks { get; set; }
+            public int? CreatedByUserId { get; set; }
+            public string? RoleName { get; set; }
+
+            public TimeSpan? ParsedInTime => ParseTimeSpanNullable(InTime);
+            public TimeSpan? ParsedOutTime => ParseTimeSpanNullable(OutTime);
+
+            private static TimeSpan? ParseTimeSpanNullable(object? val)
+            {
+                if (val == null || val == DBNull.Value) return null;
+                if (val is TimeSpan ts) return ts;
+                var str = val.ToString();
+                if (string.IsNullOrWhiteSpace(str)) return null;
+                if (TimeSpan.TryParse(str, out var parsed)) return parsed;
+                if (DateTime.TryParse(str, out var dt)) return dt.TimeOfDay;
+                return null;
+            }
+        }
+
+        private class StaffLeaveRecordRow
+        {
+            public DateTime StartDate { get; set; }
+            public DateTime EndDate { get; set; }
+            public string? LeaveReason { get; set; }
         }
 
         private class HolidayCheckRow
@@ -364,9 +404,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         private class RegularizationCheckRow
         {
             public int RegularizationId { get; set; }
+            public DateTime AttendanceDate { get; set; }
             public string Status { get; set; } = string.Empty;
-            public TimeSpan? RequestedInTime { get; set; }
-            public TimeSpan? RequestedOutTime { get; set; }
+            public object? RequestedInTime { get; set; }
+            public object? RequestedOutTime { get; set; }
         }
 
         public async Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date)
@@ -386,10 +427,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var timing = await multi.ReadFirstOrDefaultAsync<StaffTimingRow>() ?? new StaffTimingRow
             {
-                WorkStartTime = new TimeSpan(9, 0, 0),
-                WorkEndTime = new TimeSpan(16, 30, 0),
-                LateThreshold = new TimeSpan(9, 15, 0),
-                EarlyCheckoutThreshold = new TimeSpan(16, 30, 0),
+                WorkStartTime = "09:00:00",
+                WorkEndTime = "16:30:00",
+                LateThreshold = "09:15:00",
+                EarlyCheckoutThreshold = "16:30:00",
                 GracePeriodMinutes = 15
             };
 
@@ -398,9 +439,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             var leaveCheck = await multi.ReadFirstOrDefaultAsync<LeaveCheckRow>();
             var regularization = await multi.ReadFirstOrDefaultAsync<RegularizationCheckRow>();
 
-            var shiftStart = timing.WorkStartTime;
-            var shiftEnd = timing.WorkEndTime;
-            var lateThreshold = timing.LateThreshold;
+            var shiftStart = timing.ParsedWorkStartTime;
+            var shiftEnd = timing.ParsedWorkEndTime;
+            var lateThreshold = timing.ParsedLateThreshold;
             var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
 
             string status = "not_punched";
@@ -410,25 +451,28 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool isLate = false;
             string todayStatus;
 
-            if (attendance != null && attendance.InTime.HasValue)
-            {
-                inTimeStr = DateTime.Today.Add(attendance.InTime.Value).ToString("hh:mm tt");
-                isLate = attendance.InTime.Value > lateThreshold;
+            var inTime = attendance?.ParsedInTime;
+            var outTime = attendance?.ParsedOutTime;
 
-                if (attendance.OutTime.HasValue)
+            if (attendance != null && inTime.HasValue)
+            {
+                inTimeStr = DateTime.Today.Add(inTime.Value).ToString("hh:mm tt");
+                isLate = inTime.Value > lateThreshold;
+
+                if (outTime.HasValue)
                 {
-                    outTimeStr = DateTime.Today.Add(attendance.OutTime.Value).ToString("hh:mm tt");
-                    var diff = attendance.OutTime.Value - attendance.InTime.Value;
+                    outTimeStr = DateTime.Today.Add(outTime.Value).ToString("hh:mm tt");
+                    var diff = outTime.Value - inTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
 
-                    status = attendance.OutTime.Value > checkoutCutoff ? "missed_checkout" : "punched_out";
+                    status = outTime.Value > checkoutCutoff ? "missed_checkout" : "punched_out";
                 }
                 else
                 {
                     var nowTime = DateTime.Now.TimeOfDay;
                     status = nowTime > checkoutCutoff ? "missed_checkout" : "punched_in";
-                    var diff = nowTime - attendance.InTime.Value;
+                    var diff = nowTime - inTime.Value;
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
                 }
@@ -448,6 +492,33 @@ namespace CollegeManagement.API.Repositories.Implementations
             bool canRegularize = (todayStatus == "Late" || todayStatus == "Absent" || todayStatus == "Half Day" || todayStatus == "Missed Checkout")
                                  && (regularization == null || regularization.Status != "Approved");
 
+            bool markedByAdmin = false;
+            if (attendance != null)
+            {
+                const string checkAdminSql = @"
+SELECT sa.VerificationMethod, sa.DeviceId, sa.Remarks, sa.CreatedByUserId, r.RoleName
+FROM `StaffAttendances` sa
+LEFT JOIN `Users` u ON sa.CreatedByUserId = u.UserId
+LEFT JOIN `Roles` r ON u.RoleId = r.RoleId
+WHERE sa.StaffAttendanceId = @AttId LIMIT 1;";
+                try
+                {
+                    var attRow = await conn.QueryFirstOrDefaultAsync<dynamic>(checkAdminSql, new { AttId = attendance.StaffAttendanceId });
+                    if (attRow != null)
+                    {
+                        string role = (string?)attRow.RoleName ?? "";
+                        string dev = (string?)attRow.DeviceId ?? "";
+                        string rem = (string?)attRow.Remarks ?? "";
+                        byte vm = Convert.ToByte(attRow.VerificationMethod ?? 0);
+
+                        markedByAdmin = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                            || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                            || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+                catch {}
+            }
+
             return new MyAttendanceTodayResponse
             {
                 Status = status,
@@ -458,18 +529,76 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ShiftStartTime = DateTime.Today.Add(shiftStart).ToString("hh:mm tt"),
                 ShiftEndTime = DateTime.Today.Add(shiftEnd).ToString("hh:mm tt"),
                 IsLate = isLate,
-                TodayStatus = todayStatus,
+                TodayStatus = markedByAdmin ? "Present | Marked by Admin" : todayStatus,
                 CanRegularize = canRegularize,
                 DateFormatted = date.ToString("ddd, MMM dd, yyyy"),
-                RegularizationState = regularization?.Status?.ToLowerInvariant()
+                RegularizationState = regularization?.Status?.ToLowerInvariant(),
+                MarkedByAdmin = markedByAdmin,
+                MarkedBy = markedByAdmin ? "Admin" : (attendance != null ? "Self" : null)
             };
         }
 
         public async Task<MyAttendanceTodayResponse> PunchInAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
         {
             var targetDate = DateTime.Today;
+            if (targetDate.DayOfWeek == DayOfWeek.Sunday)
+            {
+                throw new InvalidOperationException("Today is Sunday (Weekly Off). Regular attendance self check-in is not permitted on non-working days.");
+            }
+
             var currentTime = DateTime.Now.TimeOfDay;
             var conn = await GetOpenConnectionAsync();
+
+            // Enforce configured campus shift hours for self check-in
+            const string timingSqlIn = @"
+SELECT 
+    COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+    COALESCE(tc.WorkEndTime, '15:20:00') AS WorkEndTime
+FROM `Staff` s
+LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
+                                     AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
+                                     AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+WHERE s.Id = @FacultyId AND s.IsDeleted = 0
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+LIMIT 1;";
+            var timingRowIn = await conn.QueryFirstOrDefaultAsync<dynamic>(timingSqlIn, new { FacultyId = facultyId });
+            var startTs = TimeSpan.TryParse((string?)timingRowIn?.WorkStartTime, out var sTs) ? sTs : new TimeSpan(9, 0, 0);
+            var endTs = TimeSpan.TryParse((string?)timingRowIn?.WorkEndTime, out var eTs) ? eTs : new TimeSpan(15, 20, 0);
+
+            if (currentTime < startTs || currentTime > endTs)
+            {
+                throw new InvalidOperationException($"Check-in is permitted only during configured shift hours: {DateTime.Today.Add(startTs):hh:mm tt} – {DateTime.Today.Add(endTs):hh:mm tt}. Currently outside shift window.");
+            }
+
+            // Asymmetric check: If attendance was marked by Admin, staff cannot overwrite it
+            const string checkAdminSqlIn = @"
+SELECT sa.StaffAttendanceId, sa.VerificationMethod, sa.DeviceId, sa.Remarks, sa.CreatedByUserId, r.RoleName
+FROM `StaffAttendances` sa
+JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+LEFT JOIN `Users` u ON sa.CreatedByUserId = u.UserId
+LEFT JOIN `Roles` r ON u.RoleId = r.RoleId
+WHERE sa.FacultyId = @FacultyId
+  AND DATE(sas.AttendanceDate) = @TodayDate
+  AND sa.IsActive = 1
+ORDER BY sa.StaffAttendanceId DESC
+LIMIT 1;";
+            var existingAttIn = await conn.QueryFirstOrDefaultAsync<dynamic>(checkAdminSqlIn, new { FacultyId = facultyId, TodayDate = targetDate });
+            if (existingAttIn != null)
+            {
+                string role = (string?)existingAttIn.RoleName ?? "";
+                string dev = (string?)existingAttIn.DeviceId ?? "";
+                string rem = (string?)existingAttIn.Remarks ?? "";
+                byte vm = Convert.ToByte(existingAttIn.VerificationMethod ?? 0);
+
+                bool isAdminMarked = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                    || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                    || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
+
+                if (isAdminMarked)
+                {
+                    throw new InvalidOperationException("Attendance for today has already been officially recorded by Administration. Staff cannot overwrite administrative attendance records.");
+                }
+            }
 
             await conn.ExecuteAsync(
                 "sp_PunchStaffAttendance",
@@ -493,8 +622,42 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<MyAttendanceTodayResponse> PunchOutAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId)
         {
             var targetDate = DateTime.Today;
+            if (targetDate.DayOfWeek == DayOfWeek.Sunday)
+            {
+                throw new InvalidOperationException("Today is Sunday (Weekly Off). Regular attendance self check-out is not permitted on non-working days.");
+            }
+
             var currentTime = DateTime.Now.TimeOfDay;
             var conn = await GetOpenConnectionAsync();
+
+            const string checkAdminSqlOut = @"
+SELECT sa.StaffAttendanceId, sa.VerificationMethod, sa.DeviceId, sa.Remarks, sa.CreatedByUserId, r.RoleName
+FROM `StaffAttendances` sa
+JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+LEFT JOIN `Users` u ON sa.CreatedByUserId = u.UserId
+LEFT JOIN `Roles` r ON u.RoleId = r.RoleId
+WHERE sa.FacultyId = @FacultyId
+  AND DATE(sas.AttendanceDate) = @TodayDate
+  AND sa.IsActive = 1
+ORDER BY sa.StaffAttendanceId DESC
+LIMIT 1;";
+            var existingAttOut = await conn.QueryFirstOrDefaultAsync<dynamic>(checkAdminSqlOut, new { FacultyId = facultyId, TodayDate = targetDate });
+            if (existingAttOut != null)
+            {
+                string role = (string?)existingAttOut.RoleName ?? "";
+                string dev = (string?)existingAttOut.DeviceId ?? "";
+                string rem = (string?)existingAttOut.Remarks ?? "";
+                byte vm = Convert.ToByte(existingAttOut.VerificationMethod ?? 0);
+
+                bool isAdminMarked = (role.Contains("Admin", StringComparison.OrdinalIgnoreCase) || role.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+                    || (dev.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !dev.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                    || (rem.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !rem.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
+
+                if (isAdminMarked)
+                {
+                    throw new InvalidOperationException("Attendance for today has already been officially recorded by Administration. Staff cannot overwrite administrative attendance records.");
+                }
+            }
 
             await conn.ExecuteAsync(
                 "sp_PunchStaffAttendance",
@@ -546,16 +709,335 @@ namespace CollegeManagement.API.Repositories.Implementations
                     break;
             }
 
+            var conn = await GetOpenConnectionAsync();
+
+            const string historySql = @"
+SELECT 
+    COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+    COALESCE(tc.WorkEndTime, '15:20:00') AS WorkEndTime,
+    COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
+    COALESCE(tc.EarlyCheckoutThreshold, '15:20:00') AS EarlyCheckoutThreshold,
+    COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+FROM `Staff` s
+LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
+                                     AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
+                                     AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+WHERE s.Id = @FacultyId AND s.IsDeleted = 0
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+LIMIT 1;
+
+SELECT 
+    DATE(sas.AttendanceDate) AS AttendanceDate,
+    sa.StaffAttendanceId,
+    sa.Status,
+    sa.InTime,
+    sa.OutTime,
+    sa.DeviceId,
+    sa.VerificationMethod,
+    sa.Remarks
+FROM `StaffAttendances` sa
+JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+WHERE sa.FacultyId = @FacultyId
+  AND sas.AttendanceDate >= @StartDate 
+  AND sas.AttendanceDate <= @EndDate
+  AND sa.IsActive = 1;
+
+SELECT 
+    HolidayName,
+    DATE(StartDate) AS StartDate,
+    DATE(EndDate) AS EndDate
+FROM `Holidays`
+WHERE IsDeleted = 0 AND Status = 'Active'
+  AND StartDate <= @EndDate AND EndDate >= @StartDate
+  AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
+
+SELECT 
+    DATE(StartDate) AS StartDate,
+    DATE(EndDate) AS EndDate,
+    Reason AS LeaveReason
+FROM `StaffLeaveRequests`
+WHERE StaffId = @FacultyId AND IsActive = 1 AND Status = 2
+  AND StartDate <= @EndDate AND EndDate >= @StartDate;
+
+SELECT 
+    RegularizationId,
+    DATE(AttendanceDate) AS AttendanceDate,
+    Status,
+    RequestedInTime,
+    RequestedOutTime
+FROM `StaffAttendanceRegularizations`
+WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
+  AND AttendanceDate >= @StartDate AND AttendanceDate <= @EndDate;
+";
+
+            using var multi = await conn.QueryMultipleAsync(
+                historySql,
+                new
+                {
+                    FacultyId = facultyId,
+                    StartDate = start.Date,
+                    EndDate = end.Date
+                });
+
+            var timing = await multi.ReadFirstOrDefaultAsync<StaffTimingRow>() ?? new StaffTimingRow
+            {
+                WorkStartTime = "09:00:00",
+                WorkEndTime = "16:30:00",
+                LateThreshold = "09:15:00",
+                EarlyCheckoutThreshold = "16:30:00",
+                GracePeriodMinutes = 15
+            };
+
+            var attendanceList = (await multi.ReadAsync<TodayAttendanceRow>()).ToList();
+            var holidayList = (await multi.ReadAsync<HolidayRecordRow>()).ToList();
+            var leaveList = (await multi.ReadAsync<StaffLeaveRecordRow>()).ToList();
+            var regList = (await multi.ReadAsync<RegularizationCheckRow>()).ToList();
+
+            var attMap = attendanceList
+                .GroupBy(a => a.AttendanceDate.Date)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.StaffAttendanceId).First());
+
+            var regMap = regList
+                .GroupBy(r => r.AttendanceDate.Date)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.RegularizationId).First());
+
+            var shiftStart = timing.ParsedWorkStartTime;
+            var shiftEnd = timing.ParsedWorkEndTime;
+            var lateThreshold = timing.ParsedLateThreshold;
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
+            string standardShiftName = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}";
+
             var logs = new List<MyAttendanceLogItemDto>();
             int presentCount = 0;
+            int absentCount = 0;
+            int leaveCount = 0;
+            int workingDaysCount = 0;
+            int elapsedWorkingDaysCount = 0;
 
             for (var d = start; d <= end; d = d.AddDays(1))
             {
                 bool isSunday = d.DayOfWeek == DayOfWeek.Sunday;
-                bool isPastOrToday = d <= now;
+                var holiday = holidayList.FirstOrDefault(h => d.Date >= h.StartDate.Date && d.Date <= h.EndDate.Date);
+                bool isHoliday = holiday != null;
+                var leave = leaveList.FirstOrDefault(l => d.Date >= l.StartDate.Date && d.Date <= l.EndDate.Date);
+                bool isLeave = leave != null;
 
-                var status = isSunday ? "Weekly Off" : (isPastOrToday ? "Present" : "--");
-                if (status == "Present") presentCount++;
+                // Sunday Exclusion: Strictly excluded from working days, attendance counts, and LOP deductions
+                if (isSunday)
+                {
+                    logs.Add(new MyAttendanceLogItemDto
+                    {
+                        Id = $"log-{d:yyyyMMdd}",
+                        Day = d.ToString("ddd"),
+                        Date = d.ToString("dd/MM/yyyy"),
+                        RawDate = d.ToString("yyyy-MM-dd"),
+                        Shift = "Weekly Off",
+                        InTime = "--",
+                        OutTime = "--",
+                        Hours = "0h 0m",
+                        Device = "--",
+                        Status = "Weekly Off",
+                        CanRegularize = false,
+                        IsToday = d.Date == now.Date,
+                        RegularizationState = null,
+                        HolidayName = null
+                    });
+                    continue;
+                }
+
+                bool isWorkingDay = !isHoliday;
+                if (isWorkingDay)
+                {
+                    workingDaysCount++;
+                    var nowTimeCheck = DateTime.Now.TimeOfDay;
+                    if (d.Date < now.Date || (d.Date == now.Date && (attMap.ContainsKey(d.Date) || nowTimeCheck >= shiftStart)))
+                    {
+                        elapsedWorkingDaysCount++;
+                    }
+                }
+
+                attMap.TryGetValue(d.Date, out var att);
+                regMap.TryGetValue(d.Date, out var reg);
+
+                string shift = isSunday ? "Weekly Off" : (isHoliday ? (holiday?.HolidayName ?? "Holiday") : (isLeave ? "Approved Leave" : standardShiftName));
+                string inTime = "--";
+                string outTime = "--";
+                string hours = isSunday ? "0h 0m" : "--";
+                string device = "--";
+                string status = "--";
+                bool canRegularize = false;
+                bool markedByAdmin = false;
+                string? markedBy = null;
+                string? regState = reg?.Status?.ToLowerInvariant();
+                string? holidayName = holiday?.HolidayName;
+
+                if (att != null)
+                {
+                    device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Web Portal" : att.DeviceId;
+                    var inT = att.ParsedInTime;
+                    var outT = att.ParsedOutTime;
+
+                    bool isAdminMarked = (att.RoleName != null && (att.RoleName.Contains("Admin", StringComparison.OrdinalIgnoreCase) || att.RoleName.Contains("Principal", StringComparison.OrdinalIgnoreCase)))
+                        || (att.DeviceId != null && att.DeviceId.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !att.DeviceId.Contains("Driver-Portal", StringComparison.OrdinalIgnoreCase))
+                        || (att.Remarks != null && att.Remarks.Contains("Admin", StringComparison.OrdinalIgnoreCase) && !att.Remarks.Contains("Driver Portal", StringComparison.OrdinalIgnoreCase));
+
+                    if (inT.HasValue)
+                    {
+                        inTime = DateTime.Today.Add(inT.Value).ToString("hh:mm tt");
+                        bool isLate = inT.Value > lateThreshold;
+
+                        if (outT.HasValue)
+                        {
+                            outTime = DateTime.Today.Add(outT.Value).ToString("hh:mm tt");
+                            var diff = outT.Value - inT.Value;
+                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                            hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+
+                            if (outT.Value > checkoutCutoff)
+                            {
+                                status = "Missed Checkout";
+                            }
+                            else if (att.Status == 3 || isLate)
+                            {
+                                status = "Late";
+                            }
+                            else if (att.Status == 4)
+                            {
+                                status = "Half Day";
+                            }
+                            else
+                            {
+                                status = isAdminMarked ? "Present (Admin)" : "Present";
+                                if (isAdminMarked)
+                                {
+                                    markedByAdmin = true;
+                                    markedBy = "Admin";
+                                    device = "Admin Entry";
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (d.Date == now.Date)
+                            {
+                                var nowTime = DateTime.Now.TimeOfDay;
+                                if (nowTime > checkoutCutoff)
+                                {
+                                    status = "Missed Checkout";
+                                    hours = "--";
+                                }
+                                else
+                                {
+                                    status = isLate ? "Late" : (isAdminMarked ? "Present (Admin)" : "Present");
+                                    var diff = nowTime - inT.Value;
+                                    if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                                    hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                                    if (isAdminMarked)
+                                    {
+                                        markedByAdmin = true;
+                                        markedBy = "Admin";
+                                        device = "Admin Entry";
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if (isAdminMarked || att.Status == 1)
+                                {
+                                    outTime = DateTime.Today.Add(shiftEnd).ToString("hh:mm tt");
+                                    var diff = shiftEnd - inT.Value;
+                                    if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                                    hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                                    status = "Present (Admin)";
+                                    markedByAdmin = true;
+                                    markedBy = "Admin";
+                                    device = "Admin Entry";
+                                }
+                                else
+                                {
+                                    status = "Missed Checkout";
+                                    hours = "--";
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        bool isAdminPresent = att.Status == 1 || isAdminMarked;
+                        if (isAdminPresent)
+                        {
+                            status = "Present (Admin)";
+                            inTime = DateTime.Today.Add(shiftStart).ToString("hh:mm tt");
+                            outTime = DateTime.Today.Add(shiftEnd).ToString("hh:mm tt");
+                            var diff = shiftEnd - shiftStart;
+                            if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
+                            hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
+                            device = "Admin Entry";
+                            markedByAdmin = true;
+                            markedBy = "Admin";
+                        }
+                        else
+                        {
+                            status = att.Status switch
+                            {
+                                2 => "Absent",
+                                3 => "Late",
+                                4 => "Half Day",
+                                5 => "Holiday",
+                                6 => "Leave",
+                                _ => "Absent"
+                            };
+                        }
+                    }
+
+                    if (status == "Present" || status == "Present (Admin)" || status == "Late") presentCount++;
+                    else if (status == "Leave") leaveCount++;
+                    else if (status == "Absent" || status == "Missed Checkout") absentCount++;
+
+                    canRegularize = (status == "Late" || status == "Absent" || status == "Half Day" || status == "Missed Checkout")
+                                 && (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                 && d.Date <= now.Date;
+                }
+                else
+                {
+                    if (isSunday)
+                    {
+                        status = "Weekly Off";
+                    }
+                    else if (isHoliday)
+                    {
+                        status = "Holiday";
+                    }
+                    else if (isLeave)
+                    {
+                        status = "Leave";
+                        leaveCount++;
+                    }
+                    else if (d.Date < now.Date)
+                    {
+                        status = "Absent";
+                        absentCount++;
+                        canRegularize = (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase));
+                    }
+                    else if (d.Date == now.Date)
+                    {
+                        var nowTime = DateTime.Now.TimeOfDay;
+                        if (nowTime > shiftEnd)
+                        {
+                            status = "Absent";
+                            absentCount++;
+                            canRegularize = (reg == null || !string.Equals(reg.Status, "Approved", StringComparison.OrdinalIgnoreCase));
+                        }
+                        else
+                        {
+                            status = "--";
+                        }
+                    }
+                    else
+                    {
+                        status = "--";
+                    }
+                }
 
                 logs.Add(new MyAttendanceLogItemDto
                 {
@@ -563,37 +1045,78 @@ namespace CollegeManagement.API.Repositories.Implementations
                     Day = d.ToString("ddd"),
                     Date = d.ToString("dd/MM/yyyy"),
                     RawDate = d.ToString("yyyy-MM-dd"),
-                    Shift = isSunday ? "Weekly Off" : "09:00 AM – 04:30 PM",
-                    InTime = isSunday ? "--" : "09:00 AM",
-                    OutTime = isSunday ? "--" : "04:30 PM",
-                    Hours = isSunday ? "0h 0m" : "7h 30m",
-                    Device = "Web Portal",
+                    Shift = shift,
+                    InTime = inTime,
+                    OutTime = outTime,
+                    Hours = hours,
+                    Device = device,
                     Status = status,
-                    CanRegularize = false,
-                    IsToday = d == now,
-                    RegularizationState = null,
-                    HolidayName = null
+                    CanRegularize = canRegularize,
+                    IsToday = d.Date == now.Date,
+                    RegularizationState = regState,
+                    HolidayName = holidayName,
+                    MarkedByAdmin = markedByAdmin,
+                    MarkedBy = markedBy
                 });
             }
 
+            // Fetch Admin LOP Policy directly from database as single source of truth
+            CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto lopPolicy;
+            try
+            {
+                lopPolicy = await conn.QueryFirstOrDefaultAsync<CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto>(
+                    "sp_LopPolicy_Get",
+                    commandType: CommandType.StoredProcedure) ?? new CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto();
+            }
+            catch
+            {
+                lopPolicy = new CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto();
+            }
+
+            decimal lopDays = 0m;
+            if (lopPolicy.Enabled)
+            {
+                int lateDays = logs.Count(l => l.Status == "Late");
+                int penalizableLate = Math.Max(0, lateDays - lopPolicy.AllowedLateLogins);
+                int divisor = Math.Max(1, lopPolicy.LateLoginsPerPenalty);
+                decimal latePenalty = (penalizableLate / divisor) * lopPolicy.PenaltyDays;
+                lopDays = absentCount + latePenalty;
+            }
+            else
+            {
+                lopDays = absentCount;
+            }
+
+            // Effective working days elapsed up to today (prevents future days from deflating percentage)
+            int effectiveWorkingDays = elapsedWorkingDaysCount > 0 ? elapsedWorkingDaysCount : (workingDaysCount > 0 ? workingDaysCount : 1);
+            decimal attendancePercentage = Math.Round(((decimal)presentCount / effectiveWorkingDays) * 100m, 1);
+            if (attendancePercentage > 100m) attendancePercentage = 100m;
+
+            string workingDaysSub = periodKey.Contains("month")
+                ? $"{start:MMMM yyyy} ({elapsedWorkingDaysCount} of {workingDaysCount} Days Elapsed)"
+                : $"{start:dd MMM} – {end:dd MMM yyyy} ({elapsedWorkingDaysCount} of {workingDaysCount} Days Elapsed)";
+
             var metrics = new MyAttendanceAnalyticsMetricsDto
             {
-                WorkingDays = $"{logs.Count(l => l.Shift != "Weekly Off")} Days",
-                WorkingDaysSub = $"{now:MMMM yyyy} Total",
+                WorkingDays = $"{elapsedWorkingDaysCount} Days",
+                WorkingDaysSub = workingDaysSub,
                 PresentDays = $"{presentCount} Days",
-                PresentDaysSub = "Biometric / Portal verified",
-                Leaves = "0 Days",
-                LeavesSub = "No leaves applied",
-                AbsentDays = "0 Days",
-                AbsentDaysSub = "No absences"
+                PresentDaysSub = $"{attendancePercentage}% Attendance",
+                Leaves = $"{leaveCount} Days",
+                LeavesSub = leaveCount > 0 ? $"{leaveCount} approved leave(s)" : "No leaves applied",
+                AbsentDays = $"{absentCount} Days",
+                AbsentDaysSub = lopDays > 0 ? $"{lopDays:0.#} LOP Day(s) (Admin Policy)" : "No loss of pay",
+                LopDays = $"{lopDays:0.#} Days",
+                LopDaysSub = lopPolicy.Enabled ? $"Policy: >{lopPolicy.AllowedLateLogins} late = {lopPolicy.PenaltyDays}d LOP per {lopPolicy.LateLoginsPerPenalty}" : "LOP disabled",
+                AttendancePercentage = $"{attendancePercentage}%"
             };
 
-            return await Task.FromResult(new MyAttendanceHistoryResponse
+            return new MyAttendanceHistoryResponse
             {
                 Period = periodKey,
                 Logs = logs,
                 Metrics = metrics
-            });
+            };
         }
 
         public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)

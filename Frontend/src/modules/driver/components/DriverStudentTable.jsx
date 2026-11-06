@@ -9,18 +9,25 @@ export default function DriverStudentTable({
   stopsList = [],
   showFilters = true,
   title,
+  activeStop,
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedStop, setSelectedStop] = useState("All");
+  const [selectedStop, setSelectedStop] = useState(activeStop || "All");
   const [selectedStatus, setSelectedStatus] = useState("All");
+
+  React.useEffect(() => {
+    if (activeStop) {
+      setSelectedStop(activeStop);
+    }
+  }, [activeStop]);
 
   const filteredStudents = useMemo(() => {
     return students.filter((st) => {
       const matchesSearch =
-        st.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        st.rollNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        st.class.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        st.stop.toLowerCase().includes(searchTerm.toLowerCase());
+        (st.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (st.rollNo || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (st.class || st.academicClass || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (st.stop || "").toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesStop = selectedStop === "All" || st.stop === selectedStop;
       const matchesStatus = selectedStatus === "All" || st.status === selectedStatus;
@@ -94,6 +101,7 @@ export default function DriverStudentTable({
                 <option value="All">All Statuses</option>
                 <option value="Picked Up">Picked Up</option>
                 <option value="Pending">Pending</option>
+                <option value="Missed">Missed</option>
                 <option value="Not Boarded">Not Boarded</option>
                 <option value="Absent">Absent</option>
               </select>
@@ -154,7 +162,7 @@ export default function DriverStudentTable({
                     </div>
                   </td>
                   <td>
-                    <span className="dp-class-tag">{student.class}</span>
+                    <span className="dp-class-tag">{student.class || student.academicClass || "Regular - REG-1"}</span>
                   </td>
                   <td>
                     <div className="dp-stop-cell">
@@ -163,15 +171,19 @@ export default function DriverStudentTable({
                   </td>
                   <td>
                     <span className="dp-time-tag">
-                      <Clock size={12} /> {student.pickupTime}
+                      <Clock size={12} /> {student.pickupTime || student.time || "07:55 AM"}
                     </span>
                   </td>
                   <td>
                     <div className="dp-contact-cell">
-                      <span className="dp-parent-name">{student.parentName}</span>
-                      <a href={`tel:${student.parentPhone}`} className="dp-phone-link" title={`Call ${student.parentPhone}`}>
-                        <Phone size={12} /> {student.parentPhone}
-                      </a>
+                      <span className="dp-parent-name">{student.parentName || "Parent / Guardian"}</span>
+                      {(student.parentPhone || student.contact) ? (
+                        <a href={`tel:${student.parentPhone || student.contact}`} className="dp-phone-link" title={`Call ${student.parentPhone || student.contact}`}>
+                          <Phone size={12} /> {student.parentPhone || student.contact}
+                        </a>
+                      ) : (
+                        <span className="dp-text-muted">No Contact</span>
+                      )}
                     </div>
                   </td>
                   <td>

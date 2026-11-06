@@ -1,3 +1,4 @@
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { 
@@ -289,7 +290,7 @@ export default function LeaveTypesPage() {
           </div>
 
           <div className="leave-types-table-wrap">
-            <table className="leave-categories-table">
+            <PaginatedTable className="leave-categories-table">
               <thead>
                 <tr>
                   <th>Category Name</th>
@@ -372,7 +373,7 @@ export default function LeaveTypesPage() {
                   ))
                 )}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </section>
       </div>

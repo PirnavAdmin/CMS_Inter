@@ -79,8 +79,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DropTime = dto.DropTime,
                     p_DistanceFromSchool = dto.DistanceFromStart,
                     p_MonthlyFee = dto.MonthlyFee > 0 ? dto.MonthlyFee : (dto.MonthlyFare ?? 1200m),
+                    p_Description = dto.Description,
+                    p_Time = (TimeSpan?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = userId
+                    p_IsActive = (byte)1,
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -88,11 +93,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long pickupPointId, UpdatePickupPointDto dto, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdatePickupPoints",
                 new
                 {
-                    p_PickupPointId = pickupPointId,
+                    p_Id = pickupPointId,
                     p_RouteId = dto.RouteId,
                     p_StopName = dto.PickupPointName.Trim(),
                     p_StopAddress = dto.Landmark,
@@ -101,8 +106,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DropTime = dto.DropTime,
                     p_DistanceFromSchool = dto.DistanceFromStart,
                     p_MonthlyFee = dto.MonthlyFee > 0 ? dto.MonthlyFee : (dto.MonthlyFare ?? 1200m),
+                    p_Description = dto.Description,
+                    p_Time = (TimeSpan?)null,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_UpdatedBy = userId
+                    p_IsActive = (byte)1,
+                    p_CreatedBy = (long?)null,
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -112,9 +122,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long pickupPointId, long? userId)
         {
             var c = Connection;
-            var rows = await c.ExecuteAsync(
+            var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeletePickupPoints",
-                new { p_PickupPointId = pickupPointId, p_UpdatedBy = userId },
+                new { p_Id = pickupPointId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

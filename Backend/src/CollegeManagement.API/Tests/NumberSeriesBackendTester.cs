@@ -326,13 +326,15 @@ namespace CollegeManagement.API.Tests
 
             await conn.ExecuteAsync("DROP PROCEDURE IF EXISTS `sp_GetNumberSeriesByCode`;");
             var sp2 = @"
-                CREATE PROCEDURE `sp_GetNumberSeriesByCode`(IN p_SeriesCode VARCHAR(50))
+                CREATE PROCEDURE `sp_GetNumberSeriesByCode`(IN p_SeriesCode VARCHAR(255), IN p_CampusId INT)
                 BEGIN
                     SELECT `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
                            `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
-                           `IsActive`, `CreatedAt`, `UpdatedAt`
+                           `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`
                     FROM `NumberSeriesConfigurations`
                     WHERE `SeriesCode` = p_SeriesCode
+                      AND (`CampusId` = p_CampusId OR `CampusId` IS NULL)
+                    ORDER BY (`CampusId` = p_CampusId) DESC
                     LIMIT 1;
                 END;";
             await conn.ExecuteAsync(sp2);
@@ -340,12 +342,13 @@ namespace CollegeManagement.API.Tests
             await conn.ExecuteAsync("DROP PROCEDURE IF EXISTS `sp_UpdateNumberSeriesByCode`;");
             var sp3 = @"
                 CREATE PROCEDURE `sp_UpdateNumberSeriesByCode`(
-                    IN p_SeriesCode VARCHAR(50),
+                    IN p_SeriesCode VARCHAR(255),
                     IN p_Prefix VARCHAR(20),
                     IN p_FormatPattern VARCHAR(100),
                     IN p_NumberLength INT,
                     IN p_StartNumber INT,
-                    IN p_Description VARCHAR(500)
+                    IN p_Description VARCHAR(500),
+                    IN p_CampusId INT
                 )
                 BEGIN
                     UPDATE `NumberSeriesConfigurations`
@@ -355,48 +358,66 @@ namespace CollegeManagement.API.Tests
                         `StartNumber` = p_StartNumber,
                         `Description` = p_Description,
                         `UpdatedAt` = CURRENT_TIMESTAMP
-                    WHERE `SeriesCode` = p_SeriesCode;
+                    WHERE `SeriesCode` = p_SeriesCode
+                      AND (`CampusId` = p_CampusId OR (p_CampusId IS NULL AND `CampusId` IS NULL));
 
                     SELECT `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
                            `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
-                           `IsActive`, `CreatedAt`, `UpdatedAt`
+                           `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`
                     FROM `NumberSeriesConfigurations`
                     WHERE `SeriesCode` = p_SeriesCode
+                      AND (`CampusId` = p_CampusId OR (p_CampusId IS NULL AND `CampusId` IS NULL))
                     LIMIT 1;
                 END;";
             await conn.ExecuteAsync(sp3);
 
             await conn.ExecuteAsync("DROP PROCEDURE IF EXISTS `sp_GenerateNextNumberSeries`;");
             var sp4 = @"
-                CREATE PROCEDURE `sp_GenerateNextNumberSeries`(IN p_SeriesCode VARCHAR(50))
+                CREATE PROCEDURE `sp_GenerateNextNumberSeries`(
+                    IN p_SeriesCode VARCHAR(255),
+                    IN p_CampusId INT,
+                    IN p_BaseSeriesCode VARCHAR(255)
+                )
                 BEGIN
+                    DECLARE v_Id INT DEFAULT NULL;
                     DECLARE v_CurrentSeq INT DEFAULT 0;
                     DECLARE v_StartNum INT DEFAULT 1;
                     DECLARE v_NextSeq INT DEFAULT 1;
 
-                    SELECT `CurrentSequence`, `StartNumber`
-                    INTO v_CurrentSeq, v_StartNum
+                    SELECT `Id`, `CurrentSequence`, `StartNumber`
+                    INTO v_Id, v_CurrentSeq, v_StartNum
                     FROM `NumberSeriesConfigurations`
                     WHERE `SeriesCode` = p_SeriesCode
+                      AND (`CampusId` = p_CampusId OR `CampusId` IS NULL)
+                    ORDER BY (`CampusId` = p_CampusId) DESC
+                    LIMIT 1
                     FOR UPDATE;
 
-                    IF v_CurrentSeq < v_StartNum THEN
-                        SET v_NextSeq = v_StartNum;
+                    IF v_Id IS NOT NULL THEN
+                        IF v_CurrentSeq < v_StartNum THEN
+                            SET v_NextSeq = v_StartNum;
+                        ELSE
+                            SET v_NextSeq = v_CurrentSeq + 1;
+                        END IF;
+
+                        UPDATE `NumberSeriesConfigurations`
+                        SET `CurrentSequence` = v_NextSeq,
+                            `UpdatedAt` = CURRENT_TIMESTAMP
+                        WHERE `Id` = v_Id;
+
+                        SELECT `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
+                               `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
+                               `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`
+                        FROM `NumberSeriesConfigurations`
+                        WHERE `Id` = v_Id;
                     ELSE
-                        SET v_NextSeq = v_CurrentSeq + 1;
+                        SELECT `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
+                               `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
+                               `IsActive`, `CampusId`, `CreatedAt`, `UpdatedAt`
+                        FROM `NumberSeriesConfigurations`
+                        WHERE `SeriesCode` = p_SeriesCode
+                        LIMIT 1;
                     END IF;
-
-                    UPDATE `NumberSeriesConfigurations`
-                    SET `CurrentSequence` = v_NextSeq,
-                        `UpdatedAt` = CURRENT_TIMESTAMP
-                    WHERE `SeriesCode` = p_SeriesCode;
-
-                    SELECT `Id`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
-                           `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, 
-                           `IsActive`, `CreatedAt`, `UpdatedAt`
-                    FROM `NumberSeriesConfigurations`
-                    WHERE `SeriesCode` = p_SeriesCode
-                    LIMIT 1;
                 END;";
             await conn.ExecuteAsync(sp4);
         }

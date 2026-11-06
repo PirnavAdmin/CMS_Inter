@@ -245,19 +245,71 @@ namespace CollegeManagement.API.Services.Implementations
                     }
                 }
 
+                var allocSubjectsList = new List<string>();
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                        "SELECT Designation, EmployeeId, CampusId, BoardId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
+                        @"SELECT s.Id, d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, 
+                                 s.CampusId, s.BoardId, s.StaffType, s.PhotoPath, s.ProfileStatus, s.ProfileCompletionPercentage, s.DepartmentSpecificJson 
+                          FROM Staffs s 
+                          LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
+                          WHERE s.Id = @Id", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
-                        if (string.IsNullOrWhiteSpace(user.Designation)) user.Designation = staffInfo.Designation;
-                        if (string.IsNullOrWhiteSpace(user.EmployeeId)) user.EmployeeId = staffInfo.EmployeeId;
+                        var freshDesig = (string?)staffInfo.Designation;
+                        if (!string.IsNullOrWhiteSpace(freshDesig))
+                        {
+                            user.Designation = freshDesig;
+                            try
+                            {
+                                await connection.ExecuteAsync(
+                                    "UPDATE Users SET Designation = @Designation WHERE UserId = @UserId",
+                                    new { Designation = freshDesig, UserId = user.UserId });
+                            }
+                            catch { }
+                        }
+                        if (!string.IsNullOrWhiteSpace((string?)staffInfo.EmployeeId))
+                        {
+                            user.EmployeeId = (string)staffInfo.EmployeeId;
+                        }
+                    }
+
+                    try
+                    {
+                        var subs = await connection.QueryAsync<string>(
+                            @"SELECT s.SubjectName FROM StaffSubjectAllocations a 
+                              INNER JOIN Subjects s ON a.SubjectId = s.SubjectId 
+                              WHERE a.StaffId = @Id AND a.IsActive = 1",
+                            new { Id = user.StaffId.Value });
+                        allocSubjectsList = subs.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+                    }
+                    catch { }
+
+                    if (!allocSubjectsList.Any() && staffInfo?.DepartmentSpecificJson != null)
+                    {
+                        try
+                        {
+                            var jsonStr = (string)staffInfo.DepartmentSpecificJson;
+                            using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
+                            if (doc.RootElement.TryGetProperty("allocatedSubjects", out var el) || doc.RootElement.TryGetProperty("subjects", out el))
+                            {
+                                if (el.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                {
+                                    allocSubjectsList = el.EnumerateArray()
+                                        .Select(x => x.GetString())
+                                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                                        .Select(x => x!)
+                                        .Distinct()
+                                        .ToList();
+                                }
+                            }
+                        }
+                        catch { }
                     }
                     
                     var campuses = await connection.QueryAsync<int>(
-                        "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id",
+                        "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id AND IsActive = 1 AND (EndDate IS NULL OR EndDate >= CURDATE())",
                         new { Id = user.StaffId.Value });
                     assignedCampusIds = campuses.Distinct().ToList();
 
@@ -324,8 +376,12 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
-                    Designation = user.Designation,
-                    EmployeeId = user.EmployeeId,
+                    Designation = (string?)staffInfo?.Designation ?? user.Designation,
+                    DesignationId = staffInfo?.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null,
+                    Department = (string?)staffInfo?.Department ?? string.Empty,
+                    DepartmentId = staffInfo?.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null,
+                    AllocatedSubjects = allocSubjectsList,
+                    EmployeeId = !string.IsNullOrWhiteSpace(user.EmployeeId) ? user.EmployeeId : (string?)staffInfo?.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
                     StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
                         ? "Admin"
@@ -333,7 +389,12 @@ namespace CollegeManagement.API.Services.Implementations
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds,
                     PhotoPath = resolvedPhotoPath,
-                    PhotoUrl = resolvedPhotoPath
+                    PhotoUrl = resolvedPhotoPath,
+                    ProfileStatus = (string?)staffInfo?.ProfileStatus ?? (user.AdminId.HasValue ? "Approved" : "PendingLink"),
+                    ProfileCompletionPercentage = staffInfo?.ProfileCompletionPercentage != null ? Convert.ToInt32(staffInfo.ProfileCompletionPercentage) : 0,
+                    IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
                 };
             }
 
@@ -408,35 +469,58 @@ namespace CollegeManagement.API.Services.Implementations
                     LastLogin = DateTime.UtcNow
                 };
 
-                using (var transaction = connection.BeginTransaction())
+                var existingUserByAdminId = await _userRepository.GetByAdminIdAsync(legacyAdmin.Id, connection);
+                if (existingUserByAdminId != null)
                 {
-                    try
+                    if (!string.Equals(existingUserByAdminId.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
                     {
-                        var newUserId = await _userRepository.CreateUserAsync(newAdminUser, connection, transaction);
-                        transaction.Commit();
-                        newAdminUser.UserId = newUserId;
+                        existingUserByAdminId.Email = normalizedEmail;
+                        await connection.ExecuteAsync("UPDATE Users SET Email = @Email, UpdatedAt = UTC_TIMESTAMP() WHERE UserId = @UserId", new { Email = normalizedEmail, UserId = existingUserByAdminId.UserId });
                     }
-                    catch (Exception ex)
+                    newAdminUser = existingUserByAdminId;
+                    if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
                     {
-                        transaction.Rollback();
-                        _logger.LogWarning(ex, "Concurrency collision during Admin JIT user creation for {Email}. Re-reading Users row.", normalizedEmail);
-
-                        var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, connection);
-                        if (existingUser != null)
+                        newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
+                    }
+                }
+                else
+                {
+                    using (var transaction = connection.BeginTransaction())
+                    {
+                        try
                         {
-                            newAdminUser = existingUser;
-                            if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
-                            {
-                                newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
-                            }
+                            var newUserId = await _userRepository.CreateUserAsync(newAdminUser, connection, transaction);
+                            transaction.Commit();
+                            newAdminUser.UserId = newUserId;
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            return new AuthResult
+                            transaction.Rollback();
+                            _logger.LogWarning(ex, "Concurrency collision during Admin JIT user creation for {Email}. Re-reading Users row.", normalizedEmail);
+
+                            var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, connection)
+                                ?? await _userRepository.GetByAdminIdAsync(legacyAdmin.Id, connection);
+                            if (existingUser != null)
                             {
-                                Status = false,
-                                Message = "Invalid Email or Password"
-                            };
+                                if (!string.Equals(existingUser.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    existingUser.Email = normalizedEmail;
+                                    await connection.ExecuteAsync("UPDATE Users SET Email = @Email, UpdatedAt = UTC_TIMESTAMP() WHERE UserId = @UserId", new { Email = normalizedEmail, UserId = existingUser.UserId });
+                                }
+                                newAdminUser = existingUser;
+                                if (newAdminUser.Role == null && newAdminUser.RoleId > 0)
+                                {
+                                    newAdminUser.Role = await _userRepository.GetRoleByIdAsync(newAdminUser.RoleId, connection) ?? null!;
+                                }
+                            }
+                            else
+                            {
+                                return new AuthResult
+                                {
+                                    Status = false,
+                                    Message = "Invalid Email or Password"
+                                };
+                            }
                         }
                     }
                 }
@@ -1222,6 +1306,9 @@ namespace CollegeManagement.API.Services.Implementations
             
             string? staffType = null;
             string? refreshPhotoPath = null;
+            string? refreshDept = null;
+            int? refreshDeptId = null;
+            int? refreshDesigId = null;
 
             if (user.AdminId.HasValue && user.AdminId.Value > 0)
             {
@@ -1231,7 +1318,10 @@ namespace CollegeManagement.API.Services.Implementations
             else if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                    "SELECT Designation, EmployeeId, StaffType, PhotoPath FROM Staff WHERE Id = @Id", 
+                    @"SELECT d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, s.StaffType, s.PhotoPath 
+                      FROM Staffs s 
+                      LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
+                      WHERE s.Id = @Id", 
                     new { Id = user.StaffId.Value });
                 if (staffInfo != null)
                 {
@@ -1239,6 +1329,9 @@ namespace CollegeManagement.API.Services.Implementations
                     user.EmployeeId = staffInfo.EmployeeId;
                     staffType = staffInfo.StaffType;
                     refreshPhotoPath = (string?)staffInfo.PhotoPath;
+                    refreshDept = (string?)staffInfo.Department;
+                    refreshDeptId = staffInfo.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null;
+                    refreshDesigId = staffInfo.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null;
                 }
             }
 
@@ -1262,6 +1355,9 @@ namespace CollegeManagement.API.Services.Implementations
                     ? "Admin"
                     : (staffType ?? (user.StudentId.HasValue ? "Student" : "Non-Teaching")),
                 Designation = user.Designation,
+                DesignationId = refreshDesigId,
+                Department = refreshDept ?? string.Empty,
+                DepartmentId = refreshDeptId,
                 EmployeeId = user.EmployeeId,
                 PhotoPath = refreshPhotoPath,
                 PhotoUrl = refreshPhotoPath

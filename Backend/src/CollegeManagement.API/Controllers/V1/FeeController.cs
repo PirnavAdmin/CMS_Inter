@@ -19,7 +19,15 @@ namespace CollegeManagement.API.Controllers.V1;
 public class FeeController : ControllerBase
 {
     private readonly IFeeService _service;
-    public FeeController(IFeeService service) => _service = service;
+    private readonly INotificationService? _notificationService;
+
+    public FeeController(
+        IFeeService service,
+        INotificationService? notificationService = null)
+    {
+        _service = service;
+        _notificationService = notificationService;
+    }
 
     private bool IsPrivilegedStaff()
     {
@@ -119,7 +127,36 @@ public class FeeController : ControllerBase
     // ---------------- Student Fee ----------------
     /// <summary>Assign a configured fee structure to an approved student.</summary>
     [HttpPost("student-fees/assign")]
-    public async Task<IActionResult> AssignStudentFee(AssignStudentFeeRequest request) => Ok(await _service.AssignStudentFeeAsync(request));
+    public async Task<IActionResult> AssignStudentFee(AssignStudentFeeRequest request)
+    {
+        var result = await _service.AssignStudentFeeAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Structure Assigned",
+                    $"Fee demand generated for your account. Total Payable Amount: ₹{result.PayableAmount:N0}. Status: {result.Status}.",
+                    "Fee",
+                    result.StudentFeeId,
+                    "/student/fees");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    null,
+                    "Fee Structure Assigned",
+                    $"Fee demand generated for student #{request.StudentId}. Total Amount: ₹{result.PayableAmount:N0}.",
+                    "Fee",
+                    result.StudentFeeId,
+                    "/parent/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     /// <summary>Get the complete student fee details, breakdown, schedules and payment history.</summary>
     [HttpGet("student-fees/{id:int}")]
@@ -163,7 +200,27 @@ public class FeeController : ControllerBase
     // ---------------- Concession ----------------
     /// <summary>Apply a student-specific concession or scholarship after fee assignment.</summary>
     [HttpPost("concession")]
-    public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request) => Ok(await _service.ApplyFeeConcessionAsync(request));
+    public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request)
+    {
+        var result = await _service.ApplyFeeConcessionAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Concession Approved",
+                    $"Fee concession of ₹{result.DiscountAmount:N0} ({result.ScholarshipName ?? "Concession"}) has been approved for your fee account.",
+                    "Fee",
+                    result.FeeConcessionId,
+                    "/student/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     // ---------------- Collection ----------------
     /// <summary>List student accounts with payable, paid, balance, next due and status.</summary>
@@ -172,7 +229,39 @@ public class FeeController : ControllerBase
 
     /// <summary>Collect full or partial payment against a selected fee schedule.</summary>
     [HttpPost("collect")]
-    public async Task<IActionResult> Collect(CreateFeePaymentRequest request) => Ok(await _service.CreateFeePaymentAsync(request));
+    public async Task<IActionResult> Collect(CreateFeePaymentRequest request)
+    {
+        var result = await _service.CreateFeePaymentAsync(request);
+
+        if (_notificationService != null && request.StudentId > 0 && result != null)
+        {
+            try
+            {
+                var receiptNo = result.ReceiptNumber ?? "N/A";
+                var studentName = !string.IsNullOrWhiteSpace(result.StudentName) ? result.StudentName : $"Student #{request.StudentId}";
+
+                await _notificationService.SendToStudentAsync(
+                    request.StudentId,
+                    "Fee Payment Received",
+                    $"Payment received: ₹{result.Amount:N0} received towards Receipt #{receiptNo} for {studentName}.",
+                    "Fee",
+                    result.FeePaymentId,
+                    $"/student/fees/receipt/{receiptNo}");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent", "Accountant" },
+                    null,
+                    "Fee Payment Received",
+                    $"Payment of ₹{result.Amount:N0} received for {studentName} (Receipt #{receiptNo}).",
+                    "Fee",
+                    result.FeePaymentId,
+                    $"/dashboard/fees");
+            }
+            catch { }
+        }
+
+        return Ok(result);
+    }
 
     // ---------------- Payment History / Receipt ----------------
     /// <summary>View payment history for one student. Enforces caller ID check to prevent IDOR.</summary>
@@ -197,12 +286,7 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
-        foreach (var id in studentIds.Distinct())
-        {
-            result[id] = await _service.GetFeePaymentsAsync(id);
-        }
-        return Ok(result);
+        return Ok(await _service.GetBulkFeePaymentsAsync(studentIds));
     }
 
     /// <summary>Fetch one payment transaction by payment ID.</summary>
@@ -244,5 +328,136 @@ public class FeeController : ControllerBase
 
     /// <summary>Return monthly fee collection report.</summary>
     [HttpGet("reports/monthly")]
-    public async Task<IActionResult> MonthlyReport([FromQuery] int? campusId, [FromQuery] int? year, [FromQuery] int? month) => Ok(await _service.GetMonthlyReportAsync(campusId, year, month));
+    public async Task<IActionResult> MonthlyReport([FromQuery] int? campusId, [FromQuery] int? year, [FromQuery] int? month) => Ok(await _service.GetMonthlyReportAsync(campusId, year, month));
+
+    /// <summary>Send fee payment reminder to student and parents.</summary>
+    [HttpPost("students/{studentId:int}/send-reminder")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> SendFeeReminder(
+        int studentId,
+        [FromQuery] decimal? amount = null,
+        [FromQuery] string? dueDate = null)
+    {
+        if (studentId <= 0) return BadRequest(new { success = false, message = "Invalid student ID." });
+
+        if (_notificationService != null)
+        {
+            try
+            {
+                var amountText = amount.HasValue && amount.Value > 0 ? $" of ₹{amount.Value:N2}" : "";
+                var dueText = !string.IsNullOrWhiteSpace(dueDate) ? $" on or before {dueDate}" : "";
+
+                await _notificationService.SendToStudentAsync(
+                    studentId,
+                    "Fee Payment Reminder",
+                    $"Reminder: Pending fee balance{amountText} is due for payment{dueText}. Please pay via student portal or at the accounts office.",
+                    "Fee",
+                    studentId,
+                    "/student/fees");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    null,
+                    "Fee Payment Reminder",
+                    $"Fee Reminder: Pending college fee balance{amountText} for your ward is due{dueText}. Please complete the payment.",
+                    "Fee",
+                    studentId,
+                    "/parent/fees");
+
+                return Ok(new { success = true, message = "Fee payment reminder sent successfully to student and parent." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        return Ok(new { success = true, message = "Notification service unavailable." });
+    }
+
+    /// <summary>Send fee overdue alert to student and parents.</summary>
+    [HttpPost("students/{studentId:int}/send-overdue-alert")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> SendFeeOverdueAlert(
+        int studentId,
+        [FromQuery] decimal? amount = null,
+        [FromQuery] string? dueDate = null)
+    {
+        if (studentId <= 0) return BadRequest(new { success = false, message = "Invalid student ID." });
+
+        if (_notificationService != null)
+        {
+            try
+            {
+                var amountText = amount.HasValue && amount.Value > 0 ? $" of ₹{amount.Value:N2}" : "";
+                var dueText = !string.IsNullOrWhiteSpace(dueDate) ? $" (due was {dueDate})" : "";
+
+                await _notificationService.SendToStudentAsync(
+                    studentId,
+                    "Fee Overdue Alert",
+                    $"URGENT: Fee payment{amountText} is OVERDUE{dueText}. Please clear outstanding dues immediately to avoid penalties or hall ticket hold.",
+                    "Fee",
+                    studentId,
+                    "/student/fees");
+
+                await _notificationService.SendToRolesAsync(
+                    new[] { "Parent" },
+                    null,
+                    "Fee Overdue Alert",
+                    $"CRITICAL NOTICE: Fee payment{amountText} for your ward is OVERDUE{dueText}. Please clear pending dues immediately.",
+                    "Fee",
+                    studentId,
+                    "/parent/fees");
+
+                return Ok(new { success = true, message = "Fee overdue alert sent successfully to student and parent." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        return Ok(new { success = true, message = "Notification service unavailable." });
+    }
+
+    /// <summary>Send bulk fee payment reminders to multiple students.</summary>
+    [HttpPost("send-bulk-due-reminders")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> SendBulkFeeReminders([FromBody] List<int> studentIds)
+    {
+        if (studentIds == null || !studentIds.Any())
+            return BadRequest(new { success = false, message = "No student IDs provided." });
+
+        var sent = 0;
+        if (_notificationService != null)
+        {
+            foreach (var sId in studentIds.Distinct())
+            {
+                try
+                {
+                    await _notificationService.SendToStudentAsync(
+                        sId,
+                        "Fee Payment Reminder",
+                        "Reminder: Outstanding fee payment is pending for your academic account. Please clear dues in the student portal.",
+                        "Fee",
+                        sId,
+                        "/student/fees");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        null,
+                        "Fee Payment Reminder",
+                        "Fee Reminder: College fee payment is pending for your ward. Please complete payment at the earliest.",
+                        "Fee",
+                        sId,
+                        "/parent/fees");
+
+                    sent++;
+                }
+                catch { }
+            }
+        }
+
+        return Ok(new { success = true, count = sent, message = $"Fee payment reminders sent to {sent} students and parents." });
+    }
 }

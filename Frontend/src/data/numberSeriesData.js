@@ -106,24 +106,45 @@ export const FIXED_NUMBER_SERIES = [
     ],
   },
   {
-    id: "certificate-number",
-    key: "certificate-number",
-    seriesCode: "CERTIFICATE_NUMBER",
-    name: "Certificate Number",
-    category: "Certificates & Degrees",
-    prefix: "CND",
-    format: "CND-{YEAR}-{RANDOM}",
-    numberLength: 6,
+    id: "offer-letter-no",
+    key: "offer-letter-no",
+    seriesCode: "OFFER_LETTER_NO",
+    name: "Staff Offer Letter Number",
+    category: "Staff Management",
+    prefix: "PC-OL",
+    format: "{CAMPUS}-OL/{YEAR}/{SEQ}",
+    numberLength: 4,
     startNumber: 1,
-    currentNumber: 439,
-    totalGenerated: 439,
-    currentExample: "CND-2026-82FC40",
-    description: "Configure certificate number format for generated certificates.",
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "PC-OL/2026/0001",
+    description: "Official serial numbering sequence for institutional faculty & staff offer letters.",
     status: "Active",
-    allowedTokens: ["{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}"],
+    allowedTokens: ["{CAMPUS}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}"],
     sampleFormats: [
-      { format: "CND-{YEAR}-{RANDOM}", example: "CND-2026-82FC40" },
-      { format: "CERT-{YEAR}-{SEQ}", example: "CERT-2026-000001" },
+      { format: "{CAMPUS}-OL/{YEAR}/{SEQ}", example: "PC-OL/2026/0001" },
+      { format: "OL-{CAMPUS}-{YEAR}-{SEQ}", example: "OL-PC-2026-0001" },
+    ],
+  },
+  {
+    id: "staff-transfer-no",
+    key: "staff-transfer-no",
+    seriesCode: "TRANSFER_ORDER_NO",
+    name: "Staff Transfer Order Number",
+    category: "Staff Management",
+    prefix: "TRF",
+    format: "{CAMPUS}-TRF/{YEAR}/{SEQ}",
+    numberLength: 4,
+    startNumber: 1,
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "PC-TRF/2026/0001",
+    description: "Official serial numbering sequence for inter-campus faculty and staff transfer orders.",
+    status: "Active",
+    allowedTokens: ["{CAMPUS}", "{YEAR}", "{YYYY}", "{SEQ}"],
+    sampleFormats: [
+      { format: "{CAMPUS}-TRF/{YEAR}/{SEQ}", example: "PC-TRF/2026/0001" },
+      { format: "TRF-{CAMPUS}-{YEAR}-{SEQ}", example: "TRF-PC-2026-0001" },
     ],
   },
 
@@ -206,15 +227,31 @@ export function normalizeNumberSeriesItem(item = {}) {
 }
 
 export function isSeriesRemoved(item) {
-  if (!item) return false;
-  const key = String(item.id || item.key || item.seriesCode || item.slug || "").toLowerCase().trim();
+  if (!item) return true;
+  const key = String(item.id || item.key || item.seriesCode || item.slug || "").toLowerCase().trim().replace(/[\s_]+/g, "-");
   const name = String(item.name || item.seriesName || "").toLowerCase().trim();
+
+  // Permanently suppress obsolete / redundant cards
+  if (
+    key.includes("certificate") ||
+    name.includes("certificate") ||
+    key === "employee-id" ||
+    key === "student-id" ||
+    key === "section-name" ||
+    key === "library-id" ||
+    key === "hostel-id" ||
+    key.startsWith("student-roll-no-") ||
+    name === "student roll" ||
+    name === "student roll no"
+  ) {
+    return true;
+  }
 
   try {
     const deletedRaw = localStorage.getItem('NumberSeries_Deleted');
     if (deletedRaw) {
       const deletedList = JSON.parse(deletedRaw);
-      if (Array.isArray(deletedList) && deletedList.includes(key)) {
+      if (Array.isArray(deletedList) && (deletedList.includes(key) || deletedList.includes(name))) {
         return true;
       }
     }
@@ -310,19 +347,41 @@ export function readNumberSeriesSettings() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return FIXED_NUMBER_SERIES;
     
-    // Filter out removed series
-    const cleanParsed = parsed.filter((p) => !isSeriesRemoved(p));
+    // Filter out removed and legacy hidden series
+    const cleanParsed = parsed.filter((p) => p && !isSeriesRemoved(p));
     
-    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all valid cards are always present
-    const result = FIXED_NUMBER_SERIES.map((fixed) => {
-      const found = cleanParsed.find((p) => p.id === fixed.id || p.key === fixed.key || p.seriesCode === fixed.seriesCode);
-      if (!found) return fixed;
-      return { ...fixed, ...found };
+    const getCanonicalKey = (item) => {
+      const rawCode = item.seriesCode || item.slug || item.key || item.id || item.name || "";
+      let code = String(rawCode).toUpperCase().replace(/[\s-]+/g, '_');
+      if (code === 'STUDENT_ROLL_NO' || code === 'STUDENT_ROLL') code = 'ROLL_NO';
+      if (code === 'STAFF_TRANSFER_NO' || code === 'STAFF_TRANSFER_ORDER_NUMBER' || code === 'STAFF_TRANSFER_ORDER_NO') code = 'TRANSFER_ORDER_NO';
+      if (code === 'STAFF_OFFER_LETTER_NO' || code === 'STAFF_OFFER_LETTER_NUMBER' || code === 'OFFER_LETTER') code = 'OFFER_LETTER_NO';
+      return code;
+    };
+
+    const seenCanonical = new Set();
+    const result = [];
+
+    // Map onto FIXED_NUMBER_SERIES first so our 8 canonical cards always come first in stable order
+    FIXED_NUMBER_SERIES.forEach((fixed) => {
+      const fixedKey = getCanonicalKey(fixed);
+      const found = cleanParsed.find((p) => {
+        return (
+          p.id === fixed.id ||
+          p.key === fixed.key ||
+          (p.seriesCode && fixed.seriesCode && p.seriesCode === fixed.seriesCode) ||
+          getCanonicalKey(p) === fixedKey
+        );
+      });
+      seenCanonical.add(fixedKey);
+      result.push(found ? { ...fixed, ...found, seriesCode: fixed.seriesCode || found.seriesCode } : fixed);
     });
     
-    // Append any custom series that are not in FIXED_NUMBER_SERIES
+    // Append any genuine custom series created by user (not in FIXED_NUMBER_SERIES)
     cleanParsed.forEach((p) => {
-      if (!FIXED_NUMBER_SERIES.some((fixed) => fixed.id === p.id || fixed.key === p.key || (p.seriesCode && fixed.seriesCode === p.seriesCode))) {
+      const pKey = getCanonicalKey(p);
+      if (!seenCanonical.has(pKey)) {
+        seenCanonical.add(pKey);
         result.push(p);
       }
     });

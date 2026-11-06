@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Wallet, Calendar, Eye, Download } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { money } from "@/modules/admin/AdminInventory/inventoryModel.js";
 import { useDialogFocus } from "@/modules/admin/AdminInventory/components/InventoryUi.jsx";
@@ -58,7 +59,7 @@ function PayslipDetails({ slip, profile, onClose, download, busy }) {
             disabled={busy}
             onClick={() => download(slip)}
           >
-            <Download size={16} />
+            <ThreeDIcon name="download" size={16} />
             {busy ? "Preparing PDF…" : "Download PDF"}
           </button>
         </div>
@@ -105,13 +106,13 @@ export default function InventoryPayslipsPage() {
     <>
       <div className="ip-page-head">
         <div>
-          <h1>
-            <Wallet size={26} /> My Payslips
+          <h1 style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <ThreeDIcon name="fee" size={28} /> My Payslips
           </h1>
           <p>View your monthly salary statements and download PDFs.</p>
         </div>
         <label className="ip-pay-year">
-          <Calendar size={16} /> Year
+          <ThreeDIcon name="calendar" size={16} /> Year
           <select aria-label="Payslip year" value={year} onChange={(e) => setYear(e.target.value)}>
             <option value="all">All Years</option>
             {[...new Set(payslips.map((p) => p.year))].map((y) => (
@@ -148,14 +149,14 @@ export default function InventoryPayslipsPage() {
             </div>
             <div className="ip-actions">
               <button className="cms-btn cms-btn-primary" onClick={() => view(current)}>
-                <Eye size={16} /> View Payslip
+                <ThreeDIcon name="view" size={16} /> View Payslip
               </button>
               <button
                 className="cms-btn cms-btn-ghost"
                 disabled={busy}
                 onClick={() => download(current)}
               >
-                <Download size={16} />
+                <ThreeDIcon name="download" size={16} />
                 {busy ? "Preparing PDF…" : "Download PDF"}
               </button>
             </div>
@@ -176,7 +177,7 @@ export default function InventoryPayslipsPage() {
                     aria-label={`View ${payslipPeriod(slip)} payslip`}
                     onClick={() => view(slip)}
                   >
-                    <Eye size={16} />
+                    <ThreeDIcon name="view" size={16} />
                   </button>
                   <button
                     className="cms-btn cms-btn-ghost"
@@ -184,7 +185,7 @@ export default function InventoryPayslipsPage() {
                     aria-label={`Download ${payslipPeriod(slip)} PDF`}
                     onClick={() => download(slip)}
                   >
-                    <Download size={16} />
+                    <ThreeDIcon name="download" size={16} />
                   </button>
                 </div>
               </div>

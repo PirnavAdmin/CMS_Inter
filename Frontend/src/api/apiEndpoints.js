@@ -58,6 +58,9 @@ export const apiEndpoints = {
     bulkSendLinks: "/api/v1/staff/bulk-send-links",
     saveProfileDraft: (id) => `/api/v1/staff/${id}/save-profile-draft`,
     saveProfileDraftByToken: (token) => `/api/v1/staff/token/${token}/save-profile-draft`,
+    savePersonalDetails: (id) => `/api/v1/staff/${id}/save-profile-draft`,
+    saveBankDetails: (id) => `/api/v1/staff/${id}/save-profile-draft`,
+    saveAddressDetails: (id) => `/api/v1/staff/${id}/save-profile-draft`,
     submitProfile: (id) => `/api/v1/staff/${id}/submit-profile`,
     submitProfileByToken: (token) => `/api/v1/staff/token/${token}/submit-profile`,
     adminReview: (id) => `/api/v1/staff/${id}/admin-review`,
@@ -85,6 +88,23 @@ export const apiEndpoints = {
     updateProfileSettings: "/api/v1/staff/settings/profile",
     updatePreferences: "/api/v1/staff/settings/preferences",
     changePassword: "/api/v1/staff/settings/change-password",
+    offerLetterPdf: (id) => `/api/v1/staff/${id}/offer-letter-pdf`,
+    experienceSummary: (id) => `/api/v1/staff/${id}/experience-summary`,
+    offerLetterWorkflowConfig: "/api/v1/staff/offer-letter-workflow/config",
+    offerLetterWorkflowRequests: "/api/v1/staff/offer-letter-workflow/requests",
+    offerLetterWorkflowVerify: (id) => `/api/v1/staff/${id}/offer-letter-workflow/verify`,
+    offerLetterWorkflowApprove: (id) => `/api/v1/staff/${id}/offer-letter-workflow/approve`,
+    offerLetterWorkflowReject: (id) => `/api/v1/staff/${id}/offer-letter-workflow/reject`,
+  },
+  staffTransfers: {
+    create: "/api/v1/staff-transfers",
+    list: "/api/v1/staff-transfers",
+    getById: (id) => `/api/v1/staff-transfers/${id}`,
+    history: (staffId) => `/api/v1/staff-transfers/staff/${staffId}/history`,
+    preflight: (staffId) => `/api/v1/staff-transfers/preflight/${staffId}`,
+    approve: (id) => `/api/v1/staff-transfers/${id}/approve`,
+    reject: (id) => `/api/v1/staff-transfers/${id}/reject`,
+    orderPdf: (id) => `/api/v1/staff-transfers/${id}/order-pdf`,
   },
   boards: {
     list: "/api/v1/boards",
@@ -141,12 +161,12 @@ export const apiEndpoints = {
     list: "/api/v1/break-types",
   },
   masterGroups: {
-    list: "/api/v1/master-groups",
-    create: "/api/v1/master-groups",
-    getById: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    update: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    delete: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}`,
-    status: (masterGroupId) => `/api/v1/master-groups/${encodeURIComponent(masterGroupId)}/status`,
+    list: "/api/v1/groups",
+    create: "/api/v1/groups",
+    getById: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    update: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    delete: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}`,
+    status: (masterGroupId) => `/api/v1/groups/${encodeURIComponent(masterGroupId)}/status`,
   },
   groups: {
     getAll: "/api/v1/groups",
@@ -261,6 +281,8 @@ export const apiEndpoints = {
     downloadPdf: "/api/v1/results/download-pdf",
     studentMemo: "/api/v1/results/students/memo",
     memo: (studentId) => `/api/v1/results/student/${studentId}/memo`,
+    studentPublished: "/api/v1/students/me/results",
+    publishedStudentMemo: (examinationId) => `/api/v1/students/me/results/${encodeURIComponent(examinationId)}/memo`,
     revaluation: "/api/v1/results/revaluation",
     revaluationById: (revaluationId) => `/api/v1/results/revaluation/${revaluationId}`,
   },
@@ -377,7 +399,7 @@ export const apiEndpoints = {
     lockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/lock`,
     unlockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/unlock`,
     studentSubjects: (studentId) => `/api/v1/attendance/student/${studentId}/subjects`,
-    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${studentId}/daily-logs`,
+    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`,
   },
   staffAttendance: {
     load: "/api/v1/staff-attendance/load",
@@ -847,14 +869,6 @@ export const apiEndpoints = {
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
     myPermissions: "/api/v1/roles/my-permissions",
   },
-  numberSeries: {
-    getAll: "/api/v1/settings/number-series",
-    getByCode: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-    update: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-    generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
-    preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
-    delete: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
-  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
@@ -878,4 +892,3 @@ export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
 };
 
 export default apiEndpoints;
-

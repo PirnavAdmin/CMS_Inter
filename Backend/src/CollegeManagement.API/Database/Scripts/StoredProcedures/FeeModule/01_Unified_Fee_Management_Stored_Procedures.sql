@@ -333,9 +333,24 @@ BEGIN
     IF p_ItemsJson IS NOT NULL AND JSON_VALID(p_ItemsJson) THEN
         SET v_ItemCount = JSON_LENGTH(p_ItemsJson);
         WHILE v_Idx < v_ItemCount DO
-            SET v_FeeTypeId = JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId')));
-            SET v_Rule = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))), 'Mandatory');
-            SET v_Amount = CAST(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))) AS DECIMAL(15,2));
+            SET v_FeeTypeId = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeTypeId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeComponentId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeComponentId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].id'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Id')))
+            );
+            SET v_Rule = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Rule'))),
+                'Mandatory'
+            );
+            SET v_Amount = CAST(COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Amount'))),
+                0
+            ) AS DECIMAL(15,2));
 
             IF v_FeeTypeId IS NOT NULL AND v_Amount > 0 THEN
                 INSERT INTO FeeStructureComponents (
@@ -419,9 +434,24 @@ BEGIN
         SET v_Idx = 0;
         IF p_ItemsJson IS NOT NULL AND JSON_VALID(p_ItemsJson) THEN
             WHILE v_Idx < v_ItemCount DO
-                SET v_FeeTypeId = JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId')));
-                SET v_Rule = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))), 'Mandatory');
-                SET v_Amount = CAST(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))) AS DECIMAL(15,2));
+                SET v_FeeTypeId = COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeTypeId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeComponentId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeComponentId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].id'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Id')))
+                );
+                SET v_Rule = COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Rule'))),
+                    'Mandatory'
+                );
+                SET v_Amount = CAST(COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Amount'))),
+                    0
+                ) AS DECIMAL(15,2));
 
                 SELECT Category INTO v_Category FROM FeeTypes WHERE FeeTypeId = v_FeeTypeId LIMIT 1;
 
@@ -457,8 +487,8 @@ BEGIN
         END IF;
     END IF;
 
-    -- Return 1st Year Structure ID
-    SELECT v_FirstYearId AS FeeStructureId, v_SecondYearId AS SecondYearStructureId;
+    -- Return full 1st Year Structure with items
+    CALL sp_FeeStructure_GetById(v_FirstYearId);
 END //
 DELIMITER ;
 
@@ -1413,6 +1443,9 @@ BEGIN
         s.StudentName,
         s.CampusId,
         COALESCE(c.CampusName, '') AS CampusName,
+        COALESCE(b.BoardName, '') AS BoardName,
+        COALESCE(ay.AcademicYearName, '') AS AcademicYearName,
+        COALESCE(s.RollNo, '') AS RollNumber,
         COALESCE(g.GroupName, '') AS GroupName,
         COALESCE(sec.SectionName, '') AS SectionName,
         sf.FeeStructureId,
@@ -1424,19 +1457,22 @@ BEGIN
         sf.ConcessionAmount AS Concession,
         0.00 AS Fine,
         sf.Status,
-        (
-            SELECT MIN(fi.DueDate)
-            FROM FeeInstallments fi
-            INNER JOIN FeePaymentPlans fpp ON fpp.FeePaymentPlanId = fi.FeePaymentPlanId
-            WHERE fpp.StudentFeeId = sf.StudentFeeId
-              AND fi.BalanceAmount > 0
-        ) AS NextDueDate
+        next_due.NextDueDate
     FROM StudentFees sf
     INNER JOIN Students s ON s.StudentId = sf.StudentId
     LEFT JOIN FeeStructures fs ON fs.FeeStructureId = sf.FeeStructureId
     LEFT JOIN Campuses c ON c.CampusId = s.CampusId
+    LEFT JOIN Boards b ON b.BoardId = s.BoardId
+    LEFT JOIN AcademicYears ay ON ay.AcademicYearId = s.AcademicYearId
     LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
     LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
+    LEFT JOIN (
+        SELECT fpp.StudentFeeId, MIN(fi.DueDate) AS NextDueDate
+        FROM FeeInstallments fi
+        INNER JOIN FeePaymentPlans fpp ON fpp.FeePaymentPlanId = fi.FeePaymentPlanId
+        WHERE fi.BalanceAmount > 0
+        GROUP BY fpp.StudentFeeId
+    ) next_due ON next_due.StudentFeeId = sf.StudentFeeId
     WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
@@ -1877,6 +1913,32 @@ DELIMITER ;
 CREATE PROCEDURE sp_GetPaymentHistoryByStudent(IN p_StudentId INT)
 BEGIN
     CALL sp_FeePayment_GetHistoryByStudent(p_StudentId);
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS sp_FeePayment_GetBulkHistory;
+DELIMITER //
+CREATE PROCEDURE sp_FeePayment_GetBulkHistory(IN p_StudentIds TEXT)
+BEGIN
+    SELECT 
+        fp.FeePaymentId,
+        fp.StudentId,
+        s.StudentName,
+        s.AdmissionNo AS AdmissionNumber,
+        fp.StudentFeeId,
+        fp.FeeInstallmentId,
+        fp.Amount,
+        fp.PaymentMode AS PaymentMethod,
+        fp.TransactionReference,
+        fp.Remarks,
+        fp.PaymentDate,
+        fp.Status,
+        fp.ReceiptNumber
+    FROM FeePayments fp
+    INNER JOIN Students s ON s.StudentId = fp.StudentId
+    WHERE p_StudentIds IS NOT NULL 
+      AND FIND_IN_SET(fp.StudentId, p_StudentIds)
+    ORDER BY fp.FeePaymentId DESC;
 END //
 DELIMITER ;
 

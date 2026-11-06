@@ -35,6 +35,7 @@
 .cms-tabs button,
 .cms-tab-btn {
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #6f8400) 35%, transparent);
+
   border-radius: 10px;
   padding: 7px 18px;
   background: var(--cms-surface, #ffffff);
@@ -51,6 +52,7 @@
 .cms-tab-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
   background: var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary, #6f8400) 8%, transparent));
+
   border-color: var(--cms-primary, #6f8400);
 }
 
@@ -60,6 +62,7 @@
   border-color: var(--cms-primary, #6f8400);
   color: #ffffff;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--cms-primary, #6f8400) 28%, transparent);
+
 }
 
 [data-theme="dark"] .cms-tabs button,
@@ -428,6 +431,7 @@
 .cms-custom-select-combobox:focus-within {
   border-color: var(--cms-primary, #6f8400) !important;
   box-shadow: 0 0 0 3px var(--cms-primary-soft, color-mix(in srgb, var(--cms-primary, #6f8400) 16%, transparent)) !important;
+
 }
 
 .cms-custom-select-combobox.is-disabled {
@@ -650,28 +654,53 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  row-gap: 12px;
-  margin-bottom: 14px;
+  row-gap: 8px;
+  margin-bottom: 6px;
   flex-wrap: wrap;
 }
 
-.cms-bulk-actions {
+.cms-bulk-actions-desktop,
+.cms-workspace-action-group {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.cms-bulk-actions-mobile {
+  display: none !important;
+}
+
+.cms-entry-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.cms-bulk-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
   flex-shrink: 0;
   min-height: 32px;
 }
 
 .cms-bulk-actions .cms-btn {
   height: 32px;
-  padding: 0 11px;
-  font-size: 0.77rem;
+  padding: 0 12px;
+  font-size: 0.78rem;
   font-weight: 600;
+  border-radius: 6px;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   flex-shrink: 0;
+  transition: all 0.18s ease;
 }
 
 .cms-file-input-hidden {
@@ -683,7 +712,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 16px;
+  margin-top: 6px;
+  margin-bottom: 14px;
+  padding-top: 0;
+  border-top: none !important;
   flex-wrap: wrap;
 }
 
@@ -728,6 +760,36 @@
   margin-left: auto;
 }
 
+.cms-entry-edit-action .cms-btn-secondary,
+.cms-btn-edit-submitted {
+  background-color: var(--cms-primary-soft, #eef5e7) !important;
+  border: 1px solid var(--cms-primary-border, #b8cb79) !important;
+  color: var(--cms-primary, #617800) !important;
+  font-weight: 600;
+  transition: all 0.18s ease;
+}
+
+.cms-entry-edit-action .cms-btn-secondary:hover:not(:disabled),
+.cms-btn-edit-submitted:hover:not(:disabled) {
+  background-color: var(--cms-primary, #617800) !important;
+  border-color: var(--cms-primary, #617800) !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .cms-entry-edit-action .cms-btn-secondary,
+[data-theme="dark"] .cms-btn-edit-submitted {
+  background-color: color-mix(in srgb, var(--cms-primary, #617800) 25%, transparent) !important;
+  border-color: color-mix(in srgb, var(--cms-primary, #617800) 45%, transparent) !important;
+  color: #d6e88d !important;
+}
+
+[data-theme="dark"] .cms-entry-edit-action .cms-btn-secondary:hover:not(:disabled),
+[data-theme="dark"] .cms-btn-edit-submitted:hover:not(:disabled) {
+  background-color: var(--cms-primary, #617800) !important;
+  border-color: var(--cms-primary, #617800) !important;
+  color: #ffffff !important;
+}
+
 .cms-marks-actions {
   display: flex;
   justify-content: flex-end;
@@ -757,15 +819,16 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 14px;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
+  flex-wrap: nowrap;
 }
 
 .cms-eval-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
 }
 
 .cms-subtab-pill-group {
@@ -774,6 +837,7 @@
   gap: 4px;
   background: var(--cms-surface-subtle, #f5f6f0);
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #6f8400) 28%, transparent);
+
   border-radius: 8px;
   padding: 3px;
 }
@@ -797,6 +861,7 @@
 .cms-subtab-pill-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
   background: color-mix(in srgb, var(--cms-primary, #6f8400) 8%, transparent);
+
 }
 
 .cms-subtab-pill-btn.active {
@@ -953,6 +1018,7 @@
   height: 30px;
   padding: 0 6px;
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #6f8400) 45%, transparent) !important;
+
   border-radius: 6px;
   text-align: center;
   font-weight: 600;
@@ -978,6 +1044,7 @@
   opacity: 0.65;
   cursor: not-allowed;
   border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 22%, transparent) !important;
+
   background: var(--cms-subtle, #f7f8ef) !important;
 }
 
@@ -988,6 +1055,7 @@
   height: 30px;
   padding: 0 8px;
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #6f8400) 45%, transparent) !important;
+
   border-radius: 6px;
   font-size: 12px;
   background: #ffffff !important;
@@ -1011,6 +1079,7 @@
   opacity: 0.65;
   cursor: not-allowed;
   border-color: color-mix(in srgb, var(--cms-primary, #6f8400) 22%, transparent) !important;
+
   background: var(--cms-subtle, #f7f8ef) !important;
 }
 
@@ -1370,19 +1439,71 @@
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
 
+/* Decreased screen width (e.g. <= 1024px, 811px):
+   Buttons come below the dropdowns line into the status toolbar line */
+@media (max-width: 1024px) {
   .cms-workspace-actions {
     flex-wrap: wrap;
-    row-gap: 12px;
+    row-gap: 8px;
+    margin-bottom: 6px;
   }
 
   .cms-entry-selects {
     flex: 1 1 100%;
+    width: 100%;
     max-width: 100%;
   }
 
-  .cms-bulk-actions {
+  .cms-bulk-actions-desktop {
+    display: none !important;
+  }
+
+  .cms-bulk-actions-mobile {
+    display: inline-flex !important;
+    align-items: center;
     margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .cms-entry-toolbar {
+    margin-top: 6px;
+    padding-top: 0;
+    border-top: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 38px;
+  }
+
+  .cms-config-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cms-entry-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .cms-entry-toolbar-empty {
+    border-top: none !important;
+    margin-top: 6px;
+    padding-top: 0;
+    margin-bottom: 14px;
+    display: flex !important;
+    justify-content: flex-end;
   }
 }
 
@@ -1837,3 +1958,69 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
 }
+
+@media (max-width: 992px) {
+  .cms-eval-table-toolbar {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  .cms-eval-toolbar-left {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .cms-eval-table-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .cms-eval-toolbar-left {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 8px !important;
+  }
+  .cms-subtab-pill-group {
+    width: 100% !important;
+    display: flex !important;
+  }
+  .cms-subtab-pill-btn {
+    flex: 1 !important;
+    text-align: center !important;
+  }
+  .cms-bulk-actions {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: stretch !important;
+  }
+  .cms-bulk-actions .cms-btn {
+    flex: 1 !important;
+  }
+  .cms-eval-search {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* Inline marks validation; preserve the existing input dimensions. */
+.cms-number-input.cms-mark-invalid,
+.cms-number-input.cms-mark-invalid:hover:not(:disabled),
+.cms-number-input.cms-mark-invalid:focus {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 1px #dc35451a !important;
+}
+.cms-mark-field-error {
+  display: block;
+  margin-top: 3px;
+  color: #dc3545;
+  font-size: 10px;
+  line-height: 1.3;
+  font-weight: 400;
+  max-width: 72px;
+  margin-inline: auto;
+  white-space: normal;
+}
+[data-theme="dark"] .cms-mark-field-error { color: #ff8c96; }

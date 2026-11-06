@@ -264,7 +264,7 @@ public class ReportsController : ControllerBase
         filter = PrepareFilter(filter);
         var data = await _reportService.FacultyWorkloadAsync(filter, ct);
         var totalStaff = data.Select(x => x.FacultyId).Distinct().Count();
-        var totalHours = data.Sum(x => x.HoursPerWeek);
+        var totalHours = Math.Round(data.Sum(x => x.HoursPerWeek), 1);
         var totalPeriods = data.Sum(x => x.PeriodCount);
         return Ok(new
         {

@@ -37,13 +37,21 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 },
                 commandType: CommandType.StoredProcedure);
 
-            var totalCount = await multi.ReadFirstOrDefaultAsync<int>();
-            var items = (await multi.ReadAsync<TransportDriverDto>()).ToList();
+            var totalCount = 0;
+            var items = new List<TransportDriverDto>();
+            if (!multi.IsConsumed)
+            {
+                totalCount = await multi.ReadFirstOrDefaultAsync<int>();
+            }
+            if (!multi.IsConsumed)
+            {
+                items = (await multi.ReadAsync<TransportDriverDto>()).ToList();
+            }
 
             return new PagedResult<TransportDriverDto>
             {
                 Items = items,
-                TotalCount = totalCount,
+                TotalCount = totalCount > 0 ? totalCount : items.Count,
                 PageNumber = filter.PageNumber > 0 ? filter.PageNumber : 1,
                 PageSize = filter.PageSize > 0 ? filter.PageSize : 20
             };
@@ -52,10 +60,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportDriverDto?> GetByIdAsync(long driverId)
         {
             var c = Connection;
-            return await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
+            var driver = await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
                 "sp_GetTransportDriversById",
                 new { p_Id = driverId },
                 commandType: CommandType.StoredProcedure);
+
+            if (driver == null)
+            {
+                driver = await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
+                    "sp_GetTransportDriverByIdOrNumber",
+                    new { p_SearchId = driverId, p_SearchStr = driverId.ToString() },
+                    commandType: CommandType.StoredProcedure);
+            }
+
+            return driver;
         }
 
         public async Task<long> CreateAsync(CreateTransportDriverDto dto, long? userId)
@@ -76,11 +94,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_StaffId = dto.StaffId,
                     p_DriverName = driverName,
                     p_EmployeeId = dto.EmployeeId?.Trim(),
-                    p_LicenseNo = licNum,
-                    p_LicenseExpiry = dto.LicenseExpiryDate,
-                    p_MobileNo = dto.MobileNumber?.Trim() ?? string.Empty,
-                    p_AlternateMobileNo = dto.AlternateMobileNumber?.Trim() ?? string.Empty,
+                    p_MobileNumber = dto.MobileNumber?.Trim() ?? string.Empty,
+                    p_AlternateMobileNumber = dto.AlternateMobileNumber?.Trim() ?? string.Empty,
                     p_Email = dto.Email?.Trim(),
+                    p_LicenceNumber = licNum,
+                    p_LicenceExpiry = dto.LicenseExpiryDate,
                     p_Address = dto.Address?.Trim() ?? string.Empty,
                     p_BloodGroup = dto.BloodGroup?.Trim() ?? string.Empty,
                     p_EmergencyContactName = dto.EmergencyContactName?.Trim() ?? string.Empty,
@@ -88,7 +106,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Experience = dto.ExperienceYears > 0 ? dto.ExperienceYears : 5,
                     p_AssignedVehicleId = dto.AssignedVehicleId,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
-                    p_CreatedBy = userId
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -125,11 +144,24 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long driverId, long? userId)
         {
             var c = Connection;
+            try
+            {
+                var result = await c.ExecuteScalarAsync<int?>(
+                    "sp_DeleteTransportDrivers",
+                    new { p_DriverId = driverId, p_UpdatedBy = userId },
+                    commandType: CommandType.StoredProcedure);
+                if (result.HasValue && result.Value == 1) return true;
+            }
+            catch
+            {
+                // Fallback to ExecuteAsync
+            }
+
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportDrivers",
                 new { p_DriverId = driverId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
-            return rows > 0;
+            return rows > 0 || rows == -1;
         }
 
         public async Task<bool> ExistsAsync(string licenceNumber, string mobileNumber, long? excludeDriverId = null)
@@ -137,7 +169,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportDriverExists",
-                new { p_LicenseNo = licenceNumber.Trim(), p_MobileNo = mobileNumber.Trim(), p_ExcludeId = excludeDriverId },
+                new { p_LicenceNumber = licenceNumber.Trim(), p_MobileNumber = mobileNumber.Trim(), p_ExcludeId = excludeDriverId },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }

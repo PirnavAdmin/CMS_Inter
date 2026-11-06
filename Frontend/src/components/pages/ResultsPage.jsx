@@ -1,3 +1,5 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
+import PaginatedTable from "../common/PaginatedTable.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import * as XLSX from "xlsx";
@@ -26,7 +28,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./ResultProcessingPage.css";
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 const ANALYTICS_MODAL_PAGE_SIZE = 5;
 
 /* ============================================================
@@ -3892,7 +3894,7 @@ function SectionsTable({
         </div>
 
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>SECTION</th>
@@ -3958,7 +3960,7 @@ function SectionsTable({
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       </div>
     </div>
@@ -4030,7 +4032,7 @@ function PublishedGroupsList({
         </div>
 
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>EXAM NAME</th>
@@ -4087,7 +4089,7 @@ function PublishedGroupsList({
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       </div>
     </div>
@@ -4114,7 +4116,7 @@ function PublishedSectionsList({ group, onBack, onViewSection }) {
         </div>
 
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>SECTION NAME</th>
@@ -4165,7 +4167,7 @@ function PublishedSectionsList({ group, onBack, onViewSection }) {
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
       </div>
     </div>
@@ -4429,7 +4431,7 @@ function RankListView({
         </div>
 
         <div className="cms-table-wrap results-rank-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>RANK</th>
@@ -4483,7 +4485,7 @@ function RankListView({
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
         <Pagination page={page} pages={pages} setPage={setPage} />
       </div>
@@ -4674,7 +4676,7 @@ function AnalyticsView({
           </div>
 
           <div className="cms-table-wrap">
-            <table className="cms-table results-subject-performance-table">
+            <PaginatedTable className="cms-table results-subject-performance-table">
               <thead>
                 <tr>
                   <th>SUBJECT NAME</th>
@@ -4722,7 +4724,7 @@ function AnalyticsView({
                   </tr>
                 )}
               </tbody>
-            </table>
+            </PaginatedTable>
           </div>
         </div>
       </div>
@@ -4762,7 +4764,7 @@ function StudentMemoView({ student, onBack, onDownloadPdf, onRevaluation }) {
         </div>
 
         <div className="cms-table-wrap">
-          <table className="cms-table">
+          <PaginatedTable className="cms-table">
             <thead>
               <tr>
                 <th>SUBJECT NAME</th>
@@ -4805,7 +4807,7 @@ function StudentMemoView({ student, onBack, onDownloadPdf, onRevaluation }) {
                 </tr>
               )}
             </tbody>
-          </table>
+          </PaginatedTable>
         </div>
 
         <div className="cms-memo-summary">
@@ -5028,29 +5030,7 @@ function PublishConfirmModal({ confirm, examName, onCancel, onConfirm, loading }
 }
 
 /* Shared Pagination Component */
-function Pagination({ page, pages, setPage, className = "", btnClassName = "" }) {
-  return (
-    <div className={`results-pagination ${className}`.trim()}>
-      <button
-        className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={page === 1}
-        onClick={() => setPage(page - 1)}
-      >
-        Previous
-      </button>
-      <span className="results-page-label">
-        Page {page} of {pages}
-      </span>
-      <button
-        className={`cms-btn cms-btn-ghost ${btnClassName}`.trim()}
-        disabled={page === pages}
-        onClick={() => setPage(page + 1)}
-      >
-        Next
-      </button>
-    </div>
-  );
-}
+function Pagination({ page, pages, setPage, className = "", btnClassName = "" }) { return <AdminPagination currentPage={page} totalPages={pages} onPageChange={setPage} className={className} />; }
 
 /* Badge Component */
 function Badge({ value }) {

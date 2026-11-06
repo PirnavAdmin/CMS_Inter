@@ -46,7 +46,7 @@ BEGIN
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         s.DepartmentId,
-        COALESCE(d.DepartmentName, NULLIF(s.Department, ''), 'General') AS DepartmentName,
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, NULLIF(s.Designation, ''), 'Staff') AS DesignationName,
         CASE 
             WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 
@@ -54,12 +54,12 @@ BEGIN
         END AS StaffType,
         CASE 
             WHEN sa.StaffAttendanceId IS NOT NULL THEN sa.Status
-            WHEN lr.LeaveRequestId IS NOT NULL THEN 6  -- Leave
+            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN 6  -- Leave
             WHEN v_IsHoliday > 0 THEN 5              -- Holiday
             ELSE NULL
         END AS Status,
         CASE 
-            WHEN sa.StaffAttendanceId IS NOT NULL OR lr.LeaveRequestId IS NOT NULL OR v_IsHoliday > 0 THEN 1 
+            WHEN sa.StaffAttendanceId IS NOT NULL OR lr.StaffLeaveRequestId IS NOT NULL OR v_IsHoliday > 0 THEN 1 
             ELSE 0 
         END AS IsAttendanceMarked,
         sa.InTime,
@@ -67,7 +67,7 @@ BEGIN
         COALESCE(sa.VerificationMethod, 1) AS VerificationMethod,
         CASE 
             WHEN sa.Remarks IS NOT NULL AND sa.Remarks != '' THEN sa.Remarks
-            WHEN lr.LeaveRequestId IS NOT NULL THEN CONCAT('Approved Leave: ', COALESCE(lr.Reason, ''))
+            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN CONCAT('Approved Leave: ', COALESCE(lr.Reason, ''))
             WHEN v_IsHoliday > 0 THEN 'Official Holiday'
             ELSE NULL
         END AS Remarks,
@@ -95,9 +95,15 @@ BEGIN
                                      AND lr.Status = 2  -- Approved
                                      AND v_TargetDate >= DATE(lr.StartDate) 
                                      AND v_TargetDate <= DATE(lr.EndDate)
-    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
-                                         AND (tc.StaffType IS NULL OR tc.StaffType = p_StaffType)
-                                         AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
+        SELECT tc2.Id 
+        FROM `AttendanceTimingConfigs` tc2 
+        WHERE tc2.IsActive = 1 
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 ELSE 1 END)
+          AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
+        ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
+        LIMIT 1
+    )
     WHERE s.IsDeleted = 0
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR s.BoardId = p_BoardId OR s.BoardId IS NULL OR s.BoardId = 0)
@@ -108,10 +114,10 @@ BEGIN
            OR (p_StaffType = 2 AND s.StaffType IS NOT NULL AND LOWER(s.StaffType) != 'teaching'))
       AND (p_Status IS NULL OR p_Status <= 0 
            OR (p_Status = 1 AND sa.Status = 1)
-           OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.LeaveRequestId IS NULL AND v_IsHoliday = 0)))
+           OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.StaffLeaveRequestId IS NULL AND v_IsHoliday = 0)))
            OR (p_Status = 3 AND sa.Status = 3)
            OR (p_Status = 5 AND (sa.Status = 5 OR v_IsHoliday > 0))
-           OR (p_Status = 6 AND (sa.Status = 6 OR lr.LeaveRequestId IS NOT NULL)))
+           OR (p_Status = 6 AND (sa.Status = 6 OR lr.StaffLeaveRequestId IS NOT NULL)))
     ORDER BY s.FirstName ASC, s.LastName ASC;
 END$$
 
@@ -336,7 +342,7 @@ BEGIN
         s.Id AS FacultyId,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
-        COALESCE(d.DepartmentName, s.Department, 'General') AS DepartmentName,
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, s.Designation, 'Staff') AS DesignationName,
         sa.InTime,
         sa.OutTime,
@@ -394,7 +400,7 @@ BEGIN
         s.Id AS FacultyId,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
-        COALESCE(d.DepartmentName, NULLIF(s.Department, ''), 'General') AS DepartmentName
+        COALESCE(d.DepartmentName, 'General') AS DepartmentName
     FROM `Staffs` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     WHERE s.IsDeleted = 0
@@ -879,5 +885,79 @@ BEGIN
     WHERE sa.IsActive = 1
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas.CampusId = p_CampusId);
 END$$
+
+
+-- -------------------------------------------------------------------------------------
+-- 15. sp_GetStaffAttendanceHistory
+-- -------------------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS sp_GetStaffAttendanceHistory$
+CREATE PROCEDURE sp_GetStaffAttendanceHistory(
+    IN p_FacultyId INT,
+    IN p_StartDate DATE,
+    IN p_EndDate DATE
+)
+BEGIN
+    -- Result Set 1: Shift Timing
+    SELECT 
+        COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+        COALESCE(tc.WorkEndTime, '16:30:00') AS WorkEndTime,
+        COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
+        COALESCE(tc.EarlyCheckoutThreshold, '16:30:00') AS EarlyCheckoutThreshold,
+        COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+    FROM `Staffs` s
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
+                                         AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
+                                         AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+    WHERE s.Id = p_FacultyId AND s.IsDeleted = 0
+    ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+    LIMIT 1;
+
+    -- Result Set 2: Attendances
+    SELECT 
+        DATE(sas.AttendanceDate) AS AttendanceDate,
+        sa.StaffAttendanceId,
+        sa.Status,
+        sa.InTime,
+        sa.OutTime,
+        sa.DeviceId,
+        sa.VerificationMethod,
+        sa.Remarks
+    FROM `StaffAttendances` sa
+    JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+    WHERE sa.FacultyId = p_FacultyId
+      AND sas.AttendanceDate >= p_StartDate 
+      AND sas.AttendanceDate <= p_EndDate
+      AND sa.IsActive = 1;
+
+    -- Result Set 3: Official Holidays
+    SELECT 
+        HolidayName,
+        DATE(StartDate) AS StartDate,
+        DATE(EndDate) AS EndDate
+    FROM `Holidays`
+    WHERE IsDeleted = 0 AND Status = 'Active'
+      AND StartDate <= p_EndDate AND EndDate >= p_StartDate
+      AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
+
+    -- Result Set 4: Approved Leaves
+    SELECT 
+        DATE(StartDate) AS StartDate,
+        DATE(EndDate) AS EndDate,
+        Reason AS LeaveReason
+    FROM `StaffLeaveRequests`
+    WHERE StaffId = p_FacultyId AND IsActive = 1 AND Status = 2
+      AND StartDate <= p_EndDate AND EndDate >= p_StartDate;
+
+    -- Result Set 5: Regularization Requests
+    SELECT 
+        RegularizationId,
+        DATE(AttendanceDate) AS AttendanceDate,
+        Status,
+        RequestedInTime,
+        RequestedOutTime
+    FROM `StaffAttendanceRegularizations`
+    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
+      AND AttendanceDate >= p_StartDate AND AttendanceDate <= p_EndDate;
+END$
 
 DELIMITER ;

@@ -21,7 +21,12 @@ import {
   RefreshCw,
   Plus,
 } from "lucide-react";
-import { useTransportManager, DEFAULT_TRANSPORT_MANAGER_PROFILE } from "../TransportManagerContext.jsx";
+import {
+  useTransportManager,
+  useTransportManagerSafe,
+  TransportManagerProvider,
+  DEFAULT_TRANSPORT_MANAGER_PROFILE,
+} from "../TransportManagerContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import * as staffApi from "@/api/staffApi.js";
@@ -254,7 +259,7 @@ function SearchSelectInput({
   );
 }
 
-export default function TransportManagerProfile() {
+function TransportManagerProfileInner() {
   const navigation = useTransportNavigation();
   const { profile = {}, updateProfile = () => { }, showToast = () => { }, authorizedBoards = [], selectedBoardId } = useTransportManager();
   const { boards = [], selectedAcademicYear } = useAcademicContext?.() || {};
@@ -279,139 +284,18 @@ export default function TransportManagerProfile() {
   const initialMiddleName = profile?.middleName || (nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "—");
   const initialLastName = profile?.lastName || (nameParts.length > 1 ? nameParts[nameParts.length - 1] : DEFAULT_TRANSPORT_MANAGER_PROFILE.lastName);
 
-  // State management with LocalStorage persistence for mock data
-  const STORAGE_KEY = "tm_profile_data";
-
-  const [profileData, setProfileData] = useState(() => {
-    let savedParsed = {};
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        savedParsed = JSON.parse(saved) || {};
-        // Remove any local storage photo so the photo is strictly managed by the backend
-        delete savedParsed.photoUrl;
-        delete savedParsed.photoPath;
-        delete savedParsed.profilePhoto;
-      }
-    } catch (e) {
-      console.warn("Failed to read tm_profile_data from localStorage:", e);
-    }
-
-    try {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("staff_profile_photo");
-        localStorage.removeItem(`staff_profile_${effectiveStaffId}_photo`);
-      }
-    } catch { }
-
-    if (Object.keys(savedParsed).length > 0) {
-      return {
-        ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
-        ...profile,
-        ...savedParsed,
-        employeeId: savedParsed.employeeId || profile.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
-        email: savedParsed.email || profile.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
-        department: savedParsed.department || profile.department || DEFAULT_TRANSPORT_MANAGER_PROFILE.department,
-        designation: savedParsed.designation || profile.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
-        photoUrl: "",
-        photoPath: "",
-        profilePhoto: "",
-      };
-    }
-
-    return {
-      ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
-      ...profile,
-      id: profile.id || DEFAULT_TRANSPORT_MANAGER_PROFILE.id,
-      staffId: profile.staffId || DEFAULT_TRANSPORT_MANAGER_PROFILE.staffId,
-      employeeId: profile.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
-      firstName: initialFirstName,
-      middleName: initialMiddleName,
-      lastName: initialLastName,
-      fullName: initialName,
-      dob: profile.dob || DEFAULT_TRANSPORT_MANAGER_PROFILE.dob,
-      gender: profile.gender || DEFAULT_TRANSPORT_MANAGER_PROFILE.gender,
-      maritalStatus: profile.maritalStatus || DEFAULT_TRANSPORT_MANAGER_PROFILE.maritalStatus,
-      mobile: profile.mobile || profile.phone || DEFAULT_TRANSPORT_MANAGER_PROFILE.mobile,
-      email: profile.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
-      department: profile.department || DEFAULT_TRANSPORT_MANAGER_PROFILE.department,
-      designation: profile.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
-      bloodGroup: profile.bloodGroup || DEFAULT_TRANSPORT_MANAGER_PROFILE.bloodGroup,
-      dateOfJoining: profile.dateOfJoining || DEFAULT_TRANSPORT_MANAGER_PROFILE.dateOfJoining,
-      aadhaar: profile.aadhaar || DEFAULT_TRANSPORT_MANAGER_PROFILE.aadhaar,
-      pan: profile.pan || DEFAULT_TRANSPORT_MANAGER_PROFILE.pan,
-      staffType: "Non-Teaching",
-      board: boardName,
-      photoUrl: "",
-
-      // Bank Details
-      bankName: "State Bank of India",
-      accountHolder: initialName,
-      accountNumber: "38920194823482",
-      ifsc: "SBIN0001234",
-      branch: "Guntur Main Branch",
-      accountType: "Salary Account",
-      uanNumber: "100982349812",
-      pfNumber: "100982349812",
-
-      // Address Info
-      houseNumber: "12-4-88/2",
-      street: "Transport Colony, Beside Bus Depot",
-      city: profile.city || DEFAULT_TRANSPORT_MANAGER_PROFILE.city,
-      pin: profile.pin || profile.pincode || DEFAULT_TRANSPORT_MANAGER_PROFILE.pin,
-      district: profile.district || DEFAULT_TRANSPORT_MANAGER_PROFILE.district,
-      state: profile.state || DEFAULT_TRANSPORT_MANAGER_PROFILE.state,
-      country: profile.country || DEFAULT_TRANSPORT_MANAGER_PROFILE.country,
-
-      // Experience Records
-      experience: [
-        {
-          id: 1,
-          institution: "APSRTC Regional Transport Division",
-          designation: "Assistant Fleet & Route Coordinator",
-          fromDate: "2019-06-01",
-          toDate: "2022-05-31",
-          subjectsTeached: "Fleet Dispatch & Route Logistics",
-          totalExp: "3 Years",
-          status: "Verified",
-        },
-        {
-          id: 2,
-          institution: "Narayana Educational Institutions",
-          designation: "Transport Operations Supervisor",
-          fromDate: "2017-05-01",
-          toDate: "2019-05-31",
-          subjectsTeached: "Student Transit & Fleet Safety",
-          totalExp: "2 Years",
-          status: "Verified",
-        },
-      ],
-
-      // Uploaded Documents
-      documents: DEFAULT_TRANSPORT_MANAGER_PROFILE.documents || [
-        {
-          id: 1,
-          name: "Aadhaar Card",
-          type: "Identity Proof",
-          format: "PDF",
-          size: "1.4 MB",
-          date: "2024-01-15",
-          status: "Verified",
-          url: "",
-        },
-        {
-          id: 2,
-          name: "PAN Card",
-          type: "Tax Identity",
-          format: "PDF",
-          size: "820 KB",
-          date: "2024-01-15",
-          status: "Verified",
-          url: "",
-        },
-      ],
-    };
-  });
+  // State management directly in memory and synced to backend API
+  const [profileData, setProfileData] = useState(() => ({
+    ...DEFAULT_TRANSPORT_MANAGER_PROFILE,
+    ...profile,
+    employeeId: profile.employeeId || DEFAULT_TRANSPORT_MANAGER_PROFILE.employeeId,
+    email: profile.email || DEFAULT_TRANSPORT_MANAGER_PROFILE.email,
+    department: profile.department || DEFAULT_TRANSPORT_MANAGER_PROFILE.department,
+    designation: profile.designation || profile.role || DEFAULT_TRANSPORT_MANAGER_PROFILE.designation,
+    joiningDate: profile.joiningDate ? String(profile.joiningDate).split("T")[0] : DEFAULT_TRANSPORT_MANAGER_PROFILE.joiningDate,
+    firstName: profile.firstName || initialFirstName,
+    lastName: profile.lastName || initialLastName,
+  }));
 
   // Query live staff profile from API by ID
   useEffect(() => {
@@ -463,13 +347,7 @@ export default function TransportManagerProfile() {
               photoPath: data.photoPath || rawServerPhoto || prev.photoPath,
               profilePhoto: data.profilePhoto || rawServerPhoto || prev.profilePhoto,
             };
-            try {
-              const toPersist = { ...merged };
-              delete toPersist.photoUrl;
-              delete toPersist.photoPath;
-              delete toPersist.profilePhoto;
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(toPersist));
-            } catch { }
+            
             return merged;
           });
 
@@ -541,18 +419,8 @@ export default function TransportManagerProfile() {
     return {};
   };
 
-  // Sync to local storage and backend API
+  // Sync to parent context and backend API
   const persistProfile = (updated) => {
-    try {
-      const toStore = { ...updated };
-      // Remove any photo fields so image is strictly persisted on the backend, not in localStorage
-      delete toStore.photoUrl;
-      delete toStore.photoPath;
-      delete toStore.profilePhoto;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
-    } catch (e) {
-      console.warn("Could not persist tm_profile_data:", e);
-    }
     if (typeof updateProfile === "function") {
       updateProfile(updated);
     }
@@ -565,7 +433,7 @@ export default function TransportManagerProfile() {
           personalEmail: updated.email,
         }).catch(() => null);
       }
-    } catch { }
+    } catch { /* ignore */ }
   };
 
   const [isEditingProfile, setIsEditingProfile] = useTransportRouteValue(navigation, "edit", false);
@@ -579,6 +447,11 @@ export default function TransportManagerProfile() {
   const [isViewPhotoOpen, setIsViewPhotoOpen] = useTransportRouteValue(navigation, "viewPhoto", false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useTransportRouteValue(navigation, "camera", false);
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [photoLoadError, setPhotoLoadError] = useState(false);
+
+  useEffect(() => {
+    setPhotoLoadError(false);
+  }, [profileData.photoUrl]);
 
   // Experience and Documents Form States
   const [newExp, setNewExp] = useState({
@@ -823,14 +696,8 @@ export default function TransportManagerProfile() {
         const updated = { ...prev, photoUrl: croppedDataUrl };
         persistProfile(updated);
         try {
-          const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
-          if (curUser) {
-            const merged = { ...curUser, photoUrl: croppedDataUrl, photoPath: croppedDataUrl, photo: croppedDataUrl };
-            if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
-            if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
-            window.dispatchEvent(new Event("storage"));
-          }
-        } catch { }
+          window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: croppedDataUrl } }));
+        } catch { /* ignore */ }
         return updated;
       });
 
@@ -852,13 +719,7 @@ export default function TransportManagerProfile() {
             });
             const serverPhoto = uploadRes?.data?.photoPath || uploadRes?.data?.PhotoPath || uploadRes?.data?.photoUrl || uploadRes?.data?.profilePhoto;
             if (serverPhoto) {
-              const curUser = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user") || "null");
-              if (curUser) {
-                const merged = { ...curUser, photoUrl: serverPhoto, photoPath: serverPhoto, photo: serverPhoto };
-                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged));
-                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged));
-                window.dispatchEvent(new Event("storage"));
-              }
+              window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: serverPhoto } }));
             }
           } catch (e) {
             console.warn("Could not upload profile photo to server:", e);
@@ -1325,8 +1186,12 @@ export default function TransportManagerProfile() {
                 onClick={() => setIsPhotoActionModalOpen(true)}
                 title="Profile Photo Options"
               >
-                {profileData.photoUrl ? (
-                  <img src={profileData.photoUrl} alt={profileData.fullName} />
+                {profileData.photoUrl && !photoLoadError ? (
+                  <img
+                    src={profileData.photoUrl}
+                    alt={profileData.fullName}
+                    onError={() => setPhotoLoadError(true)}
+                  />
                 ) : (
                   <User size={30} strokeWidth={1.8} className="sp-profile-user-icon" />
                 )}
@@ -2589,8 +2454,12 @@ export default function TransportManagerProfile() {
             {/* Profile Avatar Center View matching Screenshot 3 */}
             <div className="sp-photo-action-preview">
               <div className="sp-photo-action-avatar">
-                {profileData.photoUrl ? (
-                  <img src={profileData.photoUrl} alt={profileData.fullName} />
+                {profileData.photoUrl && !photoLoadError ? (
+                  <img
+                    src={profileData.photoUrl}
+                    alt={profileData.fullName}
+                    onError={() => setPhotoLoadError(true)}
+                  />
                 ) : (
                   <User size={46} strokeWidth={1.7} className="sp-profile-user-icon" />
                 )}
@@ -2700,11 +2569,12 @@ export default function TransportManagerProfile() {
               </button>
             </div>
             <div className="sp-photo-view-body">
-              {profileData.photoUrl ? (
+              {profileData.photoUrl && !photoLoadError ? (
                 <img
                   src={profileData.photoUrl}
                   alt={profileData.fullName}
                   className="sp-photo-view-img"
+                  onError={() => setPhotoLoadError(true)}
                 />
               ) : (
                 <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
@@ -2908,4 +2778,17 @@ export default function TransportManagerProfile() {
       )}
     </div>
   );
+}
+
+
+export default function TransportManagerProfile() {
+  const context = useTransportManagerSafe();
+  if (!context) {
+    return (
+      <TransportManagerProvider>
+        <TransportManagerProfileInner />
+      </TransportManagerProvider>
+    );
+  }
+  return <TransportManagerProfileInner />;
 }

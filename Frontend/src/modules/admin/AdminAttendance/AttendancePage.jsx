@@ -82,7 +82,10 @@ const staffStatus = (v) => {
   return STAFF_LABEL[v] ?? STAFF_LABEL[Number(v)] ?? (STAFF_STATUSES.includes(v) ? v : "—");
 };
 const status = (v, staff = false) => staff ? staffStatus(v) : studentStatus(v);
-const studentSessionStatus = (row, session) => studentStatus(get(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
+const studentSessionStatus = (row, session) => {
+  const capitalized = `${session[0].toUpperCase()}${session.slice(1)}`;
+  return studentStatus(get(row, `${session}Status`, `${capitalized}Status`, `${session}AttendanceStatus`, `${capitalized}AttendanceStatus`, `${session}SessionStatus`, session, capitalized, `${session}Attendance`));
+};
 const attendancePercentage = (row) => {
   const parsed = Number.parseFloat(String(get(row, "attendancePercentage", "percentage") ?? 0).replace("%", ""));
   return Number.isFinite(parsed) ? parsed : 0;
@@ -485,28 +488,38 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const [editLoading, setEditLoading] = useState(false);
  const [restoredEditKey, setRestoredEditKey] = useState("");
  const [editError, setEditError] = useState("");
+ const [editLoadAttempt, setEditLoadAttempt] = useState(0);
+ const editingKeyRef = useRef("");
  const editKey = JSON.stringify([staff, editId, editDate, navbarCampusId, navbarBoardId, navbarAcademicYearId, ...(!staff ? ["editLevel", "editGroup", "editProgram", "editSection"].map((key) => editParams.get(key) || "") : [])]);
  const closeEdit = () => {
    setEditing(null);
    setRestoredEditKey("");
+   editingKeyRef.current = "";
    setEditError("");
    const next = new URLSearchParams(editParams);
    ["edit", "date", "editLevel", "editGroup", "editProgram", "editSection"].forEach((key) => next.delete(key));
    setEditParams(next);
  };
  useEffect(() => {
-   if (editRequested && restoredEditKey === editKey) return undefined;
+   if (editRequested && restoredEditKey === editKey && editingKeyRef.current === editKey) return undefined;
    let active = true;
    setEditing(null);
    setEditLoading(false);
    setEditError("");
-   if (!editRequested) return undefined;
+   if (!editRequested) {
+     setRestoredEditKey("");
+     editingKeyRef.current = "";
+     return undefined;
+   }
    if (!/^[1-9]\d*$/.test(editId) || !validEditDate) {
      setEditError("Invalid attendance edit link.");
      return undefined;
    }
    setF((current) => ({ ...current, date: editDate, ...(!staff ? { level: editParams.get("editLevel") || "", group: editParams.get("editGroup") || "", program: editParams.get("editProgram") || "", section: editParams.get("editSection") || "" } : {}) }));
-   if (!navbarCampusId || !navbarBoardId || !navbarAcademicYearId) return undefined;
+   if (!navbarCampusId || !navbarBoardId || !navbarAcademicYearId) {
+     setEditError("Campus, board, and academic year must be loaded before attendance details can be opened.");
+     return undefined;
+   }
    setEditLoading(true);
    const request = staff ? apiClient.post(apiEndpoints.staffAttendance.load, {
      date: editDate,
@@ -523,17 +536,18 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    } });
    request.then((response) => {
      if (!active) return;
-     const record = asList(body(response)).find((row) => String(staff ? get(row, "facultyId", "staffId", "id") : get(row, "studentId", "id")) === editId);
+     const record = asList(body(response)).find((row) => String(staff ? get(row, "facultyId", "FacultyId", "staffId", "StaffId", "id", "Id") : get(row, "studentId", "StudentId", "id", "Id")) === editId);
      if (!record) throw new Error("Attendance record is unavailable for this date and campus.");
      const status = staffStatus(record.status);
      setEditing(staff ? { record, status: STAFF_STATUSES.includes(status) ? status : "Present", inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" }
        : { record, morning: studentSessionStatus(record, "morning"), afternoon: studentSessionStatus(record, "afternoon"), remarks: get(record, "remarks", "remark") || "" });
+     editingKeyRef.current = editKey;
      setRestoredEditKey(editKey);
      setEditLoading(false);
    }).catch((error) => { if (active) setEditError(getApiErrorMessage(error) || "Unable to load attendance."); })
      .finally(() => { if (active) setEditLoading(false); });
    return () => { active = false; };
- }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
+ }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId, editLoadAttempt]);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
@@ -798,20 +812,28 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
          throw new Error(response.data?.message || "Failed to update staff attendance.");
        }
      } else {
-       await apiClient.put(apiEndpoints.attendance.studentUpdate, {
-         studentId: get(r, "studentId", "id"),
+       const studentId = Number(get(r, "studentId", "StudentId", "id", "Id"));
+       if (!Number.isInteger(studentId) || studentId <= 0) {
+         throw new Error("This attendance record has no valid student ID. Refresh the attendance list and try again.");
+       }
+       const response = await apiClient.post(apiEndpoints.attendance.studentAdminBulkSave, {
          attendanceDate: f.date,
-         morningStatus: editing.morning !== studentSessionStatus(r, "morning") ? VALUE[editing.morning] : null,
-         afternoonStatus: editing.afternoon !== studentSessionStatus(r, "afternoon") ? VALUE[editing.afternoon] : null,
-         campusId: num(navbarCampusId),
          boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          academicLevelId: num(f.level),
          groupId: num(f.group),
+         programId: num(f.program),
          sectionId: num(f.section),
-         ...(f.program ? { programId: num(f.program) } : {}),
-         remarks: editing.remarks
+         attendances: [{
+           studentId,
+           morningStatus: VALUE[editing.morning],
+           afternoonStatus: VALUE[editing.afternoon],
+           remarks: editing.remarks
+         }]
        });
+       if (response.data?.status === false || response.data?.success === false || response.data?.isSuccess === false) {
+         throw new Error(response.data?.message || "Failed to update student attendance.");
+       }
      }
      await load();
      closeEdit();
@@ -978,12 +1000,16 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                }
                const s = staffStatus(record.status);
                const initialStatus = STAFF_STATUSES.includes(s) ? s : "Present";
-               const studentId = get(record, "studentId", "id");
+               const studentId = get(record, "studentId", "StudentId", "id", "Id");
                if (studentId == null) return say("Student attendance has no stable student ID.", "error");
                const next = new URLSearchParams(editParams);
                next.set("edit", String(studentId)); next.set("date", f.date);
                Object.entries({ editLevel: f.level, editGroup: f.group, editProgram: f.program, editSection: f.section }).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key); });
-               setRestoredEditKey(JSON.stringify([staff, String(studentId), f.date, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, f.section]));
+               const nextEditKey = JSON.stringify([staff, String(studentId), f.date, navbarCampusId, navbarBoardId, navbarAcademicYearId, ...["editLevel", "editGroup", "editProgram", "editSection"].map((key) => next.get(key) || "")]);
+               editingKeyRef.current = nextEditKey;
+               setRestoredEditKey(nextEditKey);
+               setEditError("");
+               setEditLoading(false);
                setEditParams(next);
                setEditing(
                  staff
@@ -1005,7 +1031,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        </>
      ))}
      {!staff && holidayError ? <p role="alert" className="att-holiday-banner">{holidayError}</p> : null}
-     {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError || (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{editError || holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
+     {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError ? <><p role="alert">{editError}</p><button type="button" className="cms-btn cms-btn-outline" onClick={() => setEditLoadAttempt((attempt) => attempt + 1)}>Retry</button></> : (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
      {editRequested && editing && restoredEditKey === editKey && !editLoading && !holidayLocked ? (
        <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => { if (!editSaving) closeEdit(); }} busy={busy || editSaving} />
      ) : null}
@@ -1270,6 +1296,7 @@ function StaffTimeInput({ label, value, onChange, disabled }) {
 
 function Edit({ editing, setEditing, staff, date, save, close, busy }) {
   const r = editing.record;
+  const periodAttendance = get(r, "periodAttendance", "PeriodAttendance", "periodAttendances", "PeriodAttendances", "periodAttendanceDetails", "PeriodAttendanceDetails");
   return (
     <Modal
       title={`Edit ${staff ? "Staff" : "Student"} Attendance`}
@@ -1283,9 +1310,9 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
       }
     >
       <div className="att-modal-fields">
-        <p><b>{get(r, staff ? "staffName" : "studentName", "name")}</b></p>
-        <p>{staff ? `Employee ID: ${get(r, "employeeId", "EmployeeId", "employeeCode", "EmployeeCode") || "—"}` : `Roll No: ${get(r, "rollNo", "rollNumber") || "—"} · Admission No: ${get(r, "admissionNo", "admissionNumber") || "—"}`} · Date: {date}</p>
-        <p>{staff ? `Department: ${get(r, "departmentName") || "—"} · Designation: ${get(r, "designationName") || "—"}` : `Group: ${get(r, "groupName") || "—"} · Section: ${get(r, "sectionName") || "—"}`}</p>
+        <p><b>{get(r, staff ? "staffName" : "studentName", staff ? "StaffName" : "StudentName", "name", "Name")}</b></p>
+        <p>{staff ? `Employee ID: ${get(r, "employeeId", "EmployeeId", "employeeCode", "EmployeeCode") || "—"}` : `Roll No: ${get(r, "rollNo", "rollNumber", "RollNumber") || "—"} · Admission No: ${get(r, "admissionNo", "admissionNumber", "AdmissionNumber") || "—"}`} · Date: {date}</p>
+        <p>{staff ? `Department: ${get(r, "departmentName", "DepartmentName") || "—"} · Designation: ${get(r, "designationName", "DesignationName") || "—"}` : `Group: ${get(r, "groupName", "GroupName") || "—"} · Section: ${get(r, "sectionName", "SectionName") || "—"}`}</p>
         {staff ? (
           <>
             <p>Current Status: {staffStatus(r.status)}</p>
@@ -1324,7 +1351,9 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
             </div>
             <div className="att-detail-history">
               <b>Period Attendance</b>
-              <p>Period details are not returned by the attendance API.</p>
+              {Array.isArray(periodAttendance) && periodAttendance.length ? (
+                <ul>{periodAttendance.map((period, index) => <li key={get(period, "periodId", "PeriodId", "id", "Id") ?? index}>{get(period, "periodName", "PeriodName", "name", "Name") || `Period ${index + 1}`}: {studentStatus(get(period, "status", "Status", "attendanceStatus", "AttendanceStatus"))}</li>)}</ul>
+              ) : <p>Period details are not returned by the attendance API.</p>}
             </div>
           </>
         )}
@@ -1395,20 +1424,8 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
           <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
         </div>
-        {staff ? monthlyLegend : null}
+        {monthlyLegend}
       </header>
-      <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
-        <div className="att-student-search-box">
-          <Search3DIcon size={18} />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => { onSearchChange(e.target.value); onPageChange(1); }}
-            placeholder={staff ? "Search by staff name or employee ID..." : "Search by student name, roll no. or admission no..."}
-          />
-        </div>
-        {!staff ? monthlyLegend : null}
-      </div>
       <div className="att-month-scroll">
         <table className="cms-table att-month-table">
           <thead>

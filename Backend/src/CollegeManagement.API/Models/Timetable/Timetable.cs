@@ -43,6 +43,9 @@ namespace CollegeManagement.API.Models.Timetable
 
         public int? RoomId { get; set; }
 
+        [MaxLength(20)]
+        public string SlotType { get; set; } = "Teaching";
+
         public bool IsPublished { get; set; } = false;
 
         public TimetableApprovalStatus ApprovalStatus { get; set; } = TimetableApprovalStatus.Draft;

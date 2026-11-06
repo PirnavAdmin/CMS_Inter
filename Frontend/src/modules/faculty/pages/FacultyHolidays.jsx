@@ -1,4 +1,3 @@
-import { useFacultyViewParams } from "../components/FacultyTabs.jsx";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye, Search } from "lucide-react";
 import { SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
@@ -24,6 +23,17 @@ function formatDate(value) {
 
 function getHolidayStartDate(holiday) {
   return holiday.startDate || holiday.holidayDate || "";
+}
+
+function isSundayHoliday(holiday) {
+  const start = getHolidayStartDate(holiday);
+  const end = getHolidayEndDate(holiday);
+  if (!start) return false;
+  if (!end || start === end) {
+    const d = new Date(`${start}T00:00:00`);
+    return d.getDay() === 0;
+  }
+  return false;
 }
 
 function getHolidayEndDate(holiday) {
@@ -69,10 +79,9 @@ export default function FacultyHolidays() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext?.() || {};
   const { selectedCampusId } = useCampusContext?.() || {};
 
-  const { params, setParam } = useFacultyViewParams();
   const [holidays, setHolidays] = useState(holidayRecords);
   const [apiSummary, setApiSummary] = useState(null);
-  const [loading, setLoading] = useState(params.has("holidayId"));
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [month, setMonth] = useState("All");
   const [customRange, setCustomRange] = useState({ from: "", to: "" });
@@ -80,9 +89,7 @@ export default function FacultyHolidays() {
   const [type, setType] = useState("All");
   const [status, setStatus] = useState("All");
   const [page, setPage] = useState(1);
-  const holidayId = params.get("holidayId");
-  const viewHoliday = holidayId == null || loading ? null : holidays.find((holiday) => String(holiday.id) === holidayId);
-  const setViewHoliday = (holiday) => setParam("holidayId", holiday?.id ?? null);
+  const [viewHoliday, setViewHoliday] = useState(null);
   const [toast, setToast] = useState({ message: "", type: "success" });
 
   const months = useMemo(
@@ -111,7 +118,8 @@ export default function FacultyHolidays() {
           const campusId = holiday?.campusId ?? holiday?.CampusId;
           return campusId == null || String(campusId) === String(selectedCampusId);
         });
-        setHolidays(filteredList.length > 0 ? filteredList : holidayRecords);
+        const nonSunday = (filteredList.length > 0 ? filteredList : holidayRecords).filter(h => !isSundayHoliday(h));
+        setHolidays(nonSunday);
       } else {
         setHolidays(holidayRecords);
       }
@@ -161,6 +169,7 @@ export default function FacultyHolidays() {
   // Comprehensive client-side filter
   const filteredHolidays = useMemo(() => {
     return sortedHolidays.filter((holiday) => {
+      if (isSundayHoliday(holiday)) return false;
       // 1. Text Search Filter
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -466,7 +475,6 @@ export default function FacultyHolidays() {
         </div>
       </section>
 
-      {holidayId != null && !viewHoliday && <Modal title="Holiday Details" onClose={() => setViewHoliday(null)} size="sm"><p role="status">{loading ? "Loading holiday details..." : "This holiday is unavailable."}</p></Modal>}
       {/* View Details Modal */}
       {viewHoliday ? (
         <Modal

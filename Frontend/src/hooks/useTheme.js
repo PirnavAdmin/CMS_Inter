@@ -176,21 +176,21 @@ function readCustomColor() {
 }
 
 function readPalette() {
-  if (typeof document === "undefined") return "olive";
+  if (typeof document === "undefined") return "purple";
   const attr = document.documentElement.getAttribute("data-theme-palette");
   if (VALID_PALETTES.includes(attr)) return attr;
   try {
     const saved = window.localStorage.getItem(PALETTE_STORAGE_KEY);
-    return VALID_PALETTES.includes(saved) ? saved : "olive";
+    return VALID_PALETTES.includes(saved) ? saved : "purple";
   } catch {
-    return "olive";
+    return "purple";
   }
 }
 
 function readEffectivePalette() {
   const policy = getThemePolicySnapshot();
   if (policy && policy.themeMode === "admin") {
-    return VALID_PALETTES.includes(policy.adminPalette) ? policy.adminPalette : "olive";
+    return VALID_PALETTES.includes(policy.adminPalette) ? policy.adminPalette : "purple";
   }
   return readPalette();
 }
@@ -216,7 +216,10 @@ export function applyEffectiveTheme() {
 if (typeof document !== "undefined") {
   applyEffectiveTheme();
   // Fetch fresh theme policy from backend on app bootstrap
-  fetchThemePolicy()
+  // The frontend-only Super Admin workspace uses the saved/local theme.
+  // Tenant portals retain their existing backend theme-policy bootstrap.
+  const platformMockRoute = window.location.pathname === "/super-admin" || window.location.pathname.startsWith("/super-admin/");
+  (platformMockRoute ? Promise.resolve() : fetchThemePolicy())
     .then(() => {
       applyEffectiveTheme();
       listeners.forEach((l) => l());

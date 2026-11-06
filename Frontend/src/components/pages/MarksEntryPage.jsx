@@ -1,3 +1,4 @@
+import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -15,6 +16,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./MarksEntryPage.css";
 
 const PAGE_SIZE = 5;
@@ -5493,106 +5495,7 @@ const IconAlert = () => (
   </svg>
 );
 
-function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, setPage, summaryText }) {
-  const [isCustom, setIsCustom] = useState(false);
-  const [customInput, setCustomInput] = useState(String(pageSize || 5));
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / (pageSize || 5)));
-
-  useEffect(() => {
-    if (totalPages && page > totalPages) {
-      setPage(totalPages);
-    }
-  }, [totalPages, page, setPage]);
-
-  const start = totalItems > 0 ? (page - 1) * pageSize + 1 : 0;
-  const end = totalItems > 0 ? Math.min(page * pageSize, totalItems) : 0;
-
-  return (
-    <div className="cms-pagination">
-      <div className="cms-pagination-summary-left">
-        <span className="cms-sec-record-summary">
-          Showing {start}–{end} of {totalItems} records
-        </span>
-        {summaryText ? (
-          <span className="cms-eval-summary-text" style={{ marginLeft: 12 }}>
-            ({summaryText})
-          </span>
-        ) : null}
-      </div>
-
-      <div className="cms-pagination-controls">
-        {setPageSize && (
-          <div className="cms-sec-page-size-wrap">
-            <span className="cms-sec-page-size-label">Per page:</span>
-            <select
-              className="cms-sec-page-size-select"
-              aria-label="Records per page"
-              value={isCustom ? "custom" : pageSize}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === "custom") {
-                  setIsCustom(true);
-                  setCustomInput(String(pageSize));
-                } else {
-                  setIsCustom(false);
-                  setPageSize(Number(val));
-                  setPage(1);
-                }
-              }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={15}>15</option>
-              <option value={25}>25</option>
-              <option value="custom">Custom</option>
-            </select>
-            {isCustom && (
-              <input
-                type="number"
-                min="1"
-                max="200"
-                className="cms-sec-page-size-custom-input"
-                value={customInput}
-                placeholder="Qty"
-                aria-label="Custom records per page"
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setCustomInput(val);
-                  const num = parseInt(val, 10);
-                  if (Number.isInteger(num) && num > 0) {
-                    setPageSize(num);
-                    setPage(1);
-                  }
-                }}
-              />
-            )}
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="cms-page-btn"
-          disabled={page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-        >
-          Previous
-        </button>
-        <span className="cms-page-info">
-          {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          className="cms-page-btn"
-          disabled={page >= totalPages}
-          onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
-}
+function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, setPage, summaryText }) { return <AdminPagination currentPage={page} pageSize={pageSize} totalRecords={totalItems} onPageChange={setPage} />; }
 
 function Pagination(props) {
   return (
@@ -5682,7 +5585,7 @@ function BulkImportModal({
               style={{ fontSize: 12, height: 28, padding: "0 8px", gap: 5 }}
               onClick={onDownloadTemplate}
             >
-              <Download size={13} />
+              <ThreeDIcon name="download" size={13} />
               Download Excel Template
             </button>
           </div>
@@ -5708,7 +5611,7 @@ function BulkImportModal({
                 }}
               />
               <div className="cms-room-dropzone-icon">
-                <Upload size={20} />
+                <ThreeDIcon name="upload" size={24} />
               </div>
               <span className="cms-room-dropzone-title">Click to upload or drag &amp; drop file</span>
               <span className="cms-room-dropzone-subtitle">Supported formats: .xlsx, .xls, .csv</span>
@@ -5716,7 +5619,7 @@ function BulkImportModal({
           ) : (
             <div className="cms-room-file-card">
               <div className="cms-room-file-card-info">
-                <FileSpreadsheet size={24} color="var(--cms-primary, #6F8400)" />
+                <ThreeDIcon name="excel" size={24} />
                 <div className="cms-room-file-card-details">
                   <span className="cms-room-file-name">{file.name}</span>
                   <span className="cms-room-file-meta">
@@ -5812,7 +5715,7 @@ function BulkImportModal({
                 <SkeletonButton width={128} />
               ) : (
                 <>
-                  <Upload size={14} />
+                  <ThreeDIcon name="upload" size={14} />
                   Import {validationResult.validPayloads.length} Marks
                 </>
               )}

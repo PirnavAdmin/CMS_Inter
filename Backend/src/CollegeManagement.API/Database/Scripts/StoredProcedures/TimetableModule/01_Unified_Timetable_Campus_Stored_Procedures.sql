@@ -1245,8 +1245,15 @@ BEGIN
 
         SET p_NewBackupId = LAST_INSERT_ID();
 
-        INSERT INTO `TimetableBackupSlots` (TimetableBackupId, OriginalTimetableId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt)
-        SELECT p_NewBackupId, Id, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, RoomId, IsPublished, ApprovalStatus, Remarks, UTC_TIMESTAMP()
+        INSERT INTO `TimetableBackupSlots` (
+            TimetableBackupId, OriginalTimetableId, BoardId, AcademicLevelId, AcademicYearId,
+            GroupId, SectionId, ProgramId, DayOfWeek, PeriodId,
+            SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt
+        )
+        SELECT 
+            p_NewBackupId, Id, BoardId, AcademicLevelId, AcademicYearId,
+            GroupId, SectionId, ProgramId, DayOfWeek, PeriodId,
+            SubjectId, FacultyId, COALESCE(StaffId, FacultyId, 0), RoomId, IsPublished, ApprovalStatus, Remarks, UTC_TIMESTAMP()
         FROM `Timetables`
         WHERE SectionId = p_SectionId
           AND AcademicYearId = v_YearId;
@@ -1294,7 +1301,7 @@ BEGIN
 
     DROP TEMPORARY TABLE IF EXISTS TempRestoreSlots;
     CREATE TEMPORARY TABLE TempRestoreSlots AS
-    SELECT BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, RoomId, Remarks
+    SELECT BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, ProgramId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, Remarks
     FROM `TimetableBackupSlots`
     WHERE TimetableBackupId = v_BackupId;
 
@@ -1313,8 +1320,15 @@ BEGIN
 
         SET v_NewBackupId = LAST_INSERT_ID();
 
-        INSERT INTO `TimetableBackupSlots` (TimetableBackupId, OriginalTimetableId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt)
-        SELECT v_NewBackupId, Id, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, RoomId, IsPublished, ApprovalStatus, Remarks, UTC_TIMESTAMP()
+        INSERT INTO `TimetableBackupSlots` (
+            TimetableBackupId, OriginalTimetableId, BoardId, AcademicLevelId, AcademicYearId,
+            GroupId, SectionId, ProgramId, DayOfWeek, PeriodId,
+            SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt
+        )
+        SELECT 
+            v_NewBackupId, Id, BoardId, AcademicLevelId, AcademicYearId,
+            GroupId, SectionId, ProgramId, DayOfWeek, PeriodId,
+            SubjectId, FacultyId, COALESCE(StaffId, FacultyId, 0), RoomId, IsPublished, ApprovalStatus, Remarks, UTC_TIMESTAMP()
         FROM `Timetables`
         WHERE SectionId = p_SectionId
           AND AcademicYearId = v_YearId;
@@ -1324,8 +1338,8 @@ BEGIN
     WHERE SectionId = p_SectionId
       AND AcademicYearId = v_YearId;
 
-    INSERT INTO `Timetables` (CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt)
-    SELECT v_CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, FacultyId, RoomId, 0, 0, Remarks, UTC_TIMESTAMP()
+    INSERT INTO `Timetables` (CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, ProgramId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, StaffId, RoomId, IsPublished, ApprovalStatus, Remarks, CreatedAt)
+    SELECT v_CampusId, BoardId, AcademicLevelId, AcademicYearId, GroupId, ProgramId, SectionId, DayOfWeek, PeriodId, SubjectId, FacultyId, COALESCE(StaffId, FacultyId, 0), RoomId, 0, 0, Remarks, UTC_TIMESTAMP()
     FROM TempRestoreSlots;
 
     DROP TEMPORARY TABLE IF EXISTS TempRestoreSlots;
@@ -1509,5 +1523,22 @@ BEGIN
       AND `ApprovalStatus` = 0;
 END //
 
+DROP PROCEDURE IF EXISTS `sp_DeleteSectionTimetableSlots` //
+CREATE PROCEDURE `sp_DeleteSectionTimetableSlots`(
+    IN p_AcademicYearId INT,
+    IN p_SectionIds VARCHAR(2000)
+)
+BEGIN
+    DELETE ts FROM `TimetableSubstitutions` ts
+    JOIN `Timetables` t ON t.`Id` = ts.`TimetableId`
+    WHERE t.`AcademicYearId` = p_AcademicYearId
+      AND FIND_IN_SET(t.`SectionId`, p_SectionIds) > 0;
+
+    DELETE FROM `Timetables`
+    WHERE `AcademicYearId` = p_AcademicYearId
+      AND FIND_IN_SET(`SectionId`, p_SectionIds) > 0;
+END //
+
 DELIMITER ;
+
 

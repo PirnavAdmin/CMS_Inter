@@ -1,11 +1,106 @@
 .cms-transport-page,
 .cms-transport-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   gap: 6px;
 }
+.cms-transport-page > *,
+.cms-transport-stack > *,
+.cms-transport-page .cms-card,
+.cms-transport-page .cms-card-body { min-width: 0; box-sizing: border-box; }
 
 .cms-transport-print-root {
   display: none;
+}
+.cms-transport-page .cms-transport-filter-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-width: 0; max-width: 100%; min-height: 34px; padding: 6px 9px;
+  box-sizing: border-box; border: 1px solid var(--cms-border); border-radius: 8px;
+  background: var(--cms-surface, #fff); color: var(--cms-text, #1e293b);
+  font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.cms-transport-filter-trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cms-transport-filter-menu {
+  z-index: 1200; width: var(--radix-dropdown-menu-trigger-width);
+  max-width: calc(100vw - 24px);
+  max-height: min(280px, var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto; box-sizing: border-box; padding: 4px;
+  border: 1px solid var(--cms-border, #dce2d5); border-radius: 8px;
+  background: #fff; color: var(--cms-text, #1e293b);
+  box-shadow: 0 6px 20px #0002; font-size: 13px;
+}
+.cms-transport-filter-option { padding: 8px; border-radius: 4px; overflow-wrap: anywhere; cursor: pointer; outline: none; }
+.cms-transport-filter-option[data-highlighted],
+.cms-transport-filter-option[data-state="checked"] { background: var(--cms-primary-soft, #eef3df); color: var(--cms-primary, #637d00); }
+[data-theme="dark"] .cms-transport-filter-menu { background: #171a17; color: #f1f5f9; }
+@media (max-width: 760px) {
+  .cms-transport-page .cms-transport-filter-trigger { width: 100%; height: 38px; }
+}
+
+@media (max-width: 760px) {
+  .cms-transport-page .cms-transport-toolbar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .cms-transport-page .cms-transport-toolbar > .cms-transport-search {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 38px;
+    box-sizing: border-box;
+  }
+  .cms-transport-page .cms-transport-search input { min-width: 0; }
+  .cms-transport-page .cms-transport-search > svg { flex-shrink: 0; }
+  .cms-transport-page .cms-transport-toolbar > .cms-transport-filters {
+    flex: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+  }
+  .cms-transport-page .cms-transport-filters > .cms-transport-filter {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    gap: 6px;
+  }
+  .cms-transport-page .cms-transport-filter select,
+  .cms-transport-page .cms-transport-filter input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 38px;
+    box-sizing: border-box;
+  }
+  .cms-transport-page .cms-transport-toolbar > .cms-transport-toolbar-actions {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    gap: 8px;
+  }
+  .cms-transport-page .cms-transport-toolbar-actions > .cms-btn {
+    flex: 1 1 110px;
+    min-width: 0;
+    min-height: 36px;
+    justify-content: center;
+    white-space: normal;
+  }
 }
 
 @media print {
@@ -113,6 +208,9 @@
   background: var(--cms-surface);
   overflow-x: auto;
   scrollbar-width: none;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .cms-transport-tabs::-webkit-scrollbar {
@@ -171,12 +269,15 @@
 
 .cms-transport-stat-grid {
   display: grid;
+  min-width: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
 .cms-transport-stat {
   display: flex;
+  min-width: 0;
+  box-sizing: border-box;
   gap: 10px;
   align-items: flex-start;
   padding: 12px;
@@ -185,6 +286,7 @@
   background: var(--cms-surface);
   box-shadow: var(--cms-shadow);
 }
+.cms-transport-stat > div { min-width: 0; overflow-wrap: anywhere; }
 
 .cms-transport-stat-icon {
   display: grid;
@@ -1511,6 +1613,19 @@
 }
 
 @media (max-width: 760px) {
+  .cms-transport-page .cms-transport-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    border-radius: 12px;
+    overflow: visible;
+  }
+  .cms-transport-page .cms-transport-tab {
+    min-width: 0;
+    white-space: normal;
+    padding: 8px;
+  }
+  .cms-transport-page .cms-transport-tab svg { flex-shrink: 0; }
   .cms-modal.cms-transport-detail-modal {
     width: calc(100vw - 24px);
   }

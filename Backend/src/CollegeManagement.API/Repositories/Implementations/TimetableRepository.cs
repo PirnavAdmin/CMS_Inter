@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -9,6 +10,7 @@ using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -20,6 +22,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             _context = context;
         }
+
+        private DbTransaction? CurrentTransaction => _context.Database.CurrentTransaction?.GetDbTransaction();
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
         {
@@ -164,7 +168,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<string?> CheckSlotConflictAsync(int academicYearId, int sectionId, int staffId, int roomId, int dayOfWeek, int periodId, int? excludeId = null)
+        public async Task<string?> CheckSlotConflictAsync(int academicYearId, int sectionId, int? staffId, int? roomId, int dayOfWeek, int periodId, int? excludeId = null)
         {
             var conn = await GetOpenConnectionAsync();
             var conflicts = (await conn.QueryAsync<dynamic>(
@@ -174,9 +178,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = academicYearId,
                     p_DayOfWeek = dayOfWeek,
                     p_PeriodId = periodId,
-                    p_StaffId = staffId,
+                    p_StaffId = staffId.HasValue && staffId.Value > 0 ? staffId.Value : (int?)null,
                     p_SectionId = sectionId,
-                    p_RoomId = roomId,
+                    p_RoomId = roomId.HasValue && roomId.Value > 0 ? roomId.Value : (int?)null,
                     p_ExcludeTimetableId = excludeId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
@@ -202,15 +206,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_SectionId = dto.SectionId,
                     p_DayOfWeek = dto.DayOfWeek,
                     p_PeriodId = dto.PeriodId,
-                    p_SubjectId = dto.SubjectId,
-                    p_FacultyId = dto.StaffId,
-                    p_StaffId = dto.StaffId,
-                    p_RoomId = dto.RoomId,
+                    p_SubjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null,
+                    p_FacultyId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_StaffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_RoomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null,
                     p_IsPublished = dto.IsPublished ? 1 : 0,
                     p_ApprovalStatus = dto.IsPublished ? (int)TimetableApprovalStatus.Published : (int)TimetableApprovalStatus.Draft,
                     p_Remarks = dto.Remarks,
                     p_SlotType = dto.SlotType ?? "Teaching"
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -231,15 +236,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_SectionId = dto.SectionId,
                     p_DayOfWeek = dto.DayOfWeek,
                     p_PeriodId = dto.PeriodId,
-                    p_SubjectId = dto.SubjectId,
-                    p_FacultyId = dto.StaffId,
-                    p_StaffId = dto.StaffId,
-                    p_RoomId = dto.RoomId,
+                    p_SubjectId = dto.SubjectId.HasValue && dto.SubjectId.Value > 0 ? dto.SubjectId.Value : (int?)null,
+                    p_FacultyId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_StaffId = dto.StaffId.HasValue && dto.StaffId.Value > 0 ? dto.StaffId.Value : (int?)null,
+                    p_RoomId = dto.RoomId.HasValue && dto.RoomId.Value > 0 ? dto.RoomId.Value : (int?)null,
                     p_IsPublished = dto.IsPublished ? 1 : 0,
                     p_ApprovalStatus = dto.IsPublished ? (int)TimetableApprovalStatus.Published : (int)TimetableApprovalStatus.Draft,
                     p_Remarks = dto.Remarks,
                     p_SlotType = dto.SlotType ?? "Teaching"
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -249,6 +255,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_DeleteTimetable",
                 new { p_Id = id },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -258,6 +265,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_TogglePublishSlot",
                 new { p_Id = id, p_IsPublished = isPublished ? 1 : 0 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -267,6 +275,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await conn.ExecuteAsync(
                 "sp_PublishSectionTimetable",
                 new { p_SectionId = sectionId, p_AcademicYearId = academicYearId, p_IsPublished = isPublished ? 1 : 0 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -276,24 +285,25 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.ExecuteScalarAsync<int>(
                 "sp_ApproveSectionTimetable",
                 new { p_SectionId = sectionId, p_AcademicYearId = academicYearId },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> HasSectionSlotConflictAsync(int academicYearId, int sectionId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, sectionId, 0, 0, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, sectionId, null, null, dayOfWeek, periodId, excludeId);
             return result == "SECTION";
         }
 
         public async Task<bool> HasFacultySlotConflictAsync(int academicYearId, int facultyId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, 0, facultyId, 0, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, 0, facultyId, null, dayOfWeek, periodId, excludeId);
             return result == "STAFF";
         }
 
         public async Task<bool> HasRoomSlotConflictAsync(int academicYearId, int roomId, int dayOfWeek, int periodId, int? excludeId = null)
         {
-            var result = await CheckSlotConflictAsync(academicYearId, 0, 0, roomId, dayOfWeek, periodId, excludeId);
+            var result = await CheckSlotConflictAsync(academicYearId, 0, null, roomId, dayOfWeek, periodId, excludeId);
             return result == "ROOM";
         }
 
@@ -303,6 +313,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryAsync<AllocatedFacultyDto>(
                 "sp_GetAllocatedFaculties",
                 new { p_SubjectId = subjectId, p_CampusId = campusId },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -318,6 +329,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_TargetAcademicYearId = dto.TargetAcademicYearId,
                     p_TargetSectionId = dto.TargetSectionId
                 },
+                transaction: CurrentTransaction,
                 commandType: CommandType.StoredProcedure);
         }
     }

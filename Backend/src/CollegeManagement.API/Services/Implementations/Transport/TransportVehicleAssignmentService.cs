@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.SignalR;
 using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Models.Transport;
 using Microsoft.EntityFrameworkCore;
@@ -115,27 +115,35 @@ namespace CollegeManagement.API.Services.Implementations
                     
             }
 
-            using var transaction = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+            // System.Transactions.TransactionScope removed to support MySqlRetryingExecutionStrategy
             var assignmentId = await _repository.CreateAsync(dto, userId);
             
             if (assignmentId > 0)
             {
                 var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == dto.DriverId);
-                if (driver != null)
+                long staffId = driver?.StaffId ?? dto.DriverId;
+                if (staffId > 0)
                 {
-                    _context.DriverNotifications.Add(new DriverNotification
+                    try
                     {
-                        StaffId = driver.StaffId ?? 0,
+                        _context.DriverNotifications.Add(new DriverNotification
+                    {
+                        StaffId = (int)staffId,
                         Type = "ASSIGNMENT_CREATED",
                         Title = "New Vehicle Assigned",
                         Message = "You have been assigned to a new vehicle and route.",
                         AssignmentId = assignmentId
                     });
-                    await _context.SaveChangesAsync();
+                        await _context.SaveChangesAsync();
+                    }
+                    catch
+                    {
+                        // Driver notification is best-effort and should not prevent vehicle assignment creation
+                    }
                     
                 }
             }
-            transaction.Complete();
+            // transaction.Complete();
             return assignmentId;
         }
 
@@ -286,10 +294,28 @@ namespace CollegeManagement.API.Services.Implementations
                     x.Status == "Active")
                 .Select(x => new
                 {
-                    DriverId = x.Id,
+                    DriverId = (long)x.Id,
                     LicenceExpiry = x.DrivingLicenseExpiryDate
                 })
                 .FirstOrDefaultAsync();
+
+            if (driver == null)
+            {
+                var legacyDriver = await _context.TransportDrivers
+                    .AsNoTracking()
+                    .Where(x => x.DriverId == driverId && !x.IsDeleted && x.Status)
+                    .Select(x => new
+                    {
+                        DriverId = x.DriverId,
+                        LicenceExpiry = x.LicenceExpiry
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (legacyDriver != null)
+                {
+                    driver = legacyDriver;
+                }
+            }
 
             if (driver == null)
             {

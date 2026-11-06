@@ -17,22 +17,21 @@ namespace CollegeManagement.API.Dtos.Transport.Reports
         public string? LicenseExpiry { get; set; }
 
         [JsonPropertyName("currentBus")]
-        public string CurrentBus { get; set; } = "Unassigned";
+        public string? CurrentBus { get; set; }
 
         [JsonPropertyName("currentRoute")]
-        public string CurrentRoute { get; set; } = "Unassigned";
+        public string? CurrentRoute { get; set; }
 
         [JsonPropertyName("busAttendant")]
-        public string BusAttendant { get; set; } = "Unassigned";
+        public string? BusAttendant { get; set; }
 
         [JsonPropertyName("assignmentStatus")]
-        public string AssignmentStatus { get; set; } = "Unassigned";
+        public string? AssignmentStatus { get; set; }
 
         [JsonPropertyName("experienceYears")]
-        public int ExperienceYears { get; set; } = 5;
+        public int? ExperienceYears { get; set; }
 
         [JsonPropertyName("status")]
         public string Status { get; set; } = "Active";
     }
 }
-

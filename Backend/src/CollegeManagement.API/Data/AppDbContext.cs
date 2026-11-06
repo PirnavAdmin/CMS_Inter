@@ -303,8 +303,6 @@ namespace CollegeManagement.API.Data
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
-        public DbSet<MasterGroup> MasterGroups { get; set; }
-        public DbSet<MasterGroupProgram> MasterGroupPrograms { get; set; }
         public DbSet<Group> Groups { get; set; }
         public DbSet<AcademicProgram> Programs { get; set; }
 
@@ -339,6 +337,7 @@ namespace CollegeManagement.API.Data
         // Multi-Campus / Multi-Board Staff Assignments
         public DbSet<StaffCampusAssignment> StaffCampusAssignments { get; set; }
         public DbSet<StaffBoardAssignment> StaffBoardAssignments { get; set; }
+        public DbSet<CollegeManagement.API.Models.Staff.StaffTransfer> StaffTransfers { get; set; }
 
         // Transport
         public DbSet<TransportAttendant> TransportAttendants { get; set; } = null!;
@@ -631,77 +630,7 @@ namespace CollegeManagement.API.Data
                 .HasIndex(gp => new { gp.GroupId, gp.ProgramId })
                 .IsUnique();
 
-            modelBuilder.Entity<Group>()
-                .HasIndex(g => g.MasterGroupId);
 
-            modelBuilder.Entity<Group>()
-                .HasIndex(g => new { g.MasterGroupId, g.AcademicYearId, g.AcademicLevelId });
-
-            modelBuilder.Entity<Group>()
-                .HasOne(g => g.MasterGroupNavigation)
-                .WithMany(mg => mg.ContextualGroups)
-                .HasForeignKey(g => g.MasterGroupId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            #region MasterGroup
-            modelBuilder.Entity<MasterGroup>(entity =>
-            {
-                entity.ToTable("MasterGroups");
-                entity.HasKey(mg => mg.MasterGroupId);
-
-                entity.Property(mg => mg.GroupName)
-                    .HasMaxLength(100)
-                    .IsRequired();
-
-                entity.Property(mg => mg.GroupCode)
-                    .HasMaxLength(30)
-                    .IsRequired();
-
-                entity.Property(mg => mg.Description)
-                    .HasMaxLength(500);
-
-                entity.Property(mg => mg.IsActive)
-                    .HasDefaultValue(true);
-
-                entity.Property(mg => mg.CreatedAt)
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                entity.Property(mg => mg.UpdatedAt)
-                    .IsRequired(false);
-
-                entity.HasIndex(mg => new { mg.BoardId, mg.GroupCode }).IsUnique();
-                entity.HasIndex(mg => new { mg.BoardId, mg.GroupName }).IsUnique();
-
-                entity.HasOne(mg => mg.BoardNavigation)
-                    .WithMany()
-                    .HasForeignKey(mg => mg.BoardId)
-                    .OnDelete(DeleteBehavior.Restrict);
-            });
-
-            modelBuilder.Entity<MasterGroupProgram>(entity =>
-            {
-                entity.ToTable("MasterGroupPrograms");
-                entity.HasKey(mgp => mgp.MasterGroupProgramId);
-
-                entity.Property(mgp => mgp.IsActive)
-                    .HasDefaultValue(true);
-
-                entity.Property(mgp => mgp.CreatedAt)
-                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                entity.HasIndex(mgp => new { mgp.MasterGroupId, mgp.ProgramId }).IsUnique();
-
-                entity.HasOne(mgp => mgp.MasterGroup)
-                    .WithMany(mg => mg.MasterGroupPrograms)
-                    .HasForeignKey(mgp => mgp.MasterGroupId)
-                    .OnDelete(DeleteBehavior.Cascade);
-
-                entity.HasOne(mgp => mgp.AcademicProgram)
-                    .WithMany()
-                    .HasForeignKey(mgp => mgp.ProgramId)
-                    .OnDelete(DeleteBehavior.Restrict);
-            });
-            #endregion
 
             modelBuilder.Entity<AcademicProgram>(entity =>
             {
@@ -1488,11 +1417,24 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Section).WithMany().HasForeignKey(x => x.SectionId).OnDelete(DeleteBehavior.Restrict);
                 entity.Property(x => x.ProgramId).IsRequired(false);
-                entity.Property(x => x.StaffId).HasColumnName("StaffId");
+                entity.Property(x => x.StaffId).HasColumnName("StaffId").IsRequired(false);
                 entity.HasOne(x => x.Period).WithMany().HasForeignKey(x => x.PeriodId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Subject).WithMany().HasForeignKey(x => x.SubjectId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Staff).WithMany().HasForeignKey(x => x.StaffId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.Room).WithMany().HasForeignKey(x => x.RoomId).OnDelete(DeleteBehavior.Restrict);
+                entity.Property(x => x.SlotType).HasMaxLength(20).HasDefaultValue("Teaching");
+                entity.Property(x => x.SubjectId).IsRequired(false);
+                entity.Property(x => x.RoomId).IsRequired(false);
+            });
+            #endregion
+
+            #region Timetable
+            modelBuilder.Entity<Timetable>(entity =>
+            {
+                entity.Property(x => x.SlotType).HasMaxLength(20).HasDefaultValue("Teaching");
+                entity.Property(x => x.SubjectId).IsRequired(false);
+                entity.Property(x => x.StaffId).IsRequired(false);
+                entity.Property(x => x.RoomId).IsRequired(false);
             });
             #endregion
 
@@ -2023,7 +1965,7 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffCampusAssignment>(entity =>
             {
                 entity.ToTable("StaffCampusAssignments");
-                entity.HasIndex(e => new { e.StaffId, e.CampusId }).IsUnique();
+                entity.HasIndex(e => new { e.StaffId, e.CampusId });
                 entity.HasOne(e => e.Staff)
                     .WithMany(s => s.StaffCampusAssignments)
                     .HasForeignKey(e => e.StaffId)
@@ -2046,6 +1988,25 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                 entity.HasOne(e => e.Board)
                     .WithMany()
                     .HasForeignKey(e => e.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Staff Transfers Configuration
+            modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffTransfer>(entity =>
+            {
+                entity.ToTable("StaffTransfers");
+                entity.HasIndex(e => e.TransferOrderNumber).IsUnique();
+                entity.HasOne(e => e.Staff)
+                    .WithMany()
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.FromCampus)
+                    .WithMany()
+                    .HasForeignKey(e => e.FromCampusId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.ToCampus)
+                    .WithMany()
+                    .HasForeignKey(e => e.ToCampusId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

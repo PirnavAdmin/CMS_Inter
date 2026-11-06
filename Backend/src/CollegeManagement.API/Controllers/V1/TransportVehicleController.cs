@@ -24,8 +24,30 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
+                if ((!filter.CampusId.HasValue || filter.CampusId.Value <= 0) &&
+                    Request.Headers.TryGetValue("X-Campus-Id", out var xHeader) &&
+                    int.TryParse(xHeader.FirstOrDefault(), out var parsedHeader) &&
+                    parsedHeader > 0)
+                {
+                    filter.CampusId = parsedHeader;
+                }
+
+                var resolvedCampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveAndValidateCampusId(User, filter.CampusId);
+                if (filter.CampusId.HasValue && filter.CampusId.Value > 0)
+                {
+                    filter.CampusId = resolvedCampusId;
+                }
+                else if (resolvedCampusId > 0)
+                {
+                    filter.CampusId = resolvedCampusId;
+                }
+
                 var result = await _service.GetAllAsync(filter);
                 return Ok(result);
+            }
+            catch (CollegeManagement.API.Exceptions.ForbiddenException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
             }
             catch (System.Exception)
             {
@@ -60,11 +82,34 @@ namespace CollegeManagement.API.Controllers
         // POST: api/transport/vehicles
         [HttpPost]
         [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> Create([FromBody] CreateTransportVehicleDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateTransportVehicleDto dto, [FromQuery] int? campusId = null)
         {
             try
             {
-                var id = await _service.CreateAsync(dto, null);
+                var effectiveCampus = (dto.CampusId.HasValue && dto.CampusId.Value > 0) ? dto.CampusId : campusId;
+                if ((!effectiveCampus.HasValue || effectiveCampus.Value <= 0) &&
+                    Request.Headers.TryGetValue("X-Campus-Id", out var xHeader) &&
+                    int.TryParse(xHeader.FirstOrDefault(), out var parsedHeader) &&
+                    parsedHeader > 0)
+                {
+                    effectiveCampus = parsedHeader;
+                }
+                var resolvedCampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveAndValidateCampusId(User, effectiveCampus);
+                if (resolvedCampusId > 0)
+                {
+                    dto.CampusId = resolvedCampusId;
+                }
+                else if (effectiveCampus.HasValue && effectiveCampus.Value > 0)
+                {
+                    dto.CampusId = effectiveCampus.Value;
+                }
+                else
+                {
+                    return BadRequest(new { success = false, message = "CampusId is required to create a vehicle. Please select a valid campus." });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                var id = await _service.CreateAsync(dto, userId);
                 var result = await _service.GetByIdAsync(id);
 
                 return Ok(new
@@ -73,6 +118,14 @@ namespace CollegeManagement.API.Controllers
                     message = "Vehicle created successfully.",
                     data = result
                 });
+            }
+            catch (CollegeManagement.API.Exceptions.ForbiddenException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
+            }
+            catch (CollegeManagement.API.Exceptions.ValidationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -89,10 +142,32 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+                {
+                    targetId = numId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.VehicleId;
+                }
+
+                var existing = targetId > 0 ? await _service.GetByIdAsync(targetId) : null;
                 if (existing != null)
                 {
-                    var updated = await _service.UpdateAsync(existing.VehicleId, dto, null);
+                    if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+                    {
+                        CollegeManagement.API.Helpers.CampusContextResolver.ResolveAndValidateCampusId(User, dto.CampusId.Value);
+                    }
+                    else
+                    {
+                        // Preserve existing ownership when omitted
+                        dto.CampusId = existing.CampusId;
+                    }
+
+                    var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
+                    var updated = await _service.UpdateAsync(existing.VehicleId, dto, userId);
                     if (updated)
                     {
                         var updatedDto = await _service.GetByIdAsync(existing.VehicleId);
@@ -100,26 +175,15 @@ namespace CollegeManagement.API.Controllers
                     }
                 }
 
-                var createDto = new CreateTransportVehicleDto
-                {
-                    VehicleNumber = !string.IsNullOrWhiteSpace(dto.VehicleNumber) ? dto.VehicleNumber : id,
-                    RegistrationNumber = !string.IsNullOrWhiteSpace(dto.RegistrationNumber) ? dto.RegistrationNumber : id,
-                    VehicleName = dto.VehicleName ?? "",
-                    VehicleType = dto.VehicleType ?? "Bus",
-                    Manufacturer = dto.Manufacturer ?? "",
-                    Model = dto.Model ?? "",
-                    InsuranceNumber = dto.InsuranceNumber ?? "",
-                    InsuranceExpiry = dto.InsuranceExpiry,
-                    PollutionExpiry = dto.PollutionExpiry,
-                    FitnessExpiry = dto.FitnessExpiry,
-                    Capacity = dto.Capacity > 0 ? dto.Capacity : 0,
-                    Status = dto.Status,
-                    CampusId = dto.CampusId
-                };
-
-                var newId = await _service.CreateAsync(createDto, null);
-                var newDto = await _service.GetByIdAsync(newId);
-                return Ok(new { success = true, message = "Vehicle updated successfully.", data = newDto });
+                return NotFound(new { success = false, message = "Vehicle not found." });
+            }
+            catch (CollegeManagement.API.Exceptions.ForbiddenException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
+            }
+            catch (CollegeManagement.API.Exceptions.ValidationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -134,7 +198,18 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
-                var existing = await _service.GetByIdOrNumberAsync(id);
+                long targetId = 0;
+                if (long.TryParse(id?.Trim(), out var numId) && numId > 0)
+                {
+                    targetId = numId;
+                }
+                else if (!string.IsNullOrWhiteSpace(id))
+                {
+                    var existingLookup = await _service.GetByIdOrNumberAsync(id);
+                    if (existingLookup != null) targetId = existingLookup.VehicleId;
+                }
+
+                var existing = targetId > 0 ? new Dtos.Transport.Vehicle.TransportVehicleDto { VehicleId = targetId } : null;
                 if (existing != null)
                 {
                     await _service.DeleteAsync(existing.VehicleId, null);
