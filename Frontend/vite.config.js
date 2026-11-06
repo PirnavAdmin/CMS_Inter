@@ -129,7 +129,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                     ...parsed,
                   };
                 }
-              } catch {}
+              } catch {
+                // Keep the in-memory theme policy when the optional request body is invalid.
+              }
             }
             res.writeHead(200, {
               "Content-Type": "application/json",
@@ -447,7 +449,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                 const items = secJson.items || secJson.data || (Array.isArray(secJson) ? secJson : []);
                 return res.end(JSON.stringify({ success: true, data: items, sections: items }));
               }
-            } catch {}
+            } catch {
+              // Return the local section fallback when the upstream lookup is unavailable.
+            }
             return res.end(JSON.stringify({
               success: true,
               data: [
@@ -662,7 +666,9 @@ function examCellShieldPlugin(apiBaseUrl) {
                   res.writeHead(retryRes.status, { "Content-Type": "application/json" });
                   return res.end(text);
                 }
-              } catch {}
+              } catch {
+                // Continue to the local results-sections fallback if the retry fails.
+              }
               res.writeHead(200, {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Origin": "*",

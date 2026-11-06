@@ -9,6 +9,7 @@ import staffIcon from "@/assets/dashboard-3d/teaching-staff.png";
 import TransportManagerSidebar from "./TransportManagerSidebar.jsx";
 import TransportManagerNavbar from "./TransportManagerNavbar.jsx";
 import { useTransportManager } from "../TransportManagerContext.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
 import "@/shared/layouts/DashboardLayout/DashboardLayout.css";
 import "@/cms.css";
 import "./TransportManagerLayout.css";
@@ -74,6 +75,7 @@ export const transportSearchIndex = [
 
 export default function TransportManagerLayout({ children }) {
   const { sidebarCollapsed, sidebarOpen, closeSidebar } = useTransportManager();
+  const { palette } = useTheme();
   const [themePaletteOpen, setThemePaletteOpen] = useState(false);
 
   // Close sidebar on small screens (<= 1024px) when clicking anywhere outside
@@ -100,7 +102,7 @@ export default function TransportManagerLayout({ children }) {
   }, [sidebarCollapsed, closeSidebar]);
 
   return (
-    <div className={`cms-shell tm-layout-shell ${sidebarCollapsed ? "nav-closed" : ""}`}>
+    <div className={`cms-shell tm-layout-shell ${sidebarCollapsed ? "nav-closed" : ""}`} data-dashboard-palette={palette}>
       {/* Transport Manager Sidebar with Pirnav branding & modules matching Screenshot 1 */}
       <TransportManagerSidebar />
 
