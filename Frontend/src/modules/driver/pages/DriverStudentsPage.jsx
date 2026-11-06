@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Users,
   UserCheck,
@@ -24,6 +24,12 @@ export default function DriverStudentsPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const hasLoadedOnce = useRef(false);
+
+  const toTitleCase = (str) => {
+    if (!str || typeof str !== "string") return "";
+    return str.replace(/\b\w/g, (c) => c.toUpperCase());
+  };
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
@@ -32,7 +38,9 @@ export default function DriverStudentsPage() {
 
   const fetchStudentsAndRoute = async () => {
     try {
-      setIsLoading(true);
+      if (!hasLoadedOnce.current) {
+        setIsLoading(true);
+      }
       const [studentsRes, routeRes] = await Promise.all([
         getStudents(),
         getRoute()
@@ -43,18 +51,26 @@ export default function DriverStudentsPage() {
       setStudents(fetchedStudents);
 
       const rPayload = routeRes.data?.data ?? routeRes.data ?? {};
-      const fetchedRoute = rPayload.route || { stops: [
-        { name: "Green Park" }, { name: "City Center" }, { name: "University Gate" }
-      ]};
+      const rawStops = rPayload.stops || rPayload.pickupPoints || rPayload.route?.stops || [];
+      const normalizedStops = rawStops.map((st) => ({
+        ...st,
+        name: toTitleCase(st.stopName || st.name || st.pickupPointName || "Campus Stop"),
+      }));
+
+      const fetchedRoute = {
+        ...(rPayload.route || {}),
+        stops: normalizedStops,
+      };
       setRouteDetails(fetchedRoute);
-      if (fetchedRoute.stops && fetchedRoute.stops.length > 0) {
-        setSelectedBatchStop(fetchedRoute.stops[0].name);
+      if (normalizedStops.length > 0) {
+        setSelectedBatchStop(normalizedStops[0].name);
       }
     } catch (err) {
       console.error(err);
       setError("Failed to load students data.");
     } finally {
       setIsLoading(false);
+      hasLoadedOnce.current = true;
     }
   };
 
@@ -95,7 +111,7 @@ export default function DriverStudentsPage() {
   const totalCount = students.length;
   const pickedUpCount = students.filter((s) => s.status === "Picked Up" || s.status === "Boarded").length;
   const pendingCount = students.filter((s) => s.status === "Pending").length;
-  const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent").length;
+  const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent" || s.status === "Missed").length;
 
   const stopsList = routeDetails.stops?.map((s) => s.name) || [];
 
@@ -189,6 +205,7 @@ export default function DriverStudentsPage() {
         <DriverStudentTable
           students={students}
           stopsList={stopsList}
+          activeStop={selectedBatchStop}
           onUpdateStatus={handleUpdateStatus}
           showFilters={true}
         />

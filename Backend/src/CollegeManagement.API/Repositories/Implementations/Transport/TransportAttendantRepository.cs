@@ -25,18 +25,33 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportAttendantDto>> GetAllAsync(TransportAttendantFilterDto filter)
         {
             var c = Connection;
-            var all = await c.QueryAsync<TransportAttendantDto>(
-                "sp_GetTransportAttendants",
-                new 
-                { 
-                    p_Search = filter.Search ?? "",
-                    p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                    p_CampusId = (int?)null
-                },
-                commandType: CommandType.StoredProcedure);
+            IEnumerable<TransportAttendantDto> all;
+            try
+            {
+                const string sql = "CALL sp_GetTransportAttendants(@p_Search, @p_Status, @p_CampusId);";
+                all = await c.QueryAsync<TransportAttendantDto>(
+                    sql,
+                    new 
+                    { 
+                        p_Search = filter.Search ?? "",
+                        p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
+                        p_CampusId = filter.CampusId
+                    },
+                    commandType: CommandType.Text);
+            }
+            catch (Exception ex) when (ex.Message.Contains("Incorrect number of arguments") || ex.Message.Contains("not found in the collection"))
+            {
+                const string sql1 = "CALL sp_GetTransportAttendants(@p_Search);";
+                all = await c.QueryAsync<TransportAttendantDto>(
+                    sql1,
+                    new { p_Search = filter.Search ?? "" },
+                    commandType: CommandType.Text);
+            }
                 
             var list = all.AsQueryable();
             if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
+            if (filter.CampusId.HasValue && filter.CampusId.Value > 0)
+                list = list.Where(x => x.CampusId == filter.CampusId.Value);
             
             var totalCount = list.Count();
             var paged = list.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
@@ -47,10 +62,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportAttendantDto?> GetByIdAsync(long attendantId)
         {
             var c = Connection;
+            const string sql = "CALL sp_GetTransportAttendantById(@p_Id);";
             return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
-                "sp_GetTransportAttendantById",
+                sql,
                 new { p_Id = attendantId },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.Text);
         }
 
         public async Task<long> CreateAsync(CreateTransportAttendantDto dto, long? userId)
@@ -133,10 +149,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var id = long.TryParse(search, out long attendantId) ? attendantId : -1;
             
             var c = Connection;
+            const string sql = "CALL sp_GetTransportAttendantByIdOrName(@p_SearchId, @p_SearchStr);";
             return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
-                "sp_GetTransportAttendantByIdOrName",
+                sql,
                 new { p_SearchId = id, p_SearchStr = search },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.Text);
         }
     }
 }

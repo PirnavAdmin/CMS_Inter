@@ -130,82 +130,109 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS `sp_GetTransportDrivers`;
 DELIMITER //
 CREATE PROCEDURE `sp_GetTransportDrivers`(
-    IN p_Search VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-    IN p_Status TINYINT(1),
+    IN p_Search VARCHAR(100),
+    IN p_Status TINYINT,
     IN p_CampusId INT,
     IN p_PageNumber INT,
     IN p_PageSize INT
 )
 BEGIN
     DECLARE v_Offset INT;
-    DECLARE v_PageSize INT;
-    DECLARE v_Search VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    SET p_PageNumber = IFNULL(p_PageNumber, 1);
+    IF p_PageNumber < 1 THEN SET p_PageNumber = 1; END IF;
+    SET p_PageSize = IFNULL(p_PageSize, 20);
+    IF p_PageSize < 1 THEN SET p_PageSize = 20; END IF;
+    SET v_Offset = (p_PageNumber - 1) * p_PageSize;
 
-    SET v_PageSize = COALESCE(NULLIF(p_PageSize, 0), 20);
-    SET v_Offset = (COALESCE(NULLIF(p_PageNumber, 0), 1) - 1) * v_PageSize;
-    SET v_Search = IF(p_Search IS NULL OR p_Search = '', NULL, CONCAT('%', LOWER(p_Search), '%') COLLATE utf8mb4_unicode_ci);
-
-    -- Resultset 1: Total Count
-    SELECT COUNT(*) AS TotalCount
+    -- 1. Total Count (ResultSet 1)
+    SELECT COUNT(DISTINCT s.Id) AS TotalCount
     FROM Staff s
-    LEFT JOIN TransportDrivers d ON (d.StaffId = s.Id OR (d.EmployeeId = s.EmployeeId AND s.EmployeeId IS NOT NULL AND s.EmployeeId <> '')) AND d.IsDeleted = 0
-    WHERE s.IsDeleted = 0 
-      AND s.IsDriver = 1
-      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-      AND (p_Status IS NULL OR (p_Status = 1 AND s.Status = 'Active') OR (p_Status = 0 AND s.Status <> 'Active'))
-      AND (v_Search IS NULL 
-           OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) LIKE v_Search
-           OR LOWER(s.EmployeeId) LIKE v_Search
-           OR LOWER(COALESCE(s.DrivingLicenseNumber, '')) LIKE v_Search
-           OR LOWER(s.Mobile) LIKE v_Search);
-
-    -- Resultset 2: Paginated Rows
-    SELECT 
-        s.Id AS DriverId,
-        s.Id AS StaffId,
-        s.EmployeeId AS EmployeeId,
-        CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)) AS DriverName,
-        s.Mobile AS MobileNumber,
-        s.AlternateMobile AS AlternateMobileNumber,
-        s.Email AS Email,
-        s.DrivingLicenseNumber AS LicenseNumber,
-        DATE_FORMAT(s.DrivingLicenseExpiryDate, '%Y-%m-%d') AS LicenseExpiryDate,
-        s.CurrentAddress AS Address,
-        s.BloodGroup AS BloodGroup,
-        COALESCE(d.EmergencyContactName, '') AS EmergencyContactName,
-        COALESCE(d.EmergencyContactNumber, '') AS EmergencyContactNumber,
-        COALESCE(s.DrivingExperienceYears, d.Experience, 5) AS ExperienceYears,
-        COALESCE(va.VehicleId, d.AssignedVehicleId) AS AssignedVehicleId,
-        COALESCE(va.VehicleNumber, v.VehicleNumber) AS AssignedVehicleNumber,
-        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status,
-        s.CampusId,
-        c.CampusName
-    FROM Staff s
-    LEFT JOIN Campuses c ON s.CampusId = c.CampusId
-    LEFT JOIN TransportDrivers d ON (d.StaffId = s.Id OR (d.EmployeeId = s.EmployeeId AND s.EmployeeId IS NOT NULL AND s.EmployeeId <> '')) AND d.IsDeleted = 0
-    LEFT JOIN (
-        SELECT va1.DriverId, va1.VehicleId, v1.VehicleNumber
-        FROM TransportVehicleAssignments va1
-        LEFT JOIN TransportVehicles v1 ON va1.VehicleId = v1.VehicleId AND v1.IsDeleted = 0
-        WHERE va1.IsDeleted = 0 AND va1.Status = 1
-          AND va1.AssignmentId = (
-              SELECT MAX(va2.AssignmentId)
-              FROM TransportVehicleAssignments va2
-              WHERE va2.DriverId = va1.DriverId AND va2.IsDeleted = 0 AND va2.Status = 1
+    INNER JOIN Users u ON s.Id = u.StaffId
+    INNER JOIN Roles r ON u.RoleId = r.RoleId AND r.RoleName = 'Driver'
+    INNER JOIN TransportDrivers d ON d.DriverId = (
+        SELECT MAX(d2.DriverId)
+        FROM TransportDrivers d2
+        WHERE d2.StaffId = s.Id AND d2.IsDeleted = 0
+    )
+    WHERE s.IsDeleted = 0
+      AND (
+          p_CampusId IS NULL OR p_CampusId <= 0 
+          OR s.CampusId = p_CampusId 
+          OR EXISTS (
+              SELECT 1 
+              FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = s.Id AND sca.CampusId = p_CampusId
           )
-    ) va ON s.Id = va.DriverId
+      )
+      AND (
+          p_Status IS NULL 
+          OR (p_Status = 1 AND d.Status = 1 AND s.Status = 'Active')
+          OR (p_Status = 0 AND (d.Status = 0 OR s.Status <> 'Active'))
+      )
+      AND (
+          p_Search IS NULL OR p_Search = '' 
+          OR LOWER(CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName))) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.EmployeeId, d.EmployeeId)) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.DrivingLicenseNumber, d.LicenseNo)) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.Mobile, d.MobileNo)) LIKE CONCAT('%', LOWER(p_Search), '%')
+      );
+
+    -- 2. Items (ResultSet 2)
+    SELECT 
+        d.DriverId,
+        s.Id AS StaffId,
+        COALESCE(s.EmployeeId, d.EmployeeId) AS EmployeeId,
+        COALESCE(CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName)), d.DriverName) AS DriverName,
+        COALESCE(s.Mobile, d.MobileNo) AS MobileNumber,
+        COALESCE(s.AlternateMobile, d.AlternateMobileNo) AS AlternateMobileNumber,
+        COALESCE(s.Email, d.Email) AS Email,
+        COALESCE(s.DrivingLicenseNumber, d.LicenseNo) AS LicenseNumber,
+        DATE_FORMAT(COALESCE(s.DrivingLicenseExpiryDate, d.LicenseExpiry), '%Y-%m-%d') AS LicenseExpiryDate,
+        COALESCE(s.CurrentAddress, d.Address) AS Address,
+        COALESCE(s.BloodGroup, d.BloodGroup) AS BloodGroup,
+        d.EmergencyContactName,
+        d.EmergencyContactNumber,
+        COALESCE(s.DrivingExperienceYears, d.Experience, 5) AS ExperienceYears,
+        d.AssignedVehicleId,
+        v.VehicleNumber AS AssignedVehicleNumber,
+        CASE WHEN d.Status = 1 AND s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status,
+        d.CreatedAt,
+        COALESCE(NULLIF(p_CampusId, 0), s.CampusId) AS CampusId,
+        COALESCE(c.CampusName, 'Main Campus (HQ)') AS CampusName
+    FROM Staff s
+    INNER JOIN Users u ON s.Id = u.StaffId
+    INNER JOIN Roles r ON u.RoleId = r.RoleId AND r.RoleName = 'Driver'
+    INNER JOIN TransportDrivers d ON d.DriverId = (
+        SELECT MAX(d2.DriverId)
+        FROM TransportDrivers d2
+        WHERE d2.StaffId = s.Id AND d2.IsDeleted = 0
+    )
+    LEFT JOIN Campuses c ON c.CampusId = COALESCE(NULLIF(p_CampusId, 0), s.CampusId)
     LEFT JOIN TransportVehicles v ON d.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
-    WHERE s.IsDeleted = 0 
-      AND s.IsDriver = 1
-      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
-      AND (p_Status IS NULL OR (p_Status = 1 AND s.Status = 'Active') OR (p_Status = 0 AND s.Status <> 'Active'))
-      AND (v_Search IS NULL 
-           OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) LIKE v_Search
-           OR LOWER(s.EmployeeId) LIKE v_Search
-           OR LOWER(COALESCE(s.DrivingLicenseNumber, '')) LIKE v_Search
-           OR LOWER(s.Mobile) LIKE v_Search)
-    ORDER BY s.Id ASC
-    LIMIT v_PageSize OFFSET v_Offset;
+    WHERE s.IsDeleted = 0
+      AND (
+          p_CampusId IS NULL OR p_CampusId <= 0 
+          OR s.CampusId = p_CampusId 
+          OR EXISTS (
+              SELECT 1 
+              FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = s.Id AND sca.CampusId = p_CampusId
+          )
+      )
+      AND (
+          p_Status IS NULL 
+          OR (p_Status = 1 AND d.Status = 1 AND s.Status = 'Active')
+          OR (p_Status = 0 AND (d.Status = 0 OR s.Status <> 'Active'))
+      )
+      AND (
+          p_Search IS NULL OR p_Search = '' 
+          OR LOWER(CONCAT(TRIM(s.FirstName), ' ', TRIM(s.LastName))) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.EmployeeId, d.EmployeeId)) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.DrivingLicenseNumber, d.LicenseNo)) LIKE CONCAT('%', LOWER(p_Search), '%')
+          OR LOWER(COALESCE(s.Mobile, d.MobileNo)) LIKE CONCAT('%', LOWER(p_Search), '%')
+      )
+    ORDER BY d.DriverId ASC
+    LIMIT p_PageSize OFFSET v_Offset;
 END //
 DELIMITER ;
 

@@ -31,15 +31,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IExaminationService _examinationService;
         private readonly IExaminationExportService _exportService;
         private readonly ILogger<ExaminationController> _logger;
+        private readonly INotificationService? _notificationService;
 
         public ExaminationController(
             IExaminationService examinationService,
             IExaminationExportService exportService,
-            ILogger<ExaminationController> logger)
+            ILogger<ExaminationController> logger,
+            INotificationService? notificationService = null)
         {
             _examinationService = examinationService;
             _exportService = exportService;
             _logger = logger;
+            _notificationService = notificationService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -129,6 +132,23 @@ namespace CollegeManagement.API.Controllers.V1
             request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Creating examination: {ExamName}", request.ExamName);
             var result = await _examinationService.CreateExaminationAsync(request);
+
+            if (_notificationService != null && result != null)
+            {
+                try
+                {
+                    var campusId = result.CampusId ?? request.CampusId;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "New Examination Scheduled",
+                        $"New examination '{result.ExamName}' has been scheduled from {result.StartDate:yyyy-MM-dd} to {result.EndDate:yyyy-MM-dd}.",
+                        "Examination",
+                        result.ExaminationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
 
             return CreatedAtAction(
                 nameof(GetExaminationById),
@@ -279,6 +299,25 @@ namespace CollegeManagement.API.Controllers.V1
             var result = await _examinationService.CancelExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { success = false, message = "Examination not found." });
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var reasonText = !string.IsNullOrWhiteSpace(request?.Reason) ? $" Reason: {request.Reason}" : string.Empty;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Examination Cancelled",
+                        $"Notice: Examination '{result.Name ?? exam?.ExamName ?? "Examination"}' has been CANCELLED.{reasonText}",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(new
             {
                 success = true,
@@ -305,6 +344,28 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Rescheduling examination ID: {Id}", examinationId);
             var result = await _examinationService.RescheduleExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { message = "Examination not found." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var dateRangeText = (request.NewStartDate.HasValue && request.NewEndDate.HasValue) 
+                        ? $" New dates: {request.NewStartDate.Value:yyyy-MM-dd} to {request.NewEndDate.Value:yyyy-MM-dd}." 
+                        : string.Empty;
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Examination Rescheduled",
+                        $"Notice: Examination '{exam?.ExamName ?? "Examination"}' has been RESCHEDULED.{dateRangeText} Please check updated schedule.",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 
@@ -598,6 +659,21 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { message = $"Duty assignment with ID {dutyId} was not found or could not be updated." });
             }
 
+            if (_notificationService != null)
+            {
+                try
+                {
+                    await _notificationService.SendToStaffAsync(
+                        request.NewStaffId,
+                        "Invigilation Duty Assigned",
+                        $"You have been reassigned invigilation duty #{dutyId}. Remarks: {request.Reason ?? "Updated duty assignment."}",
+                        "Examination",
+                        dutyId,
+                        "/dashboard/examinations/duties");
+                }
+                catch { }
+            }
+
             return Ok(new { success = true, message = "Exam invigilation duty reassigned successfully." });
         }
 
@@ -676,6 +752,29 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating schedule ID: {Id} for Examination ID: {ExamId}", examScheduleId, examinationId);
             var result = await _examinationService.UpdateExamScheduleAsync(examScheduleId, request);
             if (result == null) return NotFound(new { message = "Schedule not found." });
+
+            if (_notificationService != null)
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(examinationId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? request.CampusId ?? ResolveCampusId();
+                    var roomText = !string.IsNullOrWhiteSpace(result.RoomNumber) ? $" Room: {result.RoomNumber}," : string.Empty;
+                    var timeText = $"{result.StartTime:hh\\:mm} - {result.EndTime:hh\\:mm}";
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Exam Schedule / Room Updated",
+                        $"Exam slot for '{result.SubjectName ?? "Subject"}' ({examName}) updated.{roomText} Date: {result.ExamDate:yyyy-MM-dd}, Time: {timeText}.",
+                        "Examination",
+                        examinationId,
+                        "/student/examinations");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 
@@ -713,6 +812,27 @@ namespace CollegeManagement.API.Controllers.V1
             }
             _logger.LogInformation("Publishing exam schedules for Examination ID: {ExamId}.", examinationId);
             var publishedCount = await _examinationService.PublishExamSchedulesAsync(request);
+
+            if (_notificationService != null && publishedCount > 0)
+            {
+                try
+                {
+                    var targetExamId = examinationId > 0 ? examinationId : (request.ExaminationId ?? 0);
+                    var exam = await _examinationService.GetExaminationByIdAsync(targetExamId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Student", "Parent", "Teacher", "Faculty" },
+                        campusId,
+                        "Exam Schedules Announced",
+                        $"Examination schedule for '{examName}' has been published ({publishedCount} slot(s)). Check your portal for dates & times.",
+                        "Examination",
+                        targetExamId,
+                        "/dashboard/examinations");
+                }
+                catch { }
+            }
+
             return Ok(new { message = "Schedules published successfully.", publishedCount });
         }
 
@@ -800,6 +920,39 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Generating hall tickets for Examination ID: {ExamId}", request.ExaminationId);
             var result = await _examinationService.GenerateHallTicketsAsync(request);
+
+            if (_notificationService != null && result != null && result.Any())
+            {
+                try
+                {
+                    var exam = await _examinationService.GetExaminationByIdAsync(request.ExaminationId);
+                    var examName = exam?.ExamName ?? "Examination";
+                    var campusId = exam?.CampusId ?? ResolveCampusId();
+                    var studentIds = result.Select(h => h.StudentId).Where(id => id > 0).Distinct().ToList();
+
+                    if (studentIds.Any())
+                    {
+                        await _notificationService.SendToStudentsAsync(
+                            studentIds,
+                            "Hall Ticket Available",
+                            $"Your Hall Ticket for '{examName}' is now generated and ready for download.",
+                            "Examination",
+                            request.ExaminationId,
+                            $"/student/halltickets/{request.ExaminationId}");
+                    }
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        campusId,
+                        "Hall Ticket Available",
+                        $"Hall tickets for '{examName}' have been generated and are available in the portal.",
+                        "Examination",
+                        request.ExaminationId,
+                        $"/parent/dashboard");
+                }
+                catch { }
+            }
+
             return Ok(result);
         }
 
@@ -835,6 +988,22 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Assigning invigilators to Schedule ID: {ScheduleId}", request.ExamScheduleId);
             await _examinationService.AssignInvigilatorsAsync(request);
+
+            if (_notificationService != null && request.InvigilatorIds != null && request.InvigilatorIds.Any())
+            {
+                try
+                {
+                    await _notificationService.SendToStaffListAsync(
+                        request.InvigilatorIds,
+                        "Invigilation Duty Assigned",
+                        $"You have been assigned as an invigilator for Exam Schedule #{request.ExamScheduleId}.",
+                        "Examination",
+                        request.ExamScheduleId,
+                        "/dashboard/examinations/duties");
+                }
+                catch { }
+            }
+
             return Ok(new { message = "Invigilators assigned successfully." });
         }
 

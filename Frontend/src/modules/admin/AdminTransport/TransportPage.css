@@ -1705,3 +1705,605 @@
 .cms-transport-multi-pickup-modal .transport-pickup-history-sequence { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 30px; padding: 0 4px; border-radius: 8px; background: var(--cms-bg, #f0f4e5); color: var(--cms-primary, #708300); font-size: 13px; font-weight: 750; }
 .cms-transport-multi-pickup-modal .transport-pickup-history strong { font-size: 13px; overflow-wrap: anywhere; }
 .cms-transport-multi-pickup-modal .transport-pickup-history p { margin: 5px 0 0; font-size: 12px; color: var(--cms-muted, #737b68); }
+
+
+/* ==========================================================================
+   Vehicle Trips Management View (Matches Image 2 & Image 3 with CMS theme)
+   ========================================================================== */
+
+.cms-transport-trips-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cms-transport-trips-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cms-transport-trips-head-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cms-transport-trips-head-title h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--cms-text, #20251b);
+}
+
+.cms-transport-trips-head-title p {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: var(--cms-muted, #737b68);
+}
+
+.cms-transport-trips-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cms-transport-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  background: var(--cms-surface, #fff);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--cms-text, #20251b);
+}
+
+.cms-transport-trips-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .cms-transport-trips-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .cms-transport-trips-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.cms-transport-trips-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 12px;
+  background: var(--cms-surface, #fff);
+  box-shadow: var(--cms-shadow, 0 1px 3px rgba(0, 0, 0, 0.05));
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cms-transport-trips-stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.cms-transport-trips-stat-card small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cms-muted, #737b68);
+}
+
+.cms-transport-trips-stat-card strong {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.cms-transport-trips-stat-card.tone-green strong {
+  color: var(--cms-primary, #5d7000);
+}
+
+.cms-transport-trips-stat-card.tone-blue strong {
+  color: #1a73e8;
+}
+
+.cms-transport-trips-stat-card.tone-amber strong {
+  color: #e37400;
+}
+
+.cms-transport-trips-stat-card.tone-red strong {
+  color: #d93025;
+}
+
+.cms-transport-trips-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 12px;
+  background: var(--cms-surface, #fff);
+  flex-wrap: wrap;
+}
+
+.cms-transport-trips-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 8px;
+  background: var(--cms-bg, #f7f9f3);
+}
+
+.cms-transport-trips-search input {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  font-size: 0.88rem;
+  color: var(--cms-text, #20251b);
+}
+
+.cms-transport-trips-route-select {
+  padding: 8px 12px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 8px;
+  background: var(--cms-surface, #fff);
+  color: var(--cms-text, #20251b);
+  font-size: 0.88rem;
+  min-width: 180px;
+  cursor: pointer;
+}
+
+.cms-transport-trips-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .cms-transport-trips-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-transport-trip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 14px;
+  background: var(--cms-surface, #fff);
+  box-shadow: var(--cms-shadow, 0 1px 4px rgba(0, 0, 0, 0.04));
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.cms-transport-trip-card:hover {
+  border-color: var(--cms-primary, #7a8f00);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.cms-transport-trip-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cms-transport-trip-veh-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cms-transport-trip-veh-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-trip-veh-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--cms-primary-soft, #eff2e5);
+  color: var(--cms-primary, #5d7000);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.cms-transport-trip-route-name {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--cms-text, #20251b);
+}
+
+.cms-transport-trip-reg {
+  font-size: 0.78rem;
+  color: var(--cms-muted, #737b68);
+  font-weight: 500;
+}
+
+.cms-transport-trip-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.cms-transport-pill.pill-running {
+  background: var(--cms-green-soft, #e6f4ea);
+  color: var(--cms-green, #137333);
+}
+
+.cms-transport-pill.pill-inactive {
+  background: var(--cms-red-soft, #fce8e6);
+  color: var(--cms-red, #c5221f);
+}
+
+.cms-transport-pill.pill-gps-active {
+  background: var(--cms-green-soft, #e6f4ea);
+  color: var(--cms-green, #137333);
+}
+
+.cms-transport-pill.pill-gps-offline {
+  background: var(--cms-border, #e8eaed);
+  color: var(--cms-muted, #5f6368);
+}
+
+.cms-transport-trip-crew-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--cms-border, #dce2d0);
+  border-radius: 10px;
+  background: var(--cms-bg, #f7f9f3);
+}
+
+.cms-transport-trip-crew-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cms-transport-trip-crew-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cms-muted, #737b68);
+}
+
+.cms-transport-trip-crew-name {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--cms-text, #20251b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-transport-trip-crew-phone {
+  font-size: 0.78rem;
+  color: var(--cms-muted, #737b68);
+}
+
+.cms-transport-trip-card-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--cms-border, #dce2d0);
+  gap: 10px;
+}
+
+.cms-transport-trip-student-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--cms-primary, #5d7000);
+}
+
+/* Modal styling matching Image 3 with CMS Colors */
+.cms-transport-trip-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  padding: 16px;
+}
+
+.cms-transport-trip-modal-content {
+  width: 100%;
+  max-width: 860px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--cms-surface, #fff);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  border: 1px solid var(--cms-border, #dce2d0);
+}
+
+.cms-transport-trip-modal-banner {
+  background: linear-gradient(135deg, var(--cms-primary, #647800) 0%, #445400 100%);
+  color: #fff;
+  padding: 20px 24px;
+}
+
+.cms-transport-trip-modal-banner-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.cms-transport-trip-modal-banner-veh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-trip-modal-veh-pill {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.cms-transport-trip-modal-route-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.cms-transport-trip-modal-status {
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: #fff;
+  color: #2e7d32;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.cms-transport-trip-modal-effective {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin-left: 6px;
+}
+
+.cms-transport-trip-modal-close-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.cms-transport-trip-modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.cms-transport-trip-modal-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+  .cms-transport-trip-modal-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.cms-transport-trip-modal-strip-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cms-transport-trip-modal-strip-item small {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+
+.cms-transport-trip-modal-strip-item strong {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-transport-trip-modal-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--cms-border, #dce2d0);
+  background: var(--cms-surface, #fff);
+  overflow-x: auto;
+}
+
+.cms-transport-trip-modal-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--cms-muted, #737b68);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cms-transport-trip-modal-tab-btn:hover {
+  color: var(--cms-primary, #5d7000);
+}
+
+.cms-transport-trip-modal-tab-btn.is-active {
+  color: var(--cms-primary, #5d7000);
+  border-bottom-color: var(--cms-primary, #5d7000);
+}
+
+.cms-transport-trip-modal-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background: var(--cms-primary-soft, #eff2e5);
+  color: var(--cms-primary, #5d7000);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.cms-transport-trip-modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.cms-transport-trip-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 32px;
+}
+
+@media (max-width: 600px) {
+  .cms-transport-trip-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-transport-trip-overview-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.cms-transport-trip-overview-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--cms-border, #dce2d0);
+  font-size: 0.88rem;
+}
+
+.cms-transport-trip-overview-row:last-child {
+  border-bottom: none;
+}
+
+.cms-transport-trip-overview-row span {
+  color: var(--cms-muted, #737b68);
+  font-weight: 500;
+}
+
+.cms-transport-trip-overview-row strong {
+  color: var(--cms-text, #20251b);
+  font-weight: 650;
+  text-align: right;
+}
+
+.cms-transport-trip-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--cms-muted, #737b68);
+  font-size: 0.9rem;
+}
+
+[data-theme="dark"] .cms-transport-trip-card {
+  background: var(--cms-surface, #1e2219);
+  border-color: var(--cms-border, #2d3326);
+}
+
+[data-theme="dark"] .cms-transport-trip-crew-box {
+  background: var(--cms-bg, #181c13);
+  border-color: var(--cms-border, #2d3326);
+}
+
+[data-theme="dark"] .cms-transport-trip-modal-content {
+  background: var(--cms-surface, #1e2219);
+  border-color: var(--cms-border, #2d3326);
+}
+
+[data-theme="dark"] .cms-transport-date-badge {
+  background: var(--cms-surface, #1e2219);
+  border-color: var(--cms-border, #2d3326);
+  color: var(--cms-text, #e2e6d9);
+}
+
+[data-theme="dark"] .cms-transport-trips-toolbar {
+  background: var(--cms-surface, #1e2219);
+  border-color: var(--cms-border, #2d3326);
+}
+
+[data-theme="dark"] .cms-transport-trips-search {
+  background: var(--cms-bg, #181c13);
+  border-color: var(--cms-border, #2d3326);
+}
+
+[data-theme="dark"] .cms-transport-trips-route-select {
+  background: var(--cms-surface, #1e2219);
+  border-color: var(--cms-border, #2d3326);
+  color: var(--cms-text, #e2e6d9);
+}

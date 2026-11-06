@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Briefcase,
+  ShieldCheck,
   UserX,
   AlertCircle,
   RotateCw,
@@ -100,8 +101,17 @@ const normalizeTodayData = (raw, timing) => {
   const graceMins = Number(timing?.gracePeriodMinutes ?? 15);
   const checkoutCutoffMins = shiftEndMins + graceMins;
 
+  const markedByAdmin = Boolean(
+    raw.markedByAdmin ??
+    raw.MarkedByAdmin ??
+    raw.markedBy === "Admin" ??
+    raw.MarkedBy === "Admin" ??
+    (typeof raw.remarks === "string" && raw.remarks.toLowerCase().includes("admin") && !raw.remarks.toLowerCase().includes("driver portal")) ??
+    (typeof raw.deviceId === "string" && raw.deviceId.toLowerCase().includes("admin") && !raw.deviceId.toLowerCase().includes("driver-portal"))
+  );
+
   let status = rawStatus;
-  let todayStatus = rawTodayStatus;
+  let todayStatus = markedByAdmin ? "Present | Marked by Admin" : rawTodayStatus;
 
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
@@ -147,6 +157,8 @@ const normalizeTodayData = (raw, timing) => {
     canRegularize,
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: regState,
+    markedByAdmin,
+    markedBy: markedByAdmin ? "Admin" : (raw.markedBy || raw.MarkedBy || null),
   };
 };
 
@@ -244,6 +256,9 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     dateFormatted: new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
     regularizationState: null,
   });
+
+  // Monthly KPI Summary state (keeps top 4 KPI cards aligned with current month HR metrics)
+  const [monthlyMetrics, setMonthlyMetrics] = useState(null);
 
   // Live History & Analytics Metrics
   const [historyData, setHistoryData] = useState({
@@ -366,15 +381,38 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           const rawStatus = l.status || l.Status || "--";
           const isToday = Boolean(l.isToday ?? l.IsToday);
           const regState = l.regularizationState || l.RegularizationState || null;
+          const shift = l.shift || l.Shift || "09:00 AM – 03:20 PM";
+          const markedByAdmin = Boolean(
+            l.markedByAdmin ||
+            l.MarkedByAdmin ||
+            l.markedBy === "Admin" ||
+            l.MarkedBy === "Admin" ||
+            String(rawStatus).toLowerCase().includes("admin") ||
+            (typeof l.device === "string" && l.device.toLowerCase().includes("admin")) ||
+            (!isToday && rawStatus === "Present" && (inTime === "--" || !inTime || outTime === "--" || !outTime))
+          );
 
           let status = rawStatus;
           if (regState?.toLowerCase() === "approved") {
             status = "Present";
+          } else if (markedByAdmin || status.toLowerCase().includes("admin")) {
+            status = "Present (Admin)";
+          }
+
+          // If marked Present by Admin or Present without check-in/out times:
+          // Fall back to configured shift start & end times
+          let finalInTime = inTime;
+          let finalOutTime = outTime;
+          if (!isToday && (status === "Present (Admin)" || (status === "Present" && (inTime === "--" || markedByAdmin)))) {
+            const shiftParts = String(shift || "").split(/[–-]/).map((s) => s.trim());
+            if (finalInTime === "--" || !finalInTime) finalInTime = shiftParts[0] || "09:00 AM";
+            if (finalOutTime === "--" || !finalOutTime) finalOutTime = shiftParts[1] || "03:20 PM";
+            status = "Present (Admin)";
           }
 
           let hours = l.hours || l.Hours || "--";
-          if (hours === "--" && inTime !== "--" && outTime !== "--") {
-            hours = calculateDurationStr(inTime, outTime, false);
+          if ((hours === "--" || hours === "0h 0m") && finalInTime !== "--" && finalOutTime !== "--") {
+            hours = calculateDurationStr(finalInTime, finalOutTime, false);
           }
 
           const canRegularize = Boolean(l.canRegularize ?? l.CanRegularize) || (
@@ -387,12 +425,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             day: l.day || l.Day || "--",
             date: l.date || l.Date || "--",
             rawDate: l.rawDate || l.RawDate || "",
-            shift: l.shift || l.Shift || "09:00 AM – 04:30 PM",
-            inTime,
-            outTime,
+            shift,
+            inTime: finalInTime,
+            outTime: finalOutTime,
             hours,
-            device: l.device || l.Device || "--",
+            device: markedByAdmin ? "Admin Entry" : (l.device || l.Device || "--"),
             status,
+            markedByAdmin,
             canRegularize,
             isToday,
             regularizationState: regState,
@@ -433,8 +472,71 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     fetchHistory(activeFilter);
   }, [activeFilter, fetchHistory]);
 
+  // Fetch current month attendance overview for top 4 KPI cards
+  const fetchMonthlyMetrics = useCallback(async () => {
+    try {
+      const res = await attendanceService.getMyAttendanceHistory("month");
+      const payload = res?.data || res?.Data || (res?.status ? res : null);
+      if (payload) {
+        const rawMetrics = payload.metrics || payload.Metrics || {};
+        setMonthlyMetrics(rawMetrics);
+      }
+    } catch (e) {
+      console.warn("Could not load monthly attendance metrics", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMonthlyMetrics();
+  }, [fetchMonthlyMetrics]);
+
+  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
+  const isMissedCheckout = useMemo(() => {
+    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
+    if (todayData.status === "punched_in" && !todayData.outTime) {
+      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM");
+      if (shiftEndMins !== null) {
+        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        return nowMins > cutoffMins;
+      }
+    }
+    return false;
+  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
+
+  // Shift check-in and check-out window validation
+  const isCheckInAllowed = useMemo(() => {
+    if (todayData.markedByAdmin || todayData.status !== "not_punched") return false;
+    const startMins = parseTimeToMinutes(todayData.shiftStartTime || timingConfig.workStartTime || "09:00 AM");
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
+    if (startMins === null || endMins === null) return false;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    return nowMins >= startMins && nowMins <= endMins;
+  }, [todayData.markedByAdmin, todayData.status, todayData.shiftStartTime, todayData.shiftEndTime, timingConfig.workStartTime, timingConfig.workEndTime, shiftUpdateTick]);
+
+  const isCheckOutAllowed = useMemo(() => {
+    if (todayData.markedByAdmin || todayData.status !== "punched_in" || isMissedCheckout) return false;
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
+    if (endMins === null) return true;
+    const now = new Date();
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
+    const cutoffMins = endMins + grace;
+    return nowMins >= (endMins - 15) && nowMins <= cutoffMins;
+  }, [todayData.markedByAdmin, todayData.status, isMissedCheckout, todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes, shiftUpdateTick]);
+
   // Punch In Handler: POST /api/v1/staff-attendance/punch-in
   const handlePunchIn = async () => {
+    if (todayData.markedByAdmin) {
+      notify("Attendance for today has already been officially recorded by Administration.", "error");
+      return;
+    }
+    if (!isCheckInAllowed) {
+      notify(`Check-in is permitted only during configured shift hours (${todayData.shiftStartTime} – ${todayData.shiftEndTime}).`, "error");
+      return;
+    }
     if (todayData.status !== "not_punched" || actionLoading) return;
     setActionLoading(true);
     try {
@@ -454,6 +556,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         }
         notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
+        fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
@@ -465,23 +568,14 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     }
   };
 
-  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
-  const isMissedCheckout = useMemo(() => {
-    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
-    if (todayData.status === "punched_in" && !todayData.outTime) {
-      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM");
-      if (shiftEndMins !== null) {
-        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
-        const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        return nowMins > cutoffMins;
-      }
-    }
-    return false;
-  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
+
 
   // Punch Out Handler: POST /api/v1/staff-attendance/punch-out
   const handlePunchOut = async () => {
+    if (todayData.markedByAdmin) {
+      notify("Attendance for today has already been officially recorded by Administration.", "error");
+      return;
+    }
     if (todayData.status !== "punched_in" || actionLoading || isMissedCheckout) {
       if (isMissedCheckout) {
         notify("The 15-minute check-out window has expired. Marked as Missed Checkout. Please apply for attendance regularization.", "error");
@@ -506,6 +600,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         }
         notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
+        fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
@@ -633,6 +728,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   const getStatusBadgeClass = (status) => {
     switch (status) {
       case "Present":
+      case "Present (Admin)":
+      case "Present | Marked by Admin":
         return "present";
       case "Late":
         return "late";
@@ -673,26 +770,33 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             {/* Check Status Row - Centered in middle */}
             <div className="sp-summary-status-row">
               <span className="sp-summary-label">Check Status:</span>
-              <span
-                className={`sp-check-status-badge ${
-                  todayData.status === "punched_in" && !isMissedCheckout
-                    ? (todayData.isLate ? "late" : "in")
+              {todayData.markedByAdmin ? (
+                <span className="sp-check-status-badge in" style={{ background: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" }}>
+                  <ShieldCheck size={14} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                  Present | Marked by Admin ({todayData.inTime || "Verified"})
+                </span>
+              ) : (
+                <span
+                  className={`sp-check-status-badge ${
+                    todayData.status === "punched_in" && !isMissedCheckout
+                      ? (todayData.isLate ? "late" : "in")
+                      : todayData.status === "punched_out"
+                      ? "completed"
+                      : isMissedCheckout
+                      ? "missed"
+                      : "not-checked"
+                  }`}
+                >
+                  <span className="sp-status-bullet">•</span>
+                  {todayData.status === "punched_in" && !isMissedCheckout
+                    ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
                     : todayData.status === "punched_out"
-                    ? "completed"
+                    ? `Completed (${todayData.outTime || "--"})`
                     : isMissedCheckout
-                    ? "missed"
-                    : "not-checked"
-                }`}
-              >
-                <span className="sp-status-bullet">•</span>
-                {todayData.status === "punched_in" && !isMissedCheckout
-                  ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
-                  : todayData.status === "punched_out"
-                  ? `Completed (${todayData.outTime || "--"})`
-                  : isMissedCheckout
-                  ? "Missed Checkout (Cutoff Passed)"
-                  : "Not Checked In"}
-              </span>
+                    ? "Missed Checkout (Cutoff Passed)"
+                    : "Not Checked In"}
+                </span>
+              )}
             </div>
 
             {/* 3 Metric Columns: CHECK IN, CHECK OUT, WORKING HOURS */}
@@ -742,30 +846,77 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           </div>
 
           <div className="sp-punch-twin-grid">
-            {/* Check In Panel */}
-            <div className="sp-twin-panel checkin-panel">
-              {/* Check In Button */}
-              <button
-                type="button"
-                className={`sp-punch-pill-btn checkin ${
-                  todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
-                }`}
-                disabled={todayData.status !== "not_punched" || actionLoading}
-                onClick={handlePunchIn}
-              >
-                {actionLoading && todayData.status === "not_punched" ? (
-                  <Loader2 size={15} className="sp-spin" />
-                ) : (
-                  <LogIn size={15} />
-                )}
-                <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
-              </button>
+            {todayData.markedByAdmin ? (
+              <>
+                <div className="sp-twin-panel checkin-panel" style={{ opacity: 0.95 }}>
+                  <button
+                    type="button"
+                    className="sp-punch-pill-btn checkin inactive"
+                    disabled
+                    style={{ background: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46", cursor: "not-allowed" }}
+                    title="Attendance officially recorded by Administration."
+                  >
+                    <ShieldCheck size={15} />
+                    <span>Present | Marked by Admin</span>
+                  </button>
+                  <div className="sp-punch-foot-hint" style={{ color: "#059669", fontWeight: 600 }}>
+                    In: {todayData.inTime || "--:--"} (Admin Recorded)
+                  </div>
+                </div>
 
-              <div className="sp-punch-foot-hint">Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}</div>
-            </div>
+                <div className="sp-twin-panel checkout-panel" style={{ opacity: 0.95 }}>
+                  <button
+                    type="button"
+                    className="sp-punch-pill-btn checkout inactive"
+                    disabled
+                    style={{ background: "#f8fafc", borderColor: "#e2e8f0", color: "#64748b", cursor: "not-allowed" }}
+                    title="Attendance officially recorded by Administration."
+                  >
+                    <ShieldCheck size={15} />
+                    <span>{todayData.outTime ? "Checked Out by Admin" : "Check Out (Admin Locked)"}</span>
+                  </button>
+                  <div className="sp-punch-foot-hint" style={{ color: "#64748b" }}>
+                    Out: {todayData.outTime || "--:--"} (Admin Managed)
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Check In Panel */}
+                <div className="sp-twin-panel checkin-panel">
+                  {/* Check In Button */}
+                  <button
+                    type="button"
+                    className={`sp-punch-pill-btn checkin ${
+                      isCheckInAllowed && todayData.status === "not_punched" && !actionLoading ? "active" : "inactive"
+                    }`}
+                    disabled={!isCheckInAllowed || todayData.status !== "not_punched" || actionLoading}
+                    onClick={handlePunchIn}
+                    title={
+                      !isCheckInAllowed
+                        ? `Check-in allowed only during configured shift hours: ${todayData.shiftStartTime} – ${todayData.shiftEndTime}`
+                        : "Click to Check In"
+                    }
+                  >
+                    {actionLoading && todayData.status === "not_punched" ? (
+                      <Loader2 size={15} className="sp-spin" />
+                    ) : (
+                      <LogIn size={15} />
+                    )}
+                    <span>{todayData.status === "not_punched" ? "Check In" : "Checked In"}</span>
+                  </button>
 
-            {/* Check Out Panel */}
-            <div className="sp-twin-panel checkout-panel">
+                  <div
+                    className="sp-punch-foot-hint"
+                    style={{ color: !isCheckInAllowed && todayData.status === "not_punched" ? "#dc2626" : undefined, fontWeight: !isCheckInAllowed && todayData.status === "not_punched" ? 600 : undefined }}
+                  >
+                    Allowed: {todayData.shiftStartTime} – {todayData.shiftEndTime}
+                    {!isCheckInAllowed && todayData.status === "not_punched" ? " (Shift Closed)" : ""}
+                  </div>
+                </div>
+
+                {/* Check Out Panel */}
+                <div className="sp-twin-panel checkout-panel">
               {/* Check Out Button */}
               {isMissedCheckout ? (
                 <>
@@ -799,10 +950,15 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                   <button
                     type="button"
                     className={`sp-punch-pill-btn checkout ${
-                      todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                      isCheckOutAllowed && todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
                     }`}
-                    disabled={todayData.status !== "punched_in" || actionLoading}
+                    disabled={!isCheckOutAllowed || todayData.status !== "punched_in" || actionLoading}
                     onClick={handlePunchOut}
+                    title={
+                      !isCheckOutAllowed && todayData.status === "punched_in"
+                        ? `Check-out allowed around shift end (${todayData.shiftEndTime} – ${formattedCutoffTime})`
+                        : "Click to Check Out"
+                    }
                   >
                     {actionLoading && todayData.status === "punched_in" ? (
                       <Loader2 size={15} className="sp-spin" />
@@ -812,12 +968,21 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                     <span>{todayData.status === "punched_out" ? "Checked Out" : "Check Out"}</span>
                   </button>
 
-                  <div className="sp-punch-foot-hint">
+                  <div
+                    className="sp-punch-foot-hint"
+                    style={{
+                      color: !isCheckOutAllowed && todayData.status === "punched_in" ? "#dc2626" : undefined,
+                      fontWeight: !isCheckOutAllowed && todayData.status === "punched_in" ? 600 : undefined
+                    }}
+                  >
                     Allowed: 15-minute window after shift end ({todayData.shiftEndTime} – {formattedCutoffTime})
+                    {!isCheckOutAllowed && todayData.status === "punched_in" ? " (Shift In Progress)" : ""}
                   </div>
                 </>
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -838,8 +1003,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{historyData.metrics?.workingDays || historyData.metrics?.WorkingDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || historyData.metrics?.WorkingDaysSub || "--"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.workingDays || (monthlyMetrics || historyData.metrics)?.WorkingDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.workingDaysSub || (monthlyMetrics || historyData.metrics)?.WorkingDaysSub || "Current Month (Month-to-Date)"}</div>
               </>
             )}
           </div>
@@ -859,8 +1024,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || historyData.metrics?.PresentDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || historyData.metrics?.PresentDaysSub || "--"}</div>
+                <div className="sp-kpi-value green-val">{(monthlyMetrics || historyData.metrics)?.presentDays || (monthlyMetrics || historyData.metrics)?.PresentDays || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.presentDaysSub || (monthlyMetrics || historyData.metrics)?.PresentDaysSub || "--"}</div>
               </>
             )}
           </div>
@@ -880,20 +1045,20 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{historyData.metrics?.leaves || historyData.metrics?.Leaves || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || historyData.metrics?.LeavesSub || "--"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.leaves || (monthlyMetrics || historyData.metrics)?.Leaves || "0 Days"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.leavesSub || (monthlyMetrics || historyData.metrics)?.LeavesSub || "--"}</div>
               </>
             )}
           </div>
         </div>
 
-        {/* Card 4: Absent Days */}
+        {/* Card 4: Absent & LOP Days */}
         <div className="cms-card sp-metric-kpi-card">
           <div className="sp-kpi-icon-box red">
             <UserX size={20} />
           </div>
           <div className="sp-kpi-content">
-            <div className="sp-kpi-label">Absent Days</div>
+            <div className="sp-kpi-label">Absent &amp; LOP Days</div>
             {loadingHistory ? (
               <>
                 <Skeleton style={{ width: 55, height: 18, margin: "2px 0" }} />
@@ -901,8 +1066,17 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || historyData.metrics?.AbsentDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || historyData.metrics?.AbsentDaysSub || "--"}</div>
+                <div className="sp-kpi-value red-val">
+                  {(monthlyMetrics || historyData.metrics)?.absentDays || (monthlyMetrics || historyData.metrics)?.AbsentDays || "0 Days"}
+                  {(monthlyMetrics || historyData.metrics)?.lopDays && (monthlyMetrics || historyData.metrics)?.lopDays !== "0 Days" && (
+                    <span style={{ fontSize: "11px", marginLeft: "6px", color: "#dc2626", fontWeight: 700 }}>
+                      ({(monthlyMetrics || historyData.metrics).lopDays} LOP)
+                    </span>
+                  )}
+                </div>
+                <div className="sp-kpi-sub" title={(monthlyMetrics || historyData.metrics)?.lopDaysSub || ""}>
+                  {(monthlyMetrics || historyData.metrics)?.absentDaysSub || (monthlyMetrics || historyData.metrics)?.AbsentDaysSub || "--"}
+                </div>
               </>
             )}
           </div>

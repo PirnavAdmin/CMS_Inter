@@ -11,6 +11,9 @@ namespace CollegeManagement.API.DTOs.Roles
         [StringLength(255)]
         public string? Description { get; set; }
 
+        [StringLength(20)]
+        public string? StaffType { get; set; }
+
         public bool? IsActive { get; set; }
     }
 }

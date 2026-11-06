@@ -36,6 +36,8 @@ namespace CollegeManagement.API.Services.Implementations
                 "exam-code" or "exam" or "examcode" => "EXAM_CODE",
                 "certificate-number" or "certificate-no" or "certificateno" or "certificate" or "cert" => "CERTIFICATE_NO",
                 "receipt-no" or "receipt" or "receiptno" or "fee-receipt" or "fee" => "RECEIPT_NO",
+                "offer-letter-no" or "offer-letter" or "offerletter" or "ol" => "OFFER_LETTER_NO",
+                "staff-transfer-no" or "transfer-order-no" or "staff-transfer" or "transfer-no" or "trf" => "TRANSFER_ORDER_NO",
                 _ => codeOrSlug.Trim().ToUpperInvariant().Replace("-", "_")
             };
         }
@@ -54,6 +56,8 @@ namespace CollegeManagement.API.Services.Implementations
                 "EXAM_CODE" => "exam-code",
                 "CERTIFICATE_NO" => "certificate-number",
                 "RECEIPT_NO" => "receipt-no",
+                "OFFER_LETTER_NO" => "offer-letter-no",
+                "TRANSFER_ORDER_NO" => "staff-transfer-no",
                 _ => seriesCode.ToLowerInvariant().Replace("_", "-")
             };
         }

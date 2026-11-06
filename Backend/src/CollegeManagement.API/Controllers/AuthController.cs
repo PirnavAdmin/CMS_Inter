@@ -112,18 +112,31 @@ namespace CollegeManagement.API.Controllers
                 PhotoUrl = result.PhotoUrl,
                 User = new
                 {
+                    id = result.StaffId ?? result.UserId,
                     staffId = result.StaffId,
                     userId = result.UserId,
                     role = result.Role,
                     roles = new[] { result.Role },
                     staffType = result.StaffType,
                     designation = result.Designation,
+                    designationId = result.DesignationId,
+                    department = result.Department,
+                    departmentId = result.DepartmentId,
+                    campusId = result.AssignedCampusIds.FirstOrDefault(),
+                    boardId = result.AssignedBoardIds.FirstOrDefault(),
+                    allocatedSubjects = result.AllocatedSubjects,
+                    subjects = result.AllocatedSubjects,
+                    assignedCampusIds = result.AssignedCampusIds,
+                    assignedBoardIds = result.AssignedBoardIds,
                     employeeId = result.EmployeeId,
                     email = result.Email,
                     name = result.Name,
                     photoPath = result.PhotoPath,
                     photoUrl = result.PhotoUrl,
                     photo = result.PhotoUrl,
+                    profileStatus = result.ProfileStatus,
+                    profileCompletionPercentage = result.ProfileCompletionPercentage,
+                    isOnboarded = result.IsOnboarded,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                 },
                 Data = new
@@ -131,6 +144,7 @@ namespace CollegeManagement.API.Controllers
                     accessToken = result.AccessToken,
                     user = new
                     {
+                        id = result.StaffId ?? result.UserId,
                         userId = result.UserId,
                         staffId = result.StaffId,
                         employeeId = result.EmployeeId,
@@ -140,9 +154,26 @@ namespace CollegeManagement.API.Controllers
                         roles = new[] { result.Role },
                         staffType = result.StaffType,
                         designation = result.Designation,
+                        designationId = result.DesignationId,
+                        department = result.Department,
+                        departmentId = result.DepartmentId,
+                        campusId = result.AssignedCampusIds.FirstOrDefault(),
+                        boardId = result.AssignedBoardIds.FirstOrDefault(),
+                        allocatedSubjects = result.AllocatedSubjects,
+                        subjects = result.AllocatedSubjects,
+                        assignedCampusIds = result.AssignedCampusIds,
+                        assignedBoardIds = result.AssignedBoardIds,
+                        photoPath = result.PhotoPath,
+                        photoUrl = result.PhotoUrl,
+                        profileStatus = result.ProfileStatus,
+                        profileCompletionPercentage = result.ProfileCompletionPercentage,
+                        isOnboarded = result.IsOnboarded,
                         isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                     }
-                }
+                },
+                ProfileStatus = result.ProfileStatus,
+                ProfileCompletionPercentage = result.ProfileCompletionPercentage,
+                IsOnboarded = result.IsOnboarded
             });
         }
 
@@ -203,17 +234,35 @@ namespace CollegeManagement.API.Controllers
                 EmployeeId = result.EmployeeId,
                 AssignedCampusIds = result.AssignedCampusIds,
                 AssignedBoardIds = result.AssignedBoardIds,
+                PhotoPath = result.PhotoPath,
+                PhotoUrl = result.PhotoUrl,
                 User = new
                 {
+                    id = result.StaffId ?? result.UserId,
                     staffId = result.StaffId,
                     userId = result.UserId,
                     role = result.Role,
                     roles = new[] { result.Role },
                     staffType = result.StaffType,
                     designation = result.Designation,
+                    designationId = result.DesignationId,
+                    department = result.Department,
+                    departmentId = result.DepartmentId,
+                    campusId = result.AssignedCampusIds.FirstOrDefault(),
+                    boardId = result.AssignedBoardIds.FirstOrDefault(),
+                    allocatedSubjects = result.AllocatedSubjects,
+                    subjects = result.AllocatedSubjects,
+                    assignedCampusIds = result.AssignedCampusIds,
+                    assignedBoardIds = result.AssignedBoardIds,
                     employeeId = result.EmployeeId,
                     email = result.Email,
                     name = result.Name,
+                    photoPath = result.PhotoPath,
+                    photoUrl = result.PhotoUrl,
+                    photo = result.PhotoUrl,
+                    profileStatus = result.ProfileStatus,
+                    profileCompletionPercentage = result.ProfileCompletionPercentage,
+                    isOnboarded = result.IsOnboarded,
                     isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                 },
                 Data = new
@@ -221,6 +270,7 @@ namespace CollegeManagement.API.Controllers
                     accessToken = result.AccessToken,
                     user = new
                     {
+                        id = result.StaffId ?? result.UserId,
                         userId = result.UserId,
                         staffId = result.StaffId,
                         employeeId = result.EmployeeId,
@@ -230,6 +280,20 @@ namespace CollegeManagement.API.Controllers
                         roles = new[] { result.Role },
                         staffType = result.StaffType,
                         designation = result.Designation,
+                        designationId = result.DesignationId,
+                        department = result.Department,
+                        departmentId = result.DepartmentId,
+                        campusId = result.AssignedCampusIds.FirstOrDefault(),
+                        boardId = result.AssignedBoardIds.FirstOrDefault(),
+                        allocatedSubjects = result.AllocatedSubjects,
+                        subjects = result.AllocatedSubjects,
+                        assignedCampusIds = result.AssignedCampusIds,
+                        assignedBoardIds = result.AssignedBoardIds,
+                        photoPath = result.PhotoPath,
+                        photoUrl = result.PhotoUrl,
+                        profileStatus = result.ProfileStatus,
+                        profileCompletionPercentage = result.ProfileCompletionPercentage,
+                        isOnboarded = result.IsOnboarded,
                         isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
                     }
                 }

@@ -216,7 +216,10 @@ export function applyEffectiveTheme() {
 if (typeof document !== "undefined") {
   applyEffectiveTheme();
   // Fetch fresh theme policy from backend on app bootstrap
-  fetchThemePolicy()
+  // The frontend-only Super Admin workspace uses the saved/local theme.
+  // Tenant portals retain their existing backend theme-policy bootstrap.
+  const platformMockRoute = window.location.pathname === "/super-admin" || window.location.pathname.startsWith("/super-admin/");
+  (platformMockRoute ? Promise.resolve() : fetchThemePolicy())
     .then(() => {
       applyEffectiveTheme();
       listeners.forEach((l) => l());

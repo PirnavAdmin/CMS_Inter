@@ -138,6 +138,8 @@ namespace CollegeManagement.API.Helpers
                 "EXAM_CODE" => new List<string> { "{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}" },
                 "CERTIFICATE_NO" => new List<string> { "{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}" },
                 "RECEIPT_NO" => new List<string> { "{PREFIX}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}" },
+                "OFFER_LETTER_NO" => new List<string> { "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}" },
+                "TRANSFER_ORDER_NO" => new List<string> { "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}" },
                 _ => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}" }
             };
         }
@@ -199,6 +201,16 @@ namespace CollegeManagement.API.Helpers
                     new() { Pattern = "FEE-{YYYYMMDD}-{SEQ}", Example = $"FEE-{DateTime.Now:yyyyMMdd}-000011" },
                     new() { Pattern = "RCP-{YYYY}-{SEQ}", Example = $"RCP-{year}-000001" },
                     new() { Pattern = "FEE-{SEQ}", Example = "FEE-000001" }
+                },
+                "OFFER_LETTER_NO" => new List<SampleFormatDto>
+                {
+                    new() { Pattern = "{CAMPUS}-OL/{YEAR}/{SEQ}", Example = $"PC-OL/{year}/0001" },
+                    new() { Pattern = "OL-{CAMPUS}-{YEAR}-{SEQ}", Example = $"OL-PC-{year}-0001" }
+                },
+                "TRANSFER_ORDER_NO" => new List<SampleFormatDto>
+                {
+                    new() { Pattern = "{CAMPUS}-TRF/{YEAR}/{SEQ}", Example = $"PC-TRF/{year}/0001" },
+                    new() { Pattern = "TRF-{CAMPUS}-{YEAR}-{SEQ}", Example = $"TRF-PC-{year}-0001" }
                 },
                 _ => new List<SampleFormatDto>()
             };

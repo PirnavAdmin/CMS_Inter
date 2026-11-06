@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport.VehicleAssignment;
 using CollegeManagement.API.Services.Interfaces;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers
 {
@@ -11,11 +14,14 @@ namespace CollegeManagement.API.Controllers
     public class TransportVehicleAssignmentController : ControllerBase
     {
         private readonly ITransportVehicleAssignmentService _service;
+        private readonly INotificationService? _notificationService;
 
         public TransportVehicleAssignmentController(
-            ITransportVehicleAssignmentService service)
+            ITransportVehicleAssignmentService service,
+            INotificationService? notificationService = null)
         {
             _service = service;
+            _notificationService = notificationService;
         }
 
         [HttpGet]
@@ -67,6 +73,35 @@ namespace CollegeManagement.API.Controllers
                 var id = await _service.CreateAsync(dto, null);
                 var result = await _service.GetByIdAsync(id);
 
+                if (_notificationService != null && dto.DriverId > 0)
+                {
+                    try
+                    {
+                        var routeName = result?.RouteName ?? (dto.RouteId > 0 ? $"Route #{dto.RouteId}" : "Assigned Route");
+                        var busNum = result?.VehicleNumber ?? (dto.VehicleId > 0 ? $"Vehicle #{dto.VehicleId}" : "Assigned Vehicle");
+                        var shift = dto.Shift ?? "Morning";
+                        var effDate = (dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow).ToString("yyyy-MM-dd");
+
+                        await _notificationService.SendToStaffAsync(
+                            (int)dto.DriverId,
+                            "Route & Vehicle Assignment",
+                            $"You have been assigned to Vehicle {busNum} on route {routeName} for {shift} Shift effective {effDate}.",
+                            "Transport",
+                            (int)id,
+                            "/driver/dashboard");
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Transport Manager", "Admin" },
+                            null,
+                            "New Vehicle Assignment",
+                            $"Vehicle {busNum} assigned to Driver #{dto.DriverId} on route {routeName} ({shift} Shift).",
+                            "Transport",
+                            (int)id,
+                            "/dashboard/transport/assignments");
+                    }
+                    catch { }
+                }
+
                 return Ok(new
                 {
                     success = true,
@@ -76,7 +111,7 @@ namespace CollegeManagement.API.Controllers
                         AssignmentId = id,
                         RouteId = dto.RouteId > 0 ? dto.RouteId : 0,
                         VehicleId = dto.VehicleId > 0 ? dto.VehicleId : 0,
-                        DriverId = dto.DriverId > 0 ? dto.DriverId : 0,
+                        DriverId = (int)dto.DriverId,
                         Shift = dto.Shift ?? "Morning",
                         Status = dto.Status
                     }
@@ -101,6 +136,26 @@ namespace CollegeManagement.API.Controllers
                     if (updated)
                     {
                         var updatedDto = await _service.GetByIdAsync(targetId);
+
+                        if (_notificationService != null && dto.DriverId > 0)
+                        {
+                            try
+                            {
+                                var routeName = updatedDto?.RouteName ?? (dto.RouteId > 0 ? $"Route #{dto.RouteId}" : "Updated Route");
+                                var busNum = updatedDto?.VehicleNumber ?? (dto.VehicleId > 0 ? $"Vehicle #{dto.VehicleId}" : "Assigned Vehicle");
+                                var shift = dto.Shift ?? "Shift";
+
+                                await _notificationService.SendToStaffAsync(
+                                    (int)dto.DriverId,
+                                    "Route Change / Reassignment",
+                                    $"Route assignment modified: You are now re-routed to {routeName} ({busNum}, {shift} Shift).",
+                                    "Transport",
+                                    (int)targetId,
+                                    "/driver/dashboard");
+                            }
+                            catch { }
+                        }
+
                         return Ok(new { success = true, message = "Assignment updated successfully.", data = updatedDto });
                     }
                 }
@@ -109,7 +164,7 @@ namespace CollegeManagement.API.Controllers
                 {
                     RouteId = dto.RouteId > 0 ? dto.RouteId : 0,
                     VehicleId = dto.VehicleId > 0 ? dto.VehicleId : 0,
-                    DriverId = dto.DriverId > 0 ? dto.DriverId : 0,
+                    DriverId = (int)dto.DriverId,
                     AssignmentDate = dto.AssignmentDate != default ? dto.AssignmentDate : DateTime.UtcNow,
                     EffectiveFrom = dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow,
                     EffectiveTo = dto.EffectiveTo,

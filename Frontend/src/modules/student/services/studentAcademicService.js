@@ -195,7 +195,7 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
     if (!params[key]) delete params[key];
   });
 
-  const examinationEndpoint = apiEndpoints.examinations.getAll;
+  const examinationEndpoint = studentApiEndpoints.examinations.list;
   const rows = (value) => Array.isArray(value) ? value : value?.items ?? value?.Items ?? [];
   const candidates = [];
   let previousPage = "";
@@ -216,11 +216,11 @@ export const getStudentExaminations = async (student, { allPages = false } = {})
   const results = await Promise.all(visible.map(async (exam) => {
     const examinationId = exam.examinationId ?? exam.examId ?? exam.id;
     if (!examinationId) return { ...exam, schedules: [] };
-    const detailResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}`);
+    const detailResponse = await apiClient.get(studentApiEndpoints.examinations.getById(examinationId));
     const detail = getPayload(detailResponse.data) || {};
     let schedules = detail.schedules;
     if (!Array.isArray(schedules) || !schedules.length) {
-      const scheduleResponse = await apiClient.get(`${examinationEndpoint}/${encodeURIComponent(examinationId)}/schedules`);
+      const scheduleResponse = await apiClient.get(studentApiEndpoints.examinations.schedules(examinationId));
       schedules = getPayload(scheduleResponse.data);
     }
     const applicableSchedules = rows(schedules).filter(inStudentScope);
@@ -243,11 +243,11 @@ export const getStudentAttendance = async (studentId, fromDate, toDate) => {
         skipGlobalLoader: true,
       })));
       const records = responses.flatMap((response) => {
-        if (response.data?.success === false || response.data?.Success === false) {
+        if (response.data?.success === false || response.data?.Success === false || response.data?.status === false || response.data?.Status === false) {
           throw new Error(response.data.message || response.data.Message || "Unable to load attendance records.");
         }
         const payload = getPayload(response.data);
-        const rows = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.records ?? payload?.Records ?? [];
+        const rows = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.records ?? payload?.Records ?? payload?.$values ?? [];
         if (!Array.isArray(rows)) throw new Error("The attendance API returned an invalid response.");
         return rows.map((row) => {
           const date = String(row.date ?? row.Date ?? row.attendanceDate ?? row.AttendanceDate ?? "").slice(0, 10);
@@ -272,21 +272,29 @@ export const getStudentAttendance = async (studentId, fromDate, toDate) => {
   const list = (value) => {
     const payload = getPayload(value);
     return Array.isArray(payload) ? payload
-      : payload?.records ?? payload?.items ?? payload?.attendanceRecords ?? payload?.data ?? [];
+      : payload?.records ?? payload?.Records ?? payload?.items ?? payload?.Items ?? payload?.attendanceRecords ?? payload?.AttendanceRecords ?? payload?.$values ?? payload?.data ?? payload?.Data ?? [];
   };
-  return list(response.data);
+  const records = list(response.data);
+  if (!Array.isArray(records)) throw new Error("The attendance API returned an invalid response.");
+  return records;
 };
 
 export const getPublishedStudentResults = async (student) => {
   const studentId = Number(student?.studentId);
   if (!Number.isInteger(studentId) || studentId <= 0) throw new Error('Student ID is unavailable.');
   const response = await apiClient.get(studentApiEndpoints.results.published, { params: { studentId } });
-  if (response.data?.success === false) throw new Error(response.data.message || 'Unable to load published results.');
+  if (response.data?.success === false || response.data?.Success === false) {
+    throw new Error(response.data.message || response.data.Message || 'Unable to load published results.');
+  }
   const data = getPayload(response.data);
-  const rows = Array.isArray(data) ? data : data?.items ?? data?.Items ?? data?.results ?? data?.Results;
+  const rows = Array.isArray(data)
+    ? data
+    : data?.items ?? data?.Items ?? data?.records ?? data?.Records ?? data?.results ?? data?.Results ?? data?.$values;
   if (!Array.isArray(rows)) throw new Error('The server returned an invalid published results list.');
-  if (rows.some((row) => (row.studentId ?? row.StudentId) != null && String(row.studentId ?? row.StudentId) !== String(studentId))) throw new Error('The result list does not match your student profile.');
-  return rows;
+  return rows.filter((row) => {
+    const resultStudentId = row.studentId ?? row.StudentId;
+    return resultStudentId == null || String(resultStudentId) === String(studentId);
+  });
 };
 
 export const getStudentResult = async (student, examId) => {

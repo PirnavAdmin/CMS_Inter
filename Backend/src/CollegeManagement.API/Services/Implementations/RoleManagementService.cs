@@ -25,27 +25,9 @@ namespace CollegeManagement.API.Services.Implementations
             _userRepository = userRepository;
         }
 
-        public async Task<List<RoleResponse>> GetAllRolesAsync()
+        public async Task<List<RoleResponse>> GetAllRolesAsync(string? staffType = null, bool includeInactive = false)
         {
-            var cards = await _permissionRepository.GetRoleCardsAsync();
-            if (cards.Count > 0)
-            {
-                return cards.Select(c => new RoleResponse
-                {
-                    RoleId = c.RoleId,
-                    RoleName = c.RoleName,
-                    Description = c.Description,
-                    IsSystemRole = c.IsSystemRole,
-                    IsActive = c.IsActive,
-                    UserCount = c.UserCount,
-                    PermissionsCount = c.PermissionsCount,
-                    CreatedAt = c.CreatedAt,
-                    UpdatedAt = c.UpdatedAt,
-                    StaffType = c.StaffType
-                }).ToList();
-            }
-
-            var roles = await _roleRepository.GetAllAsync();
+            var roles = await _roleRepository.GetAllAsync(staffType, includeInactive);
             return roles.Select(r => new RoleResponse
             {
                 RoleId = r.RoleId,
@@ -53,6 +35,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Description = r.Description,
                 IsSystemRole = r.IsSystemRole,
                 IsActive = r.IsActive,
+                StaffType = r.StaffType,
                 CreatedAt = r.CreatedAt,
                 UpdatedAt = r.UpdatedAt
             }).ToList();
@@ -70,11 +53,13 @@ namespace CollegeManagement.API.Services.Implementations
                 Description = role.Description,
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
+                StaffType = role.StaffType,
                 CreatedAt = role.CreatedAt,
                 UpdatedAt = role.UpdatedAt
             };
         }
 
+        
         public async Task<RoleResponse> CreateRoleAsync(CreateRoleRequest request)
         {
             if (await _roleRepository.RoleExistsAsync(request.RoleName))
@@ -84,8 +69,9 @@ namespace CollegeManagement.API.Services.Implementations
 
             var role = new Role
             {
-                RoleName = request.RoleName,
-                Description = request.Description,
+                RoleName = request.RoleName.Trim(),
+                Description = request.Description?.Trim(),
+                StaffType = string.IsNullOrWhiteSpace(request.StaffType) ? "Both" : request.StaffType.Trim(),
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow
             };
@@ -99,6 +85,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Description = role.Description,
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
+                StaffType = role.StaffType,
                 CreatedAt = role.CreatedAt,
                 UpdatedAt = role.UpdatedAt
             };
@@ -114,8 +101,9 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException($"Role '{request.RoleName}' already exists.");
             }
 
-            role.RoleName = request.RoleName;
-            if (request.Description != null) role.Description = request.Description;
+            role.RoleName = request.RoleName.Trim();
+            if (request.Description != null) role.Description = request.Description.Trim();
+            if (!string.IsNullOrWhiteSpace(request.StaffType)) role.StaffType = request.StaffType.Trim();
             if (request.IsActive.HasValue) role.IsActive = request.IsActive.Value;
             role.UpdatedAt = DateTime.UtcNow;
 
@@ -128,6 +116,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Description = role.Description,
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
+                StaffType = role.StaffType,
                 CreatedAt = role.CreatedAt,
                 UpdatedAt = role.UpdatedAt
             };
@@ -269,7 +258,12 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new KeyNotFoundException($"Role with ID {resolvedRoleId} was not found.");
             }
 
-            return await _permissionRepository.AssignUserRoleAsync(userId, resolvedRoleId);
+            var assigned = await _permissionRepository.AssignUserRoleAsync(userId, resolvedRoleId);
+            if (assigned && user.StaffId.HasValue && user.StaffId.Value > 0)
+            {
+                await _userRepository.UpdateRoleByStaffIdAsync(user.StaffId.Value, resolvedRoleId);
+            }
+            return assigned;
         }
 
         public async Task<bool> RemoveUserRoleAsync(int userId, string? roleCode = null)

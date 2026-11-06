@@ -44,6 +44,7 @@ const LeaveTypesPage = lazy(() => import("@/modules/admin/AdminLeave/LeaveTypesP
 const AttendanceTimingConfigPage = lazy(() => import("@/modules/admin/AdminAttendance/AttendanceTimingConfigPage.jsx"));
 const NumberSeriesPage = lazy(() => import("@/modules/admin/AdminNumberSeries/NumberSeriesPage.jsx"));
 const TemplatesPage = lazy(() => import("@/modules/admin/AdminTemplates/TemplatesPage.jsx"));
+const OfferLetterConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/OfferLetterConfigurationPage.jsx"));
 const CredentialsGeneratorPage = lazy(() => import("@/modules/admin/AdminCredentialsGenerator/CredentialsGeneratorPage.jsx"));
 import PayrollPage from "@/modules/admin/AdminPayroll/PayrollPage.jsx";
 import ReimbursementPage from "@/modules/admin/AdminReimbursements/ReimbursementPage.jsx";
@@ -60,6 +61,7 @@ const SettingsFallback = () => (
   </div>
 );
 import Login from "@/modules/auth/pages/Login.jsx";
+const SuperAdminPortalRoutes = lazy(() => import("@/modules/super-admin/SuperAdminPortalRoutes.jsx"));
 import Register from "@/modules/auth/pages/Register.jsx";
 import ForgotPassword from "@/modules/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/modules/auth/pages/VerifyOTP.jsx";
@@ -135,6 +137,7 @@ function StudentEnrollmentRoute() {
 export default function AppRoutes() {
   return (
     <Routes>
+      <Route path="/super-admin/*" element={<Suspense fallback={<SettingsFallback/>}><SuperAdminPortalRoutes/></Suspense>} />
       <Route path="/" element={<LandingPage />} />
       <Route path="/about" element={<PublicWebsitePage page="about" />} />
       <Route path="/academics" element={<PublicWebsitePage page="academics" />} />
@@ -404,6 +407,12 @@ export default function AppRoutes() {
           <Route path="/dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
           <Route path="/dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
           <Route path="/dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+        </Route>
+
+        {/* Offer Letter Configuration Module Routes */}
+        <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="offer-letter-configuration" />}>
+          <Route path="/dashboard/settings/offer-letter-configuration" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
+          <Route path="/dashboard/settings/offer-letter" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
         </Route>
 
         {/* Credentials Generator Module Routes */}

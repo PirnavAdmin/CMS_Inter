@@ -25,6 +25,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import "../styles/FacultyStudentAttendance.css";
+import FacultySearchableSelect from "../components/FacultySearchableSelect.jsx";
 
 const MONTHLY_PAGE_SIZE = 5;
 
@@ -132,20 +133,13 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
   const [attProgram, setAttProgram] = useState("");
   const [attSection, setAttSection] = useState("");
 
-  // Cascading Dropdown Data Lists
+  // Cascading Dropdown Data Lists (strictly sourced from Faculty Timetable)
   const [attBoards, setAttBoards] = useState([]);
   const [attYears, setAttYears] = useState([]);
-  const [attLevels, setAttLevels] = useState([]);
-  const [attGroups, setAttGroups] = useState([]);
-  const [attPrograms, setAttPrograms] = useState([]);
-  const [attSections, setAttSections] = useState([]);
   const [allocatedSections, setAllocatedSections] = useState([]);
 
-  // Filter loading flags
-  const [loadingLevels, setLoadingLevels] = useState(false);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [loadingPrograms, setLoadingPrograms] = useState(false);
-  const [loadingSections, setLoadingSections] = useState(false);
+  // Timetable loading flag
+  const [loadingTimetable, setLoadingTimetable] = useState(true);
 
   // Central Attendance Ledger for Continuity across Daily & Monthly
   const [attendanceLedger, setAttendanceLedger] = useState({});
@@ -378,23 +372,27 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     setValidationResult(null);
   };
 
-  // 0. Fetch Faculty Timetable Allocated Sections (e.g. REG-1, Reg-1A, MPC-2A for Tanjiro Kamado)
+  // 0. Fetch Faculty Timetable Allocated Sections strictly from live timetable (Zero hardcoded fallbacks)
   useEffect(() => {
     let isMounted = true;
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id || 1108;
-    if (!staffId) return;
+    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
+    if (!staffId) {
+      setLoadingTimetable(false);
+      return;
+    }
 
+    setLoadingTimetable(true);
     apiClient
       .get(`/api/v1/timetable/faculty/${staffId}`)
       .then((res) => {
         const slots = res.data?.data || res.data || [];
-        if (!isMounted || !Array.isArray(slots)) return;
-
-        setTimetableSlots(slots);
+        if (!isMounted) return;
+        const validSlots = Array.isArray(slots) ? slots : [];
+        setTimetableSlots(validSlots);
 
         const secMap = new Map();
-        slots.forEach((s) => {
+        validSlots.forEach((s) => {
           if (s.sectionId && !secMap.has(s.sectionId)) {
             secMap.set(s.sectionId, {
               sectionId: s.sectionId,
@@ -411,21 +409,28 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
           }
         });
         const list = Array.from(secMap.values());
-        if (isMounted) {
-          setAllocatedSections(list);
-          if (slots.length > 0) {
-            const first = slots[0];
-            if (first.boardId && !attBoard) setAttBoard(first.boardId);
-            if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
-          }
+        setAllocatedSections(list);
+        if (validSlots.length > 0) {
+          const first = validSlots[0];
+          if (first.boardId && !attBoard) setAttBoard(first.boardId);
+          if (first.academicYearId && !attYear) setAttYear(first.academicYearId);
         }
       })
-      .catch((err) => console.warn("Could not load faculty timetable sections:", err));
+      .catch((err) => {
+        console.warn("Could not load faculty timetable sections:", err);
+        if (isMounted) {
+          setTimetableSlots([]);
+          setAllocatedSections([]);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoadingTimetable(false);
+      });
 
     return () => { isMounted = false; };
-  }, [context?.profile?.staffId, context?.profileData?.staffId]);
+  }, [context?.profile?.staffId, context?.profileData?.staffId, context?.profileData?.allocatedSubjects]);
 
-  // 1. Initialize Boards & Academic Years from Context or Live API
+  // 1. Initialize Boards & Academic Years from Context or Live API (for metadata display)
   useEffect(() => {
     let isMounted = true;
 
@@ -469,125 +474,6 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return () => { isMounted = false; };
   }, [academicCtx.boards, academicCtx.academicYears, academicCtx.selectedBoardId, academicCtx.selectedAcademicYearId]);
 
-  // 2. Load Academic Levels when Board changes
-  useEffect(() => {
-    if (!attBoard) return;
-    let isMounted = true;
-    setLoadingLevels(true);
-
-    apiClient
-      .get(`/api/v1/academic-levels?boardId=${attBoard}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttLevels(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching academic levels:", err))
-      .finally(() => { if (isMounted) setLoadingLevels(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard]);
-
-  // 3. Load Groups when Board, Academic Year, or Academic Level changes
-  useEffect(() => {
-    if (!attBoard) return;
-    let isMounted = true;
-    setLoadingGroups(true);
-
-    const params = new URLSearchParams();
-    if (attBoard) params.append("boardId", attBoard);
-    if (attYear) params.append("academicYearId", attYear);
-    if (attLevel) params.append("academicLevelId", attLevel);
-
-    apiClient
-      .get(`/api/v1/groups?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttGroups(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching groups:", err))
-      .finally(() => { if (isMounted) setLoadingGroups(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel]);
-
-  // 4. Load Programs strictly by Group
-  useEffect(() => {
-    if (!attGroup) {
-      setAttPrograms([]);
-      setAttProgram("");
-      setLoadingPrograms(false);
-      return;
-    }
-
-    let isMounted = true;
-    setLoadingPrograms(true);
-
-    apiClient
-      .get(`/api/v1/programs/group/${attGroup}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          const validList = Array.isArray(list) ? list : [];
-          setAttPrograms(validList);
-          if (attProgram && !validList.some((p) => String(p.programId || p.id) === String(attProgram))) {
-            setAttProgram("");
-          }
-        }
-      })
-      .catch(async (err) => {
-        console.warn("Error fetching programs by group, trying /api/v1/groups/{id}/programs fallback:", err);
-        try {
-          const fallbackRes = await apiClient.get(`/api/v1/groups/${attGroup}/programs`);
-          const fallbackList = fallbackRes.data?.data || fallbackRes.data || [];
-          if (isMounted) {
-            const validFallback = Array.isArray(fallbackList) ? fallbackList : [];
-            setAttPrograms(validFallback);
-            if (attProgram && !validFallback.some((p) => String(p.programId || p.id) === String(attProgram))) {
-              setAttProgram("");
-            }
-          }
-        } catch (fbErr) {
-          console.warn("Fallback failed too:", fbErr);
-          if (isMounted) setAttPrograms([]);
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoadingPrograms(false);
-      });
-
-    return () => { isMounted = false; };
-  }, [attGroup]);
-
-  // 5. Load Sections when Hierarchy changes
-  useEffect(() => {
-    let isMounted = true;
-    setLoadingSections(true);
-
-    const params = new URLSearchParams();
-    if (attBoard) params.append("boardId", attBoard);
-    if (attYear) params.append("academicYearId", attYear);
-    if (attLevel) params.append("academicLevelId", attLevel);
-    if (attGroup) params.append("groupId", attGroup);
-    if (attProgram) params.append("programId", attProgram);
-
-    apiClient
-      .get(`/api/v1/sections?${params.toString()}`)
-      .then((res) => {
-        const list = res.data?.data || res.data || [];
-        if (isMounted) {
-          setAttSections(list);
-        }
-      })
-      .catch((err) => console.warn("Error fetching sections:", err))
-      .finally(() => { if (isMounted) setLoadingSections(false); });
-
-    return () => { isMounted = false; };
-  }, [attBoard, attYear, attLevel, attGroup, attProgram]);
-
   // Format month label ("October, 2026")
   const monthlyMonthLabel = useMemo(() => {
     try {
@@ -612,79 +498,83 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     return list;
   }, [monthlyDateValue]);
 
-  // Strictly constrain sections to Faculty's allocated timetable sections
-  const displaySections = useMemo(() => {
+  // 1. Group options strictly derived from faculty timetable slots
+  const timetableGroups = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
-    // First prioritize allocated sections for this level, group, and program
-    allocatedSections.forEach((s) => {
-      if (!attLevel || String(s.academicLevelId) === String(attLevel)) {
-        if (!attGroup || !s.groupId || String(s.groupId) === String(attGroup)) {
-          if (!attProgram || !s.programId || String(s.programId) === String(attProgram)) {
-            map.set(String(s.sectionId), { ...s, isAssigned: true });
-          }
-        }
-      }
-    });
-    if (map.size > 0) {
-      return Array.from(map.values());
-    }
-    // Fallback only if no allocated sections found
-    attSections.forEach((s) => {
-      const id = String(s.sectionId || s.id);
-      if (!map.has(id)) {
-        map.set(id, {
-          sectionId: s.sectionId || s.id,
-          sectionName: s.sectionName || s.name || `Section #${id}`,
-          academicLevelId: s.academicLevelId,
-          groupId: s.groupId,
-          programId: s.programId,
-          isAssigned: false,
+    timetableSlots.forEach((s) => {
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
+      const id = s.groupId;
+      const name = s.groupName || s.groupCode;
+      if (id && !map.has(String(id))) {
+        map.set(String(id), {
+          id: id,
+          groupId: id,
+          name: name || `Group ${id}`,
+          groupName: name || `Group ${id}`,
         });
       }
     });
     return Array.from(map.values());
-  }, [allocatedSections, attSections, attLevel, attGroup, attProgram]);
+  }, [timetableSlots, attLevel]);
 
-  // Derived options directly from faculty timetable slots (how many academic levels he is attending)
+  // 2. Academic Level options strictly derived from faculty timetable slots
   const timetableLevels = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return attLevels;
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
-    // Strictly display academic levels according to faculty timetable slots
-    const relevantSlots = attGroup
-      ? timetableSlots.filter((s) => !s.groupId || String(s.groupId) === String(attGroup))
-      : timetableSlots;
-
-    const sourceSlots = relevantSlots.length > 0 ? relevantSlots : timetableSlots;
-
-    sourceSlots.forEach((s) => {
+    timetableSlots.forEach((s) => {
+      if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
       const id = s.academicLevelId;
+      const name = s.levelName || s.academicLevelName;
       if (id && !map.has(String(id))) {
         map.set(String(id), {
-          academicLevelId: id,
           id: id,
-          levelName: s.levelName || s.academicLevelName || `Level ${id}`,
-          name: s.levelName || s.academicLevelName || `Level ${id}`,
+          academicLevelId: id,
+          name: name || `Level ${id}`,
+          levelName: name || `Level ${id}`,
         });
       }
     });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : (timetableSlots.length > 0 ? [] : attLevels);
-  }, [timetableSlots, attGroup, attLevels]);
+    return Array.from(map.values());
+  }, [timetableSlots, attGroup]);
 
-  const timetableSections = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return displaySections;
+  // 3. Program options strictly derived from faculty timetable slots
+  const timetablePrograms = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
     const map = new Map();
     timetableSlots.forEach((s) => {
-      if (attLevel && String(s.academicLevelId) !== String(attLevel)) return;
+      if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
+      const id = s.programId;
+      const name = s.programName;
+      if (id && !map.has(String(id))) {
+        map.set(String(id), {
+          id: id,
+          programId: id,
+          name: name || `Program ${id}`,
+          programName: name || `Program ${id}`,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [timetableSlots, attGroup, attLevel]);
+
+  // 4. Section options strictly derived from faculty timetable slots
+  const timetableSections = useMemo(() => {
+    if (!timetableSlots || timetableSlots.length === 0) return [];
+    const map = new Map();
+    timetableSlots.forEach((s) => {
+      if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
       if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
       if (attProgram && s.programId && String(s.programId) !== String(attProgram)) return;
       const id = s.sectionId;
+      const name = s.sectionName;
       if (id && !map.has(String(id))) {
         map.set(String(id), {
-          sectionId: id,
           id: id,
-          sectionName: s.sectionName || `Section ${id}`,
-          name: s.sectionName || `Section ${id}`,
+          sectionId: id,
+          name: name || `Section ${id}`,
+          sectionName: name || `Section ${id}`,
           academicLevelId: s.academicLevelId,
           groupId: s.groupId,
           programId: s.programId,
@@ -694,96 +584,42 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
         });
       }
     });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : displaySections;
-  }, [timetableSlots, attLevel, attGroup, attProgram, displaySections]);
+    return Array.from(map.values());
+  }, [timetableSlots, attLevel, attGroup, attProgram]);
 
-  const timetableGroups = useMemo(() => {
-    if (!timetableSlots || timetableSlots.length === 0) return attGroups;
-    const map = new Map();
-    timetableSlots.forEach((s) => {
-      if (attLevel && String(s.academicLevelId) !== String(attLevel)) return;
-      const id = s.groupId;
-      if (id && !map.has(String(id))) {
-        map.set(String(id), {
-          groupId: id,
-          id: id,
-          groupName: s.groupName || `Group ${id}`,
-          name: s.groupName || `Group ${id}`,
-        });
-      }
-    });
-    const list = Array.from(map.values());
-    return list.length > 0 ? list : attGroups;
-  }, [timetableSlots, attLevel, attGroups]);
-
-  const timetablePrograms = useMemo(() => {
-    // If no group is selected, no programs are available
-    if (!attGroup) return [];
-
-    // Strictly display programs belonging to this group
-    if (attPrograms && attPrograms.length > 0) {
-      return attPrograms.map((p) => ({
-        programId: p.programId || p.id,
-        id: p.programId || p.id,
-        programName: p.programName || p.name || `Program ${p.programId || p.id}`,
-        name: p.programName || p.name || `Program ${p.programId || p.id}`,
-      }));
-    }
-
-    // Fallback: extract matching programs from faculty timetable slots
-    if (timetableSlots && timetableSlots.length > 0) {
-      const map = new Map();
-      timetableSlots.forEach((s) => {
-        if (attGroup && s.groupId && String(s.groupId) !== String(attGroup)) return;
-        if (attLevel && s.academicLevelId && String(s.academicLevelId) !== String(attLevel)) return;
-        const id = s.programId;
-        if (id && !map.has(String(id))) {
-          map.set(String(id), {
-            programId: id,
-            id: id,
-            programName: s.programName || `Program ${id}`,
-            name: s.programName || `Program ${id}`,
-          });
-        }
-      });
-      return Array.from(map.values());
-    }
-
-    return [];
-  }, [attGroup, attPrograms, timetableSlots, attLevel]);
-
-  // Read-only fetched timetable info (Board, Academic Year, Group, Program)
+  // Read-only fetched timetable info (Board, Academic Year, Group, Program) - strictly derived
   const timetableInfo = useMemo(() => {
     const slot = (attLevel ? timetableSlots.find((s) => String(s.academicLevelId) === String(attLevel)) : null)
       || (attSection ? timetableSlots.find((s) => String(s.sectionId) === String(attSection)) : null)
       || timetableSlots[0];
 
-    const fallbackBoard = attBoards.find((b) => String(b.boardId || b.id) === String(attBoard))?.name
+    const fallbackBoard = academicCtx.selectedBoard?.name
+      || attBoards.find((b) => String(b.boardId || b.id) === String(attBoard))?.name
       || attBoards[0]?.name
-      || "Board of Intermediate Education, Andhra Pradesh";
-    const fallbackYear = attYears.find((y) => String(y.academicYearId || y.id) === String(attYear))?.academicYear
+      || "-";
+    const fallbackYear = academicCtx.selectedAcademicYear?.name
+      || attYears.find((y) => String(y.academicYearId || y.id) === String(attYear))?.academicYear
       || attYears[0]?.academicYear
-      || "2026-2027";
+      || "-";
 
     return {
       boardName: slot?.boardName || fallbackBoard,
-      academicYearName: slot?.academicYearName || fallbackYear,
-      groupName: slot?.groupName || "MPC",
-      programName: slot?.programName || "Regular",
-      boardId: slot?.boardId || attBoard || 1,
-      academicYearId: slot?.academicYearId || attYear || 9,
-      groupId: slot?.groupId || attGroup || 37,
-      programId: slot?.programId || attProgram || 1,
+      academicYearName: slot?.academicYearName || slot?.academicYear || fallbackYear,
+      groupName: slot?.groupName || (attGroup ? `Group ${attGroup}` : "-"),
+      programName: slot?.programName || (attProgram ? `Program ${attProgram}` : "-"),
+      boardId: slot?.boardId || attBoard || "",
+      academicYearId: slot?.academicYearId || attYear || "",
+      groupId: slot?.groupId || attGroup || "",
+      programId: slot?.programId || attProgram || "",
     };
-  }, [timetableSlots, attLevel, attSection, attBoard, attYear, attGroup, attProgram, attBoards, attYears]);
+  }, [timetableSlots, attLevel, attSection, attBoard, attYear, attGroup, attProgram, attBoards, attYears, academicCtx.selectedBoard, academicCtx.selectedAcademicYear]);
 
   // Section Name Helper
   const currentSectionName = useMemo(() => {
     const found = timetableSections.find((s) => String(s.sectionId || s.id) === String(attSection))
-      || displaySections.find((s) => String(s.sectionId || s.id) === String(attSection));
+      || allocatedSections.find((s) => String(s.sectionId || s.id) === String(attSection));
     return found ? (found.sectionName || found.name) : (attSection ? `Section #${attSection}` : "All Sections");
-  }, [timetableSections, displaySections, attSection]);
+  }, [timetableSections, allocatedSections, attSection]);
 
   // Handlers for Filter Changes auto-synchronized with Timetable
   const handleLevelChange = (levelVal) => {
@@ -814,10 +650,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
     setDailyPage(1);
     setMonthlyPage(1);
 
-    if (!groupVal) {
-      setAttPrograms([]);
-      return;
-    }
+    if (!groupVal) return;
 
     const slot = timetableSlots.find((s) => String(s.groupId) === String(groupVal));
     if (slot) {
@@ -1010,8 +843,7 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       if (slot.boardId && !attBoard) setAttBoard(slot.boardId);
       if (slot.academicYearId && !attYear) setAttYear(slot.academicYearId);
     } else {
-      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val))
-        || attSections.find((s) => String(s.sectionId || s.id) === String(val));
+      const matched = allocatedSections.find((s) => String(s.sectionId) === String(val));
       if (matched) {
         if (matched.academicLevelId && !attLevel) setAttLevel(matched.academicLevelId);
         if (matched.groupId && !attGroup) setAttGroup(matched.groupId);
@@ -1423,8 +1255,33 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       </div>
 
       {/* 2. Hierarchical Cascading Filter Card */}
-      <div className="cms-card" style={{ marginBottom: 16 }}>
-        <div className="cms-card-body">
+      <div className="cms-card" style={{ marginBottom: 16, overflow: "visible", position: "relative", zIndex: 20 }}>
+        {/* Scoped styles ensuring filter dropdown modal displays on top with highest z-index */}
+        <style>{`
+          .att-filters-single-line .cms-searchable-select-dropdown,
+          .att-field-compact .cms-searchable-select-dropdown {
+            top: calc(100% + 4px) !important;
+            bottom: auto !important;
+            position: absolute !important;
+            z-index: 99999 !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+          }
+          .att-filters-single-line .cms-field,
+          .att-field-compact {
+            position: relative !important;
+            z-index: 10;
+          }
+          .att-filters-single-line .cms-field:focus-within,
+          .att-field-compact:focus-within {
+            z-index: 100 !important;
+          }
+          .att-filters-single-line {
+            position: relative;
+            z-index: 25;
+            overflow: visible !important;
+          }
+        `}</style>
+        <div className="cms-card-body" style={{ overflow: "visible" }}>
           {/* Read-only Single Line Info Tab for Fetched Timetable Details (Board & Academic Year) */}
           <div className="att-timetable-info-bar">
             <div className="att-info-item">
@@ -1468,72 +1325,90 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
 
             <div className="cms-field att-field-compact">
               <label>Group</label>
-              <select
+              <FacultySearchableSelect
                 value={attGroup}
+                placeholder={loadingTimetable ? "Loading..." : (timetableGroups.length === 0 ? "No groups in timetable" : "Select Group")}
+                disabled={loadingTimetable || timetableGroups.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No groups assigned in timetable" : "No matching groups"}
+                options={
+                  timetableGroups.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Group" },
+                        ...timetableGroups.map((g) => ({
+                          id: g.groupId || g.id,
+                          name: g.groupName || g.name || `Group ${g.groupId || g.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleGroupChange(e.target.value)}
-                disabled={loadingGroups && timetableGroups.length === 0}
-              >
-                <option value="">{loadingGroups && timetableGroups.length === 0 ? "Loading..." : "Select Group"}</option>
-                {timetableGroups.map((g) => (
-                  <option key={g.groupId || g.id} value={g.groupId || g.id}>
-                    {g.groupName || g.name || `Group ${g.groupId || g.id}`}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Academic Level</label>
-              <select
+              <FacultySearchableSelect
                 value={attLevel}
+                placeholder={loadingTimetable ? "Loading..." : (timetableLevels.length === 0 ? "No academic levels in timetable" : "Select Academic Level")}
+                disabled={loadingTimetable || timetableLevels.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No academic levels assigned in timetable" : "No matching academic levels"}
+                options={
+                  timetableLevels.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Academic Level" },
+                        ...timetableLevels.map((l) => ({
+                          id: l.academicLevelId || l.id,
+                          name: l.levelName || l.name || `Level ${l.academicLevelId || l.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleLevelChange(e.target.value)}
-                disabled={loadingLevels && timetableLevels.length === 0}
-              >
-                <option value="">{loadingLevels && timetableLevels.length === 0 ? "Loading..." : "Select Academic Level"}</option>
-                {timetableLevels.map((l) => (
-                  <option key={l.academicLevelId || l.id} value={l.academicLevelId || l.id}>
-                    {l.levelName || l.name || `Level ${l.academicLevelId || l.id}`}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Program</label>
-              <select
+              <FacultySearchableSelect
                 value={attProgram}
+                placeholder={loadingTimetable ? "Loading..." : (timetablePrograms.length === 0 ? (!attGroup ? "Select Group first" : "No programs in timetable") : "Select Program")}
+                disabled={loadingTimetable || timetablePrograms.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No programs assigned in timetable" : (!attGroup ? "Select Group first" : "No matching programs")}
+                options={
+                  timetablePrograms.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Program" },
+                        ...timetablePrograms.map((p) => ({
+                          id: p.programId || p.id,
+                          name: p.programName || p.name || `Program ${p.programId || p.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleProgramChange(e.target.value)}
-                disabled={!attGroup || (loadingPrograms && timetablePrograms.length === 0)}
-              >
-                <option value="">
-                  {!attGroup
-                    ? "Select Group First"
-                    : loadingPrograms && timetablePrograms.length === 0
-                    ? "Loading Programs..."
-                    : "Select Program"}
-                </option>
-                {timetablePrograms.map((p) => (
-                  <option key={p.programId || p.id} value={p.programId || p.id}>
-                    {p.programName || p.name || `Program ${p.programId || p.id}`}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div className="cms-field att-field-compact">
               <label>Section</label>
-              <select
+              <FacultySearchableSelect
                 value={attSection}
+                placeholder={loadingTimetable ? "Loading..." : (timetableSections.length === 0 ? "No sections in timetable" : "Select Section")}
+                disabled={loadingTimetable || timetableSections.length === 0}
+                emptyText={timetableSlots.length === 0 ? "No sections assigned in timetable" : "No matching sections"}
+                options={
+                  timetableSections.length === 0
+                    ? []
+                    : [
+                        { id: "", name: "Select Section" },
+                        ...timetableSections.map((s) => ({
+                          id: s.sectionId || s.id,
+                          name: s.sectionName || s.name || `Section ${s.sectionId || s.id}`,
+                        })),
+                      ]
+                }
                 onChange={(e) => handleSectionChange(e.target.value)}
-                disabled={loadingSections && timetableSections.length === 0}
-              >
-                <option value="">{loadingSections && timetableSections.length === 0 ? "Loading..." : "Select Section"}</option>
-                {timetableSections.map((s) => (
-                  <option key={s.sectionId || s.id} value={s.sectionId || s.id}>
-                    {s.isAssigned ? `${s.sectionName || s.name}` : (s.sectionName || s.name || `Section ${s.sectionId || s.id}`)}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
           </div>
@@ -1565,936 +1440,952 @@ export default function FacultyStudentAttendance({ initialView = "daily" }) {
       </div>
 
       {/* 4. Prompt Card (Shown below the tabs when no section selected or while loading) */}
-      {!attSection || !dailyFetched ? (
-        <div className="sp-att-notice-card">
-          <div className="sp-att-notice-content">
-            <div className="sp-att-notice-icon">
-              {fetchingDaily ? (
-                <Loader2 size={32} className="spin" style={{ color: "var(--cms-primary, #6F8400)" }} />
-              ) : (
-                <ClipboardCheck size={32} />
-              )}
-            </div>
-            <div className="sp-att-notice-text">
-              <h3>{fetchingDaily ? "Loading Student Attendance..." : "Select Details & Student Attendance"}</h3>
-              <p>
-                {fetchingDaily
-                  ? `Retrieving attendance sheet for ${currentSectionName} on ${attDate}...`
-                  : "Please select your Group, Academic Level, Program, and Section from your assigned timetable above to load students and record attendance."}
-              </p>
+      {
+        !attSection || !dailyFetched ? (
+          <div className="sp-att-notice-card">
+            <div className="sp-att-notice-content">
+              <div className="sp-att-notice-icon">
+                {fetchingDaily || loadingTimetable ? (
+                  <Loader2 size={32} className="spin" style={{ color: "var(--cms-primary, #6F8400)" }} />
+                ) : timetableSlots.length === 0 ? (
+                  <AlertCircle size={32} style={{ color: "var(--cms-danger, #ef4444)" }} />
+                ) : (
+                  <ClipboardCheck size={32} />
+                )}
+              </div>
+              <div className="sp-att-notice-text">
+                <h3>
+                  {fetchingDaily
+                    ? "Loading Student Attendance..."
+                    : loadingTimetable
+                      ? "Loading Faculty Timetable..."
+                      : timetableSlots.length === 0
+                        ? "No Timetable Assigned"
+                        : "Select Details & Student Attendance"}
+                </h3>
+                <p>
+                  {fetchingDaily
+                    ? `Retrieving attendance sheet for ${currentSectionName} on ${attDate}...`
+                    : loadingTimetable
+                      ? "Fetching assigned timetable classes..."
+                      : timetableSlots.length === 0
+                        ? "No teaching classes or sections are assigned to your timetable schedule. Student attendance can only be recorded for sections allocated in your timetable."
+                        : "Please select your Group, Academic Level, Program, and Section from your assigned timetable above to load students and record attendance."}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <>
-          {/* VIEW 1: Daily Attendance Table */}
-          {attView === "daily" && (
-            <div className="cms-card">
-              <div className="cms-card-head">
-                <div>
-                  <h2 style={{ margin: 0 }}>
-                    Student Attendance Sheet — {attDate} ({currentSectionName})
-                  </h2>
-                  <div className="sp-daily-summary-stats" style={{ marginTop: 6 }}>
-                    <span className="sp-stat-badge sp-stat-present" title="Students present for both sessions (Full Day)">
-                      <span className="sp-stat-dot"></span>
-                      <b>{dailyCounts.fullDay}</b> Full Day
-                    </span>
-                    <span className="sp-stat-badge sp-stat-halfday" title="Students present for one session only (Half Day)">
-                      <span className="sp-stat-dot"></span>
-                      <b>{dailyCounts.halfDay}</b> Half Day
-                    </span>
-                    <span className="sp-stat-badge sp-stat-absent" title="Students absent for both sessions">
-                      <span className="sp-stat-dot"></span>
-                      <b>{dailyCounts.absent}</b> Absent
-                    </span>
-                    <span className="sp-stat-badge sp-stat-total" title="Total section strength">
-                      <b>{dailyCounts.total}</b> Students
-                    </span>
+        ) : (
+          <>
+            {/* VIEW 1: Daily Attendance Table */}
+            {attView === "daily" && (
+              <div className="cms-card">
+                <div className="cms-card-head">
+                  <div>
+                    <h2 style={{ margin: 0 }}>
+                      Student Attendance Sheet — {attDate} ({currentSectionName})
+                    </h2>
+                    <div className="sp-daily-summary-stats" style={{ marginTop: 6 }}>
+                      <span className="sp-stat-badge sp-stat-present" title="Students present for both sessions (Full Day)">
+                        <span className="sp-stat-dot"></span>
+                        <b>{dailyCounts.fullDay}</b> Full Day
+                      </span>
+                      <span className="sp-stat-badge sp-stat-halfday" title="Students present for one session only (Half Day)">
+                        <span className="sp-stat-dot"></span>
+                        <b>{dailyCounts.halfDay}</b> Half Day
+                      </span>
+                      <span className="sp-stat-badge sp-stat-absent" title="Students absent for both sessions">
+                        <span className="sp-stat-dot"></span>
+                        <b>{dailyCounts.absent}</b> Absent
+                      </span>
+                      <span className="sp-stat-badge sp-stat-total" title="Total section strength">
+                        <b>{dailyCounts.total}</b> Students
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <div className="sp-att-card-actions">
-                  {attDirty && <span className="sp-unsaved-badge">● Unsaved Changes</span>}
+                  <div className="sp-att-card-actions">
+                    {attDirty && <span className="sp-unsaved-badge">● Unsaved Changes</span>}
 
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-outline"
-                    style={{ padding: "5px 12px", fontSize: 12.5 }}
-                    onClick={() => setShowMarkModal(true)}
-                    title="Choose session to mark all students present"
-                  >
-                    <CheckCircle size={14} /> Mark All Present
-                  </button>
-
-                  <label
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      padding: "4px 8px",
-                      background: "var(--cms-subtle, #f8f9fa)",
-                      borderRadius: 6,
-                      border: "1px solid var(--cms-border, #e5e7eb)",
-                    }}
-                    title="Send instant automated absence notification via WhatsApp/SMS to student guardians"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={notifyParents}
-                      onChange={(e) => setNotifyParents(e.target.checked)}
-                      style={{ accentColor: "var(--cms-primary, #6F8400)", cursor: "pointer" }}
-                    />
-                    <span style={{ fontWeight: 600 }}>Notify Parents</span>
-                  </label>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    style={{ padding: "5px 12px", fontSize: 12.5 }}
-                    onClick={saveAttendance}
-                    disabled={attSaving}
-                    title="Persist attendance records to database"
-                  >
-                    {attSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save Attendance
-                  </button>
-
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{ padding: "5px 12px", fontSize: 12.5 }}
-                    onClick={handleExportAttendanceSheet}
-                    title="Download section attendance sheet as Excel file"
-                  >
-                    <FileSpreadsheet size={14} /> Export Sheet
-                  </button>
-                </div>
-              </div>
-
-              {/* Table without Remarks column per user requirement */}
-              <div className="cms-table-wrap">
-                <table className="cms-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: 45 }}>#</th>
-                      <th>Roll No</th>
-                      <th>Admission No</th>
-                      <th>Student Name</th>
-                      <th style={{ textAlign: "center" }}>Morning Session</th>
-                      <th style={{ textAlign: "center" }}>Afternoon Session</th>
-                      <th style={{ textAlign: "center" }}>Day Status</th>
-                      <th style={{ width: 80, textAlign: "center" }}>Report</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedDailyStudents.length > 0 ? (
-                      pagedDailyStudents.map((s, idx) => {
-                        const dailyStatus = getStudentDailyStatus(s.morningStatus, s.afternoonStatus);
-                        const rowClass =
-                          dailyStatus === "Absent"
-                            ? "sp-absent-row"
-                            : dailyStatus === "Half Day"
-                              ? "sp-halfday-row"
-                              : "";
-                        const statusDisp = getStudentDayStatusDisplay(s.morningStatus, s.afternoonStatus);
-                        const globalIdx = (dailyPage - 1) * dailyPageSize + idx + 1;
-
-                        return (
-                          <tr key={s.studentId} className={rowClass}>
-                            <td className="cms-strong">{globalIdx}</td>
-                            <td className="cms-strong">{s.rollNo}</td>
-                            <td>{s.admissionNo}</td>
-                            <td>
-                              <strong>{s.name}</strong>
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <div className="sp-session-toggle" style={{ justifyContent: "center" }}>
-                                {["Present", "Absent"].map((st) => {
-                                  const isActive = s.morningStatus === st;
-                                  const keyCls = st.toLowerCase();
-                                  const code = st[0];
-                                  return (
-                                    <button
-                                      key={st}
-                                      type="button"
-                                      className={`sp-session-btn ${keyCls} ${isActive ? "active" : ""}`}
-                                      onClick={() => toggleSessionStatus(s.studentId, "morning", st)}
-                                      title={`Mark Morning as ${st}`}
-                                    >
-                                      {code}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <div className="sp-session-toggle" style={{ justifyContent: "center" }}>
-                                {["Present", "Absent"].map((st) => {
-                                  const isActive = s.afternoonStatus === st;
-                                  const keyCls = st.toLowerCase();
-                                  const code = st[0];
-                                  return (
-                                    <button
-                                      key={st}
-                                      type="button"
-                                      className={`sp-session-btn ${keyCls} ${isActive ? "active" : ""}`}
-                                      onClick={() => toggleSessionStatus(s.studentId, "afternoon", st)}
-                                      title={`Mark Afternoon as ${st}`}
-                                    >
-                                      {code}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <span className={`sp-day-status-pill ${statusDisp.type}`}>
-                                {statusDisp.label}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <div className="sp-tooltip-wrap">
-                                <button
-                                  type="button"
-                                  className="cms-action-btn"
-                                  onClick={() => handleDownloadStudentSlip(s)}
-                                  aria-label={`Download Attendance Report for ${s.name}`}
-                                >
-                                  <Download size={13} />
-                                </button>
-                                <span className="sp-tooltip-bubble">Download Report</span>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={8} style={{ textAlign: "center", padding: 36 }}>
-                          <div className="cms-empty">No student records enrolled in {currentSectionName}.</div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Daily Pagination */}
-              <nav className="att-pagination">
-                <span className="att-pagination-summary">
-                  Showing{" "}
-                  {attStudents.length === 0
-                    ? "0–0 of 0 records"
-                    : `${(dailyPage - 1) * dailyPageSize + 1}–${Math.min(dailyPage * dailyPageSize, attStudents.length)} of ${attStudents.length} records`}
-                </span>
-                <div className="att-pagination-controls">
-                  <div className="att-per-page-wrap">
-                    <span>Per page:</span>
-                    <select
-                      value={dailyPageSize}
-                      onChange={(e) => {
-                        setDailyPageSize(Number(e.target.value));
-                        setDailyPage(1);
-                      }}
-                      className="att-per-page-select"
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-outline"
+                      style={{ padding: "5px 12px", fontSize: 12.5 }}
+                      onClick={() => setShowMarkModal(true)}
+                      title="Choose session to mark all students present"
                     >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={20}>20</option>
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={dailyPage === 1}
-                    onClick={() => setDailyPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </button>
-                  <span className="att-page-number">
-                    {dailyPage} / {totalDailyPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={dailyPage >= totalDailyPages || totalDailyPages === 0}
-                    onClick={() => setDailyPage((p) => Math.min(totalDailyPages, p + 1))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </nav>
-            </div>
-          )}
+                      <CheckCircle size={14} /> Mark All Present
+                    </button>
 
-          {/* VIEW 2: Monthly Report */}
-          {attView === "monthly" && (
-            <div className="cms-card att-month-card">
-              <header className="att-month-header">
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 16 }}>
-                    Student Monthly Attendance — {currentSectionName} ({monthlyMonthLabel})
-                  </h3>
-                  <p style={{ margin: "2px 0 0 0", fontSize: 12.5, color: "var(--cms-muted)" }}>
-                    {monthDays.length} days · {filteredMonthlyRows.length} students enrolled
-                  </p>
-                </div>
+                    <label
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: 12,
+                        cursor: "pointer",
+                        padding: "4px 8px",
+                        background: "var(--cms-subtle, #f8f9fa)",
+                        borderRadius: 6,
+                        border: "1px solid var(--cms-border, #e5e7eb)",
+                      }}
+                      title="Send instant automated absence notification via WhatsApp/SMS to student guardians"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={notifyParents}
+                        onChange={(e) => setNotifyParents(e.target.checked)}
+                        style={{ accentColor: "var(--cms-primary, #6F8400)", cursor: "pointer" }}
+                      />
+                      <span style={{ fontWeight: 600 }}>Notify Parents</span>
+                    </label>
 
-                {/* Right Header Area: Download/Export Button + Centered Horizontal Legend */}
-                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-outline"
-                    style={{ height: 32, padding: "0 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
-                    onClick={handleExportMonthlyReport}
-                  >
-                    <Download size={13} /> Export Monthly Report
-                  </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      style={{ padding: "5px 12px", fontSize: 12.5 }}
+                      onClick={saveAttendance}
+                      disabled={attSaving}
+                      title="Persist attendance records to database"
+                    >
+                      {attSaving ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save Attendance
+                    </button>
 
-                  <div className="att-month-legend">
-                    <span>
-                      <i className="att-month-p">P</i> Present
-                    </span>
-                    <span>
-                      <i className="att-month-a">A</i> Absent
-                    </span>
-                    <span>
-                      <i className="att-month-hd">HD</i> Half Day
-                    </span>
-                    <span>
-                      <i className="att-month-h">H</i> Holiday
-                    </span>
-                    <span>
-                      <i className="att-month-off">-</i> Off Day
-                    </span>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      style={{ padding: "5px 12px", fontSize: 12.5 }}
+                      onClick={handleExportAttendanceSheet}
+                      title="Download section attendance sheet as Excel file"
+                    >
+                      <FileSpreadsheet size={14} /> Export Sheet
+                    </button>
                   </div>
                 </div>
-              </header>
 
-              {/* Search Toolbar */}
-              <div className="att-month-search-toolbar">
-                <div className="att-student-search-box">
-                  <Search3DIcon size={18} />
-                  <input
-                    type="search"
-                    value={monthlySearch}
-                    onChange={(e) => {
-                      setMonthlySearch(e.target.value);
-                      setMonthlyPage(1);
-                    }}
-                    placeholder="Search by student name, roll no, or admission no..."
-                  />
-                </div>
-              </div>
+                {/* Table without Remarks column per user requirement */}
+                <div className="cms-table-wrap">
+                  <table className="cms-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: 45 }}>#</th>
+                        <th>Roll No</th>
+                        <th>Admission No</th>
+                        <th>Student Name</th>
+                        <th style={{ textAlign: "center" }}>Morning Session</th>
+                        <th style={{ textAlign: "center" }}>Afternoon Session</th>
+                        <th style={{ textAlign: "center" }}>Day Status</th>
+                        <th style={{ width: 80, textAlign: "center" }}>Report</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedDailyStudents.length > 0 ? (
+                        pagedDailyStudents.map((s, idx) => {
+                          const dailyStatus = getStudentDailyStatus(s.morningStatus, s.afternoonStatus);
+                          const rowClass =
+                            dailyStatus === "Absent"
+                              ? "sp-absent-row"
+                              : dailyStatus === "Half Day"
+                                ? "sp-halfday-row"
+                                : "";
+                          const statusDisp = getStudentDayStatusDisplay(s.morningStatus, s.afternoonStatus);
+                          const globalIdx = (dailyPage - 1) * dailyPageSize + idx + 1;
 
-              {/* 31-Day Attendance Calendar Grid Table */}
-              <div className="att-month-scroll">
-                <table className="cms-table att-month-table">
-                  <thead>
-                    <tr>
-                      <th className="att-sticky-roll">STUDENT ID</th>
-                      <th className="att-sticky-name">STUDENT NAME</th>
-                      {monthDays.map((d) => (
-                        <th key={d.day} className={`att-month-day ${d.isSunday ? "is-sunday" : ""}`}>
-                          <b>{d.day}</b>
-                          <small>{d.weekday}</small>
-                        </th>
-                      ))}
-                      <th>Present</th>
-                      <th>Absent</th>
-                      <th>Half Day</th>
-                      <th>Attendance %</th>
-                      <th>Board Eligibility</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pagedMonthlyRows.length ? (
-                      pagedMonthlyRows.map((r) => (
-                        <tr key={r.id || r.studentId}>
-                          <td className="att-sticky-roll">{r.rollNo || r.studentId}</td>
-                          <td className="att-sticky-name">
-                            <span style={{ fontWeight: 600 }}>{r.name}</span>
-                          </td>
-                          {monthDays.map((d, idx) => (
-                            <td key={d.day} className={`att-month-day ${d.isSunday ? "is-sunday" : ""}`}>
-                              <MonthlyPill value={r.dailyStatus?.[idx] ?? "-"} />
-                            </td>
-                          ))}
-                          <td style={{ color: "var(--cms-green, #10b981)", fontWeight: 700 }}>{r.presentCount}</td>
-                          <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 700 }}>{r.absentCount}</td>
-                          <td style={{ color: "var(--cms-amber, #f59e0b)", fontWeight: 700 }}>{r.halfDayCount}</td>
-                          <td style={{ fontWeight: 800 }}>{r.attendancePct}%</td>
-                          <td>
-                            {r.attendancePct >= 75 ? (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#dcfce7", color: "#15803d", whiteSpace: "nowrap" }}>
-                                ● Eligible (≥75%)
-                              </span>
-                            ) : r.attendancePct >= 65 ? (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>
-                                ▲ Condonation (65-74%)
-                              </span>
-                            ) : (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fee2e2", color: "#b91c1c", whiteSpace: "nowrap" }}>
-                                ✕ Detained (&lt;65%)
-                              </span>
-                            )}
+                          return (
+                            <tr key={s.studentId} className={rowClass}>
+                              <td className="cms-strong">{globalIdx}</td>
+                              <td className="cms-strong">{s.rollNo}</td>
+                              <td>{s.admissionNo}</td>
+                              <td>
+                                <strong>{s.name}</strong>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <div className="sp-session-toggle" style={{ justifyContent: "center" }}>
+                                  {["Present", "Absent"].map((st) => {
+                                    const isActive = s.morningStatus === st;
+                                    const keyCls = st.toLowerCase();
+                                    const code = st[0];
+                                    return (
+                                      <button
+                                        key={st}
+                                        type="button"
+                                        className={`sp-session-btn ${keyCls} ${isActive ? "active" : ""}`}
+                                        onClick={() => toggleSessionStatus(s.studentId, "morning", st)}
+                                        title={`Mark Morning as ${st}`}
+                                      >
+                                        {code}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <div className="sp-session-toggle" style={{ justifyContent: "center" }}>
+                                  {["Present", "Absent"].map((st) => {
+                                    const isActive = s.afternoonStatus === st;
+                                    const keyCls = st.toLowerCase();
+                                    const code = st[0];
+                                    return (
+                                      <button
+                                        key={st}
+                                        type="button"
+                                        className={`sp-session-btn ${keyCls} ${isActive ? "active" : ""}`}
+                                        onClick={() => toggleSessionStatus(s.studentId, "afternoon", st)}
+                                        title={`Mark Afternoon as ${st}`}
+                                      >
+                                        {code}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <span className={`sp-day-status-pill ${statusDisp.type}`}>
+                                  {statusDisp.label}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <div className="sp-tooltip-wrap">
+                                  <button
+                                    type="button"
+                                    className="cms-action-btn"
+                                    onClick={() => handleDownloadStudentSlip(s)}
+                                    aria-label={`Download Attendance Report for ${s.name}`}
+                                  >
+                                    <Download size={13} />
+                                  </button>
+                                  <span className="sp-tooltip-bubble">Download Report</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: "center", padding: 36 }}>
+                            <div className="cms-empty">No student records enrolled in {currentSectionName}.</div>
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={monthDays.length + 7} style={{ textAlign: "center", padding: 32 }}>
-                          <div className="cms-empty">No attendance records match the selected filters.</div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
-              {/* Monthly Pagination */}
-              <nav className="att-pagination">
-                <span className="att-pagination-summary">
-                  Showing{" "}
-                  {filteredMonthlyRows.length
-                    ? `${(monthlyPage - 1) * monthlyPageSize + 1}–${Math.min(monthlyPage * monthlyPageSize, filteredMonthlyRows.length)} of ${filteredMonthlyRows.length} records`
-                    : "0–0 of 0 records"}
-                </span>
-                <div className="att-pagination-controls">
-                  <div className="att-per-page-wrap">
-                    <span>Per page:</span>
-                    <select
-                      value={monthlyPageSize}
+                {/* Daily Pagination */}
+                <nav className="att-pagination">
+                  <span className="att-pagination-summary">
+                    Showing{" "}
+                    {attStudents.length === 0
+                      ? "0–0 of 0 records"
+                      : `${(dailyPage - 1) * dailyPageSize + 1}–${Math.min(dailyPage * dailyPageSize, attStudents.length)} of ${attStudents.length} records`}
+                  </span>
+                  <div className="att-pagination-controls">
+                    <div className="att-per-page-wrap">
+                      <span>Per page:</span>
+                      <select
+                        value={dailyPageSize}
+                        onChange={(e) => {
+                          setDailyPageSize(Number(e.target.value));
+                          setDailyPage(1);
+                        }}
+                        className="att-per-page-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={15}>15</option>
+                        <option value={20}>20</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={dailyPage === 1}
+                      onClick={() => setDailyPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <span className="att-page-number">
+                      {dailyPage} / {totalDailyPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={dailyPage >= totalDailyPages || totalDailyPages === 0}
+                      onClick={() => setDailyPage((p) => Math.min(totalDailyPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </nav>
+              </div>
+            )}
+
+            {/* VIEW 2: Monthly Report */}
+            {attView === "monthly" && (
+              <div className="cms-card att-month-card">
+                <header className="att-month-header">
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>
+                      Student Monthly Attendance — {currentSectionName} ({monthlyMonthLabel})
+                    </h3>
+                    <p style={{ margin: "2px 0 0 0", fontSize: 12.5, color: "var(--cms-muted)" }}>
+                      {monthDays.length} days · {filteredMonthlyRows.length} students enrolled
+                    </p>
+                  </div>
+
+                  {/* Right Header Area: Download/Export Button + Centered Horizontal Legend */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-outline"
+                      style={{ height: 32, padding: "0 12px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}
+                      onClick={handleExportMonthlyReport}
+                    >
+                      <Download size={13} /> Export Monthly Report
+                    </button>
+
+                    <div className="att-month-legend">
+                      <span>
+                        <i className="att-month-p">P</i> Present
+                      </span>
+                      <span>
+                        <i className="att-month-a">A</i> Absent
+                      </span>
+                      <span>
+                        <i className="att-month-hd">HD</i> Half Day
+                      </span>
+                      <span>
+                        <i className="att-month-h">H</i> Holiday
+                      </span>
+                      <span>
+                        <i className="att-month-off">-</i> Off Day
+                      </span>
+                    </div>
+                  </div>
+                </header>
+
+                {/* Search Toolbar */}
+                <div className="att-month-search-toolbar">
+                  <div className="att-student-search-box">
+                    <Search3DIcon size={18} />
+                    <input
+                      type="search"
+                      value={monthlySearch}
                       onChange={(e) => {
-                        setMonthlyPageSize(Number(e.target.value));
+                        setMonthlySearch(e.target.value);
                         setMonthlyPage(1);
                       }}
-                      className="att-per-page-select"
-                    >
-                      <option value={5}>5</option>
-                      <option value={10}>10</option>
-                      <option value={15}>15</option>
-                      <option value={20}>20</option>
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={monthlyPage === 1}
-                    onClick={() => setMonthlyPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </button>
-                  <span className="att-page-number">
-                    {monthlyPage} / {totalMonthlyPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={monthlyPage >= totalMonthlyPages || totalMonthlyPages === 0}
-                    onClick={() => setMonthlyPage((p) => Math.min(totalMonthlyPages, p + 1))}
-                  >
-                    Next
-                  </button>
-                </div>
-              </nav>
-            </div>
-          )}
-
-          {/* VIEW 3: Defaulters */}
-          {attView === "defaulters" && (
-            <div className="cms-card">
-              <div className="cms-card-head" style={{ alignItems: "center" }}>
-                <div>
-                  <h2 style={{ margin: 0 }}>
-                    Collegiate Attendance Defaulter Roster — {currentSectionName}
-                  </h2>
-                  <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 2 }}>
-                    Students with attendance below threshold ({monthlyMonthLabel}) · Collegiate Shortage Evaluation
+                      placeholder="Search by student name, roll no, or admission no..."
+                    />
                   </div>
                 </div>
 
-                {/* Customizable Threshold Selector (< 75%, < 65%, < 50%, < 30%) */}
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--cms-muted)" }}>Threshold:</span>
-                    <select
-                      value={defaulterThreshold}
-                      onChange={(e) => setDefaulterThreshold(Number(e.target.value))}
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        border: "1px solid var(--cms-border, #e4e8f0)",
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        background: "var(--cms-surface, #ffffff)",
-                      }}
-                    >
-                      <option value={75}>&lt; 75% (Mandatory Board Minimum)</option>
-                      <option value={65}>&lt; 65% (Condonation Limit)</option>
-                      <option value={50}>&lt; 50% (Severe Shortage)</option>
-                      <option value={30}>&lt; 30% (Critical Non-Attendance)</option>
-                    </select>
-                  </div>
-
-                  <span className="cms-badge cms-badge-danger" style={{ fontWeight: 700 }}>
-                    {computedDefaultersList.length} Defaulters
-                  </span>
-                </div>
-              </div>
-
-              <div className="cms-table-wrap">
-                <table className="cms-table">
-                  <thead>
-                    <tr>
-                      <th>Roll No</th>
-                      <th>Student Name</th>
-                      <th>Classes Attended</th>
-                      <th>Attendance %</th>
-                      <th>Shortage from {defaulterThreshold}%</th>
-                      <th>Eligibility Status</th>
-                      <th style={{ textAlign: "center" }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {computedDefaultersList.length ? (
-                      computedDefaultersList.map((s) => {
-                        const shortage = (defaulterThreshold - s.attendancePct).toFixed(1);
-                        return (
-                          <tr key={s.studentId}>
-                            <td className="cms-strong">{s.rollNo}</td>
+                {/* 31-Day Attendance Calendar Grid Table */}
+                <div className="att-month-scroll">
+                  <table className="cms-table att-month-table">
+                    <thead>
+                      <tr>
+                        <th className="att-sticky-roll">STUDENT ID</th>
+                        <th className="att-sticky-name">STUDENT NAME</th>
+                        {monthDays.map((d) => (
+                          <th key={d.day} className={`att-month-day ${d.isSunday ? "is-sunday" : ""}`}>
+                            <b>{d.day}</b>
+                            <small>{d.weekday}</small>
+                          </th>
+                        ))}
+                        <th>Present</th>
+                        <th>Absent</th>
+                        <th>Half Day</th>
+                        <th>Attendance %</th>
+                        <th>Board Eligibility</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pagedMonthlyRows.length ? (
+                        pagedMonthlyRows.map((r) => (
+                          <tr key={r.id || r.studentId}>
+                            <td className="att-sticky-roll">{r.rollNo || r.studentId}</td>
+                            <td className="att-sticky-name">
+                              <span style={{ fontWeight: 600 }}>{r.name}</span>
+                            </td>
+                            {monthDays.map((d, idx) => (
+                              <td key={d.day} className={`att-month-day ${d.isSunday ? "is-sunday" : ""}`}>
+                                <MonthlyPill value={r.dailyStatus?.[idx] ?? "-"} />
+                              </td>
+                            ))}
+                            <td style={{ color: "var(--cms-green, #10b981)", fontWeight: 700 }}>{r.presentCount}</td>
+                            <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 700 }}>{r.absentCount}</td>
+                            <td style={{ color: "var(--cms-amber, #f59e0b)", fontWeight: 700 }}>{r.halfDayCount}</td>
+                            <td style={{ fontWeight: 800 }}>{r.attendancePct}%</td>
                             <td>
-                              <strong>{s.name}</strong>
-                            </td>
-                            <td>
-                              {s.classesAttended} / {s.totalClasses}
-                            </td>
-                            <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 800 }}>
-                              {s.attendancePct}%
-                            </td>
-                            <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 600 }}>
-                              {shortage}% Shortage
-                            </td>
-                            <td>
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  padding: "2px 8px",
-                                  borderRadius: 4,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  background: s.attendancePct < 50 ? "#fee2e2" : "#fef3c7",
-                                  color: s.attendancePct < 50 ? "#dc2626" : "#b45309",
-                                }}
-                              >
-                                {s.attendancePct < 50 ? "Detention Warning" : "Condonation Required"}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: "center" }}>
-                              <button
-                                className="cms-btn cms-btn-ghost"
-                                style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
-                                onClick={() => handleSendDefaulterNotice(s)}
-                                title="Send official notice to Student Portal"
-                              >
-                                <Send size={12} /> Send Notice
-                              </button>
+                              {r.attendancePct >= 75 ? (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#dcfce7", color: "#15803d", whiteSpace: "nowrap" }}>
+                                  ● Eligible (≥75%)
+                                </span>
+                              ) : r.attendancePct >= 65 ? (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fef3c7", color: "#b45309", whiteSpace: "nowrap" }}>
+                                  ▲ Condonation (65-74%)
+                                </span>
+                              ) : (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 12, fontSize: 11, fontWeight: 700, background: "#fee2e2", color: "#b91c1c", whiteSpace: "nowrap" }}>
+                                  ✕ Detained (&lt;65%)
+                                </span>
+                              )}
                             </td>
                           </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: "center", padding: 32 }}>
-                          <div className="cms-empty">
-                            No attendance defaulters (&lt; {defaulterThreshold}%) found in {currentSectionName} for this evaluation cycle.
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={monthDays.length + 7} style={{ textAlign: "center", padding: 32 }}>
+                            <div className="cms-empty">No attendance records match the selected filters.</div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Monthly Pagination */}
+                <nav className="att-pagination">
+                  <span className="att-pagination-summary">
+                    Showing{" "}
+                    {filteredMonthlyRows.length
+                      ? `${(monthlyPage - 1) * monthlyPageSize + 1}–${Math.min(monthlyPage * monthlyPageSize, filteredMonthlyRows.length)} of ${filteredMonthlyRows.length} records`
+                      : "0–0 of 0 records"}
+                  </span>
+                  <div className="att-pagination-controls">
+                    <div className="att-per-page-wrap">
+                      <span>Per page:</span>
+                      <select
+                        value={monthlyPageSize}
+                        onChange={(e) => {
+                          setMonthlyPageSize(Number(e.target.value));
+                          setMonthlyPage(1);
+                        }}
+                        className="att-per-page-select"
+                      >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={15}>15</option>
+                        <option value={20}>20</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={monthlyPage === 1}
+                      onClick={() => setMonthlyPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <span className="att-page-number">
+                      {monthlyPage} / {totalMonthlyPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={monthlyPage >= totalMonthlyPages || totalMonthlyPages === 0}
+                      onClick={() => setMonthlyPage((p) => Math.min(totalMonthlyPages, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </nav>
               </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+
+            {/* VIEW 3: Defaulters */}
+            {attView === "defaulters" && (
+              <div className="cms-card">
+                <div className="cms-card-head" style={{ alignItems: "center" }}>
+                  <div>
+                    <h2 style={{ margin: 0 }}>
+                      Collegiate Attendance Defaulter Roster — {currentSectionName}
+                    </h2>
+                    <div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 2 }}>
+                      Students with attendance below threshold ({monthlyMonthLabel}) · Collegiate Shortage Evaluation
+                    </div>
+                  </div>
+
+                  {/* Customizable Threshold Selector (< 75%, < 65%, < 50%, < 30%) */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 260 }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--cms-muted)" }}>Threshold:</span>
+                      <FacultySearchableSelect
+                        value={defaulterThreshold}
+                        options={[
+                          { id: 75, name: "< 75% (Mandatory Board Minimum)" },
+                          { id: 65, name: "< 65% (Condonation Limit)" },
+                          { id: 50, name: "< 50% (Severe Shortage)" },
+                          { id: 30, name: "< 30% (Critical Non-Attendance)" },
+                        ]}
+                        onChange={(e) => setDefaulterThreshold(Number(e.target.value))}
+                        style={{ minWidth: 240 }}
+                      />
+                    </div>
+
+                    <span className="cms-badge cms-badge-danger" style={{ fontWeight: 700 }}>
+                      {computedDefaultersList.length} Defaulters
+                    </span>
+                  </div>
+                </div>
+
+                <div className="cms-table-wrap">
+                  <table className="cms-table">
+                    <thead>
+                      <tr>
+                        <th>Roll No</th>
+                        <th>Student Name</th>
+                        <th>Classes Attended</th>
+                        <th>Attendance %</th>
+                        <th>Shortage from {defaulterThreshold}%</th>
+                        <th>Eligibility Status</th>
+                        <th style={{ textAlign: "center" }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {computedDefaultersList.length ? (
+                        computedDefaultersList.map((s) => {
+                          const shortage = (defaulterThreshold - s.attendancePct).toFixed(1);
+                          return (
+                            <tr key={s.studentId}>
+                              <td className="cms-strong">{s.rollNo}</td>
+                              <td>
+                                <strong>{s.name}</strong>
+                              </td>
+                              <td>
+                                {s.classesAttended} / {s.totalClasses}
+                              </td>
+                              <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 800 }}>
+                                {s.attendancePct}%
+                              </td>
+                              <td style={{ color: "var(--cms-red, #ef4444)", fontWeight: 600 }}>
+                                {shortage}% Shortage
+                              </td>
+                              <td>
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    padding: "2px 8px",
+                                    borderRadius: 4,
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    background: s.attendancePct < 50 ? "#fee2e2" : "#fef3c7",
+                                    color: s.attendancePct < 50 ? "#dc2626" : "#b45309",
+                                  }}
+                                >
+                                  {s.attendancePct < 50 ? "Detention Warning" : "Condonation Required"}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "center" }}>
+                                <button
+                                  className="cms-btn cms-btn-ghost"
+                                  style={{ fontSize: 12, padding: "4px 10px", display: "inline-flex", alignItems: "center", gap: 5 }}
+                                  onClick={() => handleSendDefaulterNotice(s)}
+                                  title="Send official notice to Student Portal"
+                                >
+                                  <Send size={12} /> Send Notice
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={7} style={{ textAlign: "center", padding: 32 }}>
+                            <div className="cms-empty">
+                              No attendance defaulters (&lt; {defaulterThreshold}%) found in {currentSectionName} for this evaluation cycle.
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )
+      }
 
       {/* 5. Mark All Present Session Selection Modal */}
-      {showMarkModal && (
-        <div className="sp-modal-overlay" onClick={() => setShowMarkModal(false)}>
-          <div className="sp-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-head">
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div className="sp-modal-icon-badge">
-                  <CheckCircle size={20} />
+      {
+        showMarkModal && (
+          <div className="sp-modal-overlay" onClick={() => setShowMarkModal(false)}>
+            <div className="sp-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="sp-modal-head">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div className="sp-modal-icon-badge">
+                    <CheckCircle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Mark All Present</h3>
+                    <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
+                      Select session attendance to apply for all students
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Mark All Present</h3>
-                  <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
-                    Select session attendance to apply for all students
-                  </p>
+                <button
+                  type="button"
+                  className="sp-modal-close-btn"
+                  onClick={() => setShowMarkModal(false)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="sp-modal-body">
+                <p style={{ margin: "0 0 14px 0", fontSize: 13, color: "var(--cms-text)", fontWeight: 600 }}>
+                  Which session would you like to mark students Present for?
+                </p>
+
+                <div className="sp-session-select-grid">
+                  <label
+                    className={`sp-session-option ${markSessionChoice === "morning" ? "active" : ""}`}
+                    onClick={() => setMarkSessionChoice("morning")}
+                  >
+                    <input
+                      type="radio"
+                      name="markSessionChoice"
+                      checked={markSessionChoice === "morning"}
+                      onChange={() => setMarkSessionChoice("morning")}
+                    />
+                    <div className="sp-session-option-text">
+                      <strong>Morning Session Only</strong>
+                      <span>Mark all students present for Morning session only</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`sp-session-option ${markSessionChoice === "afternoon" ? "active" : ""}`}
+                    onClick={() => setMarkSessionChoice("afternoon")}
+                  >
+                    <input
+                      type="radio"
+                      name="markSessionChoice"
+                      checked={markSessionChoice === "afternoon"}
+                      onChange={() => setMarkSessionChoice("afternoon")}
+                    />
+                    <div className="sp-session-option-text">
+                      <strong>Afternoon Session Only</strong>
+                      <span>Mark all students present for Afternoon session only</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`sp-session-option ${markSessionChoice === "both" ? "active" : ""}`}
+                    onClick={() => setMarkSessionChoice("both")}
+                  >
+                    <input
+                      type="radio"
+                      name="markSessionChoice"
+                      checked={markSessionChoice === "both"}
+                      onChange={() => setMarkSessionChoice("both")}
+                    />
+                    <div className="sp-session-option-text">
+                      <strong>Both Sessions (Full Day)</strong>
+                      <span>Mark all students present for both Morning & Afternoon sessions</span>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="sp-modal-notice-box">
+                  <span>ℹ️</span>
+                  <span>
+                    Students already marked as <strong>Absent</strong> in the selected session(s) will be preserved.
+                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                className="sp-modal-close-btn"
-                onClick={() => setShowMarkModal(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            <div className="sp-modal-body">
-              <p style={{ margin: "0 0 14px 0", fontSize: 13, color: "var(--cms-text)", fontWeight: 600 }}>
-                Which session would you like to mark students Present for?
-              </p>
-
-              <div className="sp-session-select-grid">
-                <label
-                  className={`sp-session-option ${markSessionChoice === "morning" ? "active" : ""}`}
-                  onClick={() => setMarkSessionChoice("morning")}
+              <div className="sp-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={() => setShowMarkModal(false)}
                 >
-                  <input
-                    type="radio"
-                    name="markSessionChoice"
-                    checked={markSessionChoice === "morning"}
-                    onChange={() => setMarkSessionChoice("morning")}
-                  />
-                  <div className="sp-session-option-text">
-                    <strong>Morning Session Only</strong>
-                    <span>Mark all students present for Morning session only</span>
-                  </div>
-                </label>
-
-                <label
-                  className={`sp-session-option ${markSessionChoice === "afternoon" ? "active" : ""}`}
-                  onClick={() => setMarkSessionChoice("afternoon")}
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  onClick={applyMarkAllPresent}
                 >
-                  <input
-                    type="radio"
-                    name="markSessionChoice"
-                    checked={markSessionChoice === "afternoon"}
-                    onChange={() => setMarkSessionChoice("afternoon")}
-                  />
-                  <div className="sp-session-option-text">
-                    <strong>Afternoon Session Only</strong>
-                    <span>Mark all students present for Afternoon session only</span>
-                  </div>
-                </label>
-
-                <label
-                  className={`sp-session-option ${markSessionChoice === "both" ? "active" : ""}`}
-                  onClick={() => setMarkSessionChoice("both")}
-                >
-                  <input
-                    type="radio"
-                    name="markSessionChoice"
-                    checked={markSessionChoice === "both"}
-                    onChange={() => setMarkSessionChoice("both")}
-                  />
-                  <div className="sp-session-option-text">
-                    <strong>Both Sessions (Full Day)</strong>
-                    <span>Mark all students present for both Morning & Afternoon sessions</span>
-                  </div>
-                </label>
+                  Apply Attendance
+                </button>
               </div>
-
-              <div className="sp-modal-notice-box">
-                <span>ℹ️</span>
-                <span>
-                  Students already marked as <strong>Absent</strong> in the selected session(s) will be preserved.
-                </span>
-              </div>
-            </div>
-
-            <div className="sp-modal-foot">
-              <button
-                type="button"
-                className="cms-btn cms-btn-ghost"
-                onClick={() => setShowMarkModal(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={applyMarkAllPresent}
-              >
-                Apply Attendance
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Student Attendance Import Modal (Matching Ref 1 & Ref 2) */}
-      {showImportModal && (
-        <div className="att-import-overlay" onClick={() => setShowImportModal(false)}>
-          <div className="att-import-modal" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="att-import-header">
-              <div>
-                <h2>Student Attendance Import</h2>
-                <p>Import student session attendance using an Excel (.xlsx, .xls) or CSV file.</p>
-              </div>
-              <button
-                type="button"
-                className="att-import-close-btn"
-                onClick={() => setShowImportModal(false)}
-                title="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="att-import-body">
-              {/* Step 1: Download Attendance Template */}
-              <div className="att-import-step-card">
-                <div className="att-step-indicator">
-                  <div className="att-step-badge">1</div>
-                  <div className="att-step-info">
-                    <h3>Download Attendance Template</h3>
-                    <p>Download the standard Excel format for bulk attendance upload.</p>
-                  </div>
+      {
+        showImportModal && (
+          <div className="att-import-overlay" onClick={() => setShowImportModal(false)}>
+            <div className="att-import-modal" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="att-import-header">
+                <div>
+                  <h2>Student Attendance Import</h2>
+                  <p>Import student session attendance using an Excel (.xlsx, .xls) or CSV file.</p>
                 </div>
                 <button
                   type="button"
-                  className="att-btn-outline"
-                  onClick={downloadAttendanceTemplate}
+                  className="att-import-close-btn"
+                  onClick={() => setShowImportModal(false)}
+                  title="Close"
                 >
-                  <FileSpreadsheet size={15} /> Download Template
+                  <X size={18} />
                 </button>
               </div>
 
-              {/* Step 2: Upload Attendance File */}
-              <div className="att-import-step-card">
-                <div className="att-step-indicator">
-                  <div className="att-step-badge">2</div>
-                  <div className="att-step-info">
-                    <h3>Upload Attendance File</h3>
-                    <p>Choose one .xlsx, .xls or .csv file containing the attendance records.</p>
+              {/* Body */}
+              <div className="att-import-body">
+                {/* Step 1: Download Attendance Template */}
+                <div className="att-import-step-card">
+                  <div className="att-step-indicator">
+                    <div className="att-step-badge">1</div>
+                    <div className="att-step-info">
+                      <h3>Download Attendance Template</h3>
+                      <p>Download the standard Excel format for bulk attendance upload.</p>
+                    </div>
                   </div>
-                </div>
-
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  style={{ display: "none" }}
-                  accept=".xlsx,.xls,.csv"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) {
-                      setImportFile(e.target.files[0]);
-                      setValidationResult(null);
-                    }
-                  }}
-                />
-
-                {!importFile ? (
-                  <div
-                    className={`att-import-dropzone ${isDragging ? "dragging" : ""}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={() => fileInputRef.current?.click()}
+                  <button
+                    type="button"
+                    className="att-btn-outline"
+                    onClick={downloadAttendanceTemplate}
                   >
-                    <div className="att-dropzone-icon">
-                      <Upload size={24} />
-                    </div>
-                    <div className="att-dropzone-title">Click to upload or drag & drop file</div>
-                    <div className="att-dropzone-sub">Supported formats: .xlsx, .xls, .csv</div>
-                  </div>
-                ) : (
-                  <div className="att-import-file-card">
-                    <div className="att-file-info">
-                      <div className="att-file-icon">
-                        <FileSpreadsheet size={22} />
-                      </div>
-                      <div className="att-file-meta">
-                        <div className="att-file-name">{importFile.name}</div>
-                        <div className="att-file-size">{(importFile.size / 1024).toFixed(1)} KB</div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span className="att-file-status-badge">
-                        <CheckCircle2 size={14} /> Ready to Validate
-                      </span>
-                      <button
-                        type="button"
-                        className="att-change-file-btn"
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        Change File
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Step 3: Validate File */}
-              <div className="att-import-step-card">
-                <div className="att-step-indicator">
-                  <div className="att-step-badge">3</div>
-                  <div className="att-step-info">
-                    <h3>Validate File</h3>
-                    <p>Run a dry validation preview before importing.</p>
-                  </div>
+                    <FileSpreadsheet size={15} /> Download Template
+                  </button>
                 </div>
 
-                <button
-                  type="button"
-                  className="att-btn-validate"
-                  onClick={handleValidateFile}
-                  disabled={!importFile || validating}
-                >
-                  {validating ? (
-                    <>
-                      <Loader2 size={15} className="spin" /> Validating File...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={15} /> Validate File
-                    </>
-                  )}
-                </button>
+                {/* Step 2: Upload Attendance File */}
+                <div className="att-import-step-card">
+                  <div className="att-step-indicator">
+                    <div className="att-step-badge">2</div>
+                    <div className="att-step-info">
+                      <h3>Upload Attendance File</h3>
+                      <p>Choose one .xlsx, .xls or .csv file containing the attendance records.</p>
+                    </div>
+                  </div>
 
-                {/* Validation Results Display */}
-                {validationResult && (
-                  <div className="att-validation-result">
-                    <div className="att-summary-pills">
-                      <span className="att-pill att-pill-total">
-                        Total Rows: <b>{validationResult.totalRows}</b>
-                      </span>
-                      <span className="att-pill att-pill-valid">
-                        Valid Rows: <b>{validationResult.validRows}</b>
-                      </span>
-                      {validationResult.invalidRows > 0 && (
-                        <span className="att-pill att-pill-error">
-                          Errors: <b>{validationResult.invalidRows}</b>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: "none" }}
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setImportFile(e.target.files[0]);
+                        setValidationResult(null);
+                      }
+                    }}
+                  />
+
+                  {!importFile ? (
+                    <div
+                      className={`att-import-dropzone ${isDragging ? "dragging" : ""}`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <div className="att-dropzone-icon">
+                        <Upload size={24} />
+                      </div>
+                      <div className="att-dropzone-title">Click to upload or drag & drop file</div>
+                      <div className="att-dropzone-sub">Supported formats: .xlsx, .xls, .csv</div>
+                    </div>
+                  ) : (
+                    <div className="att-import-file-card">
+                      <div className="att-file-info">
+                        <div className="att-file-icon">
+                          <FileSpreadsheet size={22} />
+                        </div>
+                        <div className="att-file-meta">
+                          <div className="att-file-name">{importFile.name}</div>
+                          <div className="att-file-size">{(importFile.size / 1024).toFixed(1)} KB</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="att-file-status-badge">
+                          <CheckCircle2 size={14} /> Ready to Validate
                         </span>
+                        <button
+                          type="button"
+                          className="att-change-file-btn"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Change File
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Step 3: Validate File */}
+                <div className="att-import-step-card">
+                  <div className="att-step-indicator">
+                    <div className="att-step-badge">3</div>
+                    <div className="att-step-info">
+                      <h3>Validate File</h3>
+                      <p>Run a dry validation preview before importing.</p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="att-btn-validate"
+                    onClick={handleValidateFile}
+                    disabled={!importFile || validating}
+                  >
+                    {validating ? (
+                      <>
+                        <Loader2 size={15} className="spin" /> Validating File...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={15} /> Validate File
+                      </>
+                    )}
+                  </button>
+
+                  {/* Validation Results Display */}
+                  {validationResult && (
+                    <div className="att-validation-result">
+                      <div className="att-summary-pills">
+                        <span className="att-pill att-pill-total">
+                          Total Rows: <b>{validationResult.totalRows}</b>
+                        </span>
+                        <span className="att-pill att-pill-valid">
+                          Valid Rows: <b>{validationResult.validRows}</b>
+                        </span>
+                        {validationResult.invalidRows > 0 && (
+                          <span className="att-pill att-pill-error">
+                            Errors: <b>{validationResult.invalidRows}</b>
+                          </span>
+                        )}
+                      </div>
+
+                      {validationResult.errors?.length > 0 && (
+                        <div className="att-validation-errors">
+                          <div className="att-errors-title">
+                            <AlertCircle size={15} /> File Validation Warnings / Errors:
+                          </div>
+                          <ul className="att-errors-list">
+                            {validationResult.errors.map((err, idx) => (
+                              <li key={idx}>
+                                {err.row > 0 ? <b>Row {err.row}: </b> : null}
+                                {err.message}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {validationResult.validRows > 0 && validationResult.invalidRows === 0 && (
+                        <div className="att-validation-success">
+                          <CheckCircle2 size={16} /> All {validationResult.validRows} records validated successfully. Ready to import!
+                        </div>
                       )}
                     </div>
+                  )}
+                </div>
 
-                    {validationResult.errors?.length > 0 && (
-                      <div className="att-validation-errors">
-                        <div className="att-errors-title">
-                          <AlertCircle size={15} /> File Validation Warnings / Errors:
-                        </div>
-                        <ul className="att-errors-list">
-                          {validationResult.errors.map((err, idx) => (
-                            <li key={idx}>
-                              {err.row > 0 ? <b>Row {err.row}: </b> : null}
-                              {err.message}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                {/* Collapsible Template Structure Accordion */}
+                <div className="att-import-structure">
+                  <button
+                    type="button"
+                    className="att-structure-toggle"
+                    onClick={() => setShowTemplateStructure(!showTemplateStructure)}
+                  >
+                    <span className="att-structure-arrow">{showTemplateStructure ? "▼" : "►"}</span>
+                    <span>Template Structure</span>
+                  </button>
 
-                    {validationResult.validRows > 0 && validationResult.invalidRows === 0 && (
-                      <div className="att-validation-success">
-                        <CheckCircle2 size={16} /> All {validationResult.validRows} records validated successfully. Ready to import!
+                  {showTemplateStructure && (
+                    <div className="att-structure-content">
+                      <p style={{ margin: "0 0 10px 0", fontSize: 12.5, color: "var(--cms-muted, #7B8275)" }}>
+                        The uploaded Excel/CSV file must contain the following columns in row 1:
+                      </p>
+                      <div className="att-structure-table-wrap">
+                        <table className="att-structure-table">
+                          <thead>
+                            <tr>
+                              <th>Column Name</th>
+                              <th>Required</th>
+                              <th>Description & Accepted Values</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td><b>Roll No</b></td>
+                              <td><span className="att-req-tag">Required*</span></td>
+                              <td>Student Roll Number (e.g. 1, 2, 10)</td>
+                            </tr>
+                            <tr>
+                              <td><b>Admission No</b></td>
+                              <td><span className="att-opt-tag">Optional</span></td>
+                              <td>Unique Admission ID (e.g. ADM-001, MADM-0060)</td>
+                            </tr>
+                            <tr>
+                              <td><b>Student Name</b></td>
+                              <td><span className="att-opt-tag">Optional</span></td>
+                              <td>Student's registered full name</td>
+                            </tr>
+                            <tr>
+                              <td><b>Date</b></td>
+                              <td><span className="att-opt-tag">Optional</span></td>
+                              <td>Attendance Date format: YYYY-MM-DD (defaults to selected date)</td>
+                            </tr>
+                            <tr>
+                              <td><b>Morning Session</b></td>
+                              <td><span className="att-req-tag">Required*</span></td>
+                              <td><code>Present</code>, <code>Absent</code>, <code>P</code>, <code>A</code>, <code>1</code>, <code>0</code></td>
+                            </tr>
+                            <tr>
+                              <td><b>Afternoon Session</b></td>
+                              <td><span className="att-req-tag">Required*</span></td>
+                              <td><code>Present</code>, <code>Absent</code>, <code>P</code>, <code>A</code>, <code>1</code>, <code>0</code></td>
+                            </tr>
+                          </tbody>
+                        </table>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Collapsible Template Structure Accordion */}
-              <div className="att-import-structure">
+              {/* Modal Footer */}
+              <div className="att-import-footer">
                 <button
                   type="button"
-                  className="att-structure-toggle"
-                  onClick={() => setShowTemplateStructure(!showTemplateStructure)}
+                  className="att-btn-cancel"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setImportFile(null);
+                    setValidationResult(null);
+                  }}
                 >
-                  <span className="att-structure-arrow">{showTemplateStructure ? "▼" : "►"}</span>
-                  <span>Template Structure</span>
+                  Cancel
                 </button>
-
-                {showTemplateStructure && (
-                  <div className="att-structure-content">
-                    <p style={{ margin: "0 0 10px 0", fontSize: 12.5, color: "var(--cms-muted, #7B8275)" }}>
-                      The uploaded Excel/CSV file must contain the following columns in row 1:
-                    </p>
-                    <div className="att-structure-table-wrap">
-                      <table className="att-structure-table">
-                        <thead>
-                          <tr>
-                            <th>Column Name</th>
-                            <th>Required</th>
-                            <th>Description & Accepted Values</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td><b>Roll No</b></td>
-                            <td><span className="att-req-tag">Required*</span></td>
-                            <td>Student Roll Number (e.g. 1, 2, 10)</td>
-                          </tr>
-                          <tr>
-                            <td><b>Admission No</b></td>
-                            <td><span className="att-opt-tag">Optional</span></td>
-                            <td>Unique Admission ID (e.g. ADM-001, MADM-0060)</td>
-                          </tr>
-                          <tr>
-                            <td><b>Student Name</b></td>
-                            <td><span className="att-opt-tag">Optional</span></td>
-                            <td>Student's registered full name</td>
-                          </tr>
-                          <tr>
-                            <td><b>Date</b></td>
-                            <td><span className="att-opt-tag">Optional</span></td>
-                            <td>Attendance Date format: YYYY-MM-DD (defaults to selected date)</td>
-                          </tr>
-                          <tr>
-                            <td><b>Morning Session</b></td>
-                            <td><span className="att-req-tag">Required*</span></td>
-                            <td><code>Present</code>, <code>Absent</code>, <code>P</code>, <code>A</code>, <code>1</code>, <code>0</code></td>
-                          </tr>
-                          <tr>
-                            <td><b>Afternoon Session</b></td>
-                            <td><span className="att-req-tag">Required*</span></td>
-                            <td><code>Present</code>, <code>Absent</code>, <code>P</code>, <code>A</code>, <code>1</code>, <code>0</code></td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
+                <button
+                  type="button"
+                  className="att-btn-import"
+                  onClick={handleApplyImport}
+                  disabled={!validationResult || validationResult.validRows === 0 || importing}
+                >
+                  {importing ? <Loader2 size={15} className="spin" /> : null}
+                  {importing ? "Importing Records..." : "Import Attendance"}
+                </button>
               </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="att-import-footer">
-              <button
-                type="button"
-                className="att-btn-cancel"
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                  setValidationResult(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="att-btn-import"
-                onClick={handleApplyImport}
-                disabled={!validationResult || validationResult.validRows === 0 || importing}
-              >
-                {importing ? <Loader2 size={15} className="spin" /> : null}
-                {importing ? "Importing Records..." : "Import Attendance"}
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {toast && (
-        <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
-          {toast.text}
-        </div>
-      )}
-    </div>
+      {
+        toast && (
+          <div className={`sp-toast ${toast.type === "error" ? "error" : ""}`}>
+            {toast.text}
+          </div>
+        )
+      }
+    </div >
   );
 }

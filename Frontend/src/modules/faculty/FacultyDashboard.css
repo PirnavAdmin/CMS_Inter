@@ -89,28 +89,28 @@
   height: calc(var(--cms-header-height, 68px) - 16px);
   object-fit: contain;
   object-position: center;
-  filter: brightness(1.08) contrast(1.18) saturate(1.12) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25));
+  filter: var(--cms-brand-logo-filter, brightness(1.08) contrast(1.18) saturate(1.12) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.25))) !important;
 }
 
 /* ---------- Staff Sidebar Navigation (Exact Admin Replica) ---------- */
 .faculty-shell .cms-sidebar {
-  background: linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%) !important;
-  border-right: 1px solid rgba(91, 111, 45, 0.38) !important;
+  background: var(--cms-sidebar-surface-bg, linear-gradient(180deg, rgba(218, 227, 187, 0.97) 0%, rgba(203, 216, 160, 0.95) 100%)) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border, rgba(91, 111, 45, 0.38)) !important;
 }
 
 [data-theme="dark"] .faculty-shell .cms-sidebar {
-  background: linear-gradient(180deg, #252d21 0%, #20271d 100%) !important;
-  border-right: 1px solid #3a4534 !important;
+  background: var(--cms-sidebar-surface-bg, linear-gradient(180deg, #252d21 0%, #20271d 100%)) !important;
+  border-right: 1px solid var(--cms-nav-chrome-border, #3a4534) !important;
 }
 
 .faculty-shell .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #fffdf5 0%, #f3f2dc 48%, #dbe5b8 100%) !important;
-  border-bottom: 1px solid rgba(91, 111, 45, 0.35) !important;
+  background: var(--cms-brand-surface-bg, var(--cms-surface)) !important;
+  border-bottom: 1px solid var(--cms-nav-chrome-border, rgba(91, 111, 45, 0.35)) !important;
 }
 
 [data-theme="dark"] .faculty-shell .cms-sidebar .cms-brand {
-  background: linear-gradient(135deg, #263221 0%, #1f2b1d 52%, #182318 100%) !important;
-  border-bottom-color: rgba(187, 204, 148, 0.24) !important;
+  background: var(--cms-brand-surface-bg, var(--cms-surface)) !important;
+  border-bottom-color: var(--cms-nav-chrome-border, rgba(187, 204, 148, 0.24)) !important;
 }
 
 .faculty-shell .cms-sidebar .cms-nav-group {
@@ -1013,37 +1013,170 @@
   transition: width 0.4s ease;
 }
 
-/* ---------- Toast ---------- */
+/* ---------- Toast Notification (CMS Design System Aligned) ---------- */
 .sp-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #1A2114;
-  color: #ffffff !important;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #0f172a) !important;
   border-radius: 12px;
-  padding: 12px 20px;
-  font-size: 13.5px;
-  font-weight: 600;
+  padding: 14px 18px;
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  box-shadow: 0 14px 34px -4px rgba(15, 23, 42, 0.16), 0 4px 12px -2px rgba(15, 23, 42, 0.08);
+  z-index: 999999;
+  max-width: 440px;
+  min-width: 320px;
+  word-break: break-word;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-left: 5px solid var(--cms-primary, #355e3b);
+  animation: sp-toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.sp-toast-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.28);
-  z-index: 99999;
-  max-width: 480px;
-  word-break: break-word;
-  animation: sp-toast-in 0.25s ease;
-}
-.sp-toast.error {
-  background: var(--cms-red, #dc2626) !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-}
-.sp-toast svg {
+  justify-content: center;
   flex-shrink: 0;
-  stroke: #ffffff !important;
-  color: #ffffff !important;
+  background: var(--cms-primary-soft, #edf7e2);
+  color: var(--cms-primary, #355e3b);
+  margin-top: 1px;
 }
-@keyframes sp-toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+.sp-toast-icon-wrap svg {
+  flex-shrink: 0;
+  stroke: currentColor !important;
+  color: currentColor !important;
+}
+
+.sp-toast-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-toast-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-text, #0f172a);
+  line-height: 1.3;
+  display: block;
+}
+
+.sp-toast-message {
+  font-size: 12.5px;
+  color: var(--cms-muted, #475569);
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.sp-toast-close-btn {
+  background: none;
+  border: none;
+  color: var(--cms-muted, #94a3b8);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 6px;
+  margin-top: -2px;
+  transition: all 0.15s ease;
+}
+
+.sp-toast-close-btn:hover {
+  background: var(--cms-surface-subtle, #f1f5f9);
+  color: var(--cms-text, #1e293b);
+}
+
+/* Error State */
+.sp-toast.error,
+.sp-toast.sp-toast-error {
+  border-left: 5px solid #ef4444 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #fecaca;
+  border-right: 1px solid #fecaca;
+  border-bottom: 1px solid #fecaca;
+}
+
+.sp-toast.error .sp-toast-icon-wrap,
+.sp-toast.sp-toast-error .sp-toast-icon-wrap {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+}
+
+.sp-toast.error .sp-toast-title,
+.sp-toast.sp-toast-error .sp-toast-title {
+  color: #991b1b !important;
+}
+
+.sp-toast.error .sp-toast-message,
+.sp-toast.sp-toast-error .sp-toast-message {
+  color: #475569 !important;
+}
+
+/* Warning State */
+.sp-toast.warning,
+.sp-toast.sp-toast-warning {
+  border-left: 5px solid #f59e0b !important;
+  background: #ffffff !important;
+  border-top: 1px solid #fde68a;
+  border-right: 1px solid #fde68a;
+  border-bottom: 1px solid #fde68a;
+}
+
+.sp-toast.warning .sp-toast-icon-wrap,
+.sp-toast.sp-toast-warning .sp-toast-icon-wrap {
+  background: #fffbeb !important;
+  color: #d97706 !important;
+}
+
+.sp-toast.warning .sp-toast-title,
+.sp-toast.sp-toast-warning .sp-toast-title {
+  color: #92400e !important;
+}
+
+/* Info State */
+.sp-toast.info,
+.sp-toast.sp-toast-info {
+  border-left: 5px solid #3b82f6 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #bfdbfe;
+  border-right: 1px solid #bfdbfe;
+  border-bottom: 1px solid #bfdbfe;
+}
+
+.sp-toast.info .sp-toast-icon-wrap,
+.sp-toast.sp-toast-info .sp-toast-icon-wrap {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+
+.sp-toast.info .sp-toast-title,
+.sp-toast.sp-toast-info .sp-toast-title {
+  color: #1e40af !important;
+}
+
+@keyframes sp-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
 
 /* ---------- Exam Duty Card ---------- */
 .sp-duty-card {

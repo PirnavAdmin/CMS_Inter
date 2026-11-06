@@ -1,4 +1,4 @@
-/* Faculty Classes Styles */
+/* Faculty Classes Styles — Theme-based */
 .faculty-classes-container {
   padding: 0;
 }
@@ -19,7 +19,7 @@
   align-items: center;
   gap: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease, border-color 0.2s ease;
 }
 
 .faculty-class-kpi-card:hover {
@@ -77,7 +77,7 @@
   outline: none;
   background: var(--cms-surface, #fff);
   color: var(--cms-text-primary, #1e293b);
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background 0.2s ease;
 }
 
 .faculty-classes-search-input:focus {
@@ -93,6 +93,11 @@
   background: var(--cms-surface, #fff);
   color: var(--cms-text-primary, #1e293b);
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.2s ease;
+}
+
+.faculty-classes-select:focus {
+  border-color: var(--cms-primary, #6F8400);
 }
 
 .faculty-classes-count {
@@ -126,6 +131,16 @@
   padding: 3px 8px;
   border-radius: 6px;
   font-size: 0.75rem;
+}
+
+.cms-badge-day {
+  display: inline-block;
+  background: rgba(111, 132, 0, 0.12);
+  color: var(--cms-primary, #6F8400);
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 0.72rem;
 }
 
 .cms-badge-status-active {
@@ -172,4 +187,83 @@
   border-radius: 8px;
   color: #b91c1c;
   font-size: 0.875rem;
+}
+
+/* ==========================================================================
+   DARK THEME OVERRIDES
+========================================================================== */
+[data-theme="dark"] .faculty-class-kpi-card,
+.dark-theme .faculty-class-kpi-card {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+[data-theme="dark"] .kpi-value,
+.dark-theme .kpi-value {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .kpi-label,
+.dark-theme .kpi-label {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-classes-search-input,
+[data-theme="dark"] .faculty-classes-select,
+.dark-theme .faculty-classes-search-input,
+.dark-theme .faculty-classes-select {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .faculty-classes-select option,
+.dark-theme .faculty-classes-select option {
+  background: var(--cms-surface, #171a17) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .faculty-classes-count,
+.dark-theme .faculty-classes-count {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .cms-badge-code,
+.dark-theme .cms-badge-code {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .cms-badge-group,
+.dark-theme .cms-badge-group {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #93c5fd !important;
+}
+
+[data-theme="dark"] .cms-badge-section,
+.dark-theme .cms-badge-section {
+  background: rgba(217, 70, 239, 0.15) !important;
+  color: #f0abfc !important;
+}
+
+[data-theme="dark"] .cms-badge-day,
+.dark-theme .cms-badge-day {
+  background: rgba(187, 204, 148, 0.16) !important;
+  color: #dbe8af !important;
+}
+
+[data-theme="dark"] .cms-badge-status-active,
+.dark-theme .cms-badge-status-active {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #6ee7b7 !important;
+}
+
+[data-theme="dark"] .faculty-classes-empty h3,
+.dark-theme .faculty-classes-empty h3 {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .faculty-classes-empty p,
+.dark-theme .faculty-classes-empty p {
+  color: var(--cms-muted, #8f9789) !important;
 }

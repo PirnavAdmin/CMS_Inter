@@ -55,5 +55,14 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<List<StaffSubjectAllocationResponseDto>> GetStaffSubjectAllocationsAsync(int staffId);
         Task<StaffWorkloadResponseDto?> GetStaffWorkloadAsync(int staffId);
         Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id);
+        Task<(byte[] Bytes, string ContentType, string FileName)> GenerateOfferLetterPdfAsync(int id);
+        Task<StaffExperienceSummaryDto> GetStaffExperienceSummaryAsync(int id);
+
+        Task<OfferLetterWorkflowConfigDto> GetOfferLetterWorkflowConfigAsync();
+        Task<OfferLetterWorkflowConfigDto> SaveOfferLetterWorkflowConfigAsync(OfferLetterWorkflowConfigDto dto);
+        Task<List<StaffOnboardingRequestDto>> GetOfferLetterOnboardingRequestsAsync(string? status, int? campusId);
+        Task<StaffResponseDto> VerifyStaffOnboardingAsync(int staffId, VerifyStaffOnboardingDto dto, int adminUserId);
+        Task<StaffResponseDto> ApproveStaffOfferLetterAsync(int staffId, ApproveStaffOfferLetterDto dto, int adminUserId);
+        Task<StaffResponseDto> RejectStaffOfferLetterAsync(int staffId, RejectStaffOfferLetterDto dto, int adminUserId);
     }
 }

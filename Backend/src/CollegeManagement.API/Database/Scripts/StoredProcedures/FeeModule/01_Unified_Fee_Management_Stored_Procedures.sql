@@ -333,9 +333,24 @@ BEGIN
     IF p_ItemsJson IS NOT NULL AND JSON_VALID(p_ItemsJson) THEN
         SET v_ItemCount = JSON_LENGTH(p_ItemsJson);
         WHILE v_Idx < v_ItemCount DO
-            SET v_FeeTypeId = JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId')));
-            SET v_Rule = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))), 'Mandatory');
-            SET v_Amount = CAST(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))) AS DECIMAL(15,2));
+            SET v_FeeTypeId = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeTypeId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeComponentId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeComponentId'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].id'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Id')))
+            );
+            SET v_Rule = COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Rule'))),
+                'Mandatory'
+            );
+            SET v_Amount = CAST(COALESCE(
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))),
+                JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Amount'))),
+                0
+            ) AS DECIMAL(15,2));
 
             IF v_FeeTypeId IS NOT NULL AND v_Amount > 0 THEN
                 INSERT INTO FeeStructureComponents (
@@ -419,9 +434,24 @@ BEGIN
         SET v_Idx = 0;
         IF p_ItemsJson IS NOT NULL AND JSON_VALID(p_ItemsJson) THEN
             WHILE v_Idx < v_ItemCount DO
-                SET v_FeeTypeId = JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId')));
-                SET v_Rule = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))), 'Mandatory');
-                SET v_Amount = CAST(JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))) AS DECIMAL(15,2));
+                SET v_FeeTypeId = COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeTypeId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeTypeId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].feeComponentId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].FeeComponentId'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].id'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Id')))
+                );
+                SET v_Rule = COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].rule'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Rule'))),
+                    'Mandatory'
+                );
+                SET v_Amount = CAST(COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].amount'))),
+                    JSON_UNQUOTE(JSON_EXTRACT(p_ItemsJson, CONCAT('$[', v_Idx, '].Amount'))),
+                    0
+                ) AS DECIMAL(15,2));
 
                 SELECT Category INTO v_Category FROM FeeTypes WHERE FeeTypeId = v_FeeTypeId LIMIT 1;
 
@@ -457,8 +487,8 @@ BEGIN
         END IF;
     END IF;
 
-    -- Return 1st Year Structure ID
-    SELECT v_FirstYearId AS FeeStructureId, v_SecondYearId AS SecondYearStructureId;
+    -- Return full 1st Year Structure with items
+    CALL sp_FeeStructure_GetById(v_FirstYearId);
 END //
 DELIMITER ;
 

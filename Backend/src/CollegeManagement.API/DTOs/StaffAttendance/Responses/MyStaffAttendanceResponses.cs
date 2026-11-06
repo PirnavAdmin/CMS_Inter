@@ -17,6 +17,8 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public bool CanRegularize { get; set; } = false;
         public string DateFormatted { get; set; } = string.Empty;
         public string? RegularizationState { get; set; } // null, "pending", "approved", "rejected"
+        public bool MarkedByAdmin { get; set; } = false;
+        public string? MarkedBy { get; set; }
     }
 
     public class MyAttendanceLogItemDto
@@ -35,6 +37,8 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public bool IsToday { get; set; } = false;
         public string? RegularizationState { get; set; }
         public string? HolidayName { get; set; }
+        public bool MarkedByAdmin { get; set; } = false;
+        public string? MarkedBy { get; set; }
     }
 
     public class MyAttendanceAnalyticsMetricsDto
@@ -47,6 +51,9 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string LeavesSub { get; set; } = string.Empty;
         public string AbsentDays { get; set; } = "0 Days";
         public string AbsentDaysSub { get; set; } = string.Empty;
+        public string LopDays { get; set; } = "0 Days";
+        public string LopDaysSub { get; set; } = string.Empty;
+        public string AttendancePercentage { get; set; } = "0%";
     }
 
     public class MyAttendanceHistoryResponse

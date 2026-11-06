@@ -53,12 +53,17 @@ const SERIES_ICONS = {
   "ROLL_NO": Hash,
   "admission-no": GraduationCap,
   "exam-code": BookOpen,
-  "certificate-number": FileText,
+  "EXAM_CODE": BookOpen,
   "receipt-no": Receipt,
+  "RECEIPT_NO": Receipt,
+  "offer-letter-no": FileText,
+  "OFFER_LETTER_NO": FileText,
+  "staff-transfer-no": RefreshCw,
+  "TRANSFER_ORDER_NO": RefreshCw,
 };
 
 const isHiddenSeriesCard = (series) => [series.id, series.key, series.seriesCode, series.name, series.seriesName]
-  .some((value) => ["library-id", "hostel-id", "exam-code"].includes(String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-")));
+  .some((value) => ["library-id", "hostel-id", "certificate-number", "certificate-no", "certificate", "certificate-id"].includes(String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-")));
 
 export default function NumberSeriesPage({ mode = "dashboard" }) {
   const navigate = useNavigate();
@@ -148,7 +153,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         const uniqueMerged = [];
         const seenCodes = new Set();
         // Hide legacy redundant cards that bleed from the DB.
-        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME'];
+        const hiddenCodes = ['EMPLOYEE_ID', 'STUDENT_ID', 'SECTION_NAME', 'CERTIFICATE_NO', 'CERTIFICATE_NUMBER'];
 
         for (const item of mergedValues) {
           const rawCode = item.seriesCode || item.slug || item.id || "";
@@ -529,13 +534,43 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
 
         {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
-          {seriesList.filter((series) => !isHiddenSeriesCard(series)).map((series) => {
-            const IconComponent = SERIES_ICONS[series.id] || Hash;
+          {(() => {
+            const seen = new Set();
+            const hiddenCodes = [
+              'EMPLOYEE_ID',
+              'STUDENT_ID',
+              'SECTION_NAME',
+              'CERTIFICATE_NO',
+              'CERTIFICATE_NUMBER',
+              'CERTIFICATES_NUMBER',
+              'LIBRARY_ID',
+              'HOSTEL_ID',
+            ];
+            const cleanList = (seriesList || [])
+              .filter((s) => s && !isHiddenSeriesCard(s) && !isSeriesRemoved(s))
+              .filter((s) => {
+                const rawCode = s.seriesCode || s.slug || s.key || s.id || "";
+                let code = String(rawCode).toUpperCase().replace(/[\s-]+/g, '_');
+                if (code === 'STUDENT_ROLL_NO' || code === 'STUDENT_ROLL') code = 'ROLL_NO';
+                if (code === 'STAFF_TRANSFER_NO' || code === 'STAFF_TRANSFER_ORDER_NUMBER' || code === 'STAFF_TRANSFER_ORDER_NO') code = 'TRANSFER_ORDER_NO';
+                if (code === 'STAFF_OFFER_LETTER_NO' || code === 'STAFF_OFFER_LETTER_NUMBER' || code === 'OFFER_LETTER') code = 'OFFER_LETTER_NO';
+                if (code.includes('STUDENT_ROLL_NO_') || hiddenCodes.includes(code)) return false;
+                const nameCheck = String(s.name || s.seriesName || "").trim().toLowerCase();
+                if (nameCheck === "student roll" || nameCheck === "student roll no" || nameCheck.includes("certificate")) return false;
+                if (seen.has(code)) return false;
+                seen.add(code);
+                return true;
+              });
+
+            return cleanList.map((series) => {
+              const IconComponent = SERIES_ICONS[series.id] || SERIES_ICONS[series.seriesCode] || SERIES_ICONS[series.key] || Hash;
             const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
+            const campusCodeVal = selectedCampus?.campusCode || "PC";
             const customPreviewTokens = isRollNo 
-              ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-              : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
-            const nextVal = isRollNo 
+              ? { CAMPUS: campusCodeVal, GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+              : { CAMPUS: campusCodeVal, GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+            const hasCampusToken = (series.format || series.formatPattern || "").includes("{CAMPUS}");
+            const nextVal = (isRollNo || hasCampusToken) 
               ? getNextNumberPreview(series, null, customPreviewTokens) 
               : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens));
 
@@ -613,8 +648,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                 </div>
               </div>
             );
-          })}
-        </div>
+          });
+        })()}
+      </div>
       </div>
     </DashboardLayout>
   );
@@ -676,7 +712,8 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
   const customPreviewTokens = isRollNo 
     ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
     : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
-  const nextNumberVal = isRollNo 
+  const hasCampusToken = (currentSeries.format || currentSeries.formatPattern || "").includes("{CAMPUS}");
+  const nextNumberVal = (isRollNo || hasCampusToken) 
     ? getNextNumberPreview(currentSeries, null, customPreviewTokens) 
     : (currentSeries.livePreview || getNextNumberPreview(currentSeries, null, customPreviewTokens));
 
@@ -948,6 +985,32 @@ function RenderTableHead({ seriesId }) {
           <th>Created On</th>
         </tr>
       );
+    case "offer-letter-no":
+    case "OFFER_LETTER_NO":
+      return (
+        <tr>
+          <th>#</th>
+          <th>Offer Letter No.</th>
+          <th>Staff Name</th>
+          <th>Department</th>
+          <th>Designation</th>
+          <th>Campus</th>
+          <th>Generated On</th>
+        </tr>
+      );
+    case "staff-transfer-no":
+    case "TRANSFER_ORDER_NO":
+      return (
+        <tr>
+          <th>#</th>
+          <th>Transfer Order No.</th>
+          <th>Staff Name</th>
+          <th>From Campus</th>
+          <th>To Campus</th>
+          <th>Effective Date</th>
+          <th>Created On</th>
+        </tr>
+      );
     default:
       return (
         <tr>
@@ -1047,6 +1110,32 @@ function RenderTableRow({ seriesId, row, index }) {
           <td>{row.board}</td>
           <td>{row.program || "Intermediate"}</td>
           <td>{row.group}</td>
+          <td>{row.date}</td>
+        </tr>
+      );
+    case "offer-letter-no":
+    case "OFFER_LETTER_NO":
+      return (
+        <tr>
+          <td>{index}</td>
+          <td><span className="ns-code-badge font-bold">{row.val || row.offerLetterNo}</span></td>
+          <td><strong>{row.name || row.staffName}</strong></td>
+          <td>{row.dept || "Academics"}</td>
+          <td>{row.desig || "Faculty"}</td>
+          <td>{row.campus || "Main Campus"}</td>
+          <td>{row.date}</td>
+        </tr>
+      );
+    case "staff-transfer-no":
+    case "TRANSFER_ORDER_NO":
+      return (
+        <tr>
+          <td>{index}</td>
+          <td><span className="ns-code-badge font-bold">{row.val || row.transferOrderNo}</span></td>
+          <td><strong>{row.name || row.staffName}</strong></td>
+          <td>{row.fromCampus || "Main Campus"}</td>
+          <td>{row.toCampus || "City Campus"}</td>
+          <td>{row.effectiveDate || row.date}</td>
           <td>{row.date}</td>
         </tr>
       );
@@ -1457,7 +1546,8 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
     ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: selectedGroup, PROGRAM: selectedProgram, BOARD: selectedBoard }
     : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
 
-  const nextVal = liveGeneratedNumber || (isRollNo ? getNextNumberPreview(series, null, customPreviewTokens) : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens)));
+  const hasCampusToken = (series.format || series.formatPattern || "").includes("{CAMPUS}");
+  const nextVal = liveGeneratedNumber || ((isRollNo || hasCampusToken) ? getNextNumberPreview(series, null, customPreviewTokens) : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens)));
   const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
 
   const handleCopy = () => {

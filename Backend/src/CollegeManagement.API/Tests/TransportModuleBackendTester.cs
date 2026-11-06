@@ -334,6 +334,25 @@ namespace CollegeManagement.API.Tests
 
                 var vehicleLookup = await vehicleRepo.GetLookupAsync();
                 AssertTrue(vehicleLookup != null, "Vehicle Repository: GetLookupAsync executed via SP sp_GetTransportVehicleLookup");
+
+                // Test vehicle creation with campus ID
+                var testVehNum = $"TEST-{Random.Shared.Next(10000, 99999)}";
+                var testCreateDto = new CreateTransportVehicleDto
+                {
+                    VehicleNumber = testVehNum,
+                    RegistrationNumber = testVehNum,
+                    VehicleType = "Mini Bus",
+                    Capacity = 20,
+                    CampusId = 1,
+                    Status = true
+                };
+                var newVehId = await vehicleRepo.CreateAsync(testCreateDto, null);
+                AssertTrue(newVehId > 0, "Vehicle Repository: CreateAsync executed with CampusId via sp_CreateTransportVehicles");
+
+                var fetchedVeh = await vehicleRepo.GetByIdAsync(newVehId);
+                AssertTrue(fetchedVeh != null && fetchedVeh.CampusId == 1, "Vehicle Repository: Verified created vehicle has CampusId = 1");
+
+                await vehicleRepo.DeleteAsync(newVehId, null);
             }
             catch (Exception ex)
             {
@@ -487,6 +506,77 @@ namespace CollegeManagement.API.Tests
             catch (Exception ex)
             {
                 AssertTrue(false, "Student Transport Service Execution", ex.Message);
+            }
+
+            // -------------------------------------------------------------
+            // TEST 6: REGRESSION TESTS FOR DRIVER MASTER, REPORTS & ASSIGNMENTS
+            // -------------------------------------------------------------
+            try
+            {
+                // Regression Test 6.1: Filtered Counts & Pagination (CampusId=1)
+                var pagedDrivers = await driverRepo!.GetAllAsync(new TransportDriverFilterDto { CampusId = 1, PageNumber = 1, PageSize = 100 });
+                AssertTrue(pagedDrivers != null && pagedDrivers.TotalCount >= 1 && pagedDrivers.Items.Count() == pagedDrivers.TotalCount,
+                    $"Driver Master: CampusId=1 returns registered transport drivers with matching TotalCount={pagedDrivers?.TotalCount} and ItemsCount={pagedDrivers?.Items.Count()}");
+                AssertTrue(pagedDrivers != null && pagedDrivers.TotalPages == 1 && !pagedDrivers.HasNextPage,
+                    "Driver Master: TotalPages=1 and HasNextPage=false for PageSize=100");
+
+                var page11Drivers = await driverRepo.GetAllAsync(new TransportDriverFilterDto { CampusId = 1, PageNumber = 11, PageSize = 100 });
+                AssertTrue(page11Drivers != null && page11Drivers.TotalCount == pagedDrivers!.TotalCount && page11Drivers.Items.Count() == 0,
+                    $"Driver Master: Page 11 returns empty items with accurate TotalCount={page11Drivers?.TotalCount}");
+
+                // Regression Test 6.2: Campus Isolation (CampusId=2)
+                var campus2Drivers = await driverRepo.GetAllAsync(new TransportDriverFilterDto { CampusId = 2, PageNumber = 1, PageSize = 100 });
+                AssertTrue(campus2Drivers != null && campus2Drivers.TotalCount == 0 && campus2Drivers.Items.Count() == 0,
+                    "Driver Master: Campus isolation verified (CampusId=2 returns 0 drivers)");
+
+                // Regression Test 6.3: Strict Role Membership & Exclusion of Transport Managers and Attendants
+                var venkatDriver = pagedDrivers!.Items.FirstOrDefault(d => d.StaffId == 1065);
+                AssertTrue(venkatDriver != null && venkatDriver.DriverId == 1068 && venkatDriver.DriverName == "Venkat Rao" && venkatDriver.LicenseNumber == "AP-07-2022-0099",
+                    "Driver Master: Driver identity consistent with DriverId=1068, StaffId=1065, Venkat Rao, AP-07-2022-0099");
+
+                var managerStaff = pagedDrivers!.Items.Where(d => d.StaffId == 1125 || d.StaffId == 1128).ToList();
+                AssertTrue(managerStaff.Count == 0,
+                    "Driver Master: Transport Managers (Staff 1125, 1128) are strictly EXCLUDED from driver master");
+
+                var attendantStaff = pagedDrivers!.Items.Where(d => d.StaffId == 1088).ToList();
+                AssertTrue(attendantStaff.Count == 0,
+                    "Driver Master: Attendant (Staff 1088) is strictly EXCLUDED from driver master");
+
+                var driverReps = (await reportRepo!.GetDriverReportsAsync(new ReportFilterDto { CampusId = 1 })).ToList();
+                var venkatReport = driverReps.FirstOrDefault(d => d.DriverName == "Venkat Rao");
+                AssertTrue(venkatReport != null && venkatReport.LicenseNumber == "AP-07-2022-0099",
+                    "Driver Reports: Returns Venkat Rao consistent with Driver Master");
+                if (venkatReport != null)
+                {
+                    AssertTrue(venkatReport.CurrentBus != "Assigned Bus" && venkatReport.CurrentRoute != "Assigned Route" && venkatReport.BusAttendant != "Attendant",
+                        "Driver Reports: Generic placeholder strings removed, actual related values or null returned");
+                }
+
+                var dashData = await dashRepo!.GetDashboardAsync();
+                AssertTrue(dashData.Summary.TotalDrivers >= 1 && dashData.Summary.ActiveDrivers >= 1,
+                    $"Dashboard: Driver count consistent with Master & Reports (TotalDrivers={dashData.Summary.TotalDrivers}, ActiveDrivers={dashData.Summary.ActiveDrivers})");
+
+                // Regression Test 6.4: Student Transport Assignments 22, 26, 27, 29 details resolution
+                var allStas = (await studentAssignRepo!.GetAllAsync(new StudentTransportAssignmentFilterDto { PageNumber = 1, PageSize = 50 })).Items.ToList();
+                var sta22 = allStas.FirstOrDefault(s => s.AssignmentId == 22);
+                AssertTrue(sta22 != null && sta22.StudentName == "Lasya G" && sta22.AdmissionNo == "ADM-55",
+                    "Student Transport Assignment 22: Resolves studentName='Lasya G' and admissionNo='ADM-55'");
+
+                var sta26 = allStas.FirstOrDefault(s => s.AssignmentId == 26);
+                AssertTrue(sta26 != null && sta26.StudentName == "kiran j" && sta26.AdmissionNo == "MADM-0068",
+                    "Student Transport Assignment 26: Resolves studentName='kiran j' and admissionNo='MADM-0068'");
+
+                var sta27 = allStas.FirstOrDefault(s => s.AssignmentId == 27);
+                AssertTrue(sta27 != null && sta27.StudentName == "sairam y" && sta27.AdmissionNo == "MADM-0086",
+                    "Student Transport Assignment 27: Resolves studentName='sairam y' and admissionNo='MADM-0086'");
+
+                var sta29 = allStas.FirstOrDefault(s => s.AssignmentId == 29);
+                AssertTrue(sta29 != null && sta29.StudentName == "tina r" && sta29.AdmissionNo == "MADM-0098",
+                    "Student Transport Assignment 29: Resolves studentName='tina r' and admissionNo='MADM-0098'");
+            }
+            catch (Exception ex)
+            {
+                AssertTrue(false, "Regression Tests Execution", ex.Message);
             }
 
             // -------------------------------------------------------------
