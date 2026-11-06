@@ -1,0 +1,79 @@
+/* Match the Admin Transport report palette while keeping manager-only scope. */
+.tm-transport-page .cms-transport-report-dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tm-transport-page .cms-transport-report-dashboard-stats .cms-transport-stat {
+  min-width: 0;
+}
+
+.tm-transport-page .cms-table thead,
+.tm-transport-page .cms-table thead th,
+.tm-transport-page .cms-table th {
+  background: #e8edd6 !important;
+  background-color: #e8edd6 !important;
+}
+
+.tm-transport-page .cms-table thead th,
+.tm-transport-page .cms-table th {
+  color: #71805c !important;
+  border-bottom-color: #d5ddbd !important;
+}
+
+.tm-transport-page .cms-table tbody tr {
+  background: #fff;
+}
+
+.tm-transport-page .cms-table tbody td {
+  background: #fff;
+  border-bottom-color: #d5ddbd;
+}
+
+.tm-transport-page .cms-transport-pagination {
+  border-top-color: #d5ddbd;
+  background: #e8edd6;
+  color: #71805c;
+}
+
+.tm-transport-page .cms-transport-pagination > div > span {
+  color: #39442b;
+}
+
+[data-theme="dark"] .tm-transport-page .cms-table thead,
+[data-theme="dark"] .tm-transport-page .cms-table thead th,
+[data-theme="dark"] .tm-transport-page .cms-table th {
+  background: #1c3024 !important;
+  background-color: #1c3024 !important;
+  color: #d6e1da !important;
+  border-bottom-color: #294536 !important;
+}
+
+[data-theme="dark"] .tm-transport-page .cms-table tbody tr,
+[data-theme="dark"] .tm-transport-page .cms-table tbody td {
+  background: #122219;
+  border-bottom-color: #294536;
+}
+
+[data-theme="dark"] .tm-transport-page .cms-transport-pagination {
+  border-top-color: #294536;
+  background: #1c3024;
+  color: #b9c9c0;
+}
+
+[data-theme="dark"] .tm-transport-page .cms-transport-pagination > div > span {
+  color: #e6eee9;
+}
+
+@media (max-width: 900px) {
+  .tm-transport-page .cms-transport-report-dashboard-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .tm-transport-page .cms-transport-report-dashboard-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

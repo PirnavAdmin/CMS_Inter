@@ -1,9 +1,9 @@
 export const campusContentDefaults = {
   collegeName: "Pirnav College",
-  landingBadge: "A smarter campus starts here",
-  landingHeadline: "Learn, grow and succeed with a connected college experience.",
+  landingBadge: "A Smarter Campus Starts Here",
+  landingHeadline: "Learn. Grow. Succeed Together. A Connected College Experience.",
   landingDescription:
-    "Bring students, faculty, academics, examinations, fees and administration together in one clear, reliable platform built for Pirnav College.",
+    "PIRNAV Intermediate College Management System brings students, faculty, academics and administration together in one integrated platform for better education and brighter futures.",
   landingBenefit1: "Faster daily operations",
   landingBenefit2: "Clear academic visibility",
   landingBenefit3: "Better student outcomes",
@@ -11,9 +11,9 @@ export const campusContentDefaults = {
   landingLoginButton: "Login",
   footerDescription:
     "One connected platform for academics, admissions, administration and student success.",
-  contactAddress: "Vijayawada, Andhra Pradesh",
-  contactEmail: "support@pirnavcollege.com",
-  contactPhone: "+91 9398649798",
+  contactAddress: "Dwarakapuram, Pirnav, Nizamabad, Telangana - 503224",
+  contactEmail: "pirnavjuniorcollege@gmail.com",
+  contactPhone: "+91 9908364909",
   loginCollegeName: "Pirnav College Of Intermediate",
   loginTagline:
     "“Empowering young minds with academic excellence, ethical values, and a strong foundation for a bright future.”",

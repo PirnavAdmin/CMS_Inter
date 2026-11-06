@@ -15,11 +15,8 @@ namespace CollegeManagement.API.DTOs.Result
         public string? ProgramId { get; set; }
         public string? ProgramName { get; set; }
         public int? SectionId { get; set; }
-        [Required]
         public int ExamId { get; set; }
         public int ExaminationId { get => ExamId; set => ExamId = value; }
         public DateTime? PublishDate { get; set; } = DateTime.UtcNow;
     }
 }
-
-

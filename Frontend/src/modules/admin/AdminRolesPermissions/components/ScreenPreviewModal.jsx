@@ -408,6 +408,7 @@ export function ScreenPreviewModal({
                   <div style={{ flex: 1, position: "relative", overflow: "auto", background: "#f8fafc" }}>
                     <img
                       src={imageUrl}
+                      onError={() => setImageUrl(null)}
                       alt={screen.name}
                       style={{ width: "100%", height: "auto", display: "block" }}
                     />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout from "@/shared/layouts/AuthLayout.jsx";
 import { Field, useForm } from "@/shared/components/Ui.jsx";
@@ -56,6 +56,13 @@ export default function Login() {
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const safetyTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -106,6 +113,12 @@ export default function Login() {
     if (!remember) saveRememberedCredentials(null);
 
     setBusy(true);
+    if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
+    safetyTimeoutRef.current = setTimeout(() => {
+      setBusy(false);
+      setError("Sign-in request timed out. Please check your connection and try again.");
+    }, 12000);
+
     // A login attempt must not inherit authorization from an older session.
     clearAuthSession();
     try {
@@ -116,8 +129,12 @@ export default function Login() {
         navigate("/super-admin/dashboard", { replace: true });
         return;
       }
+
+      // Non-blocking bounded permissions fetch (max 2.5s) so login navigation is never delayed
       try {
-        const permsRes = await getCurrentUserPermissions();
+        const permsPromise = getCurrentUserPermissions();
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
+        const permsRes = await Promise.race([permsPromise, timeoutPromise]);
         if (permsRes?.data && Array.isArray(permsRes.data)) {
           result.user.permissions = permsRes.data;
           saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
@@ -144,7 +161,7 @@ export default function Login() {
           String(result.user?.role || "").toLowerCase().includes("warden") ||
           String(result.user?.designation || "").toLowerCase().includes("warden"));
       const isInventory = !isAdmin && (userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper");
-      const isExamCell = !isAdmin && !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell");
+      const isExamCell = !isAdmin && !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell" || userRole.includes("exam"));
       const isPrincipal = !isAdmin && !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
       const isAccountant =
         !isAdmin &&
@@ -185,6 +202,9 @@ export default function Login() {
         userRole.includes("parent") ||
         result.roleType === "parent");
 
+      if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
+      setBusy(false);
+
       if (isAdmin) {
         navigate("/dashboard", { replace: true });
       } else if (isTransportManager) {
@@ -219,7 +239,7 @@ export default function Login() {
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
       } else {
-        navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
+        navigate(result.user?.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
       }
     } catch (loginError) {
       clearAuthSession();
@@ -240,10 +260,13 @@ export default function Login() {
           ? serverMessage
           : [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
           ? "Invalid Email or Password"
+          : loginError?.code === "ECONNABORTED" || loginError?.message?.includes("timeout")
+          ? "Sign-in request timed out. Please check your connection and try again."
           : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.";
 
       setError(displayMessage);
     } finally {
+      if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
       setBusy(false);
     }
   };

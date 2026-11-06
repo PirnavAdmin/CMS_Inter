@@ -26,6 +26,7 @@ import reportsImage from "@/assets/sidebar-3d/reports-analytics.png";
 import clockImage from "@/assets/settings-3d/attendance-timing.png";
 import verifyImage from "@/assets/settings-3d/audit-logs.png";
 import "@/modules/admin/AdminDashboard/DashboardPage.css";
+import { enrichExaminations } from "../services/examCellMasterData.js";
 
 export const payload = (response) => response?.data?.data ?? response?.data ?? response;
 export const records = (response) => {
@@ -270,6 +271,10 @@ export default function Dashboard() {
       })
     ).then(async (responses) => {
       const values = Object.fromEntries(responses.map(([key, value]) => [key, value]));
+      values.exams = enrichExaminations(records(values.exams));
+      if (values.exams) {
+        values.exams = enrichExaminations(records(values.exams));
+      }
       const failures = Object.fromEntries(responses.filter(([, , error]) => error).map(([key, , error]) => [key, error]));
 
       if (failures.evaluations && /format|submitted/i.test(failures.evaluations)) {
@@ -414,7 +419,7 @@ export default function Dashboard() {
     { label: "Time Table", to: `${examCellBase}/exam-timetable`, icon: timetableImage, tone: "cyan" },
     { label: "Marks Entry", to: `${examCellBase}/marks-entry`, icon: marksImage, tone: "violet" },
     { label: "Marks Verification", to: `${examCellBase}/marks-verification`, icon: verifyImage, tone: "blue" },
-    { label: "Results", to: `${examCellBase}/results`, icon: resultsImage, tone: "blue" },
+    { label: "Results", to: `${examCellBase}/results`, icon: resultsImage, tone: "emerald" },
     { label: "Attendance", to: `${examCellBase}/attendance`, icon: attendanceImage, tone: "green" },
     { label: "My Attendance", to: `${examCellBase}/check-in-out`, icon: attendanceImage, tone: "green" },
     { label: "Certificates", to: `${examCellBase}/certificates`, icon: certificateImage, tone: "orange" },
@@ -465,9 +470,9 @@ export default function Dashboard() {
         {/* Quick Actions Row with 3D Icons & Admin Tones */}
         <nav className="dashboard-quick-actions" aria-label="Quick Actions">
           <h2>Quick Actions</h2>
-          <div className="dashboard-quick-actions-list" style={{ gridTemplateColumns: "repeat(9, minmax(0, 1fr))" }}>
+          <div className="dashboard-quick-actions-list" style={{ display: "flex", flexWrap: "wrap", gap: "6px", width: "100%", alignItems: "center" }}>
             {quickActions.map(({ label, to, icon, tone }) => (
-              <Link key={label} to={to} className={`dashboard-quick-action tone-${tone}`}>
+              <Link key={label} to={to} className={`dashboard-quick-action tone-${tone}`} style={{ flex: "1 1 auto", minWidth: "max-content", padding: "5px 12px" }}>
                 <span className="dashboard-quick-action-icon">
                   <img src={icon} alt="" aria-hidden="true" />
                 </span>

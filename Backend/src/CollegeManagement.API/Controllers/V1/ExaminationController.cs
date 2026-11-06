@@ -620,13 +620,25 @@ namespace CollegeManagement.API.Controllers.V1
                 ? parsedStaffId
                 : null;
 
-            if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal") && !User.IsInRole("Examination Cell"))
+            bool isRosterManager = User.IsInRole("Admin") ||
+                                   User.IsInRole("Super Admin") ||
+                                   User.IsInRole("SuperAdmin") ||
+                                   User.IsInRole("Principal") ||
+                                   User.IsInRole("Examination Cell");
+
+            if (isRosterManager)
             {
-                staffId = callerStaffId ?? 0;
+                if (staffId.HasValue && staffId.Value <= 0)
+                {
+                    staffId = null;
+                }
             }
-            else if (!staffId.HasValue || staffId.Value <= 0)
+            else
             {
-                staffId = callerStaffId;
+                if (!staffId.HasValue || staffId.Value <= 0)
+                {
+                    staffId = callerStaffId ?? 0;
+                }
             }
 
             var resolvedCampusId = ResolveCampusId(campusId);

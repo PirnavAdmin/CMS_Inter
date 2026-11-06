@@ -17,22 +17,43 @@ export async function loginPreview(email, password) {
 }
 
 export function getPlatformSession() {
+  // 1. Prioritize verified live backend JWT token
+  try {
+    const token = getAuthToken();
+    if (token && token.split(".").length === 3) {
+      const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const claims = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=")));
+      const roles = [claims.role, claims.Role, claims["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]].flat().filter(Boolean);
+      if (Number.isFinite(claims.exp) && claims.exp * 1000 > Date.now() && roles.some(isSuperAdminRole)) {
+        const user = getAuthUser();
+        return {
+          preview: false,
+          role: "SuperAdmin",
+          name: user?.fullName || user?.name || claims.unique_name || claims.name || "Super Admin",
+          email: user?.email || claims.email || claims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || "",
+          expiresAt: claims.exp * 1000,
+        };
+      }
+    }
+  } catch {
+    /* Token decode failed, fallback to preview check */
+  }
+
+  // 2. Fallback to developer preview session if enabled
   if (previewEnabled) {
     try {
       const session = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
-      if (session?.preview === true && session.email === previewEmail && isSuperAdminRole(session.role) && session.expiresAt > Date.now()) return session;
-    } catch { /* Invalid preview sessions never grant access. */ }
+      if (session?.preview === true && session.email === previewEmail && isSuperAdminRole(session.role) && session.expiresAt > Date.now()) {
+        return session;
+      }
+    } catch {
+      /* Invalid preview sessions never grant access. */
+    }
   }
-  try {
-    const token = getAuthToken();
-    if (!token || token.split(".").length !== 3) return null;
-    const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const claims = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=")));
-    const roles = [claims.role, claims.Role, claims["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"]].flat();
-    if (!Number.isFinite(claims.exp) || claims.exp * 1000 <= Date.now() || !roles.some(isSuperAdminRole)) return null;
-    const user = getAuthUser();
-    return { preview: false, role: "SuperAdmin", name: user?.fullName || user?.name || "Super Admin", email: user?.email || "", expiresAt: claims.exp * 1000 };
-  } catch { return null; }
+
+  return null;
 }
 
-export function logoutPreview() { sessionStorage.removeItem(SESSION_KEY); }
+export function logoutPreview() {
+  sessionStorage.removeItem(SESSION_KEY);
+}

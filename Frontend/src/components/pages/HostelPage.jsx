@@ -1419,7 +1419,7 @@ export default function HostelPage() {
 
   // ── Enriched Categories with Live Room & Bed Counts & Block Availability ───
   const enrichedCategories = useMemo(() => {
-    return categories.map((cat) => {
+    return categories.filter((cat) => !/deluxe/i.test(cat.name || cat.specification || "")).map((cat) => {
       const catRooms = rooms.filter(
         (r) =>
           (cat.id && Number(r.roomTypeId) === Number(cat.id)) ||
@@ -1769,11 +1769,13 @@ export default function HostelPage() {
             const finalBedCapacity = Number(override?.capacity || bedCapacity);
 
             const matchCatObj = categories.find((c) =>
-              (Number(c.capacity) === finalBedCapacity && (c.acType || "").toLowerCase() === (finalAcMode || "").toLowerCase()) ||
-              Number(c.capacity) === finalBedCapacity ||
-              (catName && c.name && String(c.name).toLowerCase().includes(String(catName).toLowerCase()))
-            ) || categories[0];
+              !/deluxe/i.test(c.name || c.specification || "") &&
+              ((Number(c.capacity) === finalBedCapacity && (c.acType || "").toLowerCase() === (finalAcMode || "").toLowerCase()) ||
+              Number(c.capacity) === finalBedCapacity)
+            ) || null;
             const matchCat = matchCatObj?.id || defaultRoomType;
+            const cleanTypeName = `${finalBedCapacity}-Share ${finalAcMode === "AC" ? "AC" : "Non-AC"}`;
+            const finalRoomType = (matchCatObj?.name && !/deluxe/i.test(matchCatObj.name)) ? matchCatObj.name : cleanTypeName;
 
             let newRoomId = null;
             const existingRoom = rooms.find(
@@ -1860,7 +1862,7 @@ export default function HostelPage() {
               hostelId: targetHostelId,
               roomTypeId: Number(matchCat),
               floor: fc.floorLabel,
-              type: matchCatObj?.name || `${catName} (${finalAcMode || "Non-AC"})`,
+              type: finalRoomType,
               acType: finalAcMode,
               capacity: bedsToGen,
               occupied: 0,
@@ -9886,7 +9888,6 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
                 <option value="" disabled>Select Category...</option>
                 <option value="Boys">Boys</option>
                 <option value="Girls">Girls</option>
-                <option value="Co-ed">Co-ed</option>
                 <option value="Staff/Guest">Staff/Guest</option>
               </select>
             </div>
@@ -10057,7 +10058,7 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
 
     // Handlers for Custom Categories
     const handleAddCustomCategory = (floorIndex) => {
-      const defaultName = floorIndex === 0 ? "Deluxe Executive Suite" : "Premium Suite";
+      const defaultName = floorIndex === 0 ? "Executive Suite" : "Premium Suite";
       setFloorConfigs((prev) =>
         prev.map((fc) =>
           fc.floorIndex === floorIndex
@@ -10569,7 +10570,7 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                                   <input
                                     type="text"
                                     className="cms-custom-cat-name-input"
-                                    placeholder="e.g. Deluxe Executive Suite"
+                                    placeholder="e.g. Executive Suite"
                                     value={ca.name || ""}
                                     onChange={(e) =>
                                       handleUpdateCustomCategory(fc.floorIndex, ca.id, "name", e.target.value)
@@ -10932,7 +10933,6 @@ function CategoryModal({ modal, closeModal, handleSaveCategory }) {
               >
                 <option value="AC Accommodation">AC Accommodation</option>
                 <option value="Non-AC Standard">Non-AC Standard</option>
-                <option value="Special / Deluxe AC">Special / Deluxe AC</option>
               </select>
             </div>
             <div>
@@ -10993,6 +10993,289 @@ function CategoryModal({ modal, closeModal, handleSaveCategory }) {
 
 // Room Modal (Matching Screenshot 2: exactly 5 fields)
 // ── Room Modal (Unified Workflow: Block -> Floor -> Room Number -> Category -> AC -> Sharing -> Capacity -> Beds -> Save) ──
+function SearchableSharingDropdown({
+  value,
+  onChange,
+  options = [],
+  height = 38,
+  fontSize = 12,
+  minWidth = 160,
+  style = {},
+  disabled = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedOpt = useMemo(() => {
+    const valStr = String(value || "1");
+    const num = parseInt(valStr.replace(/\D/g, ""), 10);
+    const found = options.find((o) => String(o.key) === valStr || Number(o.capacity) === num);
+    if (found) return found;
+    if (num && num > 0) {
+      return {
+        key: String(num),
+        label: `${num}-Share`,
+        capacity: num,
+        icon: num === 1 ? "🛏️" : num === 2 ? "🛏️🛏️" : num === 3 ? "🛏️🛏️🛏️" : `🛏️x${num}`,
+      };
+    }
+    return options[0] || { key: "1", label: "1-Share", capacity: 1, icon: "🛏️" };
+  }, [value, options]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        if (isOpen) {
+          const num = parseInt(query.replace(/\D/g, ""), 10);
+          if (num > 0 && num <= 99) {
+            onChange(String(num));
+          }
+          setIsOpen(false);
+          setQuery("");
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, query, onChange]);
+
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    const directMatch = options.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        String(o.capacity).includes(q) ||
+        `${o.capacity} bed`.includes(q)
+    );
+
+    const num = parseInt(q.replace(/\D/g, ""), 10);
+    if (num > 0 && num <= 99 && !directMatch.some((o) => o.capacity === num)) {
+      return [
+        {
+          key: String(num),
+          label: `${num}-Share`,
+          capacity: num,
+          icon: num === 1 ? "🛏️" : num === 2 ? "🛏️🛏️" : num === 3 ? "🛏️🛏️🛏️" : `🛏️x${num}`,
+          isCustomInput: true,
+        },
+        ...directMatch,
+      ];
+    }
+    return directMatch;
+  }, [options, query]);
+
+  const handleSelect = (key) => {
+    onChange(String(key));
+    setIsOpen(false);
+    setQuery("");
+  };
+
+  const displayLabel = isOpen
+    ? query
+    : `${selectedOpt.icon} ${selectedOpt.label} (${selectedOpt.capacity} Bed${selectedOpt.capacity > 1 ? "s" : ""})`;
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: "relative",
+        width: "100%",
+        minWidth: minWidth,
+        ...style,
+      }}
+    >
+      <div
+        className="cms-alloc-modal-select"
+        onClick={() => {
+          if (disabled) return;
+          if (!isOpen) {
+            setIsOpen(true);
+            setQuery(String(selectedOpt.capacity || ""));
+            setTimeout(() => inputRef.current?.select(), 10);
+          }
+        }}
+        style={{
+          height,
+          minHeight: height,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 28px 0 10px",
+          cursor: disabled ? "not-allowed" : "text",
+          borderColor: isOpen ? "var(--cms-primary)" : undefined,
+          boxShadow: isOpen ? "0 0 0 2px color-mix(in srgb, var(--cms-primary) 18%, transparent)" : undefined,
+          userSelect: "none",
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          disabled={disabled}
+          value={displayLabel}
+          placeholder="Type or select sharing (e.g. 7)..."
+          onChange={(e) => {
+            const text = e.target.value;
+            setQuery(text);
+            if (!isOpen) setIsOpen(true);
+            const num = parseInt(text.replace(/\D/g, ""), 10);
+            if (num > 0 && num <= 99) {
+              onChange(String(num));
+            }
+          }}
+          onFocus={() => {
+            if (!isOpen) {
+              setIsOpen(true);
+              setQuery(String(selectedOpt.capacity || ""));
+              setTimeout(() => inputRef.current?.select(), 10);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const num = parseInt(query.replace(/\D/g, ""), 10);
+              if (num > 0 && num <= 99) {
+                handleSelect(String(num));
+                return;
+              }
+              if (filteredOptions.length > 0) {
+                handleSelect(filteredOptions[0].key);
+              }
+            } else if (e.key === "Escape") {
+              setIsOpen(false);
+              setQuery("");
+            }
+          }}
+          style={{
+            width: "100%",
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            color: "var(--cms-text)",
+            fontSize,
+            fontWeight: 700,
+            cursor: "text",
+            padding: 0,
+            margin: 0,
+          }}
+        />
+        <div
+          className="cms-alloc-modal-chevron"
+          style={{
+            position: "absolute",
+            right: 8,
+            top: "50%",
+            transform: `translateY(-50%) ${isOpen ? "rotate(180deg)" : ""}`,
+            transition: "transform 0.15s ease",
+            pointerEvents: "none",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <ChevronDown size={height <= 34 ? 13 : 14} />
+        </div>
+      </div>
+
+      {isOpen && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            background: "var(--cms-surface, #ffffff)",
+            border: "1px solid var(--cms-border, #cbd5e1)",
+            borderRadius: 8,
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18)",
+            maxHeight: 220,
+            overflowY: "auto",
+          }}
+        >
+          {filteredOptions.length === 0 ? (
+            <div
+              style={{
+                padding: "9px 12px",
+                fontSize: 11.5,
+                color: "var(--cms-muted)",
+                textAlign: "center",
+              }}
+            >
+              No matching sharing options. Type a number like <strong>7</strong> or <strong>10</strong>.
+            </div>
+          ) : (
+            filteredOptions.map((opt) => {
+              const isSelected = String(opt.key) === String(selectedOpt.key);
+              return (
+                <div
+                  key={opt.key}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelect(opt.key);
+                  }}
+                  style={{
+                    padding: "7px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    fontWeight: isSelected ? 700 : 600,
+                    cursor: "pointer",
+                    background: isSelected
+                      ? "color-mix(in srgb, var(--cms-primary, #526e34) 12%, transparent)"
+                      : "transparent",
+                    color: isSelected ? "var(--cms-primary, #526e34)" : "var(--cms-text)",
+                    borderBottom: "1px solid var(--cms-border-subtle, rgba(0,0,0,0.04))",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = isSelected
+                      ? "color-mix(in srgb, var(--cms-primary, #526e34) 18%, transparent)"
+                      : "var(--cms-subtle, #f8fafc)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isSelected
+                      ? "color-mix(in srgb, var(--cms-primary, #526e34) 12%, transparent)"
+                      : "transparent";
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 13 }}>{opt.icon}</span>
+                    <span>{opt.label}</span>
+                    {opt.isCustomInput && (
+                      <span
+                        style={{
+                          fontSize: 9.5,
+                          fontWeight: 700,
+                          padding: "1px 5px",
+                          borderRadius: 4,
+                          background: "var(--cms-green-soft, #e8f5e9)",
+                          color: "var(--cms-green, #2e7d32)",
+                        }}
+                      >
+                        Custom
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "var(--cms-muted, #64748b)",
+                    }}
+                  >
+                    {opt.capacity} Bed{opt.capacity > 1 ? "s" : ""}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RoomModal({
   modal,
   closeModal,
@@ -11019,6 +11302,12 @@ function RoomModal({
       4: "₹6,000/mo",
       5: "₹5,000/mo",
       6: "₹4,500/mo",
+      7: "₹4,000/mo",
+      8: "₹3,800/mo",
+      9: "₹3,500/mo",
+      10: "₹3,200/mo",
+      11: "₹3,000/mo",
+      12: "₹2,800/mo",
     },
     "Non-AC": {
       1: "₹7,000/mo",
@@ -11027,6 +11316,12 @@ function RoomModal({
       4: "₹3,500/mo",
       5: "₹3,000/mo",
       6: "₹2,500/mo",
+      7: "₹2,200/mo",
+      8: "₹2,000/mo",
+      9: "₹1,800/mo",
+      10: "₹1,600/mo",
+      11: "₹1,500/mo",
+      12: "₹1,400/mo",
     },
   };
 
@@ -11650,27 +11945,53 @@ function RoomModal({
   // Per-floor inline selection state ("ee floorki aa floor select chesukunela kavali")
   const [floorAddState, setFloorAddState] = useState({});
 
+  const getChosenOption = (rawKey) => {
+    const keyStr = String(rawKey || "1");
+    const num = parseInt(keyStr.replace(/\D/g, ""), 10) || 1;
+    const found = sharingOptions.find((o) => String(o.key) === keyStr || Number(o.capacity) === num);
+    if (found) return found;
+    return formatSharingOption(num);
+  };
+
+  const formatSharingOption = (cap) => {
+    const num = Math.max(1, parseInt(cap, 10) || 1);
+    let icon = "🛏️";
+    if (num === 2) icon = "🛏️🛏️";
+    else if (num === 3) icon = "🛏️🛏️🛏️";
+    else if (num >= 4) icon = `🛏️x${num}`;
+    return {
+      key: String(num),
+      label: `${num}-Share`,
+      capacity: num,
+      icon,
+    };
+  };
+
   const sharingOptions = useMemo(() => {
-    const list = [
-      { key: "1", label: "Single Bed (1-Share)", capacity: 1, icon: "🛏️" },
-      { key: "2", label: "2-Share (Double Bed)", capacity: 2, icon: "🛏️🛏️" },
-      { key: "3", label: "3-Share (Triple Bed)", capacity: 3, icon: "🛏️🛏️🛏️" },
-      { key: "4", label: "4-Share (Four Bed)", capacity: 4, icon: "🛏️x4" },
-      { key: "5", label: "5-Share (Five Bed)", capacity: 5, icon: "🛏️x5" },
-      { key: "6", label: "6-Share (Six Bed)", capacity: 6, icon: "🛏️x6" },
-    ];
-    (categories || []).forEach((cat) => {
-      if (cat && !list.some((item) => String(item.capacity) === String(cat.capacity) && item.label === cat.name)) {
-        list.push({
-          key: `cat-${cat.id}`,
-          label: `${cat.name || "Category"} (${cat.capacity || 2}-Share)`,
-          capacity: Number(cat.capacity || 2),
-          icon: Number(cat.capacity) === 1 ? "🛏️" : "🛏️🛏️",
-        });
+    const list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(formatSharingOption);
+    const used = new Set();
+    (floorConfigs || []).forEach((fc) => {
+      (fc.categoryAllocations || []).forEach((a) => {
+        if (a.capacity) used.add(Number(a.capacity));
+      });
+    });
+    if (selectedSharingKey) {
+      const p = parseInt(selectedSharingKey, 10);
+      if (p) used.add(p);
+    }
+    Object.values(floorAddState || {}).forEach((cfg) => {
+      if (cfg?.sharingKey) {
+        const p = parseInt(cfg.sharingKey, 10);
+        if (p) used.add(p);
       }
     });
-    return list;
-  }, [categories]);
+    used.forEach((cap) => {
+      if (cap > 0 && !list.some((item) => item.capacity === cap)) {
+        list.push(formatSharingOption(cap));
+      }
+    });
+    return list.sort((a, b) => a.capacity - b.capacity);
+  }, [floorConfigs, selectedSharingKey, floorAddState]);
 
   const getFloorAddConfig = (floorIndex) => {
     const cur = floorAddState[floorIndex];
@@ -11696,25 +12017,29 @@ function RoomModal({
   };
 
   const handleTopSharingChange = (newKey) => {
-    setSelectedSharingKey(newKey);
-    const chosen = sharingOptions.find((o) => o.key === newKey) || sharingOptions[0];
-    const cap = Number(chosen.capacity || 1);
+    const num = parseInt(String(newKey).replace(/\D/g, ""), 10) || 1;
+    const cleanKey = String(num);
+    setSelectedSharingKey(cleanKey);
+    const chosen = getChosenOption(cleanKey);
+    const cap = Number(chosen.capacity || num);
     setSelectedTariff(STANDARD_TARIFFS[selectedAcType]?.[cap] || (selectedAcType === "AC" ? "₹8,500/mo" : "₹5,500/mo"));
   };
 
   const handleTopAcChange = (newAc) => {
     setSelectedAcType(newAc);
-    const chosen = sharingOptions.find((o) => o.key === selectedSharingKey) || sharingOptions[0];
+    const chosen = getChosenOption(selectedSharingKey);
     const cap = Number(chosen.capacity || 1);
     setSelectedTariff(STANDARD_TARIFFS[newAc]?.[cap] || (newAc === "AC" ? "₹8,500/mo" : "₹5,500/mo"));
   };
 
   const handleFloorSharingChange = (floorIndex, newKey) => {
-    const chosen = sharingOptions.find((o) => o.key === newKey) || sharingOptions[0];
+    const num = parseInt(String(newKey).replace(/\D/g, ""), 10) || 1;
+    const cleanKey = String(num);
+    const chosen = getChosenOption(cleanKey);
     const curCfg = getFloorAddConfig(floorIndex);
-    const cap = Number(chosen.capacity || 1);
+    const cap = Number(chosen.capacity || num);
     const newTariff = STANDARD_TARIFFS[curCfg.acType]?.[cap] || (curCfg.acType === "AC" ? "₹8,500/mo" : "₹5,500/mo");
-    setFloorAddConfig(floorIndex, { sharingKey: newKey, tariff: newTariff });
+    setFloorAddConfig(floorIndex, { sharingKey: cleanKey, tariff: newTariff });
   };
 
   const handleFloorAcChange = (floorIndex, newAc) => {
@@ -11746,8 +12071,9 @@ function RoomModal({
   const handleAddRoomsDirect = (floorIndices, chosenOption, acType, roomsCount, customTariff, customStatus) => {
     const targetFloors = Array.isArray(floorIndices) ? floorIndices : [Number(floorIndices)];
     const count = Math.max(1, Number(roomsCount) || 1);
-    const validChosen = chosenOption || sharingOptions[0];
-    const cap = Number(validChosen.capacity || 1);
+    const numCap = parseInt(String(chosenOption?.capacity || chosenOption?.key || chosenOption || 1).replace(/\D/g, ""), 10) || 1;
+    const validChosen = (chosenOption && chosenOption.capacity) ? chosenOption : formatSharingOption(numCap);
+    const cap = Number(validChosen.capacity || numCap);
     const defaultFee = STANDARD_TARIFFS[acType]?.[cap] || (acType === "AC" ? "₹8,500/mo" : "₹5,500/mo");
     const finalTariff = customTariff || defaultFee;
     const finalStatus = customStatus || "Active";
@@ -11758,14 +12084,14 @@ function RoomModal({
         const currentAllocs = getFloorCategories(fc);
         const newAlloc = {
           id: `alloc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          categoryKey: validChosen.key,
-          name: validChosen.label,
+          categoryKey: String(cap),
+          name: `${cap}-Share`,
           capacity: cap,
           acType: acType,
           rooms: count,
           tariff: finalTariff,
           status: finalStatus,
-          icon: validChosen.icon,
+          icon: cap === 1 ? "🛏️" : cap === 2 ? "🛏️🛏️" : cap === 3 ? "🛏️🛏️🛏️" : `🛏️x${cap}`,
           floorIndex: fc.floorIndex,
         };
         const nextAllocs = [...currentAllocs, newAlloc];
@@ -11787,7 +12113,7 @@ function RoomModal({
   };
 
   const handleAddRoomsToFloor = () => {
-    const chosenOption = sharingOptions.find((o) => o.key === selectedSharingKey) || sharingOptions[0];
+    const chosenOption = getChosenOption(selectedSharingKey);
     const targetFloors = targetFloorChoice === "all"
       ? floorConfigs.map((fc) => fc.floorIndex)
       : [Number(targetFloorChoice)];
@@ -11888,7 +12214,8 @@ function RoomModal({
             const cap = Number(updates.capacity) || 1;
             merged.icon = cap === 1 ? "🛏️" : cap === 2 ? "🛏️🛏️" : cap === 3 ? "🛏️🛏️🛏️" : `🛏️x${cap}`;
             const opt = sharingOptions.find((o) => Number(o.capacity) === cap);
-            if (opt) merged.name = opt.label;
+            merged.name = opt ? opt.label : `${cap}-Share`;
+            merged.capacity = cap;
           }
           if ((updates.capacity !== undefined || updates.acType !== undefined) && updates.tariff === undefined) {
             const cap = Number(merged.capacity) || 1;
@@ -12646,6 +12973,13 @@ function RoomModal({
                               <option value={4}>🛏️x4 4-Share (Four Bed • 4 Beds)</option>
                               <option value={5}>🛏️x5 5-Share (Five Bed • 5 Beds)</option>
                               <option value={6}>🛏️x6 6-Share (Six Bed • 6 Beds)</option>
+                              <option value={7}>🛏️x7 7-Share (Seven Bed • 7 Beds)</option>
+                              <option value={8}>🛏️x8 8-Share (Eight Bed • 8 Beds)</option>
+                              <option value={9}>🛏️x9 9-Share (Nine Bed • 9 Beds)</option>
+                              <option value={10}>🛏️x10 10-Share (Ten Bed • 10 Beds)</option>
+                              {activeTargetCap > 10 && (
+                                <option value={activeTargetCap}>🛏️x{activeTargetCap} {activeTargetCap}-Share ({activeTargetCap} Beds)</option>
+                              )}
                             </select>
                             <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
                           </div>
@@ -12664,8 +12998,8 @@ function RoomModal({
                               className="cms-alloc-modal-select"
                               style={{ fontWeight: 700 }}
                             >
-                              <option value="AC">❄️ Air Conditioned (AC Room)</option>
-                              <option value="Non-AC">💨 Standard (Non-AC Room)</option>
+                              <option value="AC">❄️ AC Room</option>
+                              <option value="Non-AC">💨 Non-AC Room</option>
                             </select>
                             <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
                           </div>
@@ -13075,21 +13409,13 @@ function RoomModal({
                   <label style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-text)", display: "block", marginBottom: 4 }}>
                     Sharing Layout
                   </label>
-                  <div style={{ position: "relative" }}>
-                    <select
-                      value={selectedSharingKey}
-                      onChange={(e) => handleTopSharingChange(e.target.value)}
-                      className="cms-alloc-modal-select"
-                      style={{ height: 38, fontSize: 12, fontWeight: 700 }}
-                    >
-                      {sharingOptions.map((opt) => (
-                        <option key={opt.key} value={opt.key}>
-                          {opt.icon} {opt.label} ({opt.capacity} Bed{opt.capacity > 1 ? "s" : ""})
-                        </option>
-                      ))}
-                    </select>
-                    <div className="cms-alloc-modal-chevron"><ChevronDown size={14} /></div>
-                  </div>
+                  <SearchableSharingDropdown
+                    value={selectedSharingKey}
+                    onChange={(newKey) => handleTopSharingChange(newKey)}
+                    options={sharingOptions}
+                    height={38}
+                    fontSize={12}
+                  />
                 </div>
 
                 {/* 3. Room Classification */}
@@ -13350,20 +13676,14 @@ function RoomModal({
 
                       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, flex: 1 }}>
                         {/* Sharing Layout */}
-                        <div style={{ flex: "1 1 160px", minWidth: 160, position: "relative" }}>
-                          <select
+                        <div style={{ flex: "1 1 160px", minWidth: 160 }}>
+                          <SearchableSharingDropdown
                             value={fAddCfg.sharingKey}
-                            onChange={(e) => handleFloorSharingChange(fc.floorIndex, e.target.value)}
-                            className="cms-alloc-modal-select"
-                            style={{ height: 34, fontSize: 11.5, fontWeight: 700, padding: "0 24px 0 8px" }}
-                          >
-                            {sharingOptions.map((opt) => (
-                              <option key={opt.key} value={opt.key}>
-                                {opt.icon} {opt.label} ({opt.capacity} Bed{opt.capacity > 1 ? "s" : ""})
-                              </option>
-                            ))}
-                          </select>
-                          <div className="cms-alloc-modal-chevron" style={{ right: 6 }}><ChevronDown size={13} /></div>
+                            onChange={(newKey) => handleFloorSharingChange(fc.floorIndex, newKey)}
+                            options={sharingOptions}
+                            height={34}
+                            fontSize={11.5}
+                          />
                         </div>
 
                         {/* Classification */}
@@ -13375,7 +13695,7 @@ function RoomModal({
                             style={{ height: 34, fontSize: 11.5, fontWeight: 700, padding: "0 24px 0 8px" }}
                           >
                             <option value="AC">❄️ AC Room</option>
-                            <option value="Non-AC">💨 Non-AC</option>
+                            <option value="Non-AC">💨 Non-AC Room</option>
                           </select>
                           <div className="cms-alloc-modal-chevron" style={{ right: 6 }}><ChevronDown size={13} /></div>
                         </div>
@@ -13481,7 +13801,7 @@ function RoomModal({
                           type="button"
                           className="cms-btn cms-btn-primary"
                           onClick={() => {
-                            const chosen = sharingOptions.find((o) => o.key === fAddCfg.sharingKey) || sharingOptions[0];
+                            const chosen = getChosenOption(fAddCfg.sharingKey);
                             handleAddRoomsDirect(fc.floorIndex, chosen, fAddCfg.acType, fAddCfg.roomCount, fAddCfg.tariff, fAddCfg.status);
                           }}
                           style={{
@@ -13573,9 +13893,14 @@ function RoomModal({
                                     >
                                       {sharingOptions.map((opt) => (
                                         <option key={opt.key} value={String(opt.capacity)}>
-                                          {opt.icon} {opt.label}
+                                          {opt.icon} {opt.label} ({opt.capacity} Bed{opt.capacity > 1 ? "s" : ""})
                                         </option>
                                       ))}
+                                      {!sharingOptions.some((o) => Number(o.capacity) === Number(cap)) && (
+                                        <option value={String(cap)}>
+                                          🛏️x{cap} {cap}-Share ({cap} Beds)
+                                        </option>
+                                      )}
                                     </select>
                                   </td>
                                   {/* Classification Dropdown */}
@@ -13595,7 +13920,7 @@ function RoomModal({
                                       }}
                                     >
                                       <option value="AC">❄️ AC Room</option>
-                                      <option value="Non-AC">💨 Non-AC</option>
+                                      <option value="Non-AC">💨 Non-AC Room</option>
                                     </select>
                                   </td>
                                   {/* Rooms Stepper */}

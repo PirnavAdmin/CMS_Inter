@@ -3583,7 +3583,27 @@ export default function ExaminationPage() {
 
       const response = await apiClient.get("/api/v1/examinations", { signal, params, headers });
       if (signal.aborted) return;
-      const raw = unwrap(response);
+      let raw = unwrap(response);
+
+      if (raw.length === 0 && (params.boardId || params.AcademicYearId)) {
+        try {
+          const fallbackParams = effCampus ? { campusId: Number(effCampus) || effCampus } : {};
+          const fallbackRes = await apiClient.get("/api/v1/examinations", {
+            signal,
+            params: fallbackParams,
+            headers,
+          });
+          if (!signal.aborted) {
+            const fallbackRaw = unwrap(fallbackRes);
+            if (fallbackRaw.length > 0) {
+              raw = fallbackRaw;
+            }
+          }
+        } catch {
+          /* keep original raw */
+        }
+      }
+
       const normalized = raw.map((record) => normalizeExamRecord(record));
 
       const effCampusStr = effCampus ? normalizeId(effCampus) : "";
@@ -4244,26 +4264,45 @@ export default function ExaminationPage() {
 
     // 2. Board isolation
     if (selectedBoardId && exam.boardId) {
-      if (normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
+      const hasBoardMatches = exams.some((e) => e.boardId && normalizeId(e.boardId) === normalizeId(selectedBoardId));
+      if (hasBoardMatches && normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
     }
 
     // 3. Academic Year isolation
     if (selectedAcademicYearId) {
-      const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
       const selYearId = normalizeId(selectedAcademicYearId);
       const selYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
-      const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+      const hasYearMatches = exams.some((e) => {
+        const yId = normalizeId(e.yearId ?? e.academicYearId);
+        const yName = String(e.academicYearName || e.academicYear || "").trim().toLowerCase();
+        return (yId && yId === selYearId) || (selYearName && yName && (yName === selYearName || yName.includes(selYearName) || selYearName.includes(yName)));
+      });
 
-      const idMatches = examYearId && examYearId === selYearId;
-      const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
-      if (examYearId && !idMatches && !nameMatches) {
-        return false;
+      if (hasYearMatches) {
+        const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+        const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+        const idMatches = examYearId && examYearId === selYearId;
+        const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
+        if (examYearId && !idMatches && !nameMatches) {
+          return false;
+        }
       }
     }
 
     if (filters.groupId && !(exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) return false;
-    if (filters.programId && !(exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) return false;
-    if (filters.levelId && !(exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) return false;
+    if (filters.programId) {
+      const pIds = (exam.programIds || (exam.programId ? [exam.programId] : [])).map(normalizeId).filter(Boolean);
+      if (pIds.length > 0 && !pIds.includes(filters.programId)) return false;
+    }
+    if (filters.levelId) {
+      const examLevelIds = ensureArray(exam.levelIds || exam.academicLevelIds || [exam.levelId || exam.academicLevelId]).filter(Boolean).map(normalizeId);
+      const targetLevelName = String(nameOf(academicLevels, filters.levelId)).trim().toLowerCase();
+      const examLevelNames = String(exam.academicLevelName || exam.academicLevel || getLevelNames(exam, academicLevels)).toLowerCase();
+      const normFilterLevel = normalizeId(filters.levelId);
+      const idMatches = examLevelIds.includes(normFilterLevel);
+      const nameMatches = targetLevelName && examLevelNames && (examLevelNames.includes(targetLevelName) || targetLevelName.includes(examLevelNames));
+      if (examLevelIds.length > 0 && !idMatches && !nameMatches) return false;
+    }
 
     if (query) {
       const matchesSearch = [
@@ -4286,6 +4325,23 @@ export default function ExaminationPage() {
   const shownExams = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const rangeStart = list.length ? (page - 1) * PAGE_SIZE + 1 : 0;
   const rangeEnd = Math.min(page * PAGE_SIZE, list.length);
+
+  const initialLevelFilterCheckedRef = useRef(false);
+  useEffect(() => {
+    if (exams.length > 0 && !initialLevelFilterCheckedRef.current) {
+      initialLevelFilterCheckedRef.current = true;
+      if (filters.levelId) {
+        const normFilterLevel = normalizeId(filters.levelId);
+        const matchingExamsCount = exams.filter((e) => {
+          const ids = ensureArray(e.levelIds || e.academicLevelIds || [e.levelId || e.academicLevelId]).filter(Boolean).map(normalizeId);
+          return ids.includes(normFilterLevel);
+        }).length;
+        if (matchingExamsCount === 0) {
+          setFilters((prev) => ({ ...prev, levelId: "" }));
+        }
+      }
+    }
+  }, [exams, filters.levelId]);
 
   useEffect(() => setPage(1), [filters, search]);
 
@@ -5415,6 +5471,21 @@ export default function ExaminationPage() {
                   placeholder="Select Level"
                 />
               </div>
+              {Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost exam-clear-filters-btn"
+                  onClick={() => {
+                    setFilters({ groupId: "", programId: "", levelId: "" });
+                    setSearch("");
+                    setPage(1);
+                  }}
+                  title="Clear all filters"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <X size={14} /> Clear Filters
+                </button>
+              )}
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost exam-export-btn"
@@ -5598,7 +5669,28 @@ export default function ExaminationPage() {
                             </button>
                           </div>
                         ) : (
-                          "No examinations match the current filters.")}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
+                            <span>
+                              {exams.length > 0
+                                ? `No examinations match the current filters${filters.levelId ? ` (Level: ${nameOf(academicLevels, filters.levelId)})` : ""}.`
+                                : "No examinations match the current filters."}
+                            </span>
+                            {exams.length > 0 && Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                              <button
+                                type="button"
+                                className="cms-btn cms-btn-primary"
+                                onClick={() => {
+                                  setFilters({ groupId: "", programId: "", levelId: "" });
+                                  setSearch("");
+                                  setPage(1);
+                                }}
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                              >
+                                <X size={14} /> Clear Filters to Show All Examinations ({exams.length})
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -6445,6 +6537,19 @@ function SearchableSingleSelect({
             placeholder={dynamicPlaceholder}
             autoComplete="off"
           />
+          {Boolean(value) && !disabled && (
+            <X
+              className="staff-dropdown-clear"
+              size={13}
+              style={{ cursor: "pointer", opacity: 0.6, marginRight: "4px" }}
+              title="Clear selection"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearch("");
+                onChange?.("");
+              }}
+            />
+          )}
           <ChevronDown
             className="staff-dropdown-caret"
             size={14}
@@ -8409,7 +8514,7 @@ function ExamForm({
                     </div>
 
                     <div className="exam-subject-tab-body">
-                      {currentSubjectTabGroup?.subjects.map((subject) => {
+                      {currentSubjectTabGroup?.subjects.map((subject, sIdx) => {
                         const isSubjectSelected = (form.selectedSubjectIds || []).map(normalizeId).includes(normalizeId(subject.id));
                         return (
                           <div

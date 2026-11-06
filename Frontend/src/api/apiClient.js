@@ -39,9 +39,12 @@ const isAuthBypassRequest = (config) => {
   if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
   return (
-    /\/login\/?$/i.test(url) ||
-    /\/refresh(-token)?\/?$/i.test(url) ||
-    /\/register\/?$/i.test(url) ||
+    /\/login(?:\/|\?|$)/i.test(url) ||
+    /\/auth\/login/i.test(url) ||
+    /\/admin\/login/i.test(url) ||
+    /\/refresh(-token)?(?:\/|\?|$)/i.test(url) ||
+    /\/register(?:\/|\?|$)/i.test(url) ||
+    (typeof window !== "undefined" && window.location?.pathname === "/login") ||
     url.includes("/api/v1/non-teaching/") ||
     url.includes("/api/v1/staff-tasks") ||
     url.includes("/api/v1/support-tickets") ||
@@ -115,6 +118,7 @@ export const getApiErrorMessage = (error) => {
 
 const apiClient = axios.create({
   baseURL: env.useDevProxy ? "" : env.apiBaseUrl,
+  timeout: 15000,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
@@ -149,6 +153,13 @@ apiClient.interceptors.request.use(
         delete config.headers["Content-Type"];
         delete config.headers["content-type"];
       }
+    }
+    if (!config.url || config.url === "undefined" || /\/(?:undefined|null)(?:\/|\?|$)/i.test(config.url)) {
+      config.skipErrorLog = true;
+      const invalidUrlError = new Error(`Request cancelled: invalid URL destination '${config.url}'`);
+      invalidUrlError.code = "ERR_INVALID_URL";
+      invalidUrlError.config = config;
+      return Promise.reject(invalidUrlError);
     }
     beginApiLoading(config);
 
@@ -232,7 +243,7 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Gracefully ignore aborted/canceled component cleanup requests
-    if (axios.isCancel(error) || error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+    if (axios.isCancel(error) || error?.name === "CanceledError" || error?.code === "ERR_CANCELED" || error?.code === "ERR_INVALID_URL") {
       return Promise.reject(error);
     }
 
@@ -294,7 +305,7 @@ apiClient.interceptors.response.use(
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
-    const isExamCellRoute = /\/api\/v1\/(promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years)/i.test(
+    const isExamCellRoute = /\/api\/v1\/(timetable|reports|promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years|fee-setup|fees)/i.test(
       originalRequest?.url || ""
     );
     const shouldLogDevError =
@@ -303,6 +314,7 @@ apiClient.interceptors.response.use(
       !is404 &&
       !(is403 && isExamCellRoute) &&
       !(is400 && isExamCellRoute) &&
+      !(error.response?.status === 500 && isExamCellRoute) &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&

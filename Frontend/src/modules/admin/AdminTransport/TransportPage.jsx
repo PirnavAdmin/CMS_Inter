@@ -892,6 +892,10 @@ function TransportContextPage({ navigation, onNavigate }) {
   const [recordsReady, setRecordsReady] = useState(false);
   const [restoringAction, setRestoringAction] = useState(false);
   const routeAction = (action, entity, row) => {
+    if (action === "add" && entity === "attendants") {
+      showToast("Attendants are managed in Staff Management. Assign them to routes using Vehicle Assignment.", "info");
+      return;
+    }
     const id = row ? (entity === "studentAssignments" ? getStudentTransportAssignmentId(row) : row.id) : null;
     if (row && (id == null || String(id).trim() === "")) { showErrorToast("The record has no stable identifier. Refresh the list and retry."); return; }
     onNavigate("action", { action, entity, id });
@@ -1005,9 +1009,21 @@ function TransportContextPage({ navigation, onNavigate }) {
     const campusParams = { CampusId: Number(selectedCampusId) };
     const scoped = (items) => Array.isArray(items) ? items : [];
     try {
-      const driverListUrl = apiEndpoints.faculty.list;
+      const driverStaffParams = {
+        CampusId: Number(selectedCampusId),
+        Department: "Transport",
+        Designation: "Driver",
+        isDriver: true,
+        PageSize: 100,
+      };
+      const driverParams = {
+        CampusId: Number(selectedCampusId),
+        boardId: Number(selectedBoardId) || undefined,
+        academicYearId: Number(selectedAcademicYearId) || undefined,
+        PageSize: 100,
+      };
       if (import.meta.env.DEV) {
-        console.log("Transport Attendant Staff API Request:", { url: driverListUrl, method: "GET" });
+        console.log("Transport Driver Staff API Request:", { url: apiEndpoints.faculty.list, params: driverStaffParams });
       }
       const [
         routesRes,
@@ -1029,8 +1045,8 @@ function TransportContextPage({ navigation, onNavigate }) {
         getAllTransportPages(apiClient, apiEndpoints.transport.pickupPoints, campusParams, signal),
         Promise.resolve({ data: [] }), // Global lookup is not campus scoped; use scoped pickup records instead.
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicles, campusParams, signal),
-        getAllTransportPages(apiClient, driverListUrl, campusParams, signal),
-        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, { campusId: Number(selectedCampusId), boardId: Number(selectedBoardId) || undefined, academicYearId: Number(selectedAcademicYearId) || undefined, PageSize: 1000 }, signal),
+        getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams, signal),
+        getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}, signal),
         apiClient.get(apiEndpoints.transport.trips, { signal }),
@@ -1038,13 +1054,22 @@ function TransportContextPage({ navigation, onNavigate }) {
         getAllTransportPages(apiClient, apiEndpoints.transport.maintenance, {}, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.studentAssignments, {}, signal),
         Promise.resolve({ data: null }), // Dashboard controller has no scope contract; derive counts below.
-        selectedBoardId && selectedAcademicYearId
-          ? getAllTransportPages(apiClient, apiEndpoints.students.getAll, { campusId: Number(selectedCampusId), boardId: Number(selectedBoardId), academicYearId: Number(selectedAcademicYearId) }, signal)
-          : Promise.resolve({ data: [] }),
+        Promise.resolve({ data: [] }), // Student transport relies strictly on student-assignments API without redundant bulk queries.
       ]);
 
       if (!current()) return;
-      setDriverLoadError(driversRes.status === "rejected" ? getApiErrorMessage(driversRes.reason) : "");
+      const driverResult = driversRes.status === "fulfilled" ? driversRes.value : null;
+      const rawDriverItems = driverResult?.data ? extractList(driverResult.data) : [];
+      const reportedDriverTotal = driverResult?.reportedTotal ?? driverResult?.data?.totalCount ?? 0;
+      if (reportedDriverTotal > 0 && rawDriverItems.length === 0) {
+        setDriverLoadError(
+          `Data inconsistency: The driver API reported ${reportedDriverTotal} total record(s), but returned 0 items. Please verify database synchronization.`
+        );
+      } else if (driversRes.status === "rejected") {
+        setDriverLoadError(getApiErrorMessage(driversRes.reason));
+      } else {
+        setDriverLoadError("");
+      }
       const resultRows = (result) => result.status === 'fulfilled' ? extractList(result.value.data) : [];
       const records = scopeTransportRecords({
         routes: resultRows(routesRes), pickups: resultRows(pickupsRes), vehicles: resultRows(vehiclesRes),
@@ -1113,21 +1138,73 @@ function TransportContextPage({ navigation, onNavigate }) {
       if (driversRes.status === "fulfilled" || staffRes.status === "fulfilled") {
         const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
         const driverStaff = staffItems.filter(isDriverStaffRecord);
+        const staffByIdMap = new Map();
+        const staffByEmpMap = new Map();
+        driverStaff.forEach((s) => {
+          if (s.id != null) staffByIdMap.set(String(s.id), s);
+          if (s.staffId != null) staffByIdMap.set(String(s.staffId), s);
+          if (s.employeeId) staffByEmpMap.set(String(s.employeeId).toUpperCase(), s);
+        });
         setDriverStaffRecords(Object.fromEntries(driverStaff.map((staff) => [
           transportValue(staff, "staffId", "id", "facultyId"), staff,
         ]).filter(([id]) => id != null && String(id).trim())));
-        const transportDrivers = (driversRes.status === "fulfilled" ? scoped(extractList(driversRes.value.data)) : []).map((driver) => {
-          const transportDriverId = transportValue(driver, "driverId", "id");
+
+        // Staff Management is the source of eligible driver staff. Keep any
+        // linked transport profile as the operational record, and show staff
+        // drivers without a transport profile as staff-sourced rows.
+        const canonicalDrivers = driversRes.status === "fulfilled" ? scoped(extractList(driversRes.value.data)) : [];
+        const transportDrivers = canonicalDrivers.map((driver) => {
+          const rawDriverId = driver.driverId ?? driver.transportDriverId ?? (driver.staffId ? null : driver.id);
+          const transportDriverId = rawDriverId != null ? Number(rawDriverId) : Number(driver.id);
+          const staffId = driver.staffId != null ? Number(driver.staffId) : null;
+          const empId = driver.employeeId ? String(driver.employeeId).toUpperCase() : "";
+          const linkedStaff = (staffId != null && staffByIdMap.get(String(staffId))) ||
+                              (empId && staffByEmpMap.get(empId)) || null;
+
           return {
-          ...normalizeDriver(driver),
-          // Assignment endpoints require the transport driver ID, not DTO id/staffId.
-          id: transportDriverId,
-          driverId: transportDriverId,
-          transportDriverId,
-          staffId: transportValue(driver, "staffId") ?? null,
+            ...normalizeDriver(driver),
+            ...driver,
+            id: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            driverId: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            transportDriverId: transportDriverId > 0 ? transportDriverId : (driver.driverId || driver.id),
+            staffId: staffId ?? (linkedStaff?.id ? Number(linkedStaff.id) : null),
+            driverName: driver.driverName || (linkedStaff ? `${linkedStaff.firstName || ""} ${linkedStaff.lastName || ""}`.trim() : ""),
+            employeeId: driver.employeeId || linkedStaff?.employeeId || "",
+            mobileNumber: driver.mobileNumber || linkedStaff?.mobile || "",
+            alternateMobileNumber: driver.alternateMobileNumber || linkedStaff?.alternateMobile || "",
+            email: driver.email || linkedStaff?.email || "",
+            licenseNumber: driver.licenseNumber || linkedStaff?.drivingLicenseNumber || "",
+            licenseExpiryDate: driver.licenseExpiryDate || linkedStaff?.drivingLicenseExpiryDate || "",
+            address: driver.address || linkedStaff?.currentAddress || "",
+            experienceYears: Number(driver.experienceYears ?? driver.experience ?? linkedStaff?.drivingExperienceYears ?? 5),
+            status: [true, 1, "Active"].includes(driver.status) ? "Active" : "Inactive",
           };
         }).filter((driver) => Number(driver.driverId) > 0);
-        setDrivers(transportDrivers);
+        const linkedStaffIds = new Set(transportDrivers.map((driver) => String(driver.staffId ?? "")).filter(Boolean));
+        const linkedEmployeeIds = new Set(transportDrivers.map((driver) => String(driver.employeeId || "").trim().toLowerCase()).filter(Boolean));
+        const staffDriverRows = driverStaff
+          .filter((staff) => !linkedStaffIds.has(String(transportValue(staff, "staffId", "id", "facultyId")))
+            && !linkedEmployeeIds.has(String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()))
+          .map((staff) => {
+            const staffId = transportValue(staff, "staffId", "id", "facultyId");
+            return {
+              id: staffId,
+              staffId,
+              source: "staff",
+              transportDriverId: null,
+              driverName: transportValue(staff, "fullName", "staffName", "name")
+                || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" "),
+              employeeId: transportValue(staff, "employeeId", "empId") || "",
+              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+              email: transportValue(staff, "email") || "",
+              licenseNumber: transportValue(staff, "drivingLicenseNumber", "licenceNumber", "licenseNumber") || "",
+              licenseExpiryDate: String(transportValue(staff, "drivingLicenseExpiryDate", "licenceExpiry", "licenseExpiryDate") || "").split("T")[0],
+              address: transportValue(staff, "currentAddress", "address") || "",
+              experienceYears: Number(transportValue(staff, "drivingExperienceYears", "experienceYears", "experience") || 0),
+              status: "Active",
+            };
+          });
+        setDrivers([...transportDrivers, ...staffDriverRows]);
       }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
@@ -1232,31 +1309,57 @@ function TransportContextPage({ navigation, onNavigate }) {
 
 
 
-      if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
+      if (attendantsRes.status === "fulfilled" || staffRes.status === "fulfilled") {
         const staffItems = staffRes.status === "fulfilled" ? scoped(extractList(staffRes.value.data)) : [];
-        const eligibleStaff = staffItems.filter(isTransportAttendantStaff);
-        const eligibleStaffIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "staffId", "id", "facultyId"))));
-        const eligibleEmployeeIds = new Set(eligibleStaff.map((staff) => String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase()).filter(Boolean));
-        const items = scoped(extractList(attendantsRes.value.data)).filter((attendant) => {
-          const staffId = transportValue(attendant, "staffId");
-          const employeeId = String(transportValue(attendant, "employeeId", "attendantCode") || "").trim().toLowerCase();
-          return (staffId != null && eligibleStaffIds.has(String(staffId))) || (employeeId && eligibleEmployeeIds.has(employeeId));
+        const staffMap = new Map();
+        staffItems.forEach((s) => {
+          const sId = transportValue(s, "staffId", "id", "facultyId");
+          const eId = String(transportValue(s, "employeeId", "empId") || "").trim().toLowerCase();
+          if (sId) staffMap.set(String(sId), s);
+          if (eId) staffMap.set(eId, s);
         });
-        const uniqueItems = [...new Map(items.map((attendant) => [
-          String(transportValue(attendant, "staffId") ?? transportValue(attendant, "employeeId", "attendantCode") ?? transportValue(attendant, "attendantId", "id")), attendant,
-        ])).values()];
-        setAttendants(
-          uniqueItems.map((a) => ({
+        const backendAttendants = attendantsRes.status === "fulfilled" ? scoped(extractList(attendantsRes.value.data)) : [];
+        const attendantStaff = staffItems.filter(isTransportAttendantStaff);
+
+        const attendantMap = new Map();
+        backendAttendants.forEach((a) => {
+          const sId = transportValue(a, "staffId");
+          const eId = String(transportValue(a, "employeeId", "attendantCode") || "").trim().toLowerCase();
+          const linked = (sId && staffMap.get(String(sId))) || (eId && staffMap.get(eId));
+          const key = String(sId || eId || a.attendantId || a.id);
+          attendantMap.set(key, {
             id: a.attendantId || a.id,
-            staffId: a.staffId,
-            attendantName: a.attendantName || a.attendantFullName || a.fullName || a.name || "",
-            employeeId: a.employeeId || a.attendantCode || "",
-            mobileNumber: a.mobileNumber || a.phone || "",
-            gender: a.gender || "Female",
-            branch: a.branchName || a.branch || "Main Campus",
+            staffId: a.staffId || linked?.staffId || linked?.id,
+            attendantName: a.attendantName || a.attendantFullName || linked?.fullName || linked?.staffName || a.fullName || a.name || "",
+            employeeId: a.employeeId || a.attendantCode || linked?.employeeId || "",
+            mobileNumber: a.mobileNumber || a.phone || linked?.mobile || linked?.mobileNumber || "",
+            gender: a.gender || linked?.gender || "Female",
+            branch: a.branchName || a.branch || linked?.branch || "Main Campus",
             status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
-          }))
-        );
+          });
+        });
+
+        attendantStaff.forEach((staff) => {
+          const sId = transportValue(staff, "staffId", "id", "facultyId");
+          const eId = String(transportValue(staff, "employeeId", "empId") || "").trim().toLowerCase();
+          const key = String(sId || eId);
+          if (!attendantMap.has(key)) {
+            const name = transportValue(staff, "fullName", "staffName", "name")
+              || [transportValue(staff, "firstName"), transportValue(staff, "middleName"), transportValue(staff, "lastName")].filter(Boolean).join(" ");
+            attendantMap.set(key, {
+              id: sId,
+              staffId: sId,
+              attendantName: name,
+              employeeId: transportValue(staff, "employeeId", "empId") || "",
+              mobileNumber: transportValue(staff, "mobile", "mobileNumber", "phone") || "",
+              gender: transportValue(staff, "gender") || "Female",
+              branch: transportValue(staff, "branchName", "branch", "campusName") || "Main Campus",
+              status: [staff.status, staff.isActive].includes("Inactive") ? "Inactive" : "Active",
+            });
+          }
+        });
+
+        setAttendants(Array.from(attendantMap.values()));
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1351,30 +1454,17 @@ function TransportContextPage({ navigation, onNavigate }) {
       }
 
       if (studentRes.status === "fulfilled" && studentRes.value?.data) {
-        const items = scoped(extractList(studentRes.value.data));
+        const studentItems = scoped(extractList(studentRes.value.data));
         const getAdmissionNumber = (student) => [
           student.admissionNo, student.AdmissionNo, student.admissionNumber, student.AdmissionNumber,
           student.student?.admissionNo, student.student?.admissionNumber,
         ].find((value) => value != null && String(value).trim() !== "") ?? "";
-        const studentItems = await Promise.all(items.map(async (student) => {
-          if (getAdmissionNumber(student)) return student;
-          const assignmentId = getStudentTransportAssignmentId(student);
-          if (assignmentId == null || assignmentId === "") return student;
-          try {
-            const response = await apiClient.get(apiEndpoints.transport.studentAssignmentById(assignmentId), { signal });
-            const payload = response.data?.data ?? response.data ?? {};
-            const detail = payload.studentAssignment ?? payload.assignment ?? payload;
-            return { ...student, admissionNo: getAdmissionNumber(detail) };
-          } catch {
-            return student;
-          }
-        }));
         if (!current()) return;
         setStudentAssignments(
           studentItems.map((s) => ({
             id: getStudentTransportAssignmentId(s),
             studentId: s.studentId, pickupPointId: s.pickupPointId, vehicleAssignmentId: s.vehicleAssignmentId,
-            studentName: s.studentName || "Student",
+            studentName: s.studentName || s.studentFullName || s.fullName || s.name || "Student",
             admissionNo: getAdmissionNumber(s),
             routeId: s.routeId,
             routeName: s.routeName || "",
@@ -2351,7 +2441,6 @@ function TransportContextPage({ navigation, onNavigate }) {
       subtitle: "Manage attendant allocation-ready profiles.",
       rows: attendants,
       fields: attendantFields,
-      addLabel: "Add Attendant",
       columns: [
         { key: "employeeId", label: "Employee ID", strong: true },
         { key: "attendantName", label: "Attendant" },
@@ -2643,7 +2732,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         printSection={activeSection === "setup" ? "Setup" : "Operations"}
         printSubsection={setupTabs.concat(operationTabs).find((tab) => tab.id === key)?.label || config.title}
         onPrint={preparePrint}
-        onAdd={key === "drivers" ? undefined : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onAdd={key === "drivers" || key === "attendants" ? undefined : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={key === "drivers" ? undefined : (row) => requestDelete(key, row, config.title)}
         onView={(row) => openRecordDetails(key, row, config.title)}
@@ -2733,12 +2822,15 @@ function TransportContextPage({ navigation, onNavigate }) {
     const modalDriver = selectedTripModal ? findDriver(selectedTripModal.driverId) : null;
     const modalAttendant = selectedTripModal ? findAttendant(selectedTripModal.attendantId) : null;
 
+    const isStudentAssignedToAssignment = (s, assignment, v) => (
+      (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(assignment?.id)) ||
+      (s.vehicleId && (String(s.vehicleId) === String(assignment?.vehicleId) || String(s.vehicleId) === String(v?.id))) ||
+      (s.vehicleNumber && assignment?.vehicleNumber && String(s.vehicleNumber).trim().toLowerCase() === String(assignment.vehicleNumber).trim().toLowerCase()) ||
+      (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(assignment?.routeId))
+    );
+
     const modalAssignedStudents = selectedTripModal
-      ? studentAssignments.filter((s) => (
-          (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(selectedTripModal.id)) ||
-          (s.vehicleId && String(s.vehicleId) === String(selectedTripModal.vehicleId)) ||
-          (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(selectedTripModal.routeId))
-        ))
+      ? studentAssignments.filter((s) => isStudentAssignedToAssignment(s, selectedTripModal, modalVehicle))
       : [];
 
     const modalRouteStops = selectedTripModal
@@ -2860,11 +2952,7 @@ function TransportContextPage({ navigation, onNavigate }) {
               const vehicle = findVehicle(assignment.vehicleId);
               const driver = findDriver(assignment.driverId);
               const attendant = findAttendant(assignment.attendantId);
-              const students = studentAssignments.filter((s) => (
-                (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(assignment.id)) ||
-                (s.vehicleId && String(s.vehicleId) === String(assignment.vehicleId)) ||
-                (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(assignment.routeId))
-              ));
+              const students = studentAssignments.filter((s) => isStudentAssignedToAssignment(s, assignment, vehicle));
               const hasGps = Boolean(vehicle?.gpsDeviceId);
               const isRunning = assignment.status === "Active";
               const regNo = vehicle?.registrationNumber || "-";
@@ -2923,9 +3011,19 @@ function TransportContextPage({ navigation, onNavigate }) {
                   </div>
 
                   <div className="cms-transport-trip-card-foot">
-                    <span className="cms-transport-trip-student-pill">
+                    <button
+                      type="button"
+                      className="cms-transport-trip-student-pill"
+                      style={{ cursor: "pointer", border: "none", background: "transparent", padding: 0, font: "inherit", color: "inherit", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      onClick={() => {
+                        setSelectedTripModal(assignment);
+                        setTripModalTab("students");
+                        setTripStudentSearch("");
+                      }}
+                      title="Click to view assigned students"
+                    >
                       <Users size={14} /> {students.length} Student{students.length === 1 ? "" : "s"} Assigned
-                    </span>
+                    </button>
                     <button
                       type="button"
                       className="cms-btn cms-btn-primary cms-btn-sm"
