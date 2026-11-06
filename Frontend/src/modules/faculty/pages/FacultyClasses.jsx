@@ -46,14 +46,14 @@ export default function FacultyClasses() {
 
   const staffId = useMemo(() => {
     return (
-      profileData?.id ||
-      profileData?.facultyId ||
       profileData?.staffId ||
       authUser.staffId ||
+      profileData?.id ||
+      profileData?.facultyId ||
       authUser.id ||
       null
     );
-  }, [profileData, authUser]);
+  }, [profileData?.staffId, profileData?.id, profileData?.facultyId, authUser?.staffId, authUser?.id]);
 
   // Current day of week info
   const todayDate = useMemo(() => new Date(), []);
@@ -127,7 +127,7 @@ export default function FacultyClasses() {
     } finally {
       setIsLoading(false);
     }
-  }, [staffId]);
+  }, [staffId, profileData?.department, profileData?.designation, profileData?.allocatedSubjects]);
 
   useEffect(() => {
     loadClassesData();

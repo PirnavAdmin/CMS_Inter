@@ -817,8 +817,10 @@ const StaffList = () => {
                   const fullName = `${staff.firstName || ""} ${staff.lastName || ""}`.trim();
                   const initials = `${(staff.firstName?.[0] || "").toUpperCase()}${(staff.lastName?.[0] || "").toUpperCase()}` || "ST";
                   const statusRaw = staff.status || "Active";
-                  const isTransferred = statusRaw.toLowerCase().includes("transfer");
+                  const isTransferred = statusRaw.toLowerCase().includes("transfer") ||
+                    (activeCampusId && String(staff.transferredFromCampusId) === String(activeCampusId));
                   const isActive = !isTransferred && statusRaw.toLowerCase() === "active";
+                  const transferLabel = staff.transferredToCampusName ? `Transferred to ${staff.transferredToCampusName}` : "Transferred";
 
                   return (
                     <tr key={staff.id || staff.staffId}>
@@ -850,9 +852,10 @@ const StaffList = () => {
                       <td>
                         <span
                           className={`staff-status-badge ${isTransferred ? "staff-status-transferred" : isActive ? "staff-status-active" : "staff-status-inactive"}`}
-                          style={isTransferred ? { background: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe" } : undefined}
+                          style={isTransferred ? { background: "#f1f5f9", color: "#475569", border: "1px solid #cbd5e1", fontWeight: "600", padding: "3px 10px", borderRadius: "12px", fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" } : undefined}
                         >
-                          {isTransferred ? "Transferred" : isActive ? "Active" : "Inactive"}
+                          {isTransferred && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#64748b" }} />}
+                          {isTransferred ? transferLabel : isActive ? "Active" : "Inactive"}
                         </span>
                       </td>
 

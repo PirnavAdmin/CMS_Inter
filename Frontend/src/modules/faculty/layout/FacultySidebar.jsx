@@ -87,12 +87,11 @@ export default function FacultySidebar() {
     profileData?.profileCompletionPercentage ||
     0
   );
+  const statusClean = String(profileStatus || "").toLowerCase();
   const isCompleted =
-    String(profileStatus || "").toLowerCase() === "completed" ||
-    String(profileStatus || "").toLowerCase() === "approved" ||
-    String(profileStatus || "").toLowerCase() === "submitted" ||
-    authUser?.isOnboarded === true ||
-    compPct >= 50;
+    statusClean === "completed" ||
+    statusClean === "approved" ||
+    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
   const isPendingOnboarding = isFaculty && !isCompleted;
 
   const [supportContact, setSupportContact] = useState({

@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, UserRound, Palette } from "lucide-react";
 import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
@@ -38,7 +39,7 @@ export default function AccountantNavbar({ onMenu }) {
       <div className="sp-accountant-context"><span>Finance workspace</span></div>
       <div className="sp-navbar-actions">
         <button className="sp-icon-btn" onClick={() => { const next = !dark; setDark(next); document.documentElement.dataset.theme = next ? "dark" : "light"; }} aria-label="Toggle theme"><img src={dark ? lightThemeIcon : darkThemeIcon} alt="" /></button>
-        <button className="sp-icon-btn sp-notification" aria-label="Notifications"><img src={notificationIcon} alt="" /><i>0</i></button>
+        <NotificationBell />
         <div className="sp-profile-menu" ref={menuRef}>
           <button onClick={() => setProfileOpen((value) => !value)}>
             <span className="sp-avatar">{initials}</span>

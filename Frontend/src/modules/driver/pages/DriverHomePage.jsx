@@ -91,12 +91,12 @@ export default function DriverHomePage({
   const assignedAtt = dashboardData?.attendant || dashboardData?.assignment || {};
 
   const busNumber = assignedVeh.vehicleNumber || driverProfile?.assignedVehicle || "AP39AU2653";
-  const vehicleModel = assignedVeh.vehicleType || driverProfile?.vehicleModel || "Transport Van (35-Seater)";
-  const vehicleReg = assignedVeh.registrationNumber || "AP-REG-109";
-  const routeName = assignedRoute.routeName || routeInfo?.routeName || driverProfile?.assignedRoute || "Habsiguda";
+  const vehicleModel = assignedVeh.vehicleType || driverProfile?.vehicleModel || "Ashok Leyland 45-Seater";
+  const vehicleReg = assignedVeh.registrationNumber || busNumber || "AP39AU2653";
+  const routeName = assignedRoute.routeName || routeInfo?.routeName || driverProfile?.assignedRoute || "32 Habsiguda";
   const routeCode = assignedRoute.routeCode || routeInfo?.routeCode || "HABSIGUDA_1";
   const routeDistance = routeInfo?.DistanceKm || routeInfo?.distanceKm || "21.0";
-  const attendantName = assignedAtt.attendantName || driverProfile?.assignedAttendant || "Govardhan Rao";
+  const attendantName = assignedAtt.attendantName || driverProfile?.assignedAttendant || "Ramesh K";
   const shiftName = dashboardData?.shift || dashboardData?.assignment?.shift || driverProfile?.shift || "Morning";
 
   const totalAssignedStudents =

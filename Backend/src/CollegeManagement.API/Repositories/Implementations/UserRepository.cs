@@ -286,6 +286,30 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = connection ?? Connection;
             const string sql = "UPDATE `Users` SET `RoleId` = @RoleId, `UpdatedAt` = UTC_TIMESTAMP() WHERE `StaffId` = @StaffId;";
             await conn.ExecuteAsync(sql, new { StaffId = staffId, RoleId = roleId }, transaction: transaction);
+
+            try
+            {
+                var role = await GetRoleByIdAsync(roleId, conn, transaction);
+                bool isDriver = string.Equals(role?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                await conn.ExecuteAsync(
+                    "sp_SyncTransportDriverFromStaff",
+                    new { p_StaffId = staffId, p_IsDriverRole = isDriver ? (byte)1 : (byte)0 },
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure);
+
+                bool isAttendant = string.Equals(role?.RoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(role?.RoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                await conn.ExecuteAsync(
+                    "sp_SyncTransportAttendantFromStaff",
+                    new { p_StaffId = staffId, p_IsAttendantRole = isAttendant ? (byte)1 : (byte)0 },
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                // Defensive fallback if transport schema is being provisioned
+            }
+
             return true;
         }
 
@@ -378,6 +402,3 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
-
-
-

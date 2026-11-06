@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,11 +23,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ITimetableService _timetableService;
         private readonly ITimetableExportService _exportService;
+        private readonly INotificationService? _notificationService;
 
-        public TimetableController(ITimetableService timetableService, ITimetableExportService exportService)
+        public TimetableController(
+            ITimetableService timetableService,
+            ITimetableExportService exportService,
+            INotificationService? notificationService = null)
         {
             _timetableService = timetableService;
             _exportService = exportService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -40,6 +46,24 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.CreateAsync(dto);
+
+                if (_notificationService != null && result != null)
+                {
+                    try
+                    {
+                        var campusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : (int?)null);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Updated",
+                            $"New timetable slot added for Section #{result.SectionId} ({result.SubjectName ?? "Subject"} on {result.DayName}).",
+                            "Timetable",
+                            result.Id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (InvalidOperationException ex)
@@ -86,6 +110,24 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var result = await _timetableService.UpdateAsync(id, dto);
                 if (result == null) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null)
+                {
+                    try
+                    {
+                        var campusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : (int?)null);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Modified",
+                            $"Timetable slot updated for Section #{result.SectionId} ({result.SubjectName ?? "Subject"} on {result.DayName}).",
+                            "Timetable",
+                            result.Id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -104,8 +146,26 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var slot = await _timetableService.GetByIdAsync(id);
                 var success = await _timetableService.DeleteAsync(id);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null && slot != null)
+                {
+                    try
+                    {
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            slot.CampusId,
+                            "Class Cancelled",
+                            $"Notice: Class for {slot.SubjectName ?? "Subject"} (Section #{slot.SectionId}, {slot.DayName}) has been CANCELLED.",
+                            "Timetable",
+                            slot.SectionId,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return NoContent();
             }
             catch (InvalidOperationException ex)
@@ -226,6 +286,24 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var success = await _timetableService.TogglePublishSlotAsync(id, dto.IsPublished);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_notificationService != null && dto.IsPublished)
+                {
+                    try
+                    {
+                        var slot = await _timetableService.GetByIdAsync(id);
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            slot?.CampusId,
+                            "Timetable Published",
+                            $"Timetable slot for {slot?.SubjectName ?? "Subject"} has been published.",
+                            "Timetable",
+                            id,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { message = $"Slot publish status updated to {dto.IsPublished}." });
             }
             catch (InvalidOperationException ex)
@@ -246,6 +324,29 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _timetableService.PublishSectionTimetableAsync(sectionId, academicYearId ?? 0, dto.IsPublished);
+
+                if (_notificationService != null && dto.IsPublished)
+                {
+                    try
+                    {
+                        int campusId = 1;
+                        if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var cId) && cId > 0)
+                        {
+                            campusId = cId;
+                        }
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Faculty", "Teacher", "Student", "Parent" },
+                            campusId,
+                            "Timetable Published",
+                            $"Weekly timetable for Section #{sectionId} has been published. Please check your schedule.",
+                            "Timetable",
+                            sectionId,
+                            $"/dashboard/timetable/section/{sectionId}");
+                    }
+                    catch { }
+                }
+
                 return Ok(new { message = $"All timetable slots for Section ID {sectionId} publish status set to {dto.IsPublished}." });
             }
             catch (KeyNotFoundException ex)
@@ -295,6 +396,29 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.ApproveSectionTimetableAsync(sectionId, academicYearId ?? 0);
+
+                if (_notificationService != null && result != null && result.IsSuccess)
+                {
+                    try
+                    {
+                        int campusId = 1;
+                        if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var cId) && cId > 0)
+                        {
+                            campusId = cId;
+                        }
+
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Admin", "Principal", "Faculty", "Teacher" },
+                            campusId,
+                            "Timetable Approved",
+                            $"Timetable for Section #{sectionId} has been approved and verified.",
+                            "Timetable",
+                            sectionId,
+                            $"/dashboard/timetable/section/{sectionId}");
+                    }
+                    catch { }
+                }
+
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -319,6 +443,24 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.GenerateTheoryTimetableAsync(dto);
+
+                if (_notificationService != null && result != null && result.IsSuccess)
+                {
+                    try
+                    {
+                        var sectionCount = dto.SectionIds?.Count ?? 0;
+                        await _notificationService.SendToRolesAsync(
+                            new[] { "Student", "Parent", "Faculty", "Teacher" },
+                            dto.CampusId > 0 ? dto.CampusId : (int?)null,
+                            "Timetable Generated",
+                            $"Automated timetable generated ({result.TotalSlotsGenerated} slots across {sectionCount} section(s)). Check your schedule.",
+                            "Timetable",
+                            null,
+                            "/student/timetable");
+                    }
+                    catch { }
+                }
+
                 return StatusCode(StatusCodes.Status201Created, result);
             }
             catch (KeyNotFoundException ex)
@@ -374,7 +516,6 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
             }
         }
-
 
         /// <summary>
         /// Exports the weekly timetable for all programs and sections in a specific group as an Excel workbook (.xlsx).

@@ -9,17 +9,11 @@ namespace CollegeManagement.API.Validators.MarksValidators
         {
             RuleLevelCascadeMode = CascadeMode.Stop;
 
-            RuleFor(x => x.Board)
-                .NotEmpty().WithMessage("Board is required.");
-
             RuleFor(x => x.AcademicYearId)
-                .GreaterThan(0).WithMessage("Academic Year ID must be greater than 0.");
-
-            RuleFor(x => x.AcademicLevel)
-                .NotEmpty().WithMessage("Academic Level is required.");
+                .GreaterThanOrEqualTo(0).WithMessage("Academic Year ID cannot be negative.");
 
             RuleFor(x => x.GroupId)
-                .GreaterThan(0).WithMessage("Group ID must be greater than 0.");
+                .GreaterThanOrEqualTo(0).WithMessage("Group ID cannot be negative.");
 
             RuleFor(x => x.SectionId)
                 .GreaterThan(0).WithMessage("Section ID must be greater than 0.");

@@ -23,14 +23,17 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly ILeaveManagementService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly IStaffAttendanceService? _staffAttendanceService;
+        private readonly INotificationService? _notificationService;
 
         public LeaveManagementController(
             ILeaveManagementService service,
             IJwtTokenHelper jwtTokenHelper,
+            INotificationService? notificationService = null,
             IStaffAttendanceService? staffAttendanceService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _notificationService = notificationService;
             _staffAttendanceService = staffAttendanceService;
         }
 
@@ -109,6 +112,14 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
             var result = await _service.CreateStaffLeaveRequestAsync(request, userId);
+            try
+            {
+                var staffName = User.Identity?.Name ?? $"Staff #{request.StaffId}";
+                var campusId = GetCurrentCampusId();
+                if (_notificationService != null) await _notificationService.SendToRoleAsync("Admin", campusId, "New Leave Request", $"{staffName} submitted a leave application from {request.StartDate:dd-MMM-yyyy} to {request.EndDate:dd-MMM-yyyy}.", "Leave", result?.StaffLeaveRequestId, "/dashboard/leave");
+                if (_notificationService != null) await _notificationService.SendToRoleAsync("Principal", campusId, "New Leave Request", $"{staffName} submitted a leave application from {request.StartDate:dd-MMM-yyyy} to {request.EndDate:dd-MMM-yyyy}.", "Leave", result?.StaffLeaveRequestId, "/dashboard/leave");
+            }
+            catch { }
             return Ok(new { Status = true, Message = "Staff leave requested successfully.", Data = result });
         }
 
@@ -125,6 +136,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var userId = GetCurrentUserId();
             var result = await _service.ActionStaffLeaveRequestAsync(leaveRequestId, request, userId);
+            try
+            {
+                var approverName = User.Identity?.Name ?? "Admin";
+                if (result != null && result.StaffId > 0)
+                {
+                    if (_notificationService != null) await _notificationService.SendToStaffAsync(result.StaffId, $"Leave Application {request.Status}", $"Your leave request has been {request.Status.ToString().ToUpper()} by {approverName}. {(string.IsNullOrWhiteSpace(request.RejectionReason) ? "" : $"Reason: {request.RejectionReason}")}", "Leave", leaveRequestId, "/dashboard/leave");
+                }
+            }
+            catch { }
             return Ok(new { Status = true, Message = $"Staff leave {request.Status} successfully.", Data = result });
         }
 

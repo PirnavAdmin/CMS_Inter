@@ -1,3 +1,4 @@
+import NotificationBell from '@/components/common/NotificationBell.jsx';
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -1546,47 +1547,7 @@ export default function DashboardLayout({
               </div>
             </div>
             <ThemeToggle variant="dashboard" />
-            {isParent ? (
-              <Link
-                to={parentStudentId ? `/parent-dashboard/notifications?studentId=${encodeURIComponent(parentStudentId)}` : "/parent-dashboard/notifications"}
-                className="cms-icon-btn"
-                style={{ textDecoration: "none" }}
-                aria-label={`${pendingActionCount} notifications`}
-                onClick={() => {
-                  setNotifOpen(false);
-                  setProfileOpen(false);
-                  closeOnMobile();
-                }}
-              >
-                <NavbarIcon src={navbarNotificationsIcon} />
-                {pendingActionCount > 0 ? (
-                  <span className="cms-notification-badge">
-                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
-                  </span>
-                ) : null}
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="cms-icon-btn"
-                aria-label={`${pendingActionCount} sample notifications`}
-                aria-expanded={notifOpen}
-                onClick={() => {
-                  setNotifOpen((open) => !open);
-                  setProfileOpen(false);
-                  if (!notifOpen) {
-                    setHasViewedNotifications(true);
-                  }
-                }}
-              >
-                <NavbarIcon src={navbarNotificationsIcon} />
-                {pendingActionCount > 0 ? (
-                  <span className="cms-notification-badge">
-                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
-                  </span>
-                ) : null}
-              </button>
-            )}
+            <NotificationBell />
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
               {activeAdminPhoto && !adminPhotoError && !isInvalidOrBrokenPhoto(activeAdminPhoto) ? (
                 <img
@@ -1605,29 +1566,7 @@ export default function DashboardLayout({
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 
-            {!isParent && notifOpen ? (
-              <div className="cms-dropdown cms-notifications-dropdown">
-                <div className="cms-dropdown-head cms-notifications-head">
-                  <div><strong>Notifications</strong><small>Sample activity</small></div>
-                </div>
-                {currentNotifications.map((notification) => (
-                  <button
-                    key={notification.id}
-                    type="button"
-                    className="cms-notif-item"
-                    onClick={() => {
-                      setNotifOpen(false);
-                      setLiveNotifications((prev) => prev.filter((n) => n.id !== notification.id));
-                      navigate(notification.to);
-                    }}
-                  >
-                    <span className="cms-notif-count">{notification.count}</span>
-                    <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
+            {/* Universal NotificationBell active */}
 
             {profileOpen ? (
               <div className="cms-dropdown">

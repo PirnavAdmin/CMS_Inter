@@ -26,3 +26,5 @@
 .sa-shell .sa-permission-role p { margin: 8px 0 0; font-size: 11px; }
 .sa-shell .sa-permission-unavailable { font-size: 10px; color: var(--cms-muted); }
 @media(max-width: 500px) { .sa-shell .sa-permission-role > label { width: 100%; } }
+.sa-admin-checkbox { display:flex !important; align-items:center; gap:8px; }
+.sa-admin-checkbox input { width:auto; }

@@ -24,6 +24,9 @@ import {
   ArrowRight,
   Sparkles,
   AlertTriangle,
+  Clock,
+  ShieldCheck,
+  FileSignature,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
@@ -305,6 +308,8 @@ export default function FacultyProfile() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showPendingApprovalModal, setShowPendingApprovalModal] = useState(false);
+  const [isDownloadingOfferLetter, setIsDownloadingOfferLetter] = useState(false);
   const [showIncompleteModal, setShowIncompleteModal] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
   const [editPersonal, setEditPersonal] = useState({});
@@ -512,6 +517,8 @@ export default function FacultyProfile() {
     if (typeof window !== "undefined") {
       localStorage.removeItem("staff_profile_photo");
       if (staffTargetId) {
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        // await syncAllSectionsToBackend(staffTargetId, profileData);
         localStorage.removeItem(`staff_profile_${staffTargetId}_photo`);
       }
       window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
@@ -1141,6 +1148,164 @@ export default function FacultyProfile() {
     return true;
   };
 
+  const getFormattedDraftPayload = (data) => {
+    const docsMap = {};
+    (data.documents || []).forEach((d, idx) => {
+      const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+      const v = String(d?.url || d?.name || "uploaded").trim();
+      if (k) docsMap[k] = v;
+    });
+
+    const expItems = (data.experience || []).map((e) => ({
+      id: e.id,
+      organization: e.institution || e.organization || e.institutionName || "",
+      institution: e.institution || e.organization || e.institutionName || "",
+      institutionName: e.institution || e.organization || e.institutionName || "",
+      designation: e.designation || "",
+      fromDate: e.fromDate || "",
+      toDate: e.toDate || "",
+      roles: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTeached: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      subjectsTaught: e.subjectsTeached || e.subjectsTaught || e.roles || "",
+      totalYears: parseFloat(e.totalExp) || e.totalYears || 1.0,
+      totalExp: e.totalExp || `${e.totalYears || 1} Years`,
+      status: e.status || "Verified",
+    }));
+
+    const personal = {
+      firstName: data.firstName || "",
+      middleName: data.middleName || "",
+      lastName: data.lastName || "",
+      gender: data.gender || "",
+      dateOfBirth: data.dob || data.dateOfBirth || null,
+      maritalStatus: data.maritalStatus || "Single",
+      aadhaar: data.aadhaar || "",
+      panNumber: data.pan || data.panNumber || "",
+      pan: data.pan || data.panNumber || "",
+      bloodGroup: data.bloodGroup || "",
+      mobile: data.mobile || data.phone || "",
+      phone: data.mobile || data.phone || "",
+      phoneNumber: data.mobile || data.phone || "",
+      fatherOrHusbandName: data.fatherOrHusbandName || data.guardianName || "",
+      nationality: data.nationality || "Indian",
+    };
+
+    const bank = {
+      bankName: data.bankName || "",
+      accountHolderName: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountHolder: data.accountHolder || data.accountHolderName || data.fullName || "",
+      accountNumber: data.accountNumber || "",
+      ifscCode: data.ifsc || data.ifscCode || "",
+      ifsc: data.ifsc || data.ifscCode || "",
+      branch: data.branch || data.branchName || "",
+      branchName: data.branch || data.branchName || "",
+      accountType: data.accountType || "Salary Account",
+      panNumber: data.pan || data.panNumber || "",
+      pfNumber: data.pfNumber || data.uanNumber || "",
+      uanNumber: data.uanNumber || data.pfNumber || "",
+    };
+
+    const address = {
+      houseNumber: data.houseNumber || data.address || "",
+      street: data.street || data.streetArea || "",
+      currentAddress: [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || data.address || "",
+      permanentAddress: data.permanentAddress || [data.houseNumber, data.street].filter(Boolean).join(", ") || data.currentAddress || "",
+      city: data.city || data.cityVillage || "",
+      district: data.district || "",
+      state: data.state || "",
+      pincode: data.pin || data.pincode || "",
+      pin: data.pin || data.pincode || "",
+      country: data.country || "India",
+      alternateMobile: data.alternateMobile || "",
+    };
+
+    return { personal, bank, address, experience: expItems, documents: docsMap };
+  };
+
+  const syncAllSectionsToBackend = async (targetStaffId, currentData) => {
+    if (!targetStaffId) return;
+    const { personal, bank, address, experience, documents } = getFormattedDraftPayload(currentData);
+
+    const saveSection = async (sectionName, payload) => {
+      try {
+        const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+          sectionName,
+          ...payload,
+        });
+        const d = res?.data?.data || res?.data;
+        if (d && typeof d === "object" && (d.profileCompletionPercentage !== undefined || d.profileCompletion !== undefined)) {
+          const comp = d.profileCompletionPercentage ?? d.profileCompletion;
+          setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+        }
+      } catch (err) {
+        console.warn(`Draft save error for section ${sectionName}:`, err);
+      }
+    };
+
+    await saveSection("Personal", { personal, Personal: personal });
+    if (bank.accountNumber || bank.ifscCode || bank.bankName) {
+      await saveSection("Bank", { bank, Bank: bank });
+    }
+    if (address.houseNumber || address.street || address.city || address.pincode) {
+      await saveSection("Address", { address, Address: address });
+    }
+    if (experience.length > 0) {
+      await saveSection("Experience", { experience, Experience: experience });
+    }
+    if (Object.keys(documents).length > 0 || (currentData.documents && currentData.documents.length > 0)) {
+      await saveSection("Documents", { documents, Documents: documents });
+    }
+
+    // Composite full draft to saveProfileDraft
+    try {
+      const resComposite = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+        sectionName: "All",
+        personal,
+        Personal: personal,
+        bank,
+        Bank: bank,
+        address,
+        Address: address,
+        experience,
+        Experience: experience,
+        documents,
+        Documents: documents,
+      });
+      const compData = resComposite?.data?.data || resComposite?.data;
+      if (compData && typeof compData === "object" && (compData.profileCompletionPercentage !== undefined || compData.profileCompletion !== undefined)) {
+        const comp = compData.profileCompletionPercentage ?? compData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Composite draft save warning:", e);
+    }
+
+    // Direct Staff entity update via PUT /api/v1/staff/{id} to persist all sections directly to DB
+    try {
+      const staffUpdatePayload = {
+        ...currentData,
+        ...personal,
+        ...bank,
+        ...address,
+        dateOfBirth: currentData.dob || currentData.dateOfBirth || null,
+        joiningDate: currentData.dateOfJoining || currentData.joiningDate || null,
+        dateOfJoining: currentData.dateOfJoining || currentData.joiningDate || null,
+        documents,
+        experience: experience.length * 1.0,
+        photoPath: currentData.photoPath || currentData.photoUrl || "",
+        profileCompletionPercentage: Math.max(profileCompletion, Number(currentData.profileCompletionPercentage || 0)),
+      };
+      const putRes = await apiClient.put(apiEndpoints.faculty.update(targetStaffId), staffUpdatePayload);
+      const putData = putRes?.data?.data || putRes?.data;
+      if (putData && typeof putData === "object" && (putData.profileCompletionPercentage !== undefined || putData.profileCompletion !== undefined)) {
+        const comp = putData.profileCompletionPercentage ?? putData.profileCompletion;
+        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
+      }
+    } catch (e) {
+      console.warn("Staff PUT update warning:", e);
+    }
+  };
+
   const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       if (!validateCurrentProfileStep()) return;
@@ -1241,6 +1406,19 @@ export default function FacultyProfile() {
           break;
       }
 
+      if (payload.Personal) payload.personal = payload.Personal;
+      if (payload.Bank) payload.bank = payload.Bank;
+      if (payload.Address) payload.address = payload.Address;
+      if (payload.Experience) payload.experience = payload.Experience;
+      if (payload.Documents) {
+        payload.documents = {};
+        (profileData.documents || []).forEach((d, idx) => {
+          const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
+          const v = String(d?.url || d?.name || "uploaded").trim();
+          if (k) payload.documents[k] = v;
+        });
+      }
+
       if (sectionName && targetStaffId) {
         try {
           const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
@@ -1299,15 +1477,26 @@ export default function FacultyProfile() {
     setIsSavingProfile(true);
 
     try {
-      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId;
+      const authUser = getAuthUser() || {};
+      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId || authUser.staffId || authUser.id;
+      let res = null;
       if (staffTargetId) {
-        await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+        await syncAllSectionsToBackend(staffTargetId, profileData);
+        res = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+        const sData = res?.data?.data || res?.data || {};
+        if (sData.profileCompletionPercentage) {
+          profileData.profileCompletionPercentage = sData.profileCompletionPercentage;
+        }
       }
+      const newStatus = res?.data?.profileStatus || res?.data?.data?.profileStatus || "PendingApproval";
+      const isCompleted = String(newStatus).toLowerCase() === "completed" || String(newStatus).toLowerCase() === "approved";
+
       const updated = {
         ...profileData,
-        profileStatus: "Completed",
-        status: "Active",
-        isOnboarded: true,
+        profileStatus: newStatus,
+        status: isCompleted ? "Active" : profileData.status,
+        isOnboarded: isCompleted,
       };
       setProfileData(updated);
       persistStaffProfile(updated);
@@ -1316,13 +1505,48 @@ export default function FacultyProfile() {
       } catch { }
       setIsSavingProfile(false);
       setIsEditingProfile(false);
-      setShowSuccessModal(true);
-      notify("Complete staff profile updated and verified successfully!");
+
+      if (!isCompleted) {
+        setShowPendingApprovalModal(true);
+        notify("Profile submitted successfully. Sent to Admin for offer letter approval.");
+      } else {
+        setShowSuccessModal(true);
+        notify("Complete staff profile updated and verified successfully!");
+      }
     } catch (e) {
       console.error("Failed to submit profile:", e);
       const msg = e?.response?.data?.message || e?.response?.data?.Message || "Failed to submit profile to server";
       notify(msg, "error");
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleDownloadOfferLetter = async () => {
+    const sId = profileData.id || profileData.facultyId || profileData.staffId;
+    if (!sId) {
+      notify("Staff identifier not found for downloading offer letter.", "error");
+      return;
+    }
+    setIsDownloadingOfferLetter(true);
+    try {
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterPdf(sId), {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Offer_Letter_${profileData.employeeId || sId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      notify("Official Offer Letter downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to download offer letter:", err);
+      notify(err?.response?.data?.message || "Failed to download offer letter PDF. Offer letter may not be generated yet.", "error");
+    } finally {
+      setIsDownloadingOfferLetter(false);
     }
   };
 
@@ -1350,6 +1574,35 @@ export default function FacultyProfile() {
           >
             {profileCompletion}% Profile Completed
           </span>
+
+          {(String(profileData?.profileStatus || "").toLowerCase() === "completed" || String(profileData?.profileStatus || "").toLowerCase() === "approved") && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={handleDownloadOfferLetter}
+              disabled={isDownloadingOfferLetter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                boxShadow: "0 2px 8px rgba(53, 94, 59, 0.2)",
+              }}
+              title="Download Official Offer Letter PDF"
+            >
+              {isDownloadingOfferLetter ? (
+                <>
+                  <Loader2 size={14} className="spin" /> Preparing...
+                </>
+              ) : (
+                <>
+                  <FileSignature size={14} /> Download Offer Letter
+                </>
+              )}
+            </button>
+          )}
+
           <button
             type="button"
             className="cms-btn cms-btn-secondary"
@@ -1377,6 +1630,119 @@ export default function FacultyProfile() {
           </button>
         </div>
       </div>
+
+      {/* Workflow Status Banners */}
+      {String(profileData?.profileStatus || "").toLowerCase() === "pendingapproval" && (
+        <div style={{
+          background: "#fffbeb",
+          border: "1px solid #fde68a",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#fef3c7", color: "#b45309", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Clock size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#92400e" }}>
+              Onboarding Submitted — Awaiting Admin Offer Letter Approval
+            </div>
+            <div style={{ fontSize: "13px", color: "#b45309", marginTop: "2px", lineHeight: "1.5" }}>
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "underverification" && (
+        <div style={{
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#dbeafe", color: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <ShieldCheck size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#1e40af" }}>
+              Under Administrative Verification
+            </div>
+            <div style={{ fontSize: "13px", color: "#1d4ed8", marginTop: "2px", lineHeight: "1.5" }}>
+              Your submitted credentials, bank details, and identity documents are actively undergoing verification by HR Administration.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(String(profileData?.profileStatus || "").toLowerCase() === "changes required" || String(profileData?.profileStatus || "").toLowerCase() === "needscorrection") && (
+        <div style={{
+          background: "#fff1f2",
+          border: "1px solid #fecdd3",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#ffe4e6", color: "#e11d48", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <AlertTriangle size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#9f1239" }}>
+              Corrections Requested by Administration
+            </div>
+            <div style={{ fontSize: "13px", color: "#be123c", marginTop: "2px", lineHeight: "1.5" }}>
+              <strong>Admin Reason:</strong> {profileData.correctionNotes || authUser?.correctionNotes || "Please review and update requested sections."}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={() => { setIsEditingProfile(true); setProfileStep(1); }}
+            style={{ fontSize: "13px", padding: "8px 16px", background: "#e11d48", border: "none", color: "#fff" }}
+          >
+            Update Details
+          </button>
+        </div>
+      )}
+
+      {String(profileData?.profileStatus || "").toLowerCase() === "onboarding discontinued" && (
+        <div style={{
+          background: "#f8fafc",
+          border: "1px solid #cbd5e1",
+          borderRadius: "12px",
+          padding: "16px 20px",
+          marginBottom: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "14px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)"
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#e2e8f0", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <X size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: "14px", color: "#334155" }}>
+              Onboarding Process Discontinued
+            </div>
+            <div style={{ fontSize: "13px", color: "#64748b", marginTop: "2px", lineHeight: "1.5" }}>
+              {profileData.correctionNotes || authUser?.correctionNotes || "This onboarding request is discontinued. Please contact HR Administration."}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Staff Identity Strip with Profile Photo Edit - Compact Single-Line Layout */}
       <div className="cms-card sp-profile-summary-card">
@@ -1451,7 +1817,13 @@ export default function FacultyProfile() {
               type="button"
               key={step.id}
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
-              onClick={() => setProfileStep(step.id)}
+              onClick={() => {
+                if (isEditingProfile) {
+                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, profileData);
+                }
+                setProfileStep(step.id);
+              }}
               title={`View ${step.title}`}
             >
               <div className="sp-wizard-num">{isCompleted ? <Check size={14} /> : step.id}</div>
@@ -2111,6 +2483,10 @@ export default function FacultyProfile() {
                                   const updated = safeExperience.filter((item) => item.id !== x.id);
                                   setProfileData({ ...profileData, experience: updated });
                                   persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+   
+   
                                   notify("Experience record removed.");
                                 }}
                                 title="Delete Experience"
@@ -2247,6 +2623,8 @@ export default function FacultyProfile() {
                             const updatedDocs = [...safeDocuments, docRecord];
                             setProfileData({ ...profileData, documents: updatedDocs });
                             persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                             if (docFileRef.current) docFileRef.current.value = "";
                             notify("Document uploaded successfully!");
@@ -2332,6 +2710,8 @@ export default function FacultyProfile() {
                                     const updated = safeDocuments.filter((item) => item.id !== d.id);
                                     setProfileData({ ...profileData, documents: updated });
                                     persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
                                     notify("Document removed.");
                                   }}
                                   title="Delete Document"
@@ -2493,6 +2873,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Personal details updated successfully.");
                           }}
                         >
@@ -2736,6 +3117,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Bank details updated successfully.");
                           }}
                         >
@@ -2937,6 +3319,7 @@ export default function FacultyProfile() {
                               }
                             } catch {}
                             setEditingSection(null);
+                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
                             notify("Address updated successfully.");
                           }}
                         >
@@ -3160,6 +3543,8 @@ export default function FacultyProfile() {
                         setProfileData({ ...profileData, experience: updated });
                         persistStaffProfile({ ...profileData, experience: updated });
                         setNewExp({ institution: "", designation: "", fromDate: "", toDate: "", subjectsTeached: "", totalExp: "" });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
                         notify("Experience added.");
                       }}
                     >
@@ -3195,6 +3580,8 @@ export default function FacultyProfile() {
                               const updated = safeExperience.filter((item) => item.id !== exp.id);
                               setProfileData({ ...profileData, experience: updated });
                               persistStaffProfile({ ...profileData, experience: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
                               notify("Experience record removed.");
                             }}
                             title="Delete Experience"
@@ -3314,6 +3701,8 @@ export default function FacultyProfile() {
                         const updatedDocs = [...safeDocuments, docRecord];
                         setProfileData({ ...profileData, documents: updatedDocs });
                         persistStaffProfile({ ...profileData, documents: updatedDocs });
+                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
                         setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                         if (docFileRef.current) docFileRef.current.value = "";
                         notify("Document uploaded successfully!");
@@ -3351,6 +3740,8 @@ export default function FacultyProfile() {
                               const updated = safeDocuments.filter((item) => item.id !== doc.id);
                               setProfileData({ ...profileData, documents: updated });
                               persistStaffProfile({ ...profileData, documents: updated });
+                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
                               notify("Document removed.");
                             }}
                             title="Delete Document"
@@ -3535,6 +3926,94 @@ export default function FacultyProfile() {
             >
               <span>Go to Login &amp; Access Portal</span>
               <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Submission Sent for Admin Approval Modal */}
+      {showPendingApprovalModal && (
+        <div
+          className="sp-modal-overlay"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 99999,
+            padding: "20px"
+          }}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "16px",
+              padding: "36px 30px",
+              maxWidth: "480px",
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              animation: "fadeIn 0.2s ease-out"
+            }}
+          >
+            <div
+              style={{
+                width: "60px",
+                height: "60px",
+                borderRadius: "50%",
+                background: "#fef3c7",
+                color: "#d97706",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px"
+              }}
+            >
+              <Clock size={36} strokeWidth={2.2} />
+            </div>
+            <h3 style={{ margin: "0 0 10px", fontSize: "20px", fontWeight: 700, color: "#0f172a" }}>
+              Submitted for Admin Approval
+            </h3>
+
+            <div
+              style={{
+                background: "#f8fafc",
+                border: "1px solid #e2e8f0",
+                color: "#334155",
+                padding: "16px",
+                borderRadius: "12px",
+                fontSize: "14px",
+                lineHeight: "1.6",
+                textAlign: "left",
+                margin: "0 0 24px"
+              }}
+            >
+              Your details have been submitted successfully. Your request has been sent to the Admin for approval. Once your request is approved, your offer letter will be generated and sent to your registered email address.
+            </div>
+
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{
+                width: "100%",
+                padding: "12px 20px",
+                fontSize: "15px",
+                fontWeight: 600,
+                borderRadius: "10px",
+                background: "var(--cms-primary, #355e3b)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer"
+              }}
+              onClick={() => setShowPendingApprovalModal(false)}
+            >
+              Acknowledge &amp; Return to Profile
             </button>
           </div>
         </div>

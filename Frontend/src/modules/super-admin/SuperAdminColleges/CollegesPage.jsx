@@ -1,58 +1,67 @@
-import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
-import { useEffect, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
-import { Link } from "react-router-dom";
+﻿import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import { activeAccountCount } from "../superAdminPreview.js";
+import { activeAccountCount, collegeAdmins, mockAdminEligible, saveMockCollege, saveMockApplication, reviewMockApplication } from "../superAdminPreview.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
 import "./CollegesPage.css";
 
-const initial = { name: "", code: "", email: "", phone: "", address: "", logo: "", admin: "", adminEmail: "", plan: "Free", status: "Active" };
+const blank = { name: "", code: "", email: "", phone: "", address: "", logo: "", initialAdminName: "", adminEmail: "", applicantName: "", applicantEmail: "", contact: "", logoUrl: "", plan: "Free" };
 export default function CollegesPage({ registrations = false }) {
   const { data, update, session } = useSuperAdmin();
+  const [params, setParams] = useSearchParams();
   const [form, setForm] = useState(null);
-  const [viewing, setViewing] = useState(false);
-  const modalRef = useRef(null);
-  const modalOpen = Boolean(form);
-  useEffect(() => {
-    if (!modalOpen) return undefined;
-    const previous = document.activeElement;
-    modalRef.current?.focus();
-    const onKey = (event) => {
-      if (event.key === "Escape") setForm(null);
-      if (event.key === "Tab") {
-        const fields = [...modalRef.current.querySelectorAll('button, input, textarea, select, a[href]')].filter((item) => !item.disabled);
-        const first = fields[0], last = fields.at(-1);
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === modalRef.current)) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); previous?.focus(); };
-  }, [modalOpen]);
-  const save = (event) => {
-    event.preventDefault();
-    const saved = update(`${form.id ? "Updated" : "Created"} college ${form.name}`, (current) => {
-      if (current.colleges.some((college) => college.id !== form.id && college.code.toLowerCase() === form.code.trim().toLowerCase())) throw new Error("A college with this code already exists.");
-      if (!form.name.trim() || !form.code.trim()) throw new Error("Enter a college name and code.");
-      if (form.admin && !form.id && !form.adminEmail) throw new Error("Enter the College Admin email.");
-      if (form.admin && !form.id && current.users.some((user) => user.email.toLowerCase() === form.adminEmail.trim().toLowerCase())) throw new Error("An account with this admin email already exists.");
-      const id = form.id || `COL-${crypto.randomUUID().slice(0, 8)}`;
-      const { adminEmail, ...fields } = form;
-      const college = { ...fields, name: form.name.trim(), code: form.code.trim().toUpperCase(), id, registered: form.registered || new Date().toISOString().slice(0, 10), renewal: form.renewal || "" };
-      const users = form.admin && !form.id ? [...current.users, { id: crypto.randomUUID(), name: form.admin, email: adminEmail, collegeId: id, role: "CollegeAdmin", active: true, loginEnabled: true }] : current.users;
-      return { ...current, users, colleges: form.id ? current.colleges.map((item) => item.id === id ? college : item) : [...current.colleges, college] };
+  const [detail, setDetail] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [error, setError] = useState("");
+  const [nextCollege, setNextCollege] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [planFilter, setPlanFilter] = useState("");
+  const [adminFilter, setAdminFilter] = useState("");
+  const [sort, setSort] = useState("newest");
+  const [searchReset, setSearchReset] = useState(0);
+  const title = registrations ? "College Registrations" : "All Colleges";
+  const source = registrations ? data.registrations : data.colleges;
+  const rows = source.map((row) => ({ ...row, admin: registrations ? row.applicantName : collegeAdmins(data, row.id).map((admin) => admin.name).join(", "), displayStatus: registrations ? row.registrationStatus : row.collegeStatus, adminSetup: collegeAdmins(data, registrations ? row.collegeId : row.id).length ? "Admin Assigned" : "Admin Not Assigned" }))
+    .filter((row) => (!statusFilter || row.displayStatus === statusFilter) && (!planFilter || row.plan === planFilter) && (!adminFilter || (row.adminSetup === "Admin Assigned") === (adminFilter === "assigned")))
+    .sort((a, b) => {
+      if (!registrations) return 0;
+      if (sort.startsWith("name")) return a.name.localeCompare(b.name) * (sort === "name-asc" ? 1 : -1);
+      const first = Date.parse(a.submittedAt), second = Date.parse(b.submittedAt);
+      if (!Number.isFinite(first)) return Number.isFinite(second) ? 1 : 0;
+      if (!Number.isFinite(second)) return -1;
+      return (first - second) * (sort === "oldest" ? 1 : -1);
     });
-    if (saved) setForm(null);
+  const summaries = registrations ? [["", "Total Registrations", "campus-configuration", "blue", source.length], ...[["Pending", "Pending Registrations", "notifications", "amber"], ["Approved", "Approved Registrations", "mark-attendance", "green"], ["Rejected", "Rejected Registrations", "leave-types", "red"]].map(([status, label, icon, tone]) => [status, label, icon, tone, source.filter((row) => row.registrationStatus === status).length])] : [["", "Total Colleges", "campus-configuration", "blue", source.length], ["Active", "Active Colleges", "mark-attendance", "green", source.filter((row) => row.collegeStatus === "Active").length], ["Inactive", "Inactive Colleges", "leave-types", "amber", source.filter((row) => row.collegeStatus === "Inactive").length], ["unassigned", "Colleges Without Admin", "teaching-staff", "red", source.filter((row) => !collegeAdmins(data, row.id).length).length]];
+  const openForm = (row) => { setError(""); setForm({ ...blank, ...row }); };
+  const save = (event) => {
+    event.preventDefault(); setError(""); let savedId;
+    const saved = update(registrations ? "Saved registration application" : "Saved college", (current) => {
+      const next = registrations ? saveMockApplication(current, form) : saveMockCollege(current, form);
+      const collection = registrations ? next.registrations : next.colleges;
+      savedId = form.id || collection.at(-1).id; return next;
+    }, { module: registrations ? "Registrations" : "Colleges", actionType: form.id ? "Update" : "Create" });
+    if (saved) { setForm(null); if (!registrations) setNextCollege(savedId); }
+    else setError("Could not save. Check the validation message above and correct the form.");
   };
-  const changeStatus = (college, status) => update(`${status === "Active" ? "Activated" : "Deactivated"} ${college.name}`, (current) => ({ ...current, colleges: current.colleges.map((item) => item.id === college.id ? { ...item, status } : item) }));
-  const open = (college, readOnly = false) => { setViewing(readOnly); setForm(college ? { ...college } : { ...initial }); };
-  return <div className="sa-page"><header className="sa-page-head"><div><span className="sa-eyebrow">College management</span><h1><span className="sa-page-title-icon"><ThreeDIcon name="campus-configuration" size={27}/></span>{registrations ? "College Registrations" : "All Colleges"}</h1><p>Manage college profiles, access and subscription ownership.</p></div><button type="button" className="cms-btn cms-btn-primary" disabled={!session.preview} onClick={() => open()}><Plus size={16}/> Add College</button></header>
-    <SuperAdminTable title={registrations ? "Pending registrations" : "College directory"} rows={data.colleges.filter((college) => !registrations || college.status === "Pending")} columns={[
-      { key: "name", label: "College", render: (college) => <div><strong>{college.name}</strong><small className="sa-college-code">{college.code} · {college.id}</small></div> }, { key: "admin", label: "College Admin" }, { key: "email", label: "Email" }, { key: "plan", label: "Plan" },
-      { key: "accounts", label: "Account Usage", render: (college) => `${activeAccountCount(data.users, college.id)} / ${data.plans.find((plan) => plan.name === college.plan)?.limit ?? "—"}` }, { key: "status", label: "Status", render: (college) => <SuperAdminBadge value={college.status}/> },
-      { key: "actions", label: "Actions", render: (college) => <div className="sa-actions"><button className="cms-btn" type="button" onClick={() => open(college, true)}>View</button><button className="cms-btn" type="button" disabled={!session.preview} onClick={() => open(college)}>Edit</button><button className="cms-btn" type="button" disabled={!session.preview} onClick={() => changeStatus(college, college.status === "Active" ? "Inactive" : "Active")}>{college.status === "Pending" ? "Approve" : college.status === "Active" ? "Deactivate" : "Activate"}</button></div> },
+  const review = (row, status) => setConfirm({ title: `${status === "Approved" ? "Approve" : "Reject"} registration?`, message: status === "Approved" ? `Approve ${row.name} and link or create one active college? No login account is created.` : `Reject ${row.name}? The application remains in history and no college is activated.`, run: () => {
+    let id;
+    const saved = update(`${status} registration: ${row.name}`, (current) => { const next = reviewMockApplication(current, row.id, status); id = next.registrations.find((item) => item.id === row.id).collegeId; return next; }, { module: "Registrations", actionType: status });
+    if (saved && id) setNextCollege(id);
+  } });
+  const assignLink = (collegeId) => `/super-admin/college-admins?collegeId=${encodeURIComponent(collegeId)}&action=create`;
+  const viewing = detail || (!registrations && params.get("view") ? data.colleges.find((row) => row.id === params.get("view")) : null);
+  const closeDetails = () => { setDetail(null); if (params.has("view")) setParams((current) => { const next = new URLSearchParams(current); next.delete("view"); return next; }); };
+  return <div className="sa-page"><header className="sa-page-head"><div><span className="sa-eyebrow">College management</span><h1><span className="sa-page-title-icon"><ThreeDIcon name="campus-configuration" size={27}/></span>{title}</h1><p>{registrations ? "Review mock applications independently of college activation status." : "College directory, subscription ownership and administrator setup."}</p></div><button className="cms-btn cms-btn-primary" disabled={!session.preview} onClick={() => openForm(null)}>{registrations ? "Submit Mock Registration" : "Add College"}</button></header>
+    <div className="sa-registration-summary">{summaries.map(([status, label, icon, tone, count]) => <button type="button" key={label} className={`sa-registration-stat tone-${tone}${(status === "unassigned" ? adminFilter === "unassigned" : statusFilter === status && !adminFilter) ? " is-selected" : ""}`} onClick={() => { setStatusFilter(status === "unassigned" ? "" : status); setAdminFilter(status === "unassigned" ? "unassigned" : ""); }}><span className="sa-registration-stat-icon"><ThreeDIcon name={icon} size={25}/></span><span><small>{label}</small><strong>{count}</strong></span></button>)}</div>
+    {nextCollege && <section className="sa-panel sa-onboarding-next" role="status"><strong>College saved. Next: Assign College Admin.</strong><div className="sa-actions"><Link className="cms-btn" to={`/super-admin/colleges?view=${encodeURIComponent(nextCollege)}`}>View College</Link><Link className="cms-btn cms-btn-primary" to={assignLink(nextCollege)}>Assign College Admin</Link><button className="cms-btn" onClick={() => setNextCollege(null)}>Dismiss</button></div></section>}
+    <SuperAdminTable key={searchReset} title={registrations ? "Registration Management" : "College directory"} rows={rows} filterKey={`${statusFilter}:${planFilter}:${adminFilter}:${sort}`} toolbar={<div className="sa-registration-filters"><label>{registrations ? "Registration Status" : "College Status"}<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">{registrations ? "All Registrations" : "All Statuses"}</option>{(registrations ? ["Pending", "Approved", "Rejected"] : ["Active", "Inactive"]).map((status) => <option key={status}>{status}</option>)}</select></label><label>Subscription Plan<select value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}><option value="">All Plans</option>{data.plans.map((plan) => <option key={plan.id}>{plan.name}</option>)}</select></label>{registrations ? <label>Sort By<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="name-asc">College Name A–Z</option><option value="name-desc">College Name Z–A</option></select></label> : <label>Admin Assignment<select value={adminFilter} onChange={(event) => setAdminFilter(event.target.value)}><option value="">All Colleges</option><option value="assigned">Admin Assigned</option><option value="unassigned">Admin Not Assigned</option></select></label>}<button className="cms-btn" onClick={() => { setStatusFilter(""); setPlanFilter(""); setAdminFilter(""); setSort("newest"); setSearchReset((value) => value + 1); }}>Clear Filters</button></div>} columns={[
+      { key: "name", label: "College", render: (row) => <div><strong>{row.name}</strong><small className="sa-college-code">{row.code}</small></div> }, { key: "admin", label: registrations ? "Applicant / Admin Contact" : "College Admin", render: (row) => row.admin || "Admin Not Assigned" }, { key: "email", label: "Email" }, { key: "plan", label: "Plan" }, { key: "usage", label: "Account Usage", render: (row) => { const id = registrations ? row.collegeId : row.id; return `${id ? activeAccountCount(data.users, id) : 0} / ${data.plans.find((plan) => plan.name === row.plan)?.limit ?? "—"}`; } }, { key: "displayStatus", label: "Status", render: (row) => <span className={`cms-badge sa-registration-badge status-${row.displayStatus?.toLowerCase()}`}>{row.displayStatus}</span> }, ...(!registrations ? [{ key: "adminSetup", label: "Admin Setup Status" }] : []),
+      { key: "actions", label: "Actions", render: (row) => <div className="sa-actions"><button className="cms-btn" onClick={() => setDetail(row)}>View</button>{(!registrations || row.registrationStatus === "Pending") && <button className="cms-btn" disabled={!session.preview} onClick={() => openForm(row)}>Edit</button>}{registrations ? row.registrationStatus === "Pending" ? <><button className="cms-btn" disabled={!session.preview} onClick={() => review(row, "Approved")}>Approve</button><button className="cms-btn" disabled={!session.preview} onClick={() => review(row, "Rejected")}>Reject</button></> : row.collegeId && <><Link className="cms-btn" to={`/super-admin/colleges?view=${encodeURIComponent(row.collegeId)}`}>View College</Link><Link className="cms-btn" to={assignLink(row.collegeId)}>Assign Admin</Link></> : <><button className="cms-btn" disabled={!session.preview} onClick={() => setConfirm({ title: "Change college status?", message: `${row.status === "Active" ? "Deactivate" : "Activate"} ${row.name}? Deactivation blocks mock admin access without deleting accounts.`, run: () => update("Changed college status", (current) => ({ ...current, colleges: current.colleges.map((college) => college.id === row.id ? { ...college, status: college.status === "Active" ? "Inactive" : "Active" } : college) }), { module: "Colleges", actionType: "Status change", collegeId: row.id }) })}>{row.status === "Active" ? "Deactivate" : "Activate"}</button><Link className="cms-btn" to={assignLink(row.id)}>Assign Admin</Link></>}</div> },
     ]}/>
-    {form ? <div className="sa-modal-backdrop" onClick={(event) => { if (event.target === event.currentTarget) setForm(null); }}><section className="sa-modal" ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="sa-college-title"><header><h2 id="sa-college-title">{viewing ? "College Details" : form.id ? "Edit College" : "Add College"}</h2><button className="cms-icon-btn" type="button" aria-label="Close college details" onClick={() => setForm(null)}><X size={18}/></button></header><form onSubmit={save} className="sa-form"><div className="sa-form-grid">{[["name", "College Name", "text", true], ["code", "College Code", "text", true], ["email", "Email", "email", true], ["phone", "Contact Number", "tel", false], ["address", "Address", "text", false], ["logo", "Logo URL", "url", false], ["admin", "College Admin", "text", false], ...(!form.id ? [["adminEmail", "Admin Email", "email", false]] : [])].map(([key, label, type, required]) => <label key={key}>{label}<input type={type} required={required} readOnly={viewing} value={form[key] || ""} onChange={(event) => setForm({ ...form, [key]: event.target.value })}/></label>)}</div>{!form.id ? <p className="sa-muted">New colleges start on the Free plan. The preview records the admin locally; it does not send invitations or create real logins.</p> : <div className="sa-actions"><Link className="cms-btn" to="/super-admin/subscriptions" onClick={() => setForm(null)}>View Subscription</Link><Link className="cms-btn" to="/super-admin/account-usage" onClick={() => setForm(null)}>Account Usage</Link>{!form.admin ? <Link className="cms-btn" to="/super-admin/college-admins" onClick={() => setForm(null)}>Create College Admin</Link> : null}</div>}<footer><button type="button" className="cms-btn" onClick={() => setForm(null)}>Close</button>{!viewing ? <button type="submit" className="cms-btn cms-btn-primary">Save College</button> : null}</footer></form></section></div> : null}
+    {form && <Modal title={registrations ? form.id ? "Edit Registration" : "Submit Mock Registration" : form.id ? "Edit College" : "Add College"} onClose={() => setForm(null)}><form className="sa-form" onSubmit={save}><div className="sa-form-grid">{[["name", "College Name", "text", true], ["code", "Unique College Code", "text", true], ["email", "College Email", "email", true], [registrations ? "contact" : "phone", "Contact Number", "tel", false], ["address", "Address", "text", false], [registrations ? "logoUrl" : "logo", "Logo URL", "url", false], ...(registrations ? [["applicantName", "Applicant Name", "text", true], ["applicantEmail", "Applicant Email", "email", true]] : [["initialAdminName", "Initial Admin Name (contact only)", "text", false], ["adminEmail", "Initial Admin Email (contact only)", "email", false]])].map(([key, label, type, required]) => <label key={key}>{label}<input type={type} required={required} value={form[key] || ""} onChange={(event) => setForm({ ...form, [key]: event.target.value })}/></label>)}{registrations && <label>Requested Plan<select value={form.plan} onChange={(event) => setForm({ ...form, plan: event.target.value })}>{data.plans.filter((plan) => plan.active !== false).map((plan) => <option key={plan.id}>{plan.name}</option>)}</select></label>}</div><p className="sa-muted">Mock preview only. Saving contact details does not create a login account, credentials or invitation.</p>{error && <p role="alert">{error}</p>}<div className="sa-actions"><button type="button" className="cms-btn" onClick={() => setForm(null)}>Cancel</button><button className="cms-btn cms-btn-primary" disabled={!session.preview}>Save {registrations ? "Application" : "College"}</button></div></form></Modal>}
+    {viewing && <Modal title={registrations ? "Registration Details" : "College Details"} onClose={closeDetails}><dl className="sa-onboarding-details">{(registrations ? [["College", viewing.name], ["Code", viewing.code], ["Applicant", viewing.applicantName], ["Applicant Email", viewing.applicantEmail], ["Registration Status", viewing.registrationStatus], ["Submitted", viewing.submittedAt || "Not recorded"], ["Reviewed", viewing.reviewedAt || "Not reviewed"], ["Linked College", viewing.collegeId || "Not linked"]] : [["College", viewing.name], ["Code", viewing.code], ["Email", viewing.email], ["Source", viewing.source], ["College Status", viewing.collegeStatus], ["Plan", viewing.plan], ["Account Usage", `${activeAccountCount(data.users, viewing.id)} / ${data.plans.find((plan) => plan.name === viewing.plan)?.limit ?? "—"}`], ["Assigned Admins", collegeAdmins(data, viewing.id).map((admin) => `${admin.name} (${admin.email}) — ${mockAdminEligible(data, admin) ? "Mock access available" : "Mock access unavailable"}`).join("; ") || "Admin Not Assigned"]]).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>{!registrations && <div className="sa-actions"><Link className="cms-btn cms-btn-primary" to={assignLink(viewing.id)}>Assign College Admin</Link><Link className="cms-btn" to="/super-admin/subscriptions">View Subscription</Link><Link className="cms-btn" to="/super-admin/account-usage">Account Usage</Link></div>}</Modal>}
+    {confirm && <ConfirmDialog title={confirm.title} message={confirm.message} onCancel={() => setConfirm(null)} onConfirm={() => { confirm.run(); setConfirm(null); }}/>}
   </div>;
 }

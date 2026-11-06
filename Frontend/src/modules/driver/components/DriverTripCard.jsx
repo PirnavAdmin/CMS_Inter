@@ -8,7 +8,7 @@ export default function DriverTripCard({
   onStartTrip,
   onEndTrip,
   checklist = [],
-  emergencyContact = "+91 98765 43210",
+  emergencyContact = "+91 98480 22338",
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isStartable = ["Pending", "Not Started", "Scheduled"].includes(trip.status);
@@ -20,11 +20,26 @@ export default function DriverTripCard({
     return next;
   });
   const [checkedItems, setCheckedItems] = useState({});
-  const [odometerStart, setOdometerStart] = useState("42175");
+  const [odometerStart, setOdometerStart] = useState(trip?.odometerStart || trip?.startOdometer || "42175");
   const [odometerEnd, setOdometerEnd] = useState("");
   const [fuelAdded, setFuelAdded] = useState("");
   const [tripNotes, setTripNotes] = useState("");
-  const [tripDurationSeconds, setTripDurationSeconds] = useState(1840); // 30m 40s mock active
+
+  const initialDuration = useMemo(() => {
+    if (trip?.status === "In Progress" && trip.startTime) {
+      try {
+        const start = new Date(trip.startTime).getTime();
+        const now = Date.now();
+        const diffSecs = Math.max(0, Math.floor((now - start) / 1000));
+        return diffSecs > 0 && diffSecs < 86400 ? diffSecs : 0;
+      } catch {
+        return 0;
+      }
+    }
+    return 0;
+  }, [trip?.status, trip?.startTime]);
+
+  const [tripDurationSeconds, setTripDurationSeconds] = useState(initialDuration);
   const [showSosModal, setShowSosModal] = useState(false);
 
   // Live timer if in progress
@@ -90,7 +105,7 @@ export default function DriverTripCard({
 
   const handleConfirmEnd = () => {
     if (onEndTrip) {
-      onEndTrip(trip.id, { odometerEnd: odometerEnd || "42200", fuelAdded, tripNotes });
+      onEndTrip(trip.id, { odometerEnd: odometerEnd || String(Number(odometerStart || 42175) + 21), fuelAdded, tripNotes });
     }
   };
 

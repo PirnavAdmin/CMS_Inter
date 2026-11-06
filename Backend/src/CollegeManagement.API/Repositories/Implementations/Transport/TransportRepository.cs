@@ -107,30 +107,39 @@ public class TransportRepository : ITransportRepository
     public async Task AddVehicleAsync(TransportVehicle vehicle)
     {
         var conn = Connection;
+        const string sql20 = @"CALL sp_CreateTransportVehicles(
+            @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
+            @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
+            @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
+            @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId
+        );";
+
         var id = await conn.ExecuteScalarAsync<long>(
-            "sp_CreateTransportVehicles",
+            sql20,
             new
             {
                 p_VehicleNumber = vehicle.VehicleNumber ?? "",
-                p_VehicleRegistrationNo = vehicle.RegistrationNumber ?? vehicle.VehicleNumber ?? "",
-                p_VehicleName = vehicle.VehicleName ?? "",
                 p_VehicleType = vehicle.VehicleType ?? "Bus",
+                p_Capacity = vehicle.Capacity,
+                p_IsActive = vehicle.Status ? (byte)1 : (byte)0,
+                p_VehicleRegistrationNo = vehicle.RegistrationNumber ?? vehicle.VehicleNumber ?? "",
+                p_MaximumCapacity = vehicle.Capacity,
                 p_Make = vehicle.Manufacturer ?? "",
                 p_Model = vehicle.Model ?? "",
+                p_YearOfManufacture = 0,
                 p_ChassisNumber = vehicle.ChassisNumber ?? "",
                 p_EngineNumber = vehicle.EngineNumber ?? "",
-                p_GpsDeviceId = vehicle.GpsDeviceId ?? "",
-                p_InsuranceNumber = vehicle.InsuranceNumber ?? "",
                 p_InsuranceExpiry = vehicle.InsuranceExpiry,
-                p_PollutionExpiry = vehicle.PollutionExpiry,
                 p_FitnessExpiry = vehicle.FitnessExpiry,
-                p_Capacity = vehicle.Capacity,
+                p_PollutionExpiry = vehicle.PollutionExpiry,
+                p_GpsDeviceId = vehicle.GpsDeviceId ?? "",
                 p_IsAC = vehicle.IsAC ? (byte)1 : (byte)0,
-                p_Status = vehicle.Status ? (byte)1 : (byte)0,
+                p_InsuranceNumber = vehicle.InsuranceNumber ?? "",
                 p_CreatedBy = vehicle.CreatedBy,
+                p_UpdatedBy = vehicle.CreatedBy,
                 p_CampusId = vehicle.CampusId ?? 1
             },
-            commandType: CommandType.StoredProcedure);
+            commandType: CommandType.Text);
 
         vehicle.VehicleId = id;
     }
