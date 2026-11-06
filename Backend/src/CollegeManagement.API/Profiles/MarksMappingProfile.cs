@@ -86,6 +86,27 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.PublishedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.IsActive, opt => opt.Ignore())
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore());
+
+            // 4. SaveMarkDto -> MarkResponseDto Mapping
+            CreateMap<SaveMarkDto, MarkResponseDto>()
+                .ForMember(dest => dest.MarkId, opt => opt.Ignore())
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : ((src.TotalMarks.HasValue && src.TotalMarks.Value >= 0)
+                    ? src.TotalMarks.Value
+                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value >= 0)
+                        ? src.ObtainedMarks.Value
+                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => EvaluationStatus.SUBMITTED))
+                .ForMember(dest => dest.IsVerified, opt => opt.MapFrom(_ => false))
+                .ForMember(dest => dest.IsPublished, opt => opt.MapFrom(_ => false))
+                .ForMember(dest => dest.IsLocked, opt => opt.MapFrom(_ => false))
+                .ForMember(dest => dest.IsActive, opt => opt.MapFrom(_ => true))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.VerifiedBy, opt => opt.Ignore())
+                .ForMember(dest => dest.VerifiedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.ApprovedBy, opt => opt.Ignore())
+                .ForMember(dest => dest.ApprovedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.PublishedAt, opt => opt.Ignore());
         }
     }
 }
