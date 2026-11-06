@@ -25,6 +25,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { getModuleState, saveModuleState } from "../statePersistence.js";
 import { Modal, Toast, Pagination } from "@/shared/components/Ui.jsx";
+import { enrichExaminations } from "../services/examCellMasterData.js";
 import "./HallTickets.css";
 
 const normalizeId = (val) => String(val ?? "").trim();
@@ -236,13 +237,13 @@ export default function HallTickets() {
       })
       .then((res) => {
         if (!active) return;
-        let list = unwrapRecords(res);
+        let list = enrichExaminations(unwrapRecords(res));
         if (list.length === 0) {
           api
             .get("/api/v1/examinations", { params: { campusId: selectedCampusId, pageSize: 100 } })
             .then((fb) => {
               if (active) {
-                const fbList = unwrapRecords(fb);
+                const fbList = enrichExaminations(unwrapRecords(fb));
                 setExams(fbList);
                 if (fbList.length > 0 && !examId) {
                   setExamId(String(fbList[0].examinationId || fbList[0].id));

@@ -4798,7 +4798,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       apiClient.get(apiEndpoints.hostel.fees),
       apiClient.get(apiEndpoints.hostel.blocks),
       apiClient.get(apiEndpoints.hostel.roomTypes),
-      apiClient.get(apiEndpoints.fee.fineRules),
+      apiClient.get(apiEndpoints.fee.fineRules, { silent: true, skipErrorLog: true }),
     ]);
     if (structureRequestRef.current !== requestId) return;
     const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];

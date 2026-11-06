@@ -21,6 +21,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
 import { getModuleState, saveModuleState } from "../statePersistence.js";
 import { Toast, Pagination } from "@/shared/components/Ui.jsx";
+import { enrichExaminations } from "../services/examCellMasterData.js";
 import "@/modules/admin/AdminExaminations/ExaminationPage.css";
 import "./ExamReports.css";
 
@@ -170,6 +171,11 @@ const unwrapRecords = (res) => {
   return [];
 };
 
+const getExamId = (e) => String(e?.examinationId ?? e?.examId ?? e?.id ?? "");
+const getExamName = (e) => e?.examName || e?.name || "Examination Report";
+const getExamGroup = (e) => e?.groupName || e?.group || "All Groups";
+const getExamLevel = (e) => e?.academicLevelName || e?.academicLevel || "General";
+
 export default function ExamReports() {
   const { selectedCampusId: campusId } = useCampusContext();
   const { selectedBoardId: boardId, selectedAcademicYearId: academicYearId } = useAcademicContext();
@@ -232,7 +238,8 @@ export default function ExamReports() {
   };
 
   const selectedExam = useMemo(() => {
-    return exams.find((e) => String(e.examinationId || e.id) === String(examId)) || null;
+    if (!examId) return null;
+    return exams.find((e) => getExamId(e) === String(examId)) || null;
   }, [exams, examId]);
 
   // Load Examinations
@@ -244,21 +251,21 @@ export default function ExamReports() {
       })
       .then((res) => {
         if (!active) return;
-        let list = unwrapRecords(res);
+        let list = enrichExaminations(unwrapRecords(res));
         if (list.length === 0) {
           api
             .get(apiEndpoints.examinations.getAll, { params: { campusId, pageSize: 1000 } })
             .then((fb) => {
               if (active) {
-                const fbList = unwrapRecords(fb);
+                const fbList = enrichExaminations(unwrapRecords(fb));
                 setExams(fbList);
-                if (fbList.length > 0 && !examId) setExamId(String(fbList[0].examinationId || fbList[0].id));
+                if (fbList.length > 0 && !examId) setExamId(getExamId(fbList[0]));
               }
             })
             .catch(() => {});
         } else {
           setExams(list);
-          if (list.length > 0 && !examId) setExamId(String(list[0].examinationId || list[0].id));
+          if (list.length > 0 && !examId) setExamId(getExamId(list[0]));
         }
       })
       .catch((err) => {
@@ -280,33 +287,143 @@ export default function ExamReports() {
     }
 
     setBusy(true);
+
+    const targetExam = exams.find((ex) => getExamId(ex) === String(examId)) || selectedExam;
+    const numericExamId = Number(examId);
+
+    // CRITICAL: Query results strictly by examId so the backend stored procedure
+    // does not filter out records due to mismatched board or academic year context!
     const params = {
-      campusId,
-      boardId,
-      academicYearId,
-      examinationId: examId,
-      examId,
-      groupId: selectedExam?.groupId,
-      academicLevelId: selectedExam?.academicLevelId,
-      programId: selectedExam?.programId,
+      examId: numericExamId,
+      examinationId: numericExamId,
     };
+    if (targetExam?.campusId || campusId) {
+      params.campusId = targetExam?.campusId || campusId;
+    }
 
     try {
+      // 1. Fetch analytics & competition rank list from ResultService
       const [analyticsRes, ranksRes] = await Promise.all([
         api.get("/api/v1/results/analytics", { params }).catch(() => null),
         api.get("/api/v1/results/rank-list", { params }).catch(() => null),
       ]);
 
-      const loadedAnalytics = analyticsRes?.data?.data ?? analyticsRes?.data ?? null;
+      let loadedAnalytics = analyticsRes?.data?.data ?? analyticsRes?.data ?? null;
       let loadedRanks = ranksRes ? unwrapRecords(ranksRes) : [];
 
-      const hasRealAnalytics = loadedAnalytics && Number(loadedAnalytics.totalStudents) > 0;
-      const hasRealRanks = Array.isArray(loadedRanks) && loadedRanks.length > 0;
+      let hasRealAnalytics = loadedAnalytics && Number(loadedAnalytics.totalStudents || loadedAnalytics.total) > 0;
+      let hasRealRanks = Array.isArray(loadedRanks) && loadedRanks.length > 0;
+
+      // 2. If no results returned from Results table, check if marks exist in Marks table that can be processed
+      if (!hasRealAnalytics && !hasRealRanks) {
+        try {
+          const processRes = await api.post("/api/v1/results/process", {
+            examId: numericExamId,
+            examinationId: numericExamId,
+            campusId: targetExam?.campusId || campusId || 1,
+            boardId: targetExam?.boardId || 0,
+            academicYearId: targetExam?.academicYearId || 0,
+            academicLevelId: targetExam?.academicLevelId || 0,
+            groupId: targetExam?.groupId || 0,
+          }).catch(() => null);
+
+          if (processRes && processRes.status >= 200 && processRes.status < 300) {
+            const [retryAnalyticsRes, retryRanksRes] = await Promise.all([
+              api.get("/api/v1/results/analytics", { params }).catch(() => null),
+              api.get("/api/v1/results/rank-list", { params }).catch(() => null),
+            ]);
+
+            const retryAnalytics = retryAnalyticsRes?.data?.data ?? retryAnalyticsRes?.data ?? null;
+            const retryRanks = retryRanksRes ? unwrapRecords(retryRanksRes) : [];
+
+            if ((retryAnalytics && Number(retryAnalytics.totalStudents || retryAnalytics.total) > 0) || (Array.isArray(retryRanks) && retryRanks.length > 0)) {
+              loadedAnalytics = retryAnalytics;
+              loadedRanks = retryRanks;
+              hasRealAnalytics = loadedAnalytics && Number(loadedAnalytics.totalStudents || loadedAnalytics.total) > 0;
+              hasRealRanks = Array.isArray(loadedRanks) && loadedRanks.length > 0;
+            }
+          }
+        } catch {}
+      }
+
+      // 3. Fallback: Check student analysis / evaluation marks directly if Results table has no entries
+      if (!hasRealAnalytics && !hasRealRanks) {
+        try {
+          const analysisRes = await api.get("/api/v1/student-analysis", {
+            params: { examinationId: numericExamId, examId: numericExamId }
+          }).catch(() => null);
+
+          const analysisItems = analysisRes ? unwrapRecords(analysisRes) : [];
+          if (Array.isArray(analysisItems) && analysisItems.length > 0) {
+            const studentMap = new Map();
+            analysisItems.forEach((item) => {
+              const sid = item.studentId || item.id;
+              if (!sid) return;
+              if (!studentMap.has(sid)) {
+                studentMap.set(sid, {
+                  studentId: sid,
+                  studentName: item.studentName || item.name || "Student",
+                  rollNumber: item.rollNumber || item.rollNo || item.admissionNo || String(sid),
+                  sectionName: item.sectionName || item.section || targetExam?.sectionName || "Section A",
+                  obtainedMarks: 0,
+                  totalMaxMarks: 0,
+                  hasFail: false,
+                });
+              }
+              const entry = studentMap.get(sid);
+              const scored = Number(item.marksObtained ?? item.totalMarks ?? item.obtainedMarks ?? 0);
+              const maxM = Number(item.maxMarks ?? item.maximumMarks ?? 100);
+              const passM = Number(item.passingMarks ?? 35);
+              entry.obtainedMarks += scored;
+              entry.totalMaxMarks += maxM;
+              if (scored < passM || item.status === "FAIL" || item.result === "FAIL") {
+                entry.hasFail = true;
+              }
+            });
+
+            const computedRanks = Array.from(studentMap.values())
+              .sort((a, b) => b.obtainedMarks - a.obtainedMarks)
+              .map((st, idx) => {
+                const pct = st.totalMaxMarks > 0 ? Number(((st.obtainedMarks / st.totalMaxMarks) * 100).toFixed(1)) : 0;
+                return {
+                  rank: idx + 1,
+                  studentId: st.studentId,
+                  studentName: st.studentName,
+                  rollNumber: st.rollNumber,
+                  sectionName: st.sectionName,
+                  totalMarks: st.obtainedMarks,
+                  percentage: pct,
+                  result: (!st.hasFail && pct >= 35) ? "PASS" : "FAIL",
+                };
+              });
+
+            if (computedRanks.length > 0) {
+              loadedRanks = computedRanks;
+              hasRealRanks = true;
+              const total = computedRanks.length;
+              const passed = computedRanks.filter((r) => r.result === "PASS").length;
+              const failed = total - passed;
+              const passPct = total > 0 ? Math.round((passed / total) * 100) : 0;
+              const avgPct = total > 0 ? Number((computedRanks.reduce((s, r) => s + r.percentage, 0) / total).toFixed(1)) : 0;
+              loadedAnalytics = {
+                totalStudents: total,
+                passed,
+                failed,
+                passPercentage: passPct,
+                averagePercentage: avgPct,
+                highestPercentage: computedRanks[0]?.percentage || 0,
+                subjectPerformance: [],
+              };
+              hasRealAnalytics = true;
+            }
+          }
+        } catch {}
+      }
 
       let finalRanks = loadedRanks;
       let finalAnalytics = loadedAnalytics;
 
-      if (!hasRealAnalytics) {
+      if (!hasRealAnalytics && hasRealRanks) {
         const total = finalRanks.length;
         const passed = finalRanks.filter((r) => String(r.result).toUpperCase() === "PASS").length;
         const failed = total - passed;
@@ -319,6 +436,17 @@ export default function ExamReports() {
           passPercentage,
           averagePercentage: avg,
           highestPercentage: finalRanks[0]?.percentage || 0,
+          subjectPerformance: [],
+        };
+      } else if (!finalAnalytics) {
+        finalAnalytics = {
+          totalStudents: 0,
+          passed: 0,
+          failed: 0,
+          passPercentage: 0,
+          averagePercentage: 0,
+          highestPercentage: 0,
+          subjectPerformance: [],
         };
       }
 
@@ -326,7 +454,11 @@ export default function ExamReports() {
       setRanks(finalRanks);
 
       if (isManualClick) {
-        showToast("Examination analytics and rank list loaded successfully!");
+        if (finalRanks.length > 0 || Number(finalAnalytics.totalStudents) > 0) {
+          showToast("Examination analytics and rank list loaded successfully!");
+        } else {
+          showToast("No marks or results recorded for this examination yet.", "warning");
+        }
       }
     } catch (err) {
       if (isManualClick) {
@@ -341,7 +473,7 @@ export default function ExamReports() {
     if (examId) {
       handleLoadReports();
     }
-  }, [examId]);
+  }, [examId, exams.length]);
 
   // Export Excel
   const handleExportExcel = () => {
@@ -417,11 +549,14 @@ export default function ExamReports() {
               style={{ width: "100%", height: "40px" }}
             >
               <option value="">-- Choose Examination --</option>
-              {exams.map((ex) => (
-                <option key={ex.examinationId || ex.id} value={ex.examinationId || ex.id}>
-                  {ex.examName || ex.name} · {ex.groupName || "All Groups"} · {ex.academicLevelName || ex.academicLevel || "General"}
-                </option>
-              ))}
+              {exams.map((ex) => {
+                const idVal = getExamId(ex);
+                return (
+                  <option key={idVal} value={idVal}>
+                    {getExamName(ex)} · {getExamGroup(ex)} · {getExamLevel(ex)}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

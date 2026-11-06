@@ -8,12 +8,12 @@ import {
   createDefaultAttendanceMap,
 } from "./hostelAttendanceData.js";
 
-const STORAGE_KEY = "pirnav_hostel_management_store_v1";
+const STORAGE_KEY = "pirnav_hostel_management_store_v2";
 
 const INITIAL_CATEGORIES = [
   {
     id: "cat-1",
-    name: "Single Occupancy AC Deluxe",
+    name: "Single Occupancy AC",
     type: "AC Accommodation",
     specification: "AC, Attached Bath, Study Table, Balcony",
     capacity: 1,
@@ -62,13 +62,13 @@ const INITIAL_CATEGORIES = [
   {
     id: "cat-5",
     name: "Premium Scholar AC Suite",
-    type: "Special / Deluxe AC",
+    type: "AC Accommodation",
     specification: "Air Conditioned, High-Speed LAN, Refrigerator",
     capacity: 1,
     fee: "₹15,000/mo",
     totalRooms: 6,
     totalBeds: 6,
-    blocks: "Co-ed Scholars & Staff Wing",
+    blocks: "Boys Residence - Block A, Girls Residence - Block A",
     status: "Active",
   },
 ];

@@ -2300,6 +2300,10 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
       medium: "English",
     };
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState("");
+  const [feeConfig, setFeeConfig] = useState(() => savedSingleDraft?.feeConfig || EMPTY_FEE_CONFIG);
 
   useEffect(() => {
     if (currentStudent || target.year || target.group) {
@@ -2312,10 +2316,6 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
       });
     }
   }, [currentStudent, target, feeConfig]);
-  const [submitting, setSubmitting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState("");
-  const [feeConfig, setFeeConfig] = useState(EMPTY_FEE_CONFIG);
 
   useEffect(() => {
     if (preselectedStudent) {
@@ -2332,8 +2332,8 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     }
   }, [defaultNextYearId, target.year]);
 
-  const board = masters.boards.find((entry) => entry.value === asString(selectedBoardId));
-  const targetLevels = masters.levels.filter((level) => level.board === asString(selectedBoardId)
+  const board = (masters?.boards || []).find((entry) => entry.value === asString(selectedBoardId));
+  const targetLevels = (masters?.levels || []).filter((level) => level.board === asString(selectedBoardId)
     || board?.academicLevelIds?.includes(asString(level.value))
     || board?.academicLevelNames?.some((name) => name.toLowerCase() === level.label.toLowerCase()));
   const targetLevelLabel = targetLevels.find((level) => level.value === asString(target.level))?.label;
@@ -2612,10 +2612,10 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     }
   }, [targetSections, target.section, currentStudent?.section]);
 
-  const targetYearLabel = masters.years.find((year) => year.value === asString(target.year))?.label;
+  const targetYearLabel = (masters?.years || []).find((year) => year.value === asString(target.year))?.label;
 
   const fields = [
-    { name: "year", label: "Target Academic Year", type: "select", options: uniqueAcademicYearsByName(masters.years, (year) => year.label), required: true },
+    { name: "year", label: "Target Academic Year", type: "select", options: uniqueAcademicYearsByName(masters?.years || [], (year) => year.label), required: true },
     { name: "level", label: "Target Academic Level", type: "select", options: targetLevels, required: true, disabled: !selectedBoardId || !target.year },
     { name: "group", label: "Target Group", type: "select", options: availableGroups, required: true, disabled: !target.level || groupsLoading },
     { name: "program", label: "Target Program", type: "select", options: targetPrograms, required: true, disabled: !target.group || programsLoading },
@@ -2647,7 +2647,7 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
     setSubmitting(true);
     setError("");
     try {
-      const targetLevel = masters.levels.find((level) => level.value === asString(target.level))?.label || asString(target.level);
+      const targetLevel = (masters?.levels || []).find((level) => level.value === asString(target.level))?.label || asString(target.level);
       await promoteSingleStudent(currentStudent.id, {
         ...promotionFeePayload(singleFeePreview.data, feeConfig),
         campusId: numericId(campusId),

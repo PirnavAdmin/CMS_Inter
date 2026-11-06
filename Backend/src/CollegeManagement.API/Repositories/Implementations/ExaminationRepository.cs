@@ -858,17 +858,66 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             foreach (var r in rows)
             {
-                var examDate = r.ExamDate is DateTime dt ? DateOnly.FromDateTime(dt) : (r.ExamDate is DateOnly d ? d : DateOnly.FromDateTime(Convert.ToDateTime(r.ExamDate)));
-                var startTimeSpan = (TimeSpan)r.StartTime;
-                var endTimeSpan = (TimeSpan)r.EndTime;
+                var rowDict = r as IDictionary<string, object> ?? new Dictionary<string, object>();
+				object? GetVal(params string[] columnNames)
+				{
+					foreach (var name in columnNames)
+					{
+						if (rowDict.TryGetValue(name, out var v) && v != null && !(v is DBNull))
+							return v;
+					}
+					return null;
+				}
+
+				var rawExamDate = GetVal("ExamDate", "Date");
+				var examDate = rawExamDate is DateTime dt ? DateOnly.FromDateTime(dt) : (rawExamDate is DateOnly d ? d : (rawExamDate != null && DateTime.TryParse(Convert.ToString(rawExamDate), out var parsedDt) ? DateOnly.FromDateTime(parsedDt) : today));
+                var rawStartTime = GetVal("StartTime");
+				TimeSpan startTimeSpan = TimeSpan.Zero;
+				if (rawStartTime is TimeSpan tsStart) startTimeSpan = tsStart;
+				else if (rawStartTime is DateTime dtStart) startTimeSpan = dtStart.TimeOfDay;
+				else if (rawStartTime != null && TimeSpan.TryParse(Convert.ToString(rawStartTime), out var parsedStart)) startTimeSpan = parsedStart;
+
+				var rawEndTime = GetVal("EndTime");
+				TimeSpan endTimeSpan = TimeSpan.Zero;
+				if (rawEndTime is TimeSpan tsEnd) endTimeSpan = tsEnd;
+				else if (rawEndTime is DateTime dtEnd) endTimeSpan = dtEnd.TimeOfDay;
+				else if (rawEndTime != null && TimeSpan.TryParse(Convert.ToString(rawEndTime), out var parsedEnd)) endTimeSpan = parsedEnd;
+                // End time parsed above
                 var startTime = TimeOnly.FromTimeSpan(startTimeSpan);
                 var endTime = TimeOnly.FromTimeSpan(endTimeSpan);
 
-                string dutyStatus = "Upcoming";
-                string examStatus = (string)(r.ExamStatus ?? string.Empty);
-                bool isCancelled = string.Equals(examStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
+                string examStatus = string.Empty;
+				bool isCancelled = false;
+				string dutyStatus = Convert.ToString(GetVal("Status", "DutyStatus")) ?? string.Empty;
+				examStatus = Convert.ToString(GetVal("ExamStatus")) ?? string.Empty;
+				if (string.IsNullOrWhiteSpace(dutyStatus))
+				{
+					examStatus = Convert.ToString(GetVal("ExamStatus")) ?? string.Empty;
+					isCancelled = string.Equals(examStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
+					var rawIsActive = GetVal("ScheduleIsActive", "IsActive");
+					bool isActive = rawIsActive == null || Convert.ToBoolean(rawIsActive);
 
-                if (isCancelled || !Convert.ToBoolean(r.ScheduleIsActive))
+					if (isCancelled || !isActive)
+					{
+						dutyStatus = "Cancelled";
+					}
+					else if (examDate < today)
+					{
+						dutyStatus = "Completed";
+					}
+					else if (examDate == today && endTime <= TimeOnly.FromDateTime(DateTime.Now))
+					{
+						dutyStatus = "Completed";
+					}
+					else
+					{
+						dutyStatus = "Upcoming";
+					}
+				}
+                examStatus = Convert.ToString(GetVal("ExamStatus")) ?? string.Empty;
+                isCancelled = string.Equals(examStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
+
+                if (false)
                 {
                     dutyStatus = "Cancelled";
                 }
@@ -876,9 +925,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     dutyStatus = "Completed";
                 }
-                else if (examDate == today)
+                else
                 {
-                    dutyStatus = "Today";
+                    // ok
                 }
 
                 if (!string.IsNullOrWhiteSpace(status) && !string.Equals(dutyStatus, status, StringComparison.OrdinalIgnoreCase))
@@ -886,42 +935,45 @@ namespace CollegeManagement.API.Repositories.Implementations
                     continue;
                 }
 
-                string session = !string.IsNullOrWhiteSpace((string?)r.SessionId)
-                    ? (string)r.SessionId
+                var rawSession = Convert.ToString(GetVal("SessionId", "Session"));
+				string session = !string.IsNullOrWhiteSpace(rawSession)
+					? rawSession
+					
                     : (startTime.Hour < 12 ? "Morning Session" : "Afternoon Session");
+                    
 
                 string startTimeStr = startTime.ToString("hh\\:mm tt");
                 string endTimeStr = endTime.ToString("hh\\:mm tt");
                 var repTime = startTime.AddMinutes(-30);
                 string repTimeStr = $"{repTime:hh\\:mm tt} (Mandatory 30 mins prior)";
 
-                string examCat = ((string?)r.ExamPattern)?.ToLowerInvariant() ?? "internal";
+                string examCat = Convert.ToString(GetVal("ExamCategory", "ExamPattern"))?.ToLowerInvariant() ?? "internal";
                 if (examCat.Contains("board") || examCat.Contains("ipe")) examCat = "board";
                 else if (examCat.Contains("prac")) examCat = "practical";
                 else examCat = "internal";
 
                 results.Add(new FacultyExamDutyDto
                 {
-                    Id = r.DutyId != null ? Convert.ToInt32(r.DutyId) : (r.Id != null ? Convert.ToInt32(r.Id) : Convert.ToInt32(r.ExamScheduleId ?? 0)),
-                    ExamScheduleId = r.ExamScheduleId != null ? Convert.ToInt32(r.ExamScheduleId) : 0,
-                    ExaminationId = r.ExaminationId != null ? Convert.ToInt32(r.ExaminationId) : (r.ExamId != null ? Convert.ToInt32(r.ExamId) : 0),
-                    ExamName = (string)(r.ExamName ?? $"Exam #{r.ExaminationId}"),
-                    ExamCode = (string)(r.ExamCode ?? $"EXAM-{r.ExaminationId}"),
+                    Id = Convert.ToInt32(GetVal("DutyId", "Id", "ExamScheduleId") ?? 0),
+                    ExamScheduleId = Convert.ToInt32(GetVal("ExamScheduleId", "DutyId", "ScheduleId") ?? 0),
+                    ExaminationId = Convert.ToInt32(GetVal("ExaminationId", "ExamId") ?? 0),
+                    ExamName = Convert.ToString(GetVal("ExamName")) ?? $"Exam #{GetVal("ExaminationId", "ExamId")}",
+                    ExamCode = Convert.ToString(GetVal("ExamCode")) ?? $"EXAM-{GetVal("ExaminationId", "ExamId")}",
                     Category = examCat,
-                    ExamType = (string)(r.ExamPattern ?? "Board Theory"),
+                    ExamType = Convert.ToString(GetVal("ExamPattern")) ?? "Board Theory",
                     Role = "Invigilator",
                     Status = dutyStatus,
-                    Subject = !string.IsNullOrWhiteSpace((string?)r.SubjectName) ? $"{(string)r.SubjectName} ({(string)r.SubjectCode})" : $"Subject #{r.SubjectId}",
-                    SubjectCode = (string)(r.SubjectCode ?? string.Empty),
+                    Subject = !string.IsNullOrWhiteSpace(Convert.ToString(GetVal("SubjectName"))) ? (!string.IsNullOrWhiteSpace(Convert.ToString(GetVal("SubjectCode"))) ? $"{GetVal("SubjectName")} ({GetVal("SubjectCode")})" : Convert.ToString(GetVal("SubjectName"))!) : $"Subject #{GetVal("SubjectId")}",
+                    SubjectCode = Convert.ToString(GetVal("SubjectCode")) ?? string.Empty,
                     Date = examDate.ToString("dd MMM yyyy"),
                     ExamDate = examDate.ToString("yyyy-MM-dd"),
                     Session = session,
                     ExamHours = $"{startTimeStr} – {endTimeStr}",
                     StartTime = startTimeStr,
                     EndTime = endTimeStr,
-                    Venue = (string)(r.Venue ?? "Examination Hall"),
-                    Invigilator = (string)(r.InvigilatorName ?? string.Empty),
-                    InvigilatorId = (int?)r.InvigilatorId,
+                    Venue = !string.IsNullOrWhiteSpace(Convert.ToString(GetVal("Hall"))) ? (!string.IsNullOrWhiteSpace(Convert.ToString(GetVal("RoomName"))) && !string.Equals(Convert.ToString(GetVal("Hall")), Convert.ToString(GetVal("RoomName")), StringComparison.OrdinalIgnoreCase) ? $"{GetVal("Hall")} ({GetVal("RoomName")})" : Convert.ToString(GetVal("Hall"))!) : (!string.IsNullOrWhiteSpace(Convert.ToString(GetVal("RoomName"))) ? Convert.ToString(GetVal("RoomName"))! : (Convert.ToString(GetVal("Venue")) ?? "Examination Hall")),
+                    Invigilator = Convert.ToString(GetVal("FacultyName", "InvigilatorName", "Invigilator")) ?? string.Empty,
+                    InvigilatorId = GetVal("StaffId", "InvigilatorId", "FacultyId") != null ? Convert.ToInt32(GetVal("StaffId", "InvigilatorId", "FacultyId")) : null,
                     ReportingTime = repTimeStr,
                     Candidates = "30 Candidates",
                     TotalEnrolled = 30,
