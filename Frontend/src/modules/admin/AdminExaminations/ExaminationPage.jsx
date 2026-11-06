@@ -41,6 +41,7 @@ import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLa
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../../../shared/components/Ui.jsx";
 import "./ExaminationPage.css";
+import { enrichExaminations } from "@/modules/exam-cell/services/examCellMasterData.js";
 
 const PAGE_SIZE = 5;
 
@@ -325,7 +326,10 @@ const getEligibleSubjects = (exam, subjectsList = []) => {
   const isObjective = category === "objective" || isCombinedExamination(exam);
   const isRegular = category === "regular";
 
+  const seenIds = new Set();
   return ensureArray(subjectsList).filter((s) => {
+    const sId = normalizeId(s.id ?? s.subjectId);
+    if (sId && seenIds.has(sId)) return false;
     if (s.isActive === false) return false;
     // For objective, exclude language subjects (core subjects only). For regular, display all subjects.
     if (isObjective && !isRegular && isLanguageSubject(s)) return false;
@@ -336,7 +340,11 @@ const getEligibleSubjects = (exam, subjectsList = []) => {
     const matchesLevel = !levelIds.length || !sLevelIds.length || sLevelIds.some((id) => levelIds.includes(id));
     const matchesGroup = !groupIds.length || !sGroupIds.length || sGroupIds.some((id) => groupIds.includes(id));
     const matchesProgram = !sProgramIds.length || !programIds.length || sProgramIds.some((id) => programIds.includes(id));
-    return matchesLevel && matchesGroup && matchesProgram;
+    if (matchesLevel && matchesGroup && matchesProgram) {
+      if (sId) seenIds.add(sId);
+      return true;
+    }
+    return false;
   });
 };
 
@@ -3733,8 +3741,29 @@ export default function ExaminationPage() {
 
       const response = await apiClient.get("/api/v1/examinations", { signal, params, headers });
       if (signal.aborted) return;
-      const raw = unwrap(response);
-      const normalized = raw.map((record) => normalizeExamRecord(record));
+      let raw = unwrap(response);
+
+      if (raw.length === 0 && (params.boardId || params.AcademicYearId)) {
+        try {
+          const fallbackParams = effCampus ? { campusId: Number(effCampus) || effCampus } : {};
+          const fallbackRes = await apiClient.get("/api/v1/examinations", {
+            signal,
+            params: fallbackParams,
+            headers,
+          });
+          if (!signal.aborted) {
+            const fallbackRaw = unwrap(fallbackRes);
+            if (fallbackRaw.length > 0) {
+              raw = fallbackRaw;
+            }
+          }
+        } catch {
+          /* keep original raw */
+        }
+      }
+
+      const enrichedRaw = enrichExaminations(raw);
+      const normalized = enrichedRaw.map((record) => normalizeExamRecord(record));
 
       const effCampusStr = effCampus ? normalizeId(effCampus) : "";
       const effBoardStr = effBoard ? normalizeId(effBoard) : "";
@@ -3816,7 +3845,7 @@ export default function ExaminationPage() {
         });
       });
       const initialSchedules = finalExams.flatMap((exam, index) =>
-        Array.isArray(raw[index]?.schedules) || Array.isArray(raw[index]?.examinationSchedules)
+        Array.isArray(exam?.schedules) || Array.isArray(raw[index]?.schedules) || Array.isArray(raw[index]?.examinationSchedules)
           ? (exam.schedules || []).map((entry) => ({ ...entry, examId: exam.id }))
           : []
       );
@@ -4489,26 +4518,54 @@ export default function ExaminationPage() {
 
     // 2. Board isolation
     if (selectedBoardId && exam.boardId) {
-      if (normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
+      const hasBoardMatches = exams.some((e) => e.boardId && normalizeId(e.boardId) === normalizeId(selectedBoardId));
+      if (hasBoardMatches && normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
     }
 
     // 3. Academic Year isolation
     if (selectedAcademicYearId) {
-      const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
       const selYearId = normalizeId(selectedAcademicYearId);
       const selYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
-      const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+      const hasYearMatches = exams.some((e) => {
+        const yId = normalizeId(e.yearId ?? e.academicYearId);
+        const yName = String(e.academicYearName || e.academicYear || "").trim().toLowerCase();
+        return (yId && yId === selYearId) || (selYearName && yName && (yName === selYearName || yName.includes(selYearName) || selYearName.includes(yName)));
+      });
 
-      const idMatches = examYearId && examYearId === selYearId;
-      const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
-      if (examYearId && !idMatches && !nameMatches) {
-        return false;
+      if (hasYearMatches) {
+        const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+        const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+        const idMatches = examYearId && examYearId === selYearId;
+        const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
+        if (examYearId && !idMatches && !nameMatches) {
+          return false;
+        }
       }
     }
 
-    if (filters.groupId && !(exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) return false;
-    if (filters.programId && !(exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) return false;
-    if (filters.levelId && !(exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) return false;
+    if (filters.groupId) {
+      const gNorm = normalizeId(filters.groupId);
+      const eGids = (exam.groupIds || [exam.groupId]).map(normalizeId).filter(Boolean);
+      const targetGroupName = String(nameOf(groups, filters.groupId)).trim().toLowerCase();
+      const examGroupName = String(exam.groupName || getGroupNames(exam, groups) || "").trim().toLowerCase();
+      const groupMatches = eGids.includes(gNorm) || (targetGroupName && examGroupName && (examGroupName.includes(targetGroupName) || targetGroupName.includes(examGroupName)));
+      if (!groupMatches) return false;
+    }
+    if (filters.programId) {
+      const pIds = (exam.programIds || (exam.programId ? [exam.programId] : [])).map(normalizeId).filter(Boolean);
+      if (pIds.length > 0 && !pIds.includes(filters.programId)) return false;
+    }
+    if (filters.levelId) {
+      const examLevelIds = ensureArray(exam.levelIds || exam.academicLevelIds || [exam.levelId || exam.academicLevelId]).filter(Boolean).map(normalizeId);
+      const targetLevelName = String(nameOf(academicLevels, filters.levelId)).trim().toLowerCase();
+      const examLevelNames = String(exam.academicLevelName || exam.academicLevel || getLevelNames(exam, academicLevels)).toLowerCase();
+      const normFilterLevel = normalizeId(filters.levelId);
+      const idMatches = examLevelIds.includes(normFilterLevel);
+      const nameMatches = targetLevelName && examLevelNames && (examLevelNames.includes(targetLevelName) || targetLevelName.includes(examLevelNames));
+      const year1Match = normFilterLevel === "1" && (examLevelNames.includes("1st") || String(exam.name).toLowerCase().includes("1st") || String(exam.code).toLowerCase().includes("y1"));
+      const year2Match = normFilterLevel === "2" && (examLevelNames.includes("2nd") || String(exam.name).toLowerCase().includes("2nd") || String(exam.code).toLowerCase().includes("y2"));
+      if (examLevelIds.length > 0 && !idMatches && !nameMatches && !year1Match && !year2Match) return false;
+    }
 
     if (query) {
       const matchesSearch = [
@@ -4531,6 +4588,23 @@ export default function ExaminationPage() {
   const shownExams = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const rangeStart = list.length ? (page - 1) * PAGE_SIZE + 1 : 0;
   const rangeEnd = Math.min(page * PAGE_SIZE, list.length);
+
+  const initialLevelFilterCheckedRef = useRef(false);
+  useEffect(() => {
+    if (exams.length > 0 && !initialLevelFilterCheckedRef.current) {
+      initialLevelFilterCheckedRef.current = true;
+      if (filters.levelId) {
+        const normFilterLevel = normalizeId(filters.levelId);
+        const matchingExamsCount = exams.filter((e) => {
+          const ids = ensureArray(e.levelIds || e.academicLevelIds || [e.levelId || e.academicLevelId]).filter(Boolean).map(normalizeId);
+          return ids.includes(normFilterLevel);
+        }).length;
+        if (matchingExamsCount === 0) {
+          setFilters((prev) => ({ ...prev, levelId: "" }));
+        }
+      }
+    }
+  }, [exams, filters.levelId]);
 
   useEffect(() => setPage(1), [filters, search]);
 
@@ -5827,6 +5901,21 @@ export default function ExaminationPage() {
                   placeholder="Select Level"
                 />
               </div>
+              {Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost exam-clear-filters-btn"
+                  onClick={() => {
+                    setFilters({ groupId: "", programId: "", levelId: "" });
+                    setSearch("");
+                    setPage(1);
+                  }}
+                  title="Clear all filters"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <X size={14} /> Clear Filters
+                </button>
+              )}
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost exam-export-btn"
@@ -6010,7 +6099,28 @@ export default function ExaminationPage() {
                             </button>
                           </div>
                         ) : (
-                          "No examinations match the current filters.")}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
+                            <span>
+                              {exams.length > 0
+                                ? `No examinations match the current filters${filters.levelId ? ` (Level: ${nameOf(academicLevels, filters.levelId)})` : ""}.`
+                                : "No examinations match the current filters."}
+                            </span>
+                            {exams.length > 0 && Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                              <button
+                                type="button"
+                                className="cms-btn cms-btn-primary"
+                                onClick={() => {
+                                  setFilters({ groupId: "", programId: "", levelId: "" });
+                                  setSearch("");
+                                  setPage(1);
+                                }}
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                              >
+                                <X size={14} /> Clear Filters to Show All Examinations ({exams.length})
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -6594,7 +6704,8 @@ function SearchableSingleSelect({
     if (disabled) return;
     const q = (currentSearch ?? search ?? "").trim().toLowerCase();
     if (!q) {
-      if (!selectedOpt) setSearch("");
+      setSearch("");
+      if (value) onChange?.("");
       return;
     }
     const exact = options.find((o) => o.name.toLowerCase() === q || String(o.id).toLowerCase() === q);
@@ -6623,7 +6734,10 @@ function SearchableSingleSelect({
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         setOpen(false);
-        if (selectedOpt) {
+        if (!search.trim()) {
+          if (value) onChange?.("");
+          setSearch("");
+        } else if (selectedOpt) {
           setSearch(selectedOpt.name || "");
         } else {
           setSearch("");
@@ -6632,7 +6746,7 @@ function SearchableSingleSelect({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [selectedOpt, disabled]);
+  }, [selectedOpt, disabled, search, value, onChange]);
 
   const filteredOptions = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
@@ -6691,6 +6805,10 @@ function SearchableSingleSelect({
               const val = e.target.value;
               setSearch(val);
               setOpen(true);
+              if (val.trim() === "") {
+                onChange?.("");
+                return;
+              }
               const exact = options.find((o) => o.name.toLowerCase() === val.trim().toLowerCase());
               if (exact) {
                 onChange?.(exact.id);
@@ -6712,6 +6830,19 @@ function SearchableSingleSelect({
             placeholder={dynamicPlaceholder}
             autoComplete="off"
           />
+          {Boolean(value) && !disabled && (
+            <X
+              className="staff-dropdown-clear"
+              size={13}
+              style={{ cursor: "pointer", opacity: 0.6, marginRight: "4px" }}
+              title="Clear selection"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearch("");
+                onChange?.("");
+              }}
+            />
+          )}
           <ChevronDown
             className="staff-dropdown-caret"
             size={14}
@@ -7907,35 +8038,40 @@ function ExamForm({
         const results = await Promise.all(promises);
         if (!active || subjectRequestSeqRef.current !== currentReqKey) return;
 
-        const allMapped = [];
-        const seenScoped = new Set();
+        const subjectsById = new Map();
 
         results.forEach(({ res, gid, lid }) => {
           const rawSubjects = unwrap(res);
           rawSubjects.forEach((s) => {
             const sid = normalizeId(s.subjectId ?? s.id);
             if (!sid) return;
-            const scopedKey = `${sid}_${gid}_${lid}`;
-            if (seenScoped.has(scopedKey)) return;
-            seenScoped.add(scopedKey);
 
             const sLevelIds = ensureArray(s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [lid])).map(normalizeId);
             const sGroupIds = ensureArray(s.groupIds || (s.groupId ? [s.groupId] : (s.group ? [s.group.groupId || s.group.id] : [gid]))).map(normalizeId);
 
-            allMapped.push({
-              ...s,
-              id: sid,
-              name: s.subjectName ?? s.name,
-              code: s.subjectCode ?? s.code ?? "",
-              academicLevelIds: sLevelIds.includes(lid) ? sLevelIds : [...sLevelIds, lid],
-              groupIds: sGroupIds.includes(gid) ? sGroupIds : [...sGroupIds, gid],
-              programIds: (s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
-              facultyIds: (s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
-              isActive: s.isActive !== false,
-            });
+            if (subjectsById.has(sid)) {
+              const existing = subjectsById.get(sid);
+              existing.academicLevelIds = Array.from(new Set([...existing.academicLevelIds, ...sLevelIds, lid].filter(Boolean)));
+              existing.groupIds = Array.from(new Set([...existing.groupIds, ...sGroupIds, gid].filter(Boolean)));
+              existing.programIds = Array.from(new Set([...existing.programIds, ...(s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId)].filter(Boolean)));
+              existing.facultyIds = Array.from(new Set([...existing.facultyIds, ...(s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId)].filter(Boolean)));
+            } else {
+              subjectsById.set(sid, {
+                ...s,
+                id: sid,
+                name: s.subjectName ?? s.name,
+                code: s.subjectCode ?? s.code ?? "",
+                academicLevelIds: sLevelIds.includes(lid) ? sLevelIds : [...sLevelIds, lid],
+                groupIds: sGroupIds.includes(gid) ? sGroupIds : [...sGroupIds, gid],
+                programIds: (s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
+                facultyIds: (s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
+                isActive: s.isActive !== false,
+              });
+            }
           });
         });
 
+        const allMapped = Array.from(subjectsById.values());
         setFormEligibleSubjects(allMapped);
         setSubjectsLoading(false);
         setForm((prev) => {
@@ -8833,7 +8969,7 @@ function ExamForm({
                     </div>
 
                     <div className="exam-subject-tab-body">
-                      {currentSubjectTabGroup?.subjects.map((subject) => {
+                      {currentSubjectTabGroup?.subjects.map((subject, sIdx) => {
                         const isSubjectSelected = (form.selectedSubjectIds || []).map(normalizeId).includes(normalizeId(subject.id));
                         return (
                           <div
