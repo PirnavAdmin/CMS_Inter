@@ -278,6 +278,8 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
+builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
+builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 #endregion
 
 #region Services
