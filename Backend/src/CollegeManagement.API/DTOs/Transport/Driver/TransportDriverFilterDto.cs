@@ -8,6 +8,10 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
 
         public int? CampusId { get; set; }
 
+        public int? BoardId { get; set; }
+
+        public int? AcademicYearId { get; set; }
+
         public bool? LicenceExpired { get; set; }
 
         public string? SortBy { get; set; } = "driverName";

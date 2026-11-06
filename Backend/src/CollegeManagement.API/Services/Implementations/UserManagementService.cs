@@ -108,6 +108,11 @@ namespace CollegeManagement.API.Services.Implementations
 
             await _userRepository.UpdateAsync(user);
 
+            if (user.StaffId.HasValue && user.StaffId.Value > 0)
+            {
+                await _userRepository.UpdateRoleByStaffIdAsync(user.StaffId.Value, request.RoleId);
+            }
+
             var updatedUser = await _userRepository.GetByIdAsync(id) ?? user;
 
             return new UserResponse

@@ -475,6 +475,21 @@ export function TransportManagerProvider({ children }) {
     });
   }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId]);
 
+  // Transport driver profiles belong to a campus, not an academic board/year.
+  // Keep their filter aligned with the admin transport module so a profile
+  // with unrelated or stale academic metadata remains available to transport.
+  const filterDriversByCampus = useCallback((list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter((item) => {
+      if (!item) return false;
+      const campusId = item.campusId ?? item.CampusId;
+      if (campusId != null && String(campusId) !== String(effectiveCampusId)) return false;
+      const campuses = item.assignedCampusIds ?? item.assignedCampuses;
+      if (!Array.isArray(campuses) || campuses.length === 0) return true;
+      return campuses.some((campus) => String(typeof campus === "object" ? campus.id || campus.campusId : campus) === String(effectiveCampusId));
+    });
+  }, [effectiveCampusId]);
+
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type, id: Date.now() });
     setTimeout(() => setToast(null), 4000);
@@ -514,7 +529,11 @@ export function TransportManagerProvider({ children }) {
           studentsRes,
         ] = await Promise.allSettled([
           getVehicles(params),
-          getDrivers(params),
+          getDrivers({
+            campusId: effectiveCampusId,
+            boardId: effectiveBoardId || undefined,
+            academicYearId: effectiveAcademicYearId || undefined,
+          }),
           getVehicleAssignments(params),
           getMaintenanceRecords(params),
           getTransportDashboardStats(params),
@@ -528,7 +547,7 @@ export function TransportManagerProvider({ children }) {
         if (!isMounted) return;
 
         if (vehiclesRes.status === "fulfilled") setVehicles(filterByScope(vehiclesRes.value));
-        if (driversRes.status === "fulfilled") setDrivers(filterByScope(driversRes.value));
+        if (driversRes.status === "fulfilled") setDrivers(filterDriversByCampus(driversRes.value));
         if (assignmentsRes.status === "fulfilled") setAssignments(filterByScope(assignmentsRes.value));
         if (maintenanceRes.status === "fulfilled") setMaintenance(filterByScope(maintenanceRes.value));
         if (statsRes.status === "fulfilled") setDashboardMetrics(statsRes.value);
@@ -551,7 +570,7 @@ export function TransportManagerProvider({ children }) {
     return () => {
       isMounted = false;
     };
-  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, revision, filterByScope]);
+  }, [effectiveCampusId, effectiveBoardId, effectiveAcademicYearId, revision, filterByScope, filterDriversByCampus]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((prev) => !prev);

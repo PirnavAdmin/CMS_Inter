@@ -29,6 +29,19 @@ namespace CollegeManagement.API.Services.Implementations
             CreateTransportVehicleDto dto,
             long? userId)
         {
+            if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+            {
+                var campusExists = await _repository.CampusExistsAsync(dto.CampusId.Value);
+                if (!campusExists)
+                {
+                    throw new CollegeManagement.API.Exceptions.ValidationException($"Campus with ID {dto.CampusId.Value} does not exist or is inactive.");
+                }
+            }
+            else
+            {
+                throw new CollegeManagement.API.Exceptions.ValidationException("CampusId is required to create a vehicle. Please select a valid campus.");
+            }
+
             var exists = await _repository.ExistsAsync(
                 dto.VehicleNumber,
                 dto.RegistrationNumber);
@@ -47,6 +60,15 @@ namespace CollegeManagement.API.Services.Implementations
             UpdateTransportVehicleDto dto,
             long? userId)
         {
+            if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+            {
+                var campusExists = await _repository.CampusExistsAsync(dto.CampusId.Value);
+                if (!campusExists)
+                {
+                    throw new CollegeManagement.API.Exceptions.ValidationException($"Campus with ID {dto.CampusId.Value} does not exist or is inactive.");
+                }
+            }
+
             return await _repository.UpdateAsync(
                 vehicleId,
                 dto,

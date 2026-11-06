@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using Microsoft.AspNetCore.Cors;
-using Microsoft.AspNetCore.Authorization;
 using CollegeManagement.API.Filters;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,6 +27,7 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IHostelTransferVacateService _hostelTransferVacateService;
         private readonly IHostelDashboardService _hostelDashboardService;
         private readonly IHostelReportService _hostelReportService;
+        private readonly INotificationService? _notificationService;
 
         public HostelController(
             IHostelBlockService hostelBlockService,
@@ -39,7 +40,8 @@ namespace CollegeManagement.API.Controllers.V1
             IHostelOutpassLeaveService hostelOutpassLeaveService,
             IHostelTransferVacateService hostelTransferVacateService,
             IHostelDashboardService hostelDashboardService,
-            IHostelReportService hostelReportService)
+            IHostelReportService hostelReportService,
+            INotificationService? notificationService = null)
         {
             _hostelBlockService = hostelBlockService;
             _roomTypeConfigService = roomTypeConfigService;
@@ -52,6 +54,7 @@ namespace CollegeManagement.API.Controllers.V1
             _hostelTransferVacateService = hostelTransferVacateService;
             _hostelDashboardService = hostelDashboardService;
             _hostelReportService = hostelReportService;
+            _notificationService = notificationService;
         }
 
 
@@ -1049,6 +1052,34 @@ namespace CollegeManagement.API.Controllers.V1
                     success = false,
                     message = result.Message
                 });
+            }
+
+            if (_notificationService != null && result.Data != null && result.Data.StudentId > 0)
+            {
+                try
+                {
+                    var status = result.Data.ApprovalStatus ?? dto.ApprovalStatus;
+                    var remarksText = !string.IsNullOrWhiteSpace(dto.ApprovalRemarks) ? $" Remarks: {dto.ApprovalRemarks}" : "";
+                    var reqType = string.IsNullOrWhiteSpace(result.Data.RequestType) ? "Leave / Outpass" : result.Data.RequestType;
+
+                    await _notificationService.SendToStudentAsync(
+                        result.Data.StudentId,
+                        $"Hostel {reqType} {status}",
+                        $"Your hostel {reqType.ToLower()} request (#{id}) has been {status.ToUpper()}.{remarksText}",
+                        "Hostel",
+                        id,
+                        "/student/hostel");
+
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        null,
+                        $"Hostel {reqType} {status}",
+                        $"Notice: Hostel {reqType.ToLower()} application for {result.Data.StudentName ?? "your ward"} has been {status.ToUpper()}.{remarksText}",
+                        "Hostel",
+                        id,
+                        "/parent/hostel");
+                }
+                catch { }
             }
 
             return Ok(new

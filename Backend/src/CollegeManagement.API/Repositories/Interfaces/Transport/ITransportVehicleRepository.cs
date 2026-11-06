@@ -23,5 +23,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
             string vehicleNumber,
             string registrationNumber,
             long? excludeVehicleId = null);
+
+        Task<bool> CampusExistsAsync(int campusId);
     }
 }
