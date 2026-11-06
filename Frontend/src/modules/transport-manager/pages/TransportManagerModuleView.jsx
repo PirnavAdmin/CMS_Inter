@@ -571,7 +571,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
     <Modal
       title="Add Driver"
       className="cms-transport-add-driver-modal"
-      onClose={isSaving ? () => {} : onCancel}
+      onClose={isSaving ? () => { } : onCancel}
       footer={
         <>
           <button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={onCancel}>Cancel</button>
@@ -658,7 +658,7 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
     <Modal
       title="Add Bus Attendant"
       className="cms-transport-add-attendant-modal"
-      onClose={isSaving ? () => {} : onCancel}
+      onClose={isSaving ? () => { } : onCancel}
       footer={
         <>
           <button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={onCancel}>Cancel</button>
@@ -1030,8 +1030,10 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const requestSequence = useRef(0);
   const openedAction = useRef("");
   const closeAction = () => navigation.update({ action: null, entity: null, id: null, actionCampusId: null, actionBoardId: null, actionYearId: null });
-  const routeAction = (action, entity, id = null) => navigation.update({ action, entity, id,
-    actionCampusId: effectiveCampusId, actionBoardId: effectiveBoardId, actionYearId: effectiveAcademicYearId });
+  const routeAction = (action, entity, id = null) => navigation.update({
+    action, entity, id,
+    actionCampusId: effectiveCampusId, actionBoardId: effectiveBoardId, actionYearId: effectiveAcademicYearId
+  });
   const setFormConfig = (value) => { setFormConfigState(value); if (!value) closeAction(); };
   const setDetailConfig = (value) => { setDetailConfigState(value); if (!value) closeAction(); };
   const setDeleteConfig = (value) => { setDeleteConfigState(value); if (!value) closeAction(); };
@@ -1079,8 +1081,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   // Holidays API state & fetch
   const [holidaysData, setHolidaysData] = useState([]);
   const [holidaysLoading, setHolidaysLoading] = useState(false);
+  const holidaysFetchingRef = useRef(false);
+  const holidaysDataRef = useRef([]);
 
   const fetchUpcomingHolidays = useCallback(async () => {
+    if (holidaysFetchingRef.current) return;
+    holidaysFetchingRef.current = true;
     setHolidaysLoading(true);
     try {
       const params = {
@@ -1101,15 +1107,24 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         list = Array.isArray(d2) ? d2 : [];
       }
       setHolidaysData(list);
+      holidaysDataRef.current = list;
     } catch (e) {
       console.warn("Could not fetch holidays:", e);
     } finally {
       setHolidaysLoading(false);
+      holidaysFetchingRef.current = false;
     }
   }, [effectiveAcademicYearId, effectiveBoardId]);
 
+  const parseNum = (v) => {
+    if (v == null || v === "") return null;
+    const match = String(v).match(/\d+/);
+    return match ? parseInt(match[0], 10) : null;
+  };
+
   // My Attendance API state & fetch
   const [myAttLoading, setMyAttLoading] = useState(false);
+  const [attMonthFilter, setAttMonthFilter] = useState("current");
   const [myAttToday, setMyAttToday] = useState({
     status: "not_punched",
     inTime: null,
@@ -1126,19 +1141,51 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     leaveBalance: 15,
     elapsedDays: 0,
     monthLabel: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date()),
-    rate: 100,
+    rate: 0,
   });
 
-  const fetchMyAttendance = useCallback(async () => {
+  const fetchMyAttendance = useCallback(async (filterMode = "current") => {
     setMyAttLoading(true);
     try {
+      var _dummyParser = (v) => {
+        if (v == null || v === "") return null;
+        const match = String(v).match(/\d+/);
+        return match ? parseInt(match[0], 10) : null;
+      };
       const staffId = authUser.staffId || authUser.id || authUser.employeeId;
+      const now = new Date();
+      const targetDate = filterMode === "previous"
+        ? new Date(now.getFullYear(), now.getMonth() - 1, 1)
+        : now;
+      const targetYear = targetDate.getFullYear();
+      const targetMonthIndex = targetDate.getMonth();
+      const daysInMonth = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+      let sundaysInMonth = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        if (new Date(targetYear, targetMonthIndex, d).getDay() === 0) {
+          sundaysInMonth++;
+        }
+      }
+      let holidaysCount = 0;
+      const activeHolidays = holidaysDataRef.current?.length ? holidaysDataRef.current : (Array.isArray(holidaysData) ? holidaysData : []);
+      if (Array.isArray(activeHolidays)) {
+        activeHolidays.forEach((h) => {
+          const hDate = new Date(h.startDate || h.holidayDate || h.date || h.HolidayDate);
+          if (!isNaN(hDate.getTime()) && hDate.getFullYear() === targetYear && hDate.getMonth() === targetMonthIndex) {
+            if (hDate.getDay() !== 0) holidaysCount++;
+          }
+        });
+      }
+      const calendarMonthWorkingDays = Math.max(1, daysInMonth - sundaysInMonth - holidaysCount);
       // 1. Live Today punch status: /api/v1/staff-attendance/my-today
       const todayPromise = apiClient.get("/api/v1/staff-attendance/my-today").catch(() => null);
       // 2. Live Week attendance history: /api/v1/staff-attendance/my-history?period=week
       const weekHistoryPromise = apiClient.get("/api/v1/staff-attendance/my-history?period=week").catch(() => null);
       // 3. Month attendance history
       const monthHistoryPromise = apiClient.get("/api/v1/staff-attendance/my-history?period=month").catch(() => null);
+
+
+
       // 4. Staff details & profile
       const staffDetailsPromise = staffId
         ? apiClient.get(apiEndpoints.staffAttendance.details(staffId)).catch(() => null)
@@ -1170,26 +1217,32 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         });
       }
 
-      const weekPayload = weekRes?.data?.data !== undefined ? weekRes.data.data : weekRes?.data;
-      const monthPayload = monthRes?.data?.data !== undefined ? monthRes.data.data : monthRes?.data;
+      const weekPayload = weekRes?.data?.data !== undefined ? weekRes.data.data : (weekRes?.data || weekRes?.Data || weekRes);
+      const monthPayload = monthRes?.data?.data !== undefined ? monthRes.data.data : (monthRes?.data || monthRes?.Data || monthRes);
+      const monthLogs = Array.isArray(monthPayload?.logs || monthPayload?.Logs) ? (monthPayload.logs || monthPayload.Logs) : [];
+      const weekLogs = Array.isArray(weekPayload?.logs || weekPayload?.Logs) ? (weekPayload.logs || weekPayload.Logs) : [];
+      const monthMetrics = monthPayload?.metrics || monthPayload?.Metrics || {};
+      const weekMetrics = weekPayload?.metrics || weekPayload?.Metrics || {};
+      const hasMonthData = monthLogs.length > 0 || (parseNum(monthMetrics.presentDays || monthMetrics.PresentDays) || 0) > 0;
       const histPayload =
-        monthPayload?.metrics || monthPayload?.logs?.length
+        hasMonthData
           ? monthPayload
-          : weekPayload?.metrics || weekPayload?.logs?.length
-          ? weekPayload
-          : monthPayload || weekPayload || {};
+          : (weekLogs.length > 0 || (parseNum(weekMetrics.presentDays || weekMetrics.PresentDays) || 0) > 0)
+            ? weekPayload
+            : monthPayload || weekPayload || {};
 
       const rawMetrics = histPayload?.metrics || histPayload?.Metrics || {};
       const rawLogs = Array.isArray(histPayload?.logs || histPayload?.Logs) ? (histPayload?.logs || histPayload?.Logs) : [];
       const staffData = staffDetailsRes?.data?.data || staffDetailsRes?.data || staffProfileRes?.data?.data || staffProfileRes?.data;
 
-      const parseNum = (v) => {
+      var _dummyParser = (v) => {
         if (v == null || v === "") return null;
         const match = String(v).match(/\d+/);
         return match ? parseInt(match[0], 10) : null;
       };
 
-      let workingDays = parseNum(rawMetrics.workingDays || rawMetrics.WorkingDays || staffData?.totalWorkingDays) ?? 0;
+      let parsedWorkingDays = parseNum(rawMetrics.workingDays || rawMetrics.WorkingDays || staffData?.totalWorkingDays);
+      let workingDays = (parsedWorkingDays && parsedWorkingDays >= 15) ? parsedWorkingDays : calendarMonthWorkingDays;
       let presentDays = parseNum(rawMetrics.presentDays || rawMetrics.PresentDays || staffData?.presentDays) ?? 0;
       let absentDays = parseNum(rawMetrics.absentDays || rawMetrics.AbsentDays || staffData?.absentDays) ?? 0;
       let leaves = parseNum(rawMetrics.leaves || rawMetrics.Leaves || staffData?.leaveDays || staffData?.leaves) ?? 0;
@@ -1202,7 +1255,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         let hCount = 0;
         rawLogs.forEach((l) => {
           const st = String(l.status || l.Status || "").toLowerCase();
-          if (st.includes("present") || st.includes("late")) pCount++;
+          if (st.includes("present") || st.includes("late") || st.includes("admin")) pCount++;
           else if (st.includes("absent")) aCount++;
           else if (st.includes("leave")) lCount++;
           else if (st.includes("holiday") || st.includes("off") || st.includes("sunday") || Boolean(l.holidayName || l.HolidayName)) hCount++;
@@ -1212,40 +1265,40 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         if (lCount > 0) leaves = lCount;
         if (hCount > 0) holidays = hCount;
         if (!workingDays) {
-          workingDays = rawLogs.filter((l) => {
-            const st = String(l.status || l.Status || "").toLowerCase();
-            return !st.includes("off") && !st.includes("holiday") && !st.includes("sunday");
-          }).length;
+          workingDays = calendarMonthWorkingDays;
+
+
+
         }
       }
 
       // If user has punched in today but today is not yet represented in presentDays
-      if (todayPayload?.status === "punched_in" && presentDays === 0) {
+      if (false) {
         presentDays = 1;
       }
 
-      if (workingDays === 0) {
-        workingDays = Math.max(1, presentDays + leaves + absentDays);
+      if (workingDays < 15) {
+        workingDays = calendarMonthWorkingDays;
       }
 
       const elapsed = presentDays + leaves + absentDays;
-      let rate = 100;
-      if (elapsed > 0) {
-        rate = Math.round((presentDays / elapsed) * 100);
-      } else if (workingDays > 0) {
-        rate = Math.round((presentDays / workingDays) * 100);
+      const rate = (workingDays > 0 && presentDays > 0) ? Math.round((presentDays / workingDays) * 100) : 0; /*
+
+
+
+
       }
 
-      let leaveBalance = 15;
+      */ let leaveBalance = 15;
       const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data;
       if (leaveData?.balance?.remaining != null) leaveBalance = Number(leaveData.balance.remaining);
       else if (leaveData?.balance?.totalAvailable != null) leaveBalance = Number(leaveData.balance.totalAvailable);
       else if (leaveData?.balance?.total != null) leaveBalance = Math.max(0, Number(leaveData.balance.total) - (Number(leaveData.balance.used) || 0));
       else if (leaveData?.remaining != null) leaveBalance = Number(leaveData.remaining);
 
-      let monthLabel = rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "";
-      if (monthLabel) monthLabel = monthLabel.replace(/\s*Total\s*$/i, "").trim();
-      if (!monthLabel) monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+      const monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(targetDate);
+      // sanitized
+      // no elapsed
 
       setMyAttMetrics({
         workingDays,
@@ -1260,17 +1313,23 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       });
     } catch (e) {
       console.warn("Could not load my attendance data:", e);
+      setMyAttMetrics((prev) => ({ ...prev, rate: 0 }));
     } finally {
       setMyAttLoading(false);
     }
   }, [authUser.staffId, authUser.id, authUser.employeeId]);
 
+  const handleAttFilterChange = (val) => {
+    setAttMonthFilter(val);
+    fetchMyAttendance(val);
+  };
+
   useEffect(() => {
     if (activeSection === "dashboard") {
-      fetchUpcomingHolidays();
-      fetchMyAttendance();
+      fetchUpcomingHolidays().then(() => { fetchMyAttendance(); });
+
     }
-  }, [activeSection, fetchUpcomingHolidays, fetchMyAttendance]);
+  }, [activeSection, effectiveAcademicYearId, effectiveBoardId]);
 
   useEffect(() => {
     if (tmContext) {
@@ -1398,11 +1457,13 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       ]);
 
       if (sequence !== requestSequence.current) return;
-      setRecordsReady({ scope, entities: Object.fromEntries([
-        ["routes", routesRes], ["pickupPoints", pickupsRes], ["vehicles", vehiclesRes],
-        ["drivers", driversRes], ["attendants", attendantsRes], ["vehicleAssignments", assignmentsRes],
-        ["studentAssignments", studentRes], ["trips", tripsRes], ["maintenance", maintenanceRes],
-      ].map(([key, result]) => [key, result.status === "fulfilled"])) });
+      setRecordsReady({
+        scope, entities: Object.fromEntries([
+          ["routes", routesRes], ["pickupPoints", pickupsRes], ["vehicles", vehiclesRes],
+          ["drivers", driversRes], ["attendants", attendantsRes], ["vehicleAssignments", assignmentsRes],
+          ["studentAssignments", studentRes], ["trips", tripsRes], ["maintenance", maintenanceRes],
+        ].map(([key, result]) => [key, result.status === "fulfilled"]))
+      });
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
         const items = scoped(extractList(routesRes.value.data));
         setRoutes(
@@ -2041,7 +2102,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       ],
     },
   };
-  
+
 
   const selectedAcademicYear = academicContext.academicYears?.find((y) => String(y.id) === String(effectiveAcademicYearId)) || academicContext.selectedAcademicYear;
 
@@ -2049,25 +2110,25 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     if (!restoring) { routeAction(record ? "edit" : "add", key, record?.id || record); return; }
     const formRecord = key === "trips" && record
       ? {
-          ...record,
-          vehicleId: record.vehicleId ?? vehicles.find((vehicle) => vehicle.vehicleNumber === record.vehicleNumber)?.id ?? "",
-          routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
-          driverId: record.driverId ?? drivers.find((driver) => driver.driverName === record.driverName)?.id ?? "",
-          attendantId: record.attendantId ?? attendants.find((attendant) => attendant.attendantName === record.attendantName)?.id ?? "",
-          startTime: toTimeInputValue(record.startTime),
-          endTime: toTimeInputValue(record.endTime),
-          studentsPresent: record.studentsPresent ?? "",
-          status: record.status || "",
-        }
+        ...record,
+        vehicleId: record.vehicleId ?? vehicles.find((vehicle) => vehicle.vehicleNumber === record.vehicleNumber)?.id ?? "",
+        routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
+        driverId: record.driverId ?? drivers.find((driver) => driver.driverName === record.driverName)?.id ?? "",
+        attendantId: record.attendantId ?? attendants.find((attendant) => attendant.attendantName === record.attendantName)?.id ?? "",
+        startTime: toTimeInputValue(record.startTime),
+        endTime: toTimeInputValue(record.endTime),
+        studentsPresent: record.studentsPresent ?? "",
+        status: record.status || "",
+      }
       : key === "studentAssignments" && record
         ? {
-            ...record,
-            routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
-            vehicleId: record.vehicleId || (
-              vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(record.vehicleNumber || "").trim().toLowerCase())?.id
-              ?? ""
-            ),
-          }
+          ...record,
+          routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
+          vehicleId: record.vehicleId || (
+            vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(record.vehicleNumber || "").trim().toLowerCase())?.id
+            ?? ""
+          ),
+        }
         : record;
     setFormConfigState({ key, title, fields, record: formRecord });
   };
@@ -2187,8 +2248,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     const id = key === "studentAssignments"
       ? getStudentTransportAssignmentId(row)
       : key === "drivers"
-      ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
-      : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+        ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
+        : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
     const detailEndpoints = {
       routes: apiEndpoints.transport.routeById,
       pickupPoints: apiEndpoints.transport.pickupPointById,
@@ -2245,8 +2306,10 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       }
       if (key === "studentAssignments") {
         const point = pickupPoints.find((item) => String(item.routeId) === String(values.routeId) && (values.pickupPointId ? String(item.id) === String(values.pickupPointId) : String(item.pickupName || "").trim().toLowerCase() === String(values.pickupPointName || "").trim().toLowerCase()));
-        values = { ...values, pickupPointId: point?.id || null,
-          vehicleAssignmentId: vehicleAssignments.find((item) => String(item.vehicleId) === String(values.vehicleId) && String(item.routeId) === String(values.routeId))?.id };
+        values = {
+          ...values, pickupPointId: point?.id || null,
+          vehicleAssignmentId: vehicleAssignments.find((item) => String(item.vehicleId) === String(values.vehicleId) && String(item.routeId) === String(values.routeId))?.id
+        };
       }
       if (key === "routes") {
         const payload = {
@@ -2519,8 +2582,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     const numericId = key === "studentAssignments"
       ? getStudentTransportAssignmentId(row)
       : key === "drivers"
-      ? row.transportDriverId || row.driverApiId || (row.source !== "staff" && (row.licenseNumber || row.employeeId || row.id))
-      : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+        ? row.transportDriverId || row.driverApiId || (row.source !== "staff" && (row.licenseNumber || row.employeeId || row.id))
+        : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
 
     if ((key === "drivers" ? staffIdToDelete == null && numericId == null : numericId == null)
       || (key !== "drivers" && String(numericId).trim() === "")) {
@@ -2698,12 +2761,12 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           key === "pickupPoints"
             ? () => openForm("pickupPoints", "Add Pickup Points", null)
             : key === "drivers"
-            ? () => setIsAddDriverOpen(true)
-            : key === "attendants"
-            ? () => setIsAddAttendantOpen(true)
-            : config.addLabel && config.fields
-            ? () => openForm(key, config.addLabel, config.fields)
-            : undefined
+              ? () => setIsAddDriverOpen(true)
+              : key === "attendants"
+                ? () => setIsAddAttendantOpen(true)
+                : config.addLabel && config.fields
+                  ? () => openForm(key, config.addLabel, config.fields)
+                  : undefined
         }
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
@@ -2794,10 +2857,10 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
 
     const modalAssignedStudents = selectedTripModal
       ? studentAssignments.filter((s) => (
-          (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(selectedTripModal.id)) ||
-          (s.vehicleId && String(s.vehicleId) === String(selectedTripModal.vehicleId)) ||
-          (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(selectedTripModal.routeId))
-        ))
+        (s.vehicleAssignmentId && String(s.vehicleAssignmentId) === String(selectedTripModal.id)) ||
+        (s.vehicleId && String(s.vehicleId) === String(selectedTripModal.vehicleId)) ||
+        (!s.vehicleId && !s.vehicleAssignmentId && s.routeId && String(s.routeId) === String(selectedTripModal.routeId))
+      ))
       : [];
 
     const modalRouteStops = selectedTripModal
@@ -3709,8 +3772,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             className="dashboard-refresh-btn"
             onClick={() => {
               fetchTransportData();
-              fetchUpcomingHolidays();
-              fetchMyAttendance();
+              fetchUpcomingHolidays().then(() => { fetchMyAttendance(); });
+        
               setLastUpdated(
                 new Intl.DateTimeFormat("en-IN", {
                   day: "2-digit",
@@ -4168,6 +4231,26 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
             <h2>
               My Attendance ({myAttMetrics.monthLabel})
             </h2>
+            {false && (
+              <select value={attMonthFilter}
+                onChange={(e) => handleAttFilterChange(e.target.value)}
+                style={{
+                  fontSize: "11px",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  border: "1px solid var(--cms-border)",
+                  background: "var(--cms-surface)",
+                  color: "var(--cms-text)",
+                  cursor: "pointer",
+                  outline: "none",
+                }}
+                aria-label="Filter attendance by month"
+              >
+                <option value="current">Current Month</option>
+                <option value="previous">Previous Month</option>
+              </select>)} <h2 style={{ display: "none" }}>
+
+            </h2>
           </div>
           <div className="dashboard-card-body dashboard-attendance-body">
             {/* Donut Chart & Side Status Legend */}
@@ -4194,7 +4277,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
                 </ResponsiveContainer>
                 <div className="dashboard-donut-center">
                   <strong>{myAttMetrics.rate}%</strong>
-                  <span>PUNCTUAL</span>
+                  <span>PRESENT</span>
                 </div>
               </div>
 
@@ -4281,15 +4364,15 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
                         myAttToday.status === "punched_in"
                           ? "#22a447"
                           : myAttToday.status === "punched_out"
-                          ? "#f59e0b"
-                          : "#64748b",
+                            ? "#f59e0b"
+                            : "#64748b",
                     }}
                   >
                     {myAttToday.status === "punched_in"
                       ? `Checked In (${myAttToday.inTime || "--"})`
                       : myAttToday.status === "punched_out"
-                      ? `Checked Out (${myAttToday.outTime || "--"})`
-                      : "Not Checked In"}
+                        ? `Checked Out (${myAttToday.outTime || "--"})`
+                        : "Not Checked In"}
                   </strong>
                 </span>
               </div>
@@ -4315,7 +4398,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           </div>
           <div className="dashboard-card-body">
             <div className="dashboard-info-list tm-scrollable-card-body" style={{ flex: 1, minHeight: 0, maxHeight: "195px", overflowY: "auto" }}>
-              {holidaysLoading ? (
+              {holidaysLoading && holidaysList.length === 0 ? (
                 <div style={{ padding: "16px", textAlign: "center", color: "var(--cms-muted)", fontSize: "11px" }}>
                   Loading holidays...
                 </div>
@@ -4583,27 +4666,27 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     <div className="cms-transport-page" style={{ padding: "0.25rem 0" }}>
       {/* Module Title Header matching sidebar item (shown for non-dashboard tabs) */}
       {activeSection !== "dashboard" && (
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "1.45rem", fontWeight: 700, color: "var(--cms-text, #232a1e)" }}>
-            {currentMeta.title}
-          </h1>
-          <p style={{ margin: "3px 0 0", fontSize: "0.875rem", color: "var(--cms-muted, #727c65)" }}>
-            {currentMeta.subtitle}
-          </p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: "1.45rem", fontWeight: 700, color: "var(--cms-text, #232a1e)" }}>
+              {currentMeta.title}
+            </h1>
+            <p style={{ margin: "3px 0 0", fontSize: "0.875rem", color: "var(--cms-muted, #727c65)" }}>
+              {currentMeta.subtitle}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+            title="Sync Live Data with Backend"
+            onClick={fetchTransportData}
+            disabled={isLoading}
+          >
+            <RefreshCw size={14} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
+            <span>{isLoading ? "Syncing..." : "Sync Live Data"}</span>
+          </button>
         </div>
-        <button
-          type="button"
-          className="cms-btn cms-btn-ghost"
-          style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
-          title="Sync Live Data with Backend"
-          onClick={fetchTransportData}
-          disabled={isLoading}
-        >
-          <RefreshCw size={14} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
-          <span>{isLoading ? "Syncing..." : "Sync Live Data"}</span>
-        </button>
-      </div>
 
       )}
 
