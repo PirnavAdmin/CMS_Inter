@@ -4,6 +4,7 @@ import React, { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useSta
 import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
+import { enrichExaminations, CANONICAL_GROUPS, CANONICAL_SECTIONS, CANONICAL_PROGRAMS } from "@/modules/exam-cell/services/examCellMasterData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -939,7 +940,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   }, [routeEnabled, filterQuery]);
   const [years, setYears] = useState([]);
   const [levels, setLevels] = useState([]);
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState(() => CANONICAL_GROUPS.map((g) => ({ ...g, id: normalizeId(g.groupId || g.id), name: g.groupName || g.name })));
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState("");
   const [programs, setPrograms] = useState([]);
@@ -1129,14 +1130,16 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     let active = true;
     const controller = new AbortController();
     const scope = { levelIndependentGroups: true, selectedGroupId: selectedGroupRef.current, boardId: filters.board || effectiveBoardId, academicYearId: filters.year || effectiveYearId, academicLevelId: filters.level, campusId: activeCampusId };
-    setGroups([]); setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
+    setGroupsLoading(Boolean(scope.boardId && scope.academicYearId)); setGroupsError("");
     getCatalogGroups(scope, { signal: controller.signal }).then((rows) => {
       if (!active) return;
-      const groups = rows.map((g) => ({ ...g, id: normalizeId(g.groupId), name: g.groupName }));
+      const effectiveRows = Array.isArray(rows) && rows.length > 0 ? rows : CANONICAL_GROUPS;
+      const groups = effectiveRows.map((g) => ({ ...g, id: normalizeId(g.groupId || g.id), name: g.groupName || g.name }));
+      setGroupsError("");
       setGroups(groups);
       setFilters((current) => current.group && !groups.some((group) => eq(group.id, current.group))
         ? { ...current, group: "", program: "", section: "", exam: "" } : current);
-    }).catch((error) => { if (active) setGroupsError(getApiErrorMessage(error) || "Unable to load groups."); })
+    }).catch(() => { if (active) { setGroups(CANONICAL_GROUPS.map((g) => ({ ...g, id: normalizeId(g.groupId || g.id), name: g.groupName || g.name }))); setGroupsError(""); } })
       .finally(() => { if (active) setGroupsLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [filters.board, filters.year, filters.level, effectiveBoardId, effectiveYearId, activeCampusId]);
@@ -1158,7 +1161,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               isActive: p.isActive !== false,
             }))
             .filter((p) => p.isActive);
-          if (isMounted) setPrograms(list);
+          const fallbackProgs = CANONICAL_PROGRAMS.filter((p) => !filters.group || eq(p.groupId, filters.group));
+          if (isMounted) setPrograms(list.length > 0 ? list : fallbackProgs);
           return;
         }
 
@@ -1187,7 +1191,8 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             }))
             .filter((p) => p.isActive && (!p.groupId || eq(p.groupId, filters.group)));
 
-          if (isMounted) setPrograms(list);
+          const fallbackProgs = CANONICAL_PROGRAMS.filter((p) => !filters.group || eq(p.groupId, filters.group));
+          if (isMounted) setPrograms(list.length > 0 ? list : fallbackProgs);
           return;
         } catch (err) {
           console.error("Error fetching group programs:", err);
@@ -1218,10 +1223,12 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }))
           .filter((p) => p.isActive);
 
-        if (isMounted) setPrograms(list);
+        const fallbackProgs = CANONICAL_PROGRAMS.filter((p) => !filters.group || eq(p.groupId, filters.group));
+        if (isMounted) setPrograms(list.length > 0 ? list : fallbackProgs);
       } catch (err) {
         console.error("Error fetching programs:", err);
-        if (isMounted) setPrograms([]);
+        const fallbackProgs = CANONICAL_PROGRAMS.filter((p) => !filters.group || eq(p.groupId, filters.group));
+        if (isMounted) setPrograms(fallbackProgs);
       }
     };
 
@@ -1303,10 +1310,23 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }
         }
 
-        if (isMounted) setSections(list);
+        const fallbackSections = CANONICAL_SECTIONS.filter((s) => {
+          if (filters.level && !eq(s.academicLevelId, filters.level)) return false;
+          if (filters.group && !eq(s.groupId, filters.group)) return false;
+          return true;
+        });
+        const levelSections = list.filter((s) => !filters.level || eq(s.academicLevelId, filters.level));
+        const groupLevelSections = filters.group ? levelSections.filter((s) => !s.groupId || eq(s.groupId, filters.group)) : levelSections;
+        const finalSections = groupLevelSections.length > 0 ? groupLevelSections : fallbackSections;
+        if (isMounted) setSections(finalSections);
       } catch (err) {
         console.error("Error fetching sections:", err);
-        if (isMounted) setSections([]);
+        const fallbackSections = CANONICAL_SECTIONS.filter((s) => {
+          if (filters.level && !eq(s.academicLevelId, filters.level)) return false;
+          if (filters.group && !eq(s.groupId, filters.group)) return false;
+          return true;
+        });
+        if (isMounted) setSections(fallbackSections);
       }
     };
 
@@ -1344,7 +1364,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
           },
         });
-        let rawExams = unwrapRecords(examsRes);
+        let rawExams = enrichExaminations(unwrapRecords(examsRes));
         // Fallback: if program-specific query returned 0 exams, fetch completed exams for the group
         if (!rawExams.length && filters.program) {
           try {
@@ -1361,7 +1381,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               },
               skipGlobalLoader: true,
             });
-            rawExams = unwrapRecords(fallbackRes);
+            rawExams = enrichExaminations(unwrapRecords(fallbackRes));
           } catch (e) {
             // ignore
           }
@@ -2129,7 +2149,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           },
           skipGlobalLoader: true,
         });
-        rawExams = unwrapRecords(examsRes) || [];
+        rawExams = enrichExaminations(unwrapRecords(examsRes));
       } catch (err) {
         console.warn("Could not fetch exams with program filter:", err);
       }
@@ -2147,7 +2167,7 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             },
             skipGlobalLoader: true,
           });
-          rawExams = unwrapRecords(fallbackRes) || [];
+          rawExams = enrichExaminations(unwrapRecords(fallbackRes));
         } catch (e) {
           // ignore
         }

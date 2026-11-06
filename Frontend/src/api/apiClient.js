@@ -39,9 +39,12 @@ const isAuthBypassRequest = (config) => {
   if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
   return (
-    /\/login\/?$/i.test(url) ||
-    /\/refresh(-token)?\/?$/i.test(url) ||
-    /\/register\/?$/i.test(url) ||
+    /\/login(?:\/|\?|$)/i.test(url) ||
+    /\/auth\/login/i.test(url) ||
+    /\/admin\/login/i.test(url) ||
+    /\/refresh(-token)?(?:\/|\?|$)/i.test(url) ||
+    /\/register(?:\/|\?|$)/i.test(url) ||
+    (typeof window !== "undefined" && window.location?.pathname === "/login") ||
     url.includes("/api/v1/non-teaching/") ||
     url.includes("/api/v1/staff-tasks") ||
     url.includes("/api/v1/support-tickets") ||
@@ -115,6 +118,7 @@ export const getApiErrorMessage = (error) => {
 
 const apiClient = axios.create({
   baseURL: env.useDevProxy ? "" : env.apiBaseUrl,
+  timeout: 15000,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",

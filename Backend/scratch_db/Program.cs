@@ -5,29 +5,36 @@ using System.Collections.Generic;
 using Dapper;
 using MySql.Data.MySqlClient;
 
-string connStr = "Server=srv1061.hstgr.io;Port=3306;Database=u819242402_CLM_System;User=u819242402_CLM;Password=Clm@2026;SslMode=None;ConvertZeroDateTime=True;Pooling=true;MinimumPoolSize=1;MaximumPoolSize=5;";
+string connStr = "Server=collegemanagementdb-mysql-3069cc62-manikesandeep-1393.g.aivencloud.com;Port=19182;Database=CollegeManagement;User ID=avnadmin;Password=AVNS_jgPZED4pphZib4tvJID;SslMode=Required;Allow User Variables=True;";
 using var conn = new MySqlConnection(connStr);
 await conn.OpenAsync();
 
-var allTables = (await conn.QueryAsync<string>("SHOW TABLES;")).ToList();
-var approvalTables = allTables.Where(t => t.Contains("Approval", StringComparison.OrdinalIgnoreCase) || t.Contains("Exam", StringComparison.OrdinalIgnoreCase) || t.Contains("Leave", StringComparison.OrdinalIgnoreCase)).ToList();
+Console.WriteLine("Connected to database successfully!");
 
-Console.WriteLine("Relevant tables:");
-foreach (var t in approvalTables)
+string[] sps = { "sp_GetResultStatistics", "sp_GetResultAnalysis", "sp_GetFailedStudents", "sp_GetRankList", "sp_ProcessResults", "sp_GetSectionResultSummaries" };
+foreach (var sp in sps)
 {
-    var count = await conn.ExecuteScalarAsync<int>($"SELECT COUNT(*) FROM `{t}`;");
-    Console.WriteLine($"  {t} ({count} rows)");
+    try
+    {
+        var row = await conn.QueryFirstOrDefaultAsync<dynamic>($"SHOW CREATE PROCEDURE `{sp}`;");
+        if (row != null)
+        {
+            var dict = (IDictionary<string, object>)row;
+            Console.WriteLine($"\n================== {sp} ==================");
+            Console.WriteLine(dict["Create Procedure"]?.ToString());
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error fetching {sp}: {ex.Message}");
+    }
 }
 
-// Check if Examination has approval fields or an approvals table
-var examCols = (await conn.QueryAsync("DESCRIBE Examinations;")).ToList();
-Console.WriteLine("\nExaminations approval-related columns:");
-foreach (var c in examCols)
+// Also check Examinations matching MPC or recent exams
+Console.WriteLine("\n================== Recent Examinations ==================");
+var exams = await conn.QueryAsync<dynamic>("SELECT ExaminationId, ExamName, ExamCode, BoardId, AcademicYearId, AcademicLevelId, GroupId, Status FROM Examinations ORDER BY ExaminationId DESC LIMIT 10;");
+foreach (var e in exams)
 {
-    var d = (IDictionary<string, object>)c;
-    string col = d["Field"]?.ToString() ?? "";
-    if (col.Contains("Approv", StringComparison.OrdinalIgnoreCase) || col.Contains("Status", StringComparison.OrdinalIgnoreCase))
-    {
-        Console.WriteLine($"  {col} ({d["Type"]})");
-    }
+    var dict = (IDictionary<string, object>)e;
+    Console.WriteLine($"ExamId: {dict["ExaminationId"]}, Name: {dict["ExamName"]}, Code: {dict["ExamCode"]}, GroupId: {dict["GroupId"]}, Status: {dict["Status"]}");
 }

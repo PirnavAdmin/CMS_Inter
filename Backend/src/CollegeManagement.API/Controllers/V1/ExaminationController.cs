@@ -552,7 +552,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId = null,
             [FromQuery] int? boardId = null)
         {
-            if (!staffId.HasValue || staffId.Value <= 0)
+            bool isRosterManager = User.IsInRole("Admin") ||
+								   User.IsInRole("Examination Cell") ||
+								   User.IsInRole("Principal") ||
+								   User.IsInRole("SuperAdmin");
+
+			if (isRosterManager && staffId.HasValue && staffId.Value <= 0)
+			{
+				staffId = null;
+			}
+
+			if (!isRosterManager && (!staffId.HasValue || staffId.Value <= 0))
             {
                 var staffClaim = User.FindFirst("staff_id")?.Value
                     ?? User.FindFirst("StaffId")?.Value

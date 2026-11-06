@@ -10,7 +10,7 @@ import "../ParentDashboard.css";
 
 export default function ParentFeesPage() {
   const {
-    availableChildren,
+    availableChildren: rawChildren,
     activeChildId,
     setActiveChildId,
     child,
@@ -19,6 +19,7 @@ export default function ParentFeesPage() {
     currentAcademicYear,
     loading,
   } = useParentPortal();
+  const availableChildren = (rawChildren || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
   const [searchParams, setSearchParams] = useSearchParams();
   const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
@@ -277,8 +278,8 @@ export default function ParentFeesPage() {
                 </thead>
                 <tbody>
                   {(childFee.receipts || []).length > 0 ? (
-                    (childFee.receipts || []).map((rec) => (
-                      <tr key={rec.id}>
+                    (childFee.receipts || []).map((rec, idx) => (
+                      <tr key={rec.id ? `rec-${rec.id}` : `receipt-${idx}`}>
                         <td><strong>{rec.receiptNo}</strong></td>
                         <td>{rec.date}</td>
                         <td style={{ fontWeight: 700, color: "var(--cms-green)" }}>₹{rec.amount.toLocaleString()}</td>

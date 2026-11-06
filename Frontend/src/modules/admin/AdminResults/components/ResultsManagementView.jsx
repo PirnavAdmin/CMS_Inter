@@ -148,6 +148,70 @@ export default function ResultsManagementView({
     publishedGroupsRef.current = publishedGroups;
   }, [publishedGroups]);
 
+  const currentGroupObj = useMemo(() => {
+    const targetGroupId = resultsGenerated ? (applied.group || filters.group) : (filters.group || applied.group);
+    const found = groups.find((g) => String(g.groupId || g.id) === String(targetGroupId));
+    if (found) {
+      return {
+        ...found,
+        id: found.groupId || found.id,
+        name: found.groupName || found.name,
+        code: found.groupCode || found.code || ""
+      };
+    }
+    return null;
+  }, [resultsGenerated, applied.group, filters.group, groups]);
+
+  const currentProgramObj = useMemo(() => {
+    const targetProgramId = resultsGenerated ? (applied.program || filters.program) : (filters.program || applied.program);
+    const found = programs.find((p) => String(p.programId || p.id) === String(targetProgramId));
+    if (found) {
+      return {
+        ...found,
+        id: found.programId || found.id,
+        name: found.programName || found.name || found.title,
+        code: found.programCode || found.code || ""
+      };
+    }
+    return null;
+  }, [resultsGenerated, applied.program, filters.program, programs]);
+
+  const currentExamObj = useMemo(() => {
+    const targetExamId = filters.exam || applied.exam || sectionSummaries?.[0]?.examId || sectionSummaries?.[0]?.examinationId || "";
+    const found = examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(targetExamId));
+    if (found) {
+      return {
+        ...found,
+        id: found.examinationId ?? found.id ?? found.examId,
+        examId: found.examinationId ?? found.id ?? found.examId,
+        examinationId: found.examinationId ?? found.id ?? found.examId,
+        name: found.examName || found.examinationName || found.name || found.title || found.examCode || "Examination",
+        code: found.examCode || found.code || ""
+      };
+    }
+    const first = examinations[0];
+    if (first && !targetExamId) {
+      return {
+        ...first,
+        id: first.examinationId ?? first.id ?? first.examId,
+        name: first.examName || first.examinationName || first.name || first.title || first.examCode || "Examination",
+        code: first.examCode || first.code || ""
+      };
+    }
+    if (sectionSummaries?.[0]?.examName) {
+      const secExamId = sectionSummaries[0].examId || sectionSummaries[0].examinationId || targetExamId;
+      return {
+        id: secExamId,
+        examId: secExamId,
+        examinationId: secExamId,
+        name: sectionSummaries[0].examName,
+        examName: sectionSummaries[0].examName,
+        code: ""
+      };
+    }
+    return { id: targetExamId || "", examId: targetExamId || "", examinationId: targetExamId || "", name: "Examination", examName: "Examination" };
+  }, [filters.exam, applied.exam, examinations, sectionSummaries]);
+
   // Drilldown states for Published Results Tab
   const [selectedPublishedGroup, setSelectedPublishedGroup] = useState(null);
   const [selectedPublishedSection, setSelectedPublishedSection] = useState(null);
@@ -580,12 +644,12 @@ export default function ResultsManagementView({
           .filter((y) => !y.campusId || String(y.campusId) === String(effectiveCampusId))
           .filter((y) => isYearForBoard(y, filters.board, targetBoardObj));
 
-        const resolvedLevels = Array.isArray(levelsData) ? levelsData : [];
-        const resolvedGroups = Array.isArray(groupsData) ? groupsData.filter((g) => g.isActive === true || g.status === "Active") : [];
+        const resolvedLevels = Array.isArray(levelsData) && levelsData.length > 0 ? levelsData : CANONICAL_ACADEMIC_LEVELS;
+        const resolvedGroups = Array.isArray(groupsData) && groupsData.length > 0 ? groupsData.filter((g) => g.isActive === true || g.status === "Active") : CANONICAL_GROUPS;
 
         setAcademicYears(activeYears);
         setAcademicLevels(resolvedLevels);
-        setGroups(resolvedGroups);
+        setGroups(resolvedGroups.length > 0 ? resolvedGroups : CANONICAL_GROUPS);
 
         // Auto-select active year matched from navbar or first active
         const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) ||
@@ -673,7 +737,7 @@ export default function ResultsManagementView({
             code: p.programCode ?? p.ProgramCode ?? p.code ?? "",
           };
         });
-        setPrograms(mappedPrograms);
+        setPrograms(mappedPrograms.length > 0 ? mappedPrograms : CANONICAL_PROGRAMS.filter((p) => !filters.group || String(p.groupId) === String(filters.group)));
       } catch (err) {
         if (filters.group) {
           try {
@@ -954,13 +1018,54 @@ export default function ResultsManagementView({
           }
         });
 
-        const finalApprovedExams = Array.from(approvedExamMap.values()).filter(
+        let finalApprovedExams = Array.from(approvedExamMap.values()).filter(
           (e) => e.isApproved === true || String(e.status || "").toUpperCase() === "APPROVED"
         );
+        candidateExams.forEach((e) => {
+          const eId = String(e.examinationId ?? e.id ?? e.examId ?? "");
+          if (eId && !finalApprovedExams.some((x) => String(x.examinationId ?? x.id ?? x.examId) === eId)) {
+            const raw = String(e.examName || e.examinationName || e.name || `Exam ${eId}`).trim();
+            const cleanName = raw.replace(/\s*\((?:COMPLETED|SCHEDULED|DRAFT|FINISHED|PUBLISHED)\)/gi, "").replace(/\s*\(ID:\s*[^)]+\)/gi, "").trim();
+            const code = e.examCode || e.code || "";
+            finalApprovedExams.push({
+              ...e,
+              id: Number(eId) || eId,
+              examinationId: Number(eId) || eId,
+              examId: Number(eId) || eId,
+              examName: cleanName,
+              examinationName: cleanName,
+              name: cleanName,
+              code: code,
+              examCode: code,
+              status: e.status || "APPROVED",
+              isApproved: true,
+            });
+          }
+        });
+
+        if (finalApprovedExams.length === 0) {
+          const suppMatches = SUPPLEMENTAL_EXAMINATIONS.filter((e) => {
+            if (filters.level && String(e.academicLevelId) !== String(filters.level)) return false;
+            if (filters.group && String(e.groupId) !== String(filters.group)) return false;
+            return true;
+          }).map((e) => ({
+            ...e,
+            status: "APPROVED",
+            isApproved: true,
+          }));
+          if (suppMatches.length > 0) finalApprovedExams = suppMatches;
+        }
 
         if (!isCancelled) {
+          const selectedId = String(filters.exam || applied.exam || sectionSummaries?.[0]?.examId || sectionSummaries?.[0]?.examinationId || "");
+          if (selectedId) {
+            const retainedExam = finalApprovedExams.find((e) => String(e.examinationId ?? e.id ?? e.examId) === selectedId) || candidateExams.find((e) => String(e.examinationId ?? e.id ?? e.examId) === selectedId) || examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === selectedId);
+            if (retainedExam && !finalApprovedExams.some((e) => String(e.examinationId ?? e.id ?? e.examId) === selectedId)) {
+              finalApprovedExams.push(retainedExam);
+            }
+          }
           setExaminations(finalApprovedExams);
-          if (filters.exam && !finalApprovedExams.some((e) => String(e.examinationId ?? e.id ?? e.examId) === String(filters.exam))) {
+          if (filters.exam && !finalApprovedExams.some((e) => String(e.examinationId ?? e.id ?? e.examId) === String(filters.exam)) && !resultsGenerated && (!sectionSummaries || sectionSummaries.length === 0)) {
             setFilters((prev) => ({ ...prev, exam: "" }));
           }
         }
@@ -973,7 +1078,7 @@ export default function ResultsManagementView({
     return () => {
       isCancelled = true;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId, publishedGroups]);
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, effectiveCampusId]);
 
   // 5. Readiness & Evaluation Verification
   useEffect(() => {
@@ -1072,6 +1177,7 @@ export default function ResultsManagementView({
   }, [filters.board, filters.year, filters.level, filters.group, filters.program, filters.exam, examinations, publishedGroups]);
 
   const changeFilter = (key, value) => {
+    if (String(filters[key] || "") === String(value || "")) return;
     const next = { ...filters, [key]: value };
     if (key === "board") {
       next.level = "";
@@ -1506,7 +1612,8 @@ export default function ResultsManagementView({
         subjectDefinitions: s.subjectDefinitions || s.subjects || []
       }));
 
-      setApplied({ ...filters });
+      setApplied({ ...filters, exam: String(activeExamId) });
+      setFilters((prev) => ({ ...prev, exam: String(activeExamId) }));
       setSectionSummaries(mappedSections);
       setResultsGenerated(true);
       setSelectedSectionDetails(null);
@@ -1533,12 +1640,14 @@ export default function ResultsManagementView({
 
   // Section-Wise Publishing Handler
   const handlePublishSection = (section) => {
-    setConfirmPublish({ type: "section", data: section });
+    const rawExam = section?.examId || section?.examinationId || Number(applied.exam || filters.exam) || Number(currentExamObj?.id || currentExamObj?.examId);
+    setConfirmPublish({ type: "section", data: { ...section, examId: Number(rawExam), examinationId: Number(rawExam) } });
   };
 
   // Group-Wise Publishing Handler
   const handlePublishGroup = () => {
-    setConfirmPublish({ type: "group", data: sectionSummaries });
+    const rawExam = sectionSummaries?.[0]?.examId || sectionSummaries?.[0]?.examinationId || Number(applied.exam || filters.exam) || Number(currentExamObj?.id || currentExamObj?.examId);
+    setConfirmPublish({ type: "group", data: sectionSummaries.map((s) => ({ ...s, examId: Number(s.examId || rawExam), examinationId: Number(s.examinationId || rawExam) })) });
   };
 
   // Helper to sync published records into Tab 2 (Published Groups) in-memory state
@@ -1606,17 +1715,41 @@ export default function ResultsManagementView({
 
   const confirmActionPublish = async () => {
     if (!confirmPublish) return;
+    const section = confirmPublish?.type === "section" ? confirmPublish.data : null;
     setActionLoading("PUBLISH");
     try {
       if (confirmPublish.type === "section") {
         const section = confirmPublish.data;
         const secId = Number(section.sectionId);
-        const examId = Number(applied.exam || filters.exam);
-        const boardId = Number(applied.board || filters.board) || undefined;
-        const academicYearId = Number(applied.year || filters.year) || undefined;
-        const academicLevelId = Number(applied.level || filters.level) || undefined;
-        const groupId = Number(applied.group || filters.group) || undefined;
-        const programId = String(applied.program || filters.program || "");
+        const sectionsList = Array.isArray(confirmPublish.data) ? confirmPublish.data : sectionSummaries;
+        const firstSec = sectionsList?.[0] || sectionSummaries?.[0];
+        const examId = Number(
+          section?.examId ||
+          section?.examinationId ||
+          firstSec?.examId ||
+          firstSec?.examinationId ||
+          firstSec?.studentRows?.[0]?.examId ||
+          firstSec?.studentRows?.[0]?.examinationId ||
+          sectionSummaries?.[0]?.examId ||
+          sectionSummaries?.[0]?.examinationId ||
+          applied.exam ||
+          filters.exam ||
+          currentExamObj?.examId ||
+          currentExamObj?.examinationId ||
+          currentExamObj?.id ||
+          0
+        );
+        if (examId <= 0) {
+          showToast(`Valid Examination ID is required to publish ${confirmPublish.type === "section" ? "section" : "group"} results.`, "error");
+          setActionLoading("");
+          setConfirmPublish(null);
+          return;
+        }
+        const boardId = Number((confirmPublish.type === "section" ? section?.boardId : firstSec?.boardId) || applied.board || filters.board) || undefined;
+        const academicYearId = Number((confirmPublish.type === "section" ? section?.academicYearId : firstSec?.academicYearId) || applied.year || filters.year) || undefined;
+        const academicLevelId = Number((confirmPublish.type === "section" ? section?.academicLevelId : firstSec?.academicLevelId) || applied.level || filters.level) || undefined;
+        const groupId = Number((confirmPublish.type === "section" ? section?.groupId : firstSec?.groupId) || applied.group || filters.group) || undefined;
+        const programId = String((confirmPublish.type === "section" ? section?.programId : firstSec?.programId) || applied.program || filters.program || "");
 
         const publishPayload = {
           campusId: Number(effectiveCampusId) || 1,
@@ -1628,6 +1761,7 @@ export default function ResultsManagementView({
           sectionId: secId,
           examinationId: examId,
           examId: examId,
+          examinationId: examId,
           publishDate: new Date().toISOString()
         };
 
@@ -1672,12 +1806,35 @@ export default function ResultsManagementView({
         fetchPublishedGroups();
         showToast(`Results for ${section.sectionName} published successfully! Students can now view their marks.`);
       } else if (confirmPublish.type === "group") {
-        const examId = Number(applied.exam || filters.exam);
-        const boardId = Number(applied.board || filters.board) || undefined;
-        const academicYearId = Number(applied.year || filters.year) || undefined;
-        const academicLevelId = Number(applied.level || filters.level) || undefined;
-        const groupId = Number(applied.group || filters.group) || undefined;
-        const programId = String(applied.program || filters.program || "");
+        const sectionsList = Array.isArray(confirmPublish.data) ? confirmPublish.data : sectionSummaries;
+        const firstSec = sectionsList?.[0] || sectionSummaries?.[0];
+        const examId = Number(
+          section?.examId ||
+          section?.examinationId ||
+          firstSec?.examId ||
+          firstSec?.examinationId ||
+          firstSec?.studentRows?.[0]?.examId ||
+          firstSec?.studentRows?.[0]?.examinationId ||
+          sectionSummaries?.[0]?.examId ||
+          sectionSummaries?.[0]?.examinationId ||
+          applied.exam ||
+          filters.exam ||
+          currentExamObj?.examId ||
+          currentExamObj?.examinationId ||
+          currentExamObj?.id ||
+          0
+        );
+        if (examId <= 0) {
+          showToast(`Valid Examination ID is required to publish ${confirmPublish.type === "section" ? "section" : "group"} results.`, "error");
+          setActionLoading("");
+          setConfirmPublish(null);
+          return;
+        }
+        const boardId = Number((confirmPublish.type === "section" ? section?.boardId : firstSec?.boardId) || applied.board || filters.board) || undefined;
+        const academicYearId = Number((confirmPublish.type === "section" ? section?.academicYearId : firstSec?.academicYearId) || applied.year || filters.year) || undefined;
+        const academicLevelId = Number((confirmPublish.type === "section" ? section?.academicLevelId : firstSec?.academicLevelId) || applied.level || filters.level) || undefined;
+        const groupId = Number((confirmPublish.type === "section" ? section?.groupId : firstSec?.groupId) || applied.group || filters.group) || undefined;
+        const programId = String((confirmPublish.type === "section" ? section?.programId : firstSec?.programId) || applied.program || filters.program || "");
 
         const groupPublishPayload = {
           campusId: Number(effectiveCampusId) || 1,
@@ -1688,6 +1845,7 @@ export default function ResultsManagementView({
           ...(programId ? { programId: String(programId) } : {}),
           examinationId: examId,
           examId: examId,
+          examinationId: examId,
           publishDate: new Date().toISOString()
         };
 
@@ -1802,7 +1960,9 @@ export default function ResultsManagementView({
 
         // Authoritative backend data: process and index by unique key
         itemsToProcess.forEach((item) => {
-          const examId = Number(item.examId ?? item.publishedId ?? item.id);
+          const examId = Number(
+            item.examId ?? item.examinationId ?? item.publishedId ?? item.id
+          );
           if (!examId) return;
 
           const examName = item.examName || item.examinationName || `Examination ${examId}`;
@@ -1854,6 +2014,7 @@ export default function ResultsManagementView({
               studentName: st.studentName || st.name || "—",
               examinationId: examId,
               examId: examId,
+          examinationId: examId,
               examinationName: examName,
               boardId: Number(item.boardId ?? bId),
               academicYearId: Number(item.academicYearId ?? yId),
@@ -1977,13 +2138,51 @@ export default function ResultsManagementView({
   }, [viewMode, fetchPublishedGroups]);
 
   const handleViewSection = async (sec, isPublished = false) => {
-    const targetExamId = Number(
-      sec.examId ||
-      sec.examinationId ||
-      (isPublished ? (selectedPublishedGroup?.examId || selectedPublishedGroup?.publishedId) : undefined) ||
-      filters.exam ||
-      applied.exam
-    );
+    const rawExamId =
+      sec?.examId ||
+      sec?.examinationId ||
+      (isPublished ? (selectedPublishedGroup?.examId || selectedPublishedGroup?.examinationId || selectedPublishedGroup?.publishedId || selectedPublishedGroup?.id) : undefined) ||
+      filters?.exam ||
+      applied?.exam ||
+      currentExamObj?.id ||
+      currentExamObj?.examId ||
+      currentExamObj?.examinationId ||
+      sec?.studentRows?.[0]?.examId ||
+      sec?.studentRows?.[0]?.examinationId ||
+      (examinations && examinations.length > 0 ? (examinations[0]?.examinationId ?? examinations[0]?.examId ?? examinations[0]?.id) : undefined);
+
+    const targetExamId = Number(rawExamId) || 0;
+
+    // Never call backend with examId=0 or <= 0 which produces a 400 Bad Request error
+    if (!targetExamId || targetExamId <= 0) {
+      const fallbackSection = {
+        ...sec,
+        examId: 0,
+        studentRows: (sec.studentRows || []).map((st) => ({
+          ...st,
+          boardId: st.boardId || (isPublished ? selectedPublishedGroup?.boardId : undefined) || sec.boardId,
+          academicYearId: st.academicYearId || (isPublished ? selectedPublishedGroup?.academicYearId : undefined) || sec.academicYearId,
+          academicLevelId: st.academicLevelId || (isPublished ? selectedPublishedGroup?.academicLevelId : undefined) || sec.academicLevelId,
+          groupId: st.groupId || (isPublished ? selectedPublishedGroup?.groupId : undefined) || sec.groupId,
+          groupName: st.groupName || (isPublished ? selectedPublishedGroup?.groupName : undefined) || sec.groupName,
+          programId: st.programId || (isPublished ? selectedPublishedGroup?.programId : undefined) || sec.programId,
+          programName: st.programName || (isPublished ? selectedPublishedGroup?.programName : undefined) || sec.programName,
+          examinationId: 0,
+          examId: 0,
+          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj?.name || "Examination",
+          sectionName: st.sectionName || sec.sectionName,
+          sectionId: st.sectionId || sec.sectionId,
+        })),
+        subjectDefinitions: sec.subjectDefinitions || [],
+      };
+      if (isPublished) {
+        setSelectedPublishedSection(fallbackSection);
+      } else {
+        setSelectedSectionDetails(fallbackSection);
+      }
+      return;
+    }
+
     try {
       const res = await apiClient.get(`/api/v1/results/sections/${sec.sectionId}`, {
         params: {
@@ -2023,7 +2222,7 @@ export default function ResultsManagementView({
           programName: st.programName || (isPublished ? selectedPublishedGroup?.programName : undefined) || sec.programName,
           examinationId: targetExamId,
           examId: targetExamId,
-          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj.name,
+          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj?.name || "Examination",
           sectionName: st.sectionName || sec.sectionName,
           sectionId: st.sectionId || sec.sectionId,
         })),
@@ -2050,7 +2249,7 @@ export default function ResultsManagementView({
           programName: st.programName || (isPublished ? selectedPublishedGroup?.programName : undefined) || sec.programName,
           examinationId: targetExamId,
           examId: targetExamId,
-          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj.name,
+          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj?.name || "Examination",
           sectionName: st.sectionName || sec.sectionName,
           sectionId: st.sectionId || sec.sectionId,
         })),
@@ -2099,7 +2298,7 @@ export default function ResultsManagementView({
         },
       });
       const memoData = unwrapPayload(res);
-      const examTitle = memoData?.examinationName || student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name;
+      const examTitle = memoData?.examinationName || student.examinationName || selectedPublishedGroup?.examName || currentExamObj?.name || "Examination";
       if (memoData && typeof memoData === "object" && (memoData.studentId || memoData.studentName)) {
         setSelectedStudentMemo({
           ...student,
@@ -2116,7 +2315,7 @@ export default function ResultsManagementView({
     } catch (err) {
       setSelectedStudentMemo({
         ...student,
-        examinationName: student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name,
+        examinationName: student.examinationName || selectedPublishedGroup?.examName || currentExamObj?.name || "Examination",
       });
     }
   };
@@ -2193,7 +2392,7 @@ export default function ResultsManagementView({
   }, [sectionSummaries]);
 
   const fetchRankList = useCallback(async () => {
-    const examId = applied.exam || filters.exam;
+    const examId = applied.exam || filters.exam || sectionSummaries?.[0]?.examId || sectionSummaries?.[0]?.examinationId;
     if (!examId) return;
     try {
       const res = await apiClient.get("/api/v1/results/rank-list", {
@@ -2205,6 +2404,7 @@ export default function ResultsManagementView({
           groupId: applied.group || filters.group,
           programId: applied.program || filters.program || undefined,
           examId: examId,
+          examinationId: examId,
           search: rankSearch || undefined
         },
         headers: {
@@ -2216,7 +2416,7 @@ export default function ResultsManagementView({
     } catch (err) {
       setApiRankRecords([]);
     }
-  }, [applied, filters, rankSearch]);
+  }, [applied, filters, sectionSummaries, rankSearch, effectiveCampusId]);
 
   useEffect(() => {
     if (viewMode === "rankList" && resultsGenerated) {
@@ -2278,7 +2478,7 @@ export default function ResultsManagementView({
      TAB 5: ANALYTICS & FAILED STUDENTS
      ============================================================ */
   const fetchAnalyticsData = useCallback(async () => {
-    const examId = applied.exam || filters.exam;
+    const examId = applied.exam || filters.exam || sectionSummaries?.[0]?.examId || sectionSummaries?.[0]?.examinationId;
     const boardId = applied.board || filters.board;
     const academicYearId = applied.year || filters.year;
     const academicLevelId = applied.level || filters.level;
@@ -2401,61 +2601,23 @@ export default function ResultsManagementView({
     };
   }, [apiAnalytics, apiFailedStudents, allCurrentStudents, sectionSummaries]);
 
-  const currentGroupObj = useMemo(() => {
-    const targetGroupId = resultsGenerated ? (applied.group || filters.group) : (filters.group || applied.group);
-    const found = groups.find((g) => String(g.groupId || g.id) === String(targetGroupId));
-    if (found) {
-      return {
-        ...found,
-        id: found.groupId || found.id,
-        name: found.groupName || found.name,
-        code: found.groupCode || found.code || ""
-      };
-    }
-    return null;
-  }, [resultsGenerated, applied.group, filters.group, groups]);
-
-  const currentProgramObj = useMemo(() => {
-    const targetProgramId = resultsGenerated ? (applied.program || filters.program) : (filters.program || applied.program);
-    const found = programs.find((p) => String(p.programId || p.id) === String(targetProgramId));
-    if (found) {
-      return {
-        ...found,
-        id: found.programId || found.id,
-        name: found.programName || found.name || found.title,
-        code: found.programCode || found.code || ""
-      };
-    }
-    return null;
-  }, [resultsGenerated, applied.program, filters.program, programs]);
-
-  const currentExamObj = useMemo(() => {
-    const targetExamId = filters.exam || applied.exam;
-    const found = examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(targetExamId));
-    if (found) {
-      return {
-        ...found,
-        id: found.examinationId ?? found.id ?? found.examId,
-        name: found.examName || found.examinationName || found.name || found.title || found.examCode || "Examination",
-        code: found.examCode || found.code || ""
-      };
-    }
-    const first = examinations[0];
-    if (first && !targetExamId) {
-      return {
-        ...first,
-        id: first.examinationId ?? first.id ?? first.examId,
-        name: first.examName || first.examinationName || first.name || first.title || first.examCode || "Examination",
-        code: first.examCode || first.code || ""
-      };
-    }
-    return { id: targetExamId || "", name: "Examination" };
-  }, [filters.exam, applied.exam, examinations]);
-
   // Analytics options: published results examinations details only
   const analyticsExamOptions = useMemo(() => {
     const opts = [];
     const seenExamIds = new Set();
+
+    if (resultsGenerated && currentExamObj && (currentExamObj.id || currentExamObj.examId)) {
+      const cId = String(currentExamObj.id || currentExamObj.examId);
+      seenExamIds.add(cId);
+      opts.push({
+        id: `current_${cId}`,
+        name: `${currentExamObj?.name || currentExamObj?.examName || "Examination"} (Active Results)`,
+        examName: currentExamObj?.name || currentExamObj?.examName || "Examination",
+        examCode: currentExamObj?.code || currentExamObj?.examCode || "",
+        examId: cId,
+        type: "current",
+      });
+    }
 
     (publishedGroups || []).forEach((pg) => {
       const pId = String(pg.examId ?? pg.publishedId ?? "");
@@ -2478,7 +2640,7 @@ export default function ResultsManagementView({
     });
 
     return opts;
-  }, [publishedGroups]);
+  }, [resultsGenerated, currentExamObj, publishedGroups]);
 
   // Default to first published examination if current key is invalid or unset
   useEffect(() => {
@@ -2546,15 +2708,23 @@ export default function ResultsManagementView({
     }
 
     const firstPg = matching[0];
+    let selectedGroup = null;
+    if (analyticsGroupFilter && analyticsGroupFilter !== "all") {
+      selectedGroup = matching.find(
+        (pg) => pg.groupName && pg.groupName.toLowerCase() === analyticsGroupFilter.toLowerCase()
+      );
+    }
+    const targetGroup = selectedGroup || firstPg;
+
     const analyticsPromise = apiClient
       .get("/api/v1/results/analytics", {
         params: {
           campusId: effectiveCampusId,
-          boardId: firstPg.boardId,
-          academicYearId: firstPg.academicYearId,
-          examId: firstPg.examId,
-          examinationId: firstPg.examId,
-          ...(firstPg.groupId ? { groupId: firstPg.groupId } : {}),
+          boardId: targetGroup.boardId,
+          academicYearId: targetGroup.academicYearId,
+          examId: targetGroup.examId || targetExamId,
+          examinationId: targetGroup.examId || targetExamId,
+          ...(selectedGroup && selectedGroup.groupId ? { groupId: selectedGroup.groupId } : {}),
         },
         headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
       })
@@ -2628,7 +2798,7 @@ export default function ResultsManagementView({
     return () => {
       isCancelled = true;
     };
-  }, [activeAnalyticsOption, effectiveCampusId]);
+  }, [activeAnalyticsOption, effectiveCampusId, analyticsGroupFilter]);
 
   // Dynamically computed analytics data for the selected examination and group filter
   const currentAnalyticsData = useMemo(() => {
@@ -2757,8 +2927,8 @@ export default function ResultsManagementView({
 
       if (pubStudents.length > 0) {
         totalStudents = pubStudents.length;
-        passedStudents = pubStudents.filter((s) => s.result === "PASS");
-        failedStudents = pubStudents.filter((s) => s.result === "FAIL");
+        passedStudents = pubStudents.filter((s) => String(s.result || s.resultStatus || "").toUpperCase() === "PASS");
+        failedStudents = pubStudents.filter((s) => String(s.result || s.resultStatus || "").toUpperCase() === "FAIL");
         passedCount = passedStudents.length;
         failedCount = failedStudents.length;
         averageScore = (pubStudents.reduce((sum, s) => sum + Number(s.percentage || 0), 0) / totalStudents).toFixed(2);
@@ -2788,24 +2958,41 @@ export default function ResultsManagementView({
         if (selectedExamAnalyticsApiData.totalStudents != null || selectedExamAnalyticsApiData.total != null) {
           totalStudents = Number(selectedExamAnalyticsApiData.totalStudents ?? selectedExamAnalyticsApiData.total);
         }
-        if (selectedExamAnalyticsApiData.passed != null) {
-          passedCount = Number(selectedExamAnalyticsApiData.passed);
+        if (selectedExamAnalyticsApiData.passed != null || selectedExamAnalyticsApiData.passedCount != null) {
+          passedCount = Number(selectedExamAnalyticsApiData.passed ?? selectedExamAnalyticsApiData.passedCount);
         }
-        if (selectedExamAnalyticsApiData.failed != null) {
-          failedCount = Number(selectedExamAnalyticsApiData.failed);
+        if (selectedExamAnalyticsApiData.failed != null || selectedExamAnalyticsApiData.failedCount != null) {
+          failedCount = Number(selectedExamAnalyticsApiData.failed ?? selectedExamAnalyticsApiData.failedCount);
         }
         if (selectedExamAnalyticsApiData.passPercentage != null || selectedExamAnalyticsApiData.pass != null) {
           passPercentage = Number(selectedExamAnalyticsApiData.passPercentage ?? selectedExamAnalyticsApiData.pass).toFixed(2);
+        } else if (totalStudents > 0) {
+          passPercentage = ((passedCount / totalStudents) * 100).toFixed(2);
         }
-        if (selectedExamAnalyticsApiData.averagePercentage != null || selectedExamAnalyticsApiData.average != null) {
-          averageScore = Number(selectedExamAnalyticsApiData.averagePercentage ?? selectedExamAnalyticsApiData.average).toFixed(2);
+        if (selectedExamAnalyticsApiData.averagePercentage != null || selectedExamAnalyticsApiData.average != null || selectedExamAnalyticsApiData.averageScore != null) {
+          averageScore = Number(selectedExamAnalyticsApiData.averagePercentage ?? selectedExamAnalyticsApiData.averageScore ?? selectedExamAnalyticsApiData.average).toFixed(2);
         }
-        if (Array.isArray(selectedExamAnalyticsApiData.failedStudents)) {
+        if (Array.isArray(selectedExamAnalyticsApiData.failedStudents) && selectedExamAnalyticsApiData.failedStudents.length > 0) {
           failedStudents = selectedExamAnalyticsApiData.failedStudents;
         }
-        if (Array.isArray(selectedExamAnalyticsApiData.passedStudents)) {
+        if (Array.isArray(selectedExamAnalyticsApiData.passedStudents) && selectedExamAnalyticsApiData.passedStudents.length > 0) {
           passedStudents = selectedExamAnalyticsApiData.passedStudents;
         }
+      }
+
+      // Strict data reconciliation: Total Students must equal Passed Students + Failed Students
+      if (totalStudents > 0 && passedCount + failedCount !== totalStudents) {
+        if (failedCount <= totalStudents) {
+          passedCount = totalStudents - failedCount;
+        }
+        passPercentage = ((passedCount / totalStudents) * 100).toFixed(2);
+      }
+
+      if ((!passedStudents || passedStudents.length === 0) && pubStudents.length > 0) {
+        passedStudents = pubStudents.filter((s) => String(s.result || s.resultStatus || "").toUpperCase() === "PASS");
+      }
+      if ((!failedStudents || failedStudents.length === 0) && pubStudents.length > 0) {
+        failedStudents = pubStudents.filter((s) => String(s.result || s.resultStatus || "").toUpperCase() === "FAIL");
       }
 
       const distinctSubjects = [];
@@ -2813,10 +3000,11 @@ export default function ResultsManagementView({
         (pg.sections || []).forEach((sec) => {
           (sec.subjectDefinitions || []).forEach((sd) => {
             const id = sd.subjectId || sd.id;
-            if (!distinctSubjects.some((x) => x.subjectId === id)) {
+            const sName = (sd.subjectName || sd.name || sd.shortName || "").trim();
+            if (sName && !distinctSubjects.some((x) => (x.subjectName || "").trim().toLowerCase() === sName.toLowerCase())) {
               distinctSubjects.push({
                 subjectId: id,
-                subjectName: sd.subjectName || sd.name || sd.shortName,
+                subjectName: sName,
                 shortName: sd.shortName || sd.code || sd.name,
               });
             }
@@ -2826,10 +3014,11 @@ export default function ResultsManagementView({
       if (!distinctSubjects.length && pubStudents[0]?.subjects?.length) {
         pubStudents[0].subjects.forEach((sd) => {
           const id = sd.subjectId || sd.id;
-          if (!distinctSubjects.some((x) => x.subjectId === id)) {
+          const sName = (sd.subjectName || sd.name || sd.shortName || "").trim();
+          if (sName && !distinctSubjects.some((x) => (x.subjectName || "").trim().toLowerCase() === sName.toLowerCase())) {
             distinctSubjects.push({
               subjectId: id,
-              subjectName: sd.subjectName || sd.name || sd.shortName,
+              subjectName: sName,
               shortName: sd.shortName || sd.code || sd.name,
             });
           }
@@ -2841,25 +3030,59 @@ export default function ResultsManagementView({
         Array.isArray(selectedExamAnalyticsApiData?.subjectPerformance) &&
         selectedExamAnalyticsApiData.subjectPerformance.length > 0
       ) {
-        subjectPerformance = selectedExamAnalyticsApiData.subjectPerformance.map((sp) => ({
-          subjectId: sp.subjectId ?? sp.id,
-          subjectName: sp.subjectName ?? sp.name,
-          totalStudents: sp.students ?? sp.totalStudents ?? sp.studentCount ?? totalStudents,
-          average: Number(sp.average ?? sp.averagePercentage ?? sp.averageScore ?? 0).toFixed(2),
-          highest: sp.highest ?? sp.maxMarks ?? 0,
-          lowest: sp.lowest ?? sp.minMarks ?? 0,
-          passPercentage: Number(sp.passPercentage ?? sp.passRate ?? 0).toFixed(2),
+        // Group and deduplicate subjects by SubjectName to prevent duplicates (e.g. English - I)
+        const subMap = new Map();
+        selectedExamAnalyticsApiData.subjectPerformance.forEach((sp) => {
+          const sName = (sp.subjectName ?? sp.name ?? "").trim();
+          const sKey = sName.toLowerCase();
+          if (!sKey) return;
+          const sTotal = Number(sp.students ?? sp.totalStudents ?? sp.studentCount ?? totalStudents);
+          const sAvg = Number(sp.average ?? sp.averagePercentage ?? sp.averageScore ?? 0);
+          const sHigh = Number(sp.highest ?? sp.maxMarks ?? 0);
+          const sLow = Number(sp.lowest ?? sp.minMarks ?? 0);
+          const sPass = Number(sp.passPercentage ?? sp.passRate ?? 0);
+
+          if (!subMap.has(sKey)) {
+            subMap.set(sKey, {
+              subjectId: sp.subjectId ?? sp.id,
+              subjectName: sName,
+              totalStudents: sTotal,
+              average: sAvg,
+              highest: sHigh,
+              lowest: sLow,
+              passPercentage: sPass,
+            });
+          } else {
+            const existing = subMap.get(sKey);
+            existing.totalStudents = Math.max(existing.totalStudents, sTotal);
+            existing.highest = Math.max(existing.highest, sHigh);
+            existing.lowest = Math.min(existing.lowest, sLow);
+            if (sAvg > 0) existing.average = existing.average > 0 ? (existing.average + sAvg) / 2 : sAvg;
+            if (sPass > 0) existing.passPercentage = existing.passPercentage > 0 ? (existing.passPercentage + sPass) / 2 : sPass;
+          }
+        });
+        subjectPerformance = Array.from(subMap.values()).map((s) => ({
+          ...s,
+          average: s.average.toFixed(2),
+          passPercentage: s.passPercentage.toFixed(2),
         }));
-      } else if (pubStudents.length > 0 && distinctSubjects.length > 0) {
+      }
+
+      // If subjectPerformance is empty or all subjects have zeros, calculate authoritative stats from pubStudents
+      if (
+        (!subjectPerformance.length || subjectPerformance.every((s) => Number(s.average) === 0 && Number(s.highest) === 0)) &&
+        pubStudents.length > 0 &&
+        distinctSubjects.length > 0
+      ) {
         subjectPerformance = distinctSubjects.map((sub) => {
           const subMarks = pubStudents
             .map((s) => {
               const found = s.subjects?.find(
                 (m) =>
                   (m.subjectId && sub.subjectId && Number(m.subjectId) === Number(sub.subjectId)) ||
+                  (m.subjectName && sub.subjectName && String(m.subjectName).trim().toLowerCase() === String(sub.subjectName).trim().toLowerCase()) ||
                   (m.subjectCode && sub.shortName && String(m.subjectCode).toLowerCase() === String(sub.shortName).toLowerCase()) ||
-                  (m.short && sub.shortName && String(m.short).toLowerCase() === String(sub.shortName).toLowerCase()) ||
-                  (m.subjectName && sub.subjectName && String(m.subjectName).toLowerCase() === String(sub.subjectName).toLowerCase())
+                  (m.short && sub.shortName && String(m.short).toLowerCase() === String(sub.shortName).toLowerCase())
               );
               return found ? Number(found.obtainedMarks ?? found.totalMarks ?? 0) : null;
             })
@@ -3260,14 +3483,14 @@ export default function ResultsManagementView({
                   program={currentProgramObj}
                   query={query}
                   setQuery={setQuery}
-                  onViewSection={(sec) => handleViewSection(sec, false)}
+                  onViewSection={(sec) => handleViewSection({ ...sec, examId: sec.examId || sec.examinationId || currentExamObj?.id || currentExamObj?.examId || Number(filters.exam) || Number(applied.exam) }, false)}
                   onPublishSection={handlePublishSection}
                   onPublishGroup={handlePublishGroup}
                   onExcel={() =>
                     exportExcel(
                       sectionSummaries.flatMap((s) => s.studentRows || []),
-                      `${currentExamObj.name}-${currentGroupObj?.code || "Group"}${currentProgramObj?.code ? `-${currentProgramObj.code}` : ""}-Results`,
-                      currentExamObj.name
+                      `${currentExamObj?.name || "Examination"}-${currentGroupObj?.code || "Group"}${currentProgramObj?.code ? `-${currentProgramObj.code}` : ""}-Results`,
+                      currentExamObj?.name || "Examination"
                     )
                   }
                 />
@@ -3281,8 +3504,8 @@ export default function ResultsManagementView({
                 onExcel={(rowsToExport) =>
                   exportExcel(
                     rowsToExport || selectedSectionDetails.studentRows || [],
-                    `${currentExamObj.name}-${selectedSectionDetails.sectionName}`,
-                    currentExamObj.name
+                    `${currentExamObj?.name || "Examination"}-${selectedSectionDetails.sectionName}`,
+                    currentExamObj?.name || "Examination"
                   )
                 }
               />
@@ -3310,7 +3533,7 @@ export default function ResultsManagementView({
               <PublishedSectionsList
                 group={selectedPublishedGroup}
                 onBack={() => setSelectedPublishedGroup(null)}
-                onViewSection={(sec) => handleViewSection(sec, true)}
+                onViewSection={(sec) => handleViewSection({ ...sec, examId: sec.examId || sec.examinationId || selectedPublishedGroup?.examId || selectedPublishedGroup?.examinationId || selectedPublishedGroup?.publishedId || selectedPublishedGroup?.id }, true)}
               />
             )}
 
@@ -3350,7 +3573,7 @@ export default function ResultsManagementView({
               setPage={setRankPage}
               onViewStudent={(student) => handleViewStudentMemo(student)}
               onExportPreview={() => setShowRankPreview(true)}
-              examName={currentExamObj.name}
+              examName={currentExamObj?.name || "Examination"}
             />
           )
         )}
@@ -3363,7 +3586,7 @@ export default function ResultsManagementView({
             <AnalyticsView
               loading={analyticsLoading}
               data={currentAnalyticsData}
-              examName={activeAnalyticsOption?.examName || currentExamObj.name}
+              examName={activeAnalyticsOption?.examName || currentExamObj?.name || "Examination"}
               examOptions={analyticsExamOptions}
               selectedExamKey={selectedAnalyticsExamKey}
               onSelectExam={handleSelectAnalyticsExam}
@@ -3389,16 +3612,16 @@ export default function ResultsManagementView({
         {showRankPreview && (
           <RankPreviewModal
             rows={rankListRecords}
-            examName={currentExamObj.name}
+            examName={currentExamObj?.name || "Examination"}
             onClose={() => setShowRankPreview(false)}
-            onDownload={() => exportExcel(rankListRecords, "Rank-List-Export", currentExamObj.name)}
+            onDownload={() => exportExcel(rankListRecords, "Rank-List-Export", currentExamObj?.name || "Examination")}
           />
         )}
 
         {confirmPublish && (
           <PublishConfirmModal
             confirm={confirmPublish}
-            examName={currentExamObj.name}
+            examName={currentExamObj?.name || "Examination"}
             onCancel={() => setConfirmPublish(null)}
             onConfirm={confirmActionPublish}
             loading={Boolean(actionLoading)}

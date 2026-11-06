@@ -8,6 +8,43 @@ import { getChildForYear } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
+export const getStudentInitials = (name) => {
+  if (!name || typeof name !== "string") return "";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  if (parts.length === 1) {
+    return parts[0].charAt(0).toUpperCase();
+  }
+  return "";
+};
+
+export const generateAvatarDataUrl = (initials, color = "10B981") => {
+  const cleanColor = String(color || "10B981").replace("#", "");
+  const textVal = String(initials || "").trim() || "ST";
+  const fontSize = textVal.length > 2 ? 40 : textVal.length === 2 ? 48 : 56;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128"><rect width="128" height="128" rx="28" fill="#${cleanColor}"/><text x="64" y="68" text-anchor="middle" dominant-baseline="central" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="700">${textVal}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+export const getStudentAvatarColor = () => {
+  return "10B981";
+};
+
+export const resolveChildAvatar = (childObj) => {
+  if (!childObj) return "";
+  const name = childObj.name || childObj.studentName || "Student";
+  const initials = getStudentInitials(name) || "ST";
+  const color = getStudentAvatarColor(childObj.id || childObj.studentId, name);
+  const dataUrl = generateAvatarDataUrl(initials, color);
+  const raw = childObj.avatar || childObj.photoUrl || childObj.photo;
+  if (!raw || String(raw).includes("4675fbcbaa014725ac946bad5121f55b.png") || String(raw).includes("ui-avatars.com")) {
+    return dataUrl;
+  }
+  return raw;
+};
+
 export default function ParentChildrenPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -117,7 +154,18 @@ export default function ParentChildrenPage() {
             <div key={c.id} className="parent-card" style={{ borderTop: isSelected ? "3px solid var(--cms-primary)" : undefined }}>
               <div className="parent-card-header">
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <img src={c.avatar} alt={c.name} className="parent-child-avatar" style={{ width: 46, height: 46 }} />
+                  <img
+                    src={resolveChildAvatar(c)}
+                    alt={c.name}
+                    className="parent-child-avatar"
+                    style={{ width: 46, height: 46, flexShrink: 0 }}
+                    onError={(e) => {
+                      const initials = getStudentInitials(c.name);
+                      const color = getStudentAvatarColor(c.id, c.name);
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = generateAvatarDataUrl(initials || "ST", color);
+                    }}
+                  />
                   <div>
                     <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{c.name}</h3>
                     <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>Roll No: {c.roll} | Adm: {c.admissionNo}</span>
@@ -206,7 +254,18 @@ export default function ParentChildrenPage() {
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 16, paddingBottom: 16, borderBottom: "1px solid var(--cms-border)" }}>
-                <img src={selectedChildModal.avatar} alt={selectedChildModal.name} className="parent-child-avatar" style={{ width: 64, height: 64 }} />
+                <img
+                  src={resolveChildAvatar(selectedChildModal)}
+                  alt={selectedChildModal.name}
+                  className="parent-child-avatar"
+                  style={{ width: 64, height: 64 }}
+                  onError={(e) => {
+                    const initials = getStudentInitials(selectedChildModal.name);
+                    const color = getStudentAvatarColor(selectedChildModal.id, selectedChildModal.name);
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials || selectedChildModal.name)}&background=${color}&color=fff&size=128`;
+                  }}
+                />
                 <div>
                   <h3 style={{ margin: "0 0 4px 0", fontSize: 18 }}>{selectedChildModal.name}</h3>
                   <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>{selectedChildModal.programme} | {selectedChildModal.section}</div>
@@ -283,7 +342,18 @@ export function ParentChildDetailsRoute() {
         <div className="parent-card">
           <div className="parent-card-header">
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <img src={child.avatar} alt={child.name} className="parent-child-avatar" style={{ width: 60, height: 60 }} />
+              <img
+                src={resolveChildAvatar(child)}
+                alt={child.name}
+                className="parent-child-avatar"
+                style={{ width: 60, height: 60, flexShrink: 0 }}
+                onError={(e) => {
+                  const initials = getStudentInitials(child.name);
+                  const color = getStudentAvatarColor(child.id, child.name);
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials || child.name)}&background=${color}&color=fff&size=128`;
+                }}
+              />
               <div>
                 <h2 style={{ margin: "0 0 4px 0", fontSize: 18, color: "var(--cms-text)" }}>{child.name}</h2>
                 <p style={{ margin: 0, fontSize: 13, color: "var(--cms-muted)" }}>{child.level} • {child.department}</p>
