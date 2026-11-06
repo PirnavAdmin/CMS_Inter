@@ -101,6 +101,7 @@ export default function DriverStudentTable({
                 <option value="All">All Statuses</option>
                 <option value="Picked Up">Picked Up</option>
                 <option value="Pending">Pending</option>
+                <option value="Missed">Missed</option>
                 <option value="Not Boarded">Not Boarded</option>
                 <option value="Absent">Absent</option>
               </select>

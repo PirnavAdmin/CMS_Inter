@@ -111,7 +111,7 @@ export default function DriverStudentsPage() {
   const totalCount = students.length;
   const pickedUpCount = students.filter((s) => s.status === "Picked Up" || s.status === "Boarded").length;
   const pendingCount = students.filter((s) => s.status === "Pending").length;
-  const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent").length;
+  const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent" || s.status === "Missed").length;
 
   const stopsList = routeDetails.stops?.map((s) => s.name) || [];
 
