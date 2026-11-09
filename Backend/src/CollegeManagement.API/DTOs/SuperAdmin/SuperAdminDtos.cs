@@ -52,6 +52,8 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public string? Renewal { get; set; }
         public int ActiveAccounts { get; set; }
         public int AccountLimit { get; set; }
+        public int Students { get; set; }
+        public int TotalStudents { get; set; }
     }
 
     public class CreateCollegeRequest
@@ -90,8 +92,12 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? LastLogin { get; set; }
         public int CollegeId { get; set; }
         public string CollegeName { get; set; } = string.Empty;
+        public string? CollegeCode { get; set; }
         public string Role { get; set; } = "CollegeAdmin";
         public bool Active { get; set; }
         public bool LoginEnabled { get; set; }
@@ -102,7 +108,26 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
     {
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonConverter(typeof(SMS.Api.Common.FlexibleIntConverter))]
         public int CollegeId { get; set; }
+
+        public string? Phone { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+
+    public class SuperAdminUpdateUserRequest
+    {
+        public string? Name { get; set; }
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool? Active { get; set; }
+        public bool? IsActive { get; set; }
+
+        [System.Text.Json.Serialization.JsonConverter(typeof(SMS.Api.Common.FlexibleIntConverter))]
+        public int? CollegeId { get; set; }
     }
 
     // ==========================================
@@ -114,6 +139,8 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? CollegeId { get; set; }
         public string CollegeName { get; set; } = string.Empty;
         public string Role { get; set; } = string.Empty;
@@ -163,12 +190,13 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public int SubscriptionId { get; set; }
         public int CollegeId { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
         public string Plan { get; set; } = string.Empty;
         public int Active { get; set; }
-        public int Limit { get; set; }
+        public int? Limit { get; set; }
         public string? SubscriptionStart { get; set; }
         public string? Renewal { get; set; }
-        public string SubscriptionStatus { get; set; } = "Active";
+        public string SubscriptionStatus { get; set; } = string.Empty;
         public int? Days { get; set; }
         public List<string> Modules { get; set; } = new();
     }
@@ -273,6 +301,7 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public int AuditLogId { get; set; }
         public string Message { get; set; } = string.Empty;
         public string PerformedBy { get; set; } = "Platform Admin";
+        public string? Role { get; set; } = "Super Admin";
         public string? Module { get; set; }
         public string College { get; set; } = "Platform Global";
         public string At { get; set; } = string.Empty;

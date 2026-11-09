@@ -46,6 +46,10 @@ export const superAdminApi = {
     const res = await apiClient.post("/api/v1/super-admin/college-admins", payload);
     return res.data;
   },
+  updateCollegeAdmin: async (id, payload) => {
+    const res = await apiClient.put(`/api/v1/super-admin/college-admins/${encodeURIComponent(id)}`, payload);
+    return res.data;
+  },
 
   // 4. Global Users
   getGlobalUsers: async (params = {}) => {
@@ -167,6 +171,12 @@ export const superAdminApi = {
   getProfile: async () => {
     const res = await apiClient.get("/api/v1/super-admin/profile");
     return res.data?.data || res.data;
+  },
+
+  // 15. Change Password
+  changePassword: async (currentPassword, newPassword) => {
+    const res = await apiClient.post("/api/v1/super-admin/change-password", { currentPassword, newPassword });
+    return res.data;
   },
 };
 

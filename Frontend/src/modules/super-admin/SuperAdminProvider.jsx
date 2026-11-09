@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import superAdminApi, { getApiErrorMessage } from "@/api/superAdminApi.js";
-import { MODULES } from "./superAdminPreview.js";
+import { MODULES, createPreviewData, normalizeMockData } from "./superAdminPreview.js";
 
 const Context = createContext(null);
 const emptyState = () => ({
@@ -36,7 +36,24 @@ function normalizeLiveData(sources) {
   };
   data.colleges = choose(sources.colleges, bootstrap, "colleges").map((row) => {
     const status = row.status ?? row.collegeStatus ?? "Active";
-    return { ...row, id: idOf(row), collegeId: Number(row.collegeId ?? row.id ?? 0), name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", status, collegeStatus: status, plan: row.plan ?? row.planName ?? "Free", registered: row.registered ?? row.registeredAt ?? row.createdAt ?? "", renewal: row.renewal ?? row.renewalDate ?? "", activeAccounts: Number(row.activeAccounts ?? row.accountCount ?? 0), accountLimit: Number(row.accountLimit ?? 0) };
+    return {
+      ...row,
+      id: idOf(row),
+      collegeId: Number(row.collegeId ?? row.id ?? 0),
+      name: row.name ?? row.collegeName ?? "-",
+      code: row.code ?? row.collegeCode ?? "-",
+      status,
+      collegeStatus: status,
+      trustSociety: row.trustSociety ?? row.TrustSociety ?? row.trust_society ?? "-",
+      campuses: row.campuses ?? row.Campuses ?? row.totalCampuses ?? (row.campusesCount != null ? row.campusesCount : "-"),
+      students: row.students != null && row.students !== "-" ? Number(row.students) : (row.totalStudents != null ? Number(row.totalStudents) : 0),
+      modules: row.modules ?? row.Modules ?? row.modulesSummary ?? "-",
+      plan: row.plan ?? row.planName ?? "-",
+      registered: row.registered ?? row.registeredAt ?? row.createdAt ?? "-",
+      renewal: row.renewal ?? row.renewalDate ?? "-",
+      activeAccounts: row.activeAccounts != null ? Number(row.activeAccounts) : (row.accountCount != null ? Number(row.accountCount) : "-"),
+      accountLimit: row.accountLimit != null ? Number(row.accountLimit) : "-",
+    };
   });
   const pending = choose(sources.pending, bootstrap, "registrations", "colleges");
   data.registrations = pending.filter((row) => (row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending").toLowerCase() === "pending" || row.registrationStatus === "Approved" || row.registrationStatus === "Rejected").map((row) => ({ ...row, id: idOf(row), collegeId: row.collegeId ? String(row.collegeId) : null, name: row.name ?? row.collegeName ?? "", code: row.code ?? row.collegeCode ?? "", contact: row.phone ?? row.contact ?? "", applicantName: row.applicantName ?? row.admin ?? "", applicantEmail: row.applicantEmail ?? row.email ?? "", plan: row.plan ?? row.planName ?? "Free", registrationStatus: row.registrationStatus ?? row.status ?? row.collegeStatus ?? "Pending", submittedAt: row.submittedAt ?? row.registeredAt ?? row.createdAt ?? null }));
@@ -45,16 +62,87 @@ function normalizeLiveData(sources) {
   data.plans = choose(sources.plans, bootstrap, "plans").map((row) => ({ ...row, id: row.planId ?? row.id ?? row.name, planId: Number(row.planId ?? row.id ?? 0), name: row.name ?? row.planName ?? "", description: row.description ?? "", price: Number(row.price ?? 0), limit: Number(row.limit ?? row.accountLimit ?? 0), durationDays: Number(row.durationDays ?? 30), active: row.active !== false && row.status !== "Inactive", modules: Array.isArray(row.modules) ? row.modules : [] }));
   const users = choose(sources.users, bootstrap, "users", "globalUsers");
   const admins = choose(sources.admins, bootstrap, "collegeAdmins", "admins");
-  data.collegeAdmins = admins.map((row) => ({ ...row, id: idOf(row), userId: Number(row.userId ?? row.id ?? 0), name: row.name ?? row.fullName ?? "", role: row.role ?? "CollegeAdmin", collegeId: row.collegeId ? String(row.collegeId) : null }));
+  data.collegeAdmins = admins.map((row) => ({
+    ...row,
+    id: idOf(row),
+    userId: Number(row.userId ?? row.id ?? 0),
+    name: row.name ?? row.fullName ?? "-",
+    role: row.role ?? "CollegeAdmin",
+    email: row.email ?? "-",
+    phone: row.phone || row.phoneNumber || row.contact || row.mobileNumber || "-",
+    phoneNumber: row.phoneNumber || row.phone || "-",
+    lastLogin: row.lastLogin || row.lastLoginAt || "-",
+    collegeId: row.collegeId ? String(row.collegeId) : null,
+    collegeName: row.collegeName ?? "-"
+  }));
   data.users = [...new Map([...users, ...admins].map((row) => [idOf(row), row])).values()].map((row) => {
     const active = row.active ?? (row.accountStatus === "Active" || row.status === "Active");
-    return { ...row, id: idOf(row), userId: Number(row.userId ?? row.id ?? 0), name: row.name ?? row.fullName ?? "User", fullName: row.fullName ?? row.name ?? "User", email: row.email ?? "", phone: row.phone ?? row.mobileNumber ?? "", collegeId: row.collegeId ? String(row.collegeId) : null, collegeName: row.collegeName ?? "Platform", role: row.role ?? "User", active: Boolean(active), loginEnabled: row.loginEnabled !== false, accountStatus: row.accountStatus ?? row.status ?? (active ? "Active" : "Inactive") };
+    return {
+      ...row,
+      id: idOf(row),
+      userId: Number(row.userId ?? row.id ?? 0),
+      name: row.name ?? row.fullName ?? "-",
+      fullName: row.fullName ?? row.name ?? "-",
+      email: row.email ?? "-",
+      phone: row.phone || row.phoneNumber || row.mobileNumber || "-",
+      phoneNumber: row.phoneNumber || row.phone || "-",
+      collegeId: row.collegeId ? String(row.collegeId) : null,
+      collegeName: row.collegeName ?? "-",
+      role: row.role ?? "User",
+      active: Boolean(active),
+      loginEnabled: row.loginEnabled !== false,
+      accountStatus: row.accountStatus ?? row.status ?? (active ? "Active" : "Inactive"),
+      lastLogin: row.lastLogin || row.lastLoginAt || "-"
+    };
   });
   data.payments = choose(sources.payments, bootstrap, "payments", "invoices").map((row) => ({ ...row, id: idOf(row), paymentId: Number(row.paymentId ?? row.id ?? 0), invoice: row.invoice ?? row.invoiceNumber ?? `INV-${idOf(row)}`, collegeId: String(row.collegeId ?? ""), amount: Number(row.amount ?? 0), date: row.date ?? row.paymentDate ?? row.createdAt ?? "", status: row.status ?? "Pending" }));
-  data.activities = choose(sources.audit, bootstrap, "activities", "auditLogs", "items").map((row) => ({ ...row, id: idOf(row) || String(row.auditLogId ?? `${row.createdAt}-${row.actionType}`), message: row.message ?? row.description ?? row.action ?? "", performedBy: row.performedBy ?? row.userName ?? "", at: row.at ?? row.createdAt ?? row.timestamp ?? "", actionType: row.actionType ?? row.action ?? "", scope: row.scope ?? "Platform" }));
+  data.activities = choose(sources.audit, bootstrap, "activities", "auditLogs", "items").map((row) => ({
+    ...row,
+    id: idOf(row) || String(row.auditLogId ?? `${row.createdAt}-${row.actionType}`),
+    message: row.message ?? row.description ?? row.action ?? "",
+    performedBy: row.performedBy ?? row.userName ?? "Super Administrator",
+    role: row.role ?? (String(row.performedBy || row.userName || "").includes("ADM") ? "College Admin" : "Super Admin"),
+    module: row.module ?? row.entityName ?? "Platform",
+    college: row.college ?? row.collegeName ?? (row.collegeId ? `COL-${row.collegeId}` : "All Colleges"),
+    at: row.at ?? row.createdAt ?? row.timestamp ?? "",
+    actionType: row.actionType ?? row.action ?? "",
+    scope: row.scope ?? "Platform"
+  }));
   data.notifications = choose(sources.notifications, bootstrap, "notifications").map((row) => ({ ...row, id: idOf(row), notificationId: Number(row.notificationId ?? row.id ?? 0), date: row.date ?? row.createdAt ?? "", read: row.read ?? (row.isRead ? "Read" : "Unread") }));
   data.readNotificationIds = data.notifications.filter((row) => row.read === "Read").map((row) => row.id);
-  data.subscriptions = list(sources.subscriptions, "subscriptions");
+  const rawSubs = list(sources.subscriptions, "subscriptions");
+  data.subscriptions = rawSubs.map((row) => {
+    const plan = row.plan || row.planName;
+    const limit = row.limit ?? row.accountLimit;
+    const start = row.subscriptionStart || row.startDate;
+    const renewal = row.renewal || row.renewalDate;
+    const status = row.subscriptionStatus || row.status;
+    const hasPlan = plan && plan !== "-" && plan !== "—" && plan.toLowerCase() !== "null";
+    const hasStart = start && start !== "-" && start !== "—" && start.toLowerCase() !== "null";
+    const hasRenewal = renewal && renewal !== "-" && renewal !== "—" && renewal.toLowerCase() !== "null";
+    const hasStatus = status && status !== "-" && status !== "—" && status.toLowerCase() !== "null";
+
+    return {
+      ...row,
+      id: row.subscriptionId ? `SUB-${row.subscriptionId}` : (row.id ?? `SUB-${row.collegeId}`),
+      subscriptionId: Number(row.subscriptionId ?? 0),
+      collegeId: row.collegeId ? String(row.collegeId) : null,
+      name: row.name || row.collegeName || "—",
+      collegeName: row.name || row.collegeName || "—",
+      code: row.code || row.collegeCode || "—",
+      collegeCode: row.code || row.collegeCode || "—",
+      plan: hasPlan ? plan : "—",
+      limit: limit != null && limit !== "-" && limit !== "—" && limit !== "null" ? Number(limit) : null,
+      accountLimit: limit != null && limit !== "-" && limit !== "—" && limit !== "null" ? Number(limit) : "—",
+      active: Number(row.active ?? row.activeAccounts ?? row.activeUsersCount ?? 0),
+      activeAccounts: Number(row.active ?? row.activeAccounts ?? row.activeUsersCount ?? 0),
+      startDate: hasStart ? String(start).slice(0, 10) : "—",
+      renewalDate: hasRenewal ? String(renewal).slice(0, 10) : "—",
+      status: hasStatus ? status : "—",
+      daysRemaining: row.days ?? row.daysRemaining ?? null,
+      modules: Array.isArray(row.modules) ? row.modules : []
+    };
+  });
   data.accountUsage = list(sources.usage, "accountUsage", "items");
   data.renewals = list(sources.renewals, "renewals", "items");
   data.moduleMatrix = list(sources.modules, "modules", "plans", "items");
@@ -105,6 +193,13 @@ export default function SuperAdminProvider({ session, children }) {
     for (const [key, result] of entries) if (result.ok) sources[key] = { data: result.value, ok: true };
     const successful = entries.filter(([, result]) => result.ok).length;
     if (!successful) {
+      if (session?.preview) {
+        const preview = normalizeMockData(createPreviewData());
+        latest.current = preview;
+        setData(preview);
+        setLoading(false);
+        return true;
+      }
       const firstError = entries.find(([, result]) => !result.ok)?.[1].error;
       setMessage(getApiErrorMessage(firstError));
       setLoading(false);
@@ -139,16 +234,28 @@ export default function SuperAdminProvider({ session, children }) {
         else if (act === "Create") result = await superAdminApi.createCollege({ ...payload, status: "Pending" });
         else if (act === "Update") result = await superAdminApi.updateCollege(cid, { ...payload, status: "Pending" });
       } else if (mod === "College Admins") {
-        if (act === "Create") result = await superAdminApi.createCollegeAdmin({ name: payload.name, email: payload.email, collegeId: Number(payload.collegeId) });
+        const rawCid = payload?.collegeId ?? details?.collegeId;
+        const matchedCollege = latest.current.colleges.find((c) => String(c.id).toLowerCase() === String(rawCid).toLowerCase() || String(c.collegeId) === String(rawCid));
+        const numericCollegeId = Number(matchedCollege?.collegeId) || Number(rawCid) || (parseInt(String(rawCid).replace(/\D/g, ""), 10) || 0);
+        if (act === "Create") result = await superAdminApi.createCollegeAdmin({ name: payload.name, email: payload.email, phone: payload.phone || payload.phoneNumber, collegeId: numericCollegeId });
+        else if (act === "Update") result = await superAdminApi.updateCollegeAdmin(details.userId ?? details.id, { name: payload.name, email: payload.email, phone: payload.phone || payload.phoneNumber, active: payload.active, collegeId: numericCollegeId });
         else if (act === "Access change") result = await superAdminApi.updateUserStatus(details.userId, payload.active ? "Active" : "Inactive");
       } else if (mod === "Global Users") {
         if (act === "Status change") result = await superAdminApi.updateUserStatus(details.userId, details.status);
         else if (act === "Reset password") result = await superAdminApi.resetUserPassword(details.userId, details.newPassword);
-      } else if (mod === "Subscriptions") {
-        const cid = details.collegeId;
-        if (act === "Changed subscription") result = await superAdminApi.changeCollegePlan(cid, details.planName ?? payload.plan);
-        else if (act === "Renewed subscription") result = await superAdminApi.renewCollegeSubscription(cid, details.extensionDays ?? 30);
-        else if (act === "Cancelled subscription") result = await superAdminApi.cancelCollegeSubscription(cid);
+      } else if (mod === "Subscriptions" || mod === "Renewals") {
+        const rawCid = details.collegeId ?? payload?.collegeId;
+        const matchedCollege = latest.current.colleges.find((c) => String(c.id).toLowerCase() === String(rawCid).toLowerCase() || String(c.collegeId) === String(rawCid));
+        const numericCollegeId = Number(matchedCollege?.collegeId) || Number(rawCid) || (parseInt(String(rawCid).replace(/\D/g, ""), 10) || 0);
+        const planName = details.planName ?? payload?.plan ?? details.plan ?? payload?.planName;
+
+        if (act === "Assign" || act === "Plan change" || act === "Changed subscription") {
+          result = await superAdminApi.changeCollegePlan(numericCollegeId, planName);
+        } else if (act === "Renew" || act === "Renewed subscription") {
+          result = await superAdminApi.renewCollegeSubscription(numericCollegeId, details.extensionDays ?? payload?.extensionDays ?? 30);
+        } else if (act === "Cancel" || act === "Cancelled subscription") {
+          result = await superAdminApi.cancelCollegeSubscription(numericCollegeId);
+        }
       } else if (mod === "Plans") {
         if (act === "Create" || act === "Update") result = await superAdminApi.savePlan(payload, details.planId ?? payload.planId ?? null);
         else if (act === "Status change") {

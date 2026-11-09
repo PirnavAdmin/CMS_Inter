@@ -1,12 +1,28 @@
-﻿import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useState } from "react";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminPreview.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
+import CollegeSubscriptionsPage from "./CollegeSubscriptionsPage.jsx";
+import RenewalsPage from "./RenewalsPage.jsx";
+import SubscriptionPlansPage from "./SubscriptionPlansPage.jsx";
 import "./SubscriptionsPage.css";
 
 export default function SubscriptionsPage({ section = "plans" }) {
+  if (section === "subscriptions") {
+    return <CollegeSubscriptionsPage />;
+  }
+  if (section === "renewals") {
+    return <RenewalsPage />;
+  }
+  if (section === "plans") {
+    return <SubscriptionPlansPage />;
+  }
+  return <AccountUsageView section={section} />;
+}
+
+function AccountUsageView({ section }) {
   const { data, update, session } = useSuperAdmin();
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -17,7 +33,7 @@ export default function SubscriptionsPage({ section = "plans" }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const title = { plans: "Subscription Plans", subscriptions: "College Subscriptions", "account-usage": "Account Usage", renewals: "Renewals" }[section];
-  const reportRows = section === "subscriptions" ? data.subscriptions : section === "account-usage" ? data.accountUsage : section === "renewals" ? data.renewals : [];
+  const reportRows = section === "account-usage" ? data.accountUsage : section === "renewals" ? data.renewals : [];
   const sourceRows = reportRows.length ? reportRows.map((row) => {
     const college = data.colleges.find((item) => String(item.id) === String(row.collegeId ?? row.id));
     return { ...college, ...row, id: String(row.collegeId ?? row.id ?? college?.id ?? ""), name: row.collegeName ?? row.name ?? college?.name ?? "", plan: row.planName ?? row.plan ?? college?.plan ?? "Free", renewal: row.renewalDate ?? row.renewal ?? college?.renewal ?? "", activeAccounts: row.activeAccounts ?? row.accountCount, accountLimit: row.accountLimit ?? row.limit };
