@@ -466,7 +466,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                     durationStr = $"{(int)diff.TotalHours}h {diff.Minutes}m";
 
-                    status = outTime.Value > checkoutCutoff ? "missed_checkout" : "punched_out";
+                    status = "punched_out";
                 }
                 else
                 {
@@ -678,41 +678,53 @@ LIMIT 1;";
             return await GetMyTodayStatusAsync(facultyId, targetDate);
         }
 
-        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate)
+        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate, int? year = null, int? month = null)
         {
-            var now = targetDate ?? DateTime.Today;
+            var now = targetDate ?? DateTime.UtcNow;
             DateTime start, end;
-            string periodKey = (period ?? "week").ToLowerInvariant();
+            string periodKey = (period ?? "month").ToLowerInvariant();
 
-            switch (periodKey)
+            if (year.HasValue && month.HasValue && month.Value >= 1 && month.Value <= 12)
             {
-                case "last_week":
-                    int diffLast = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7 + 7;
-                    start = now.AddDays(-diffLast).Date;
-                    end = start.AddDays(6).Date;
-                    break;
-                case "month":
-                    start = new DateTime(now.Year, now.Month, 1);
-                    end = start.AddMonths(1).AddDays(-1);
-                    break;
-                case "last_month":
-                    var prevMonth = now.AddMonths(-1);
-                    start = new DateTime(prevMonth.Year, prevMonth.Month, 1);
-                    end = start.AddMonths(1).AddDays(-1);
-                    break;
-                case "week":
-                default:
-                    periodKey = "week";
-                    int diff = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
-                    start = now.AddDays(-diff).Date;
-                    end = start.AddDays(6).Date;
-                    break;
+                start = new DateTime(year.Value, month.Value, 1);
+                end = start.AddMonths(1).AddDays(-1);
+                periodKey = "month";
+            }
+            else
+            {
+                switch (periodKey)
+                {
+                    case "last_month":
+                        var firstDayLastMonth = new DateTime(now.Year, now.Month, 1).AddMonths(-1);
+                        start = firstDayLastMonth;
+                        end = firstDayLastMonth.AddMonths(1).AddDays(-1);
+                        break;
+                    case "last_week":
+                        int diffLast = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7 + 7;
+                        start = now.AddDays(-diffLast).Date;
+                        end = start.AddDays(6).Date;
+                        break;
+                    case "week":
+                        int diff = ((int)now.DayOfWeek - (int)DayOfWeek.Monday + 7) % 7;
+                        start = now.AddDays(-diff).Date;
+                        end = start.AddDays(6).Date;
+                        break;
+                    case "month":
+                    default:
+                        periodKey = "month";
+                        start = new DateTime(now.Year, now.Month, 1);
+                        end = start.AddMonths(1).AddDays(-1);
+                        break;
+                }
             }
 
             var conn = await GetOpenConnectionAsync();
 
             const string historySql = @"
 SELECT 
+    s.Id AS FacultyId,
+    COALESCE(s.CampusId, 1) AS CampusId,
+    COALESCE(s.DepartmentId, 0) AS DepartmentId,
     COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
     COALESCE(tc.WorkEndTime, '15:20:00') AS WorkEndTime,
     COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
@@ -749,14 +761,15 @@ SELECT
 FROM `Holidays`
 WHERE IsDeleted = 0 AND Status = 'Active'
   AND StartDate <= @EndDate AND EndDate >= @StartDate
-  AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
+  AND (CampusId IS NULL OR CampusId = 0 OR CampusId = (SELECT COALESCE(CampusId, 1) FROM `Staff` WHERE Id = @FacultyId LIMIT 1))
+  AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only' OR AppliesTo IS NULL);
 
 SELECT 
     DATE(StartDate) AS StartDate,
     DATE(EndDate) AS EndDate,
     Reason AS LeaveReason
 FROM `StaffLeaveRequests`
-WHERE StaffId = @FacultyId AND IsActive = 1 AND Status = 2
+WHERE StaffId = @FacultyId AND IsActive = 1 AND (Status = 2 OR Status = 1)
   AND StartDate <= @EndDate AND EndDate >= @StartDate;
 
 SELECT 
@@ -804,57 +817,42 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
             var shiftStart = timing.ParsedWorkStartTime;
             var shiftEnd = timing.ParsedWorkEndTime;
             var lateThreshold = timing.ParsedLateThreshold;
+            var earlyCheckoutThreshold = timing.ParsedEarlyCheckoutThreshold;
             var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
             string standardShiftName = $"{DateTime.Today.Add(shiftStart):hh:mm tt} – {DateTime.Today.Add(shiftEnd):hh:mm tt}";
+
+            // Calculate Total Calendar Days, Weekly Offs (Sundays), and Approved Institution Holidays
+            int totalCalendarDays = (end.Date - start.Date).Days + 1;
+            int weeklyOffs = 0;
+            for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
+            {
+                if (d.DayOfWeek == DayOfWeek.Sunday) weeklyOffs++;
+            }
+
+            int holidayCount = 0;
+            for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
+            {
+                if (d.DayOfWeek == DayOfWeek.Sunday) continue;
+                if (holidayList.Any(h => d.Date >= h.StartDate.Date && d.Date <= h.EndDate.Date))
+                {
+                    holidayCount++;
+                }
+            }
+
+            int totalWorkingDays = Math.Max(0, totalCalendarDays - weeklyOffs - holidayCount);
 
             var logs = new List<MyAttendanceLogItemDto>();
             int presentCount = 0;
             int absentCount = 0;
             int leaveCount = 0;
-            int workingDaysCount = 0;
-            int elapsedWorkingDaysCount = 0;
 
-            for (var d = start; d <= end; d = d.AddDays(1))
+            for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
             {
                 bool isSunday = d.DayOfWeek == DayOfWeek.Sunday;
                 var holiday = holidayList.FirstOrDefault(h => d.Date >= h.StartDate.Date && d.Date <= h.EndDate.Date);
                 bool isHoliday = holiday != null;
                 var leave = leaveList.FirstOrDefault(l => d.Date >= l.StartDate.Date && d.Date <= l.EndDate.Date);
                 bool isLeave = leave != null;
-
-                // Sunday Exclusion: Strictly excluded from working days, attendance counts, and LOP deductions
-                if (isSunday)
-                {
-                    logs.Add(new MyAttendanceLogItemDto
-                    {
-                        Id = $"log-{d:yyyyMMdd}",
-                        Day = d.ToString("ddd"),
-                        Date = d.ToString("dd/MM/yyyy"),
-                        RawDate = d.ToString("yyyy-MM-dd"),
-                        Shift = "Weekly Off",
-                        InTime = "--",
-                        OutTime = "--",
-                        Hours = "0h 0m",
-                        Device = "--",
-                        Status = "Weekly Off",
-                        CanRegularize = false,
-                        IsToday = d.Date == now.Date,
-                        RegularizationState = null,
-                        HolidayName = null
-                    });
-                    continue;
-                }
-
-                bool isWorkingDay = !isHoliday;
-                if (isWorkingDay)
-                {
-                    workingDaysCount++;
-                    var nowTimeCheck = DateTime.Now.TimeOfDay;
-                    if (d.Date < now.Date || (d.Date == now.Date && (attMap.ContainsKey(d.Date) || nowTimeCheck >= shiftStart)))
-                    {
-                        elapsedWorkingDaysCount++;
-                    }
-                }
 
                 attMap.TryGetValue(d.Date, out var att);
                 regMap.TryGetValue(d.Date, out var reg);
@@ -865,13 +863,19 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                 string hours = isSunday ? "0h 0m" : "--";
                 string device = "--";
                 string status = "--";
+                bool isLate = false;
                 bool canRegularize = false;
                 bool markedByAdmin = false;
                 string? markedBy = null;
                 string? regState = reg?.Status?.ToLowerInvariant();
                 string? holidayName = holiday?.HolidayName;
+                object id = att != null && att.StaffAttendanceId > 0 ? att.StaffAttendanceId : (object)int.Parse(d.ToString("yyyyMMdd"));
 
-                if (att != null)
+                if (isSunday)
+                {
+                    status = "Weekly Off";
+                }
+                else if (att != null)
                 {
                     device = string.IsNullOrWhiteSpace(att.DeviceId) ? "Web Portal" : att.DeviceId;
                     var inT = att.ParsedInTime;
@@ -884,7 +888,7 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                     if (inT.HasValue)
                     {
                         inTime = DateTime.Today.Add(inT.Value).ToString("hh:mm tt");
-                        bool isLate = inT.Value > lateThreshold;
+                        isLate = inT.Value > lateThreshold;
 
                         if (outT.HasValue)
                         {
@@ -893,11 +897,7 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                             if (diff.TotalMinutes < 0) diff = diff.Add(TimeSpan.FromHours(24));
                             hours = $"{(int)diff.TotalHours}h {diff.Minutes}m";
 
-                            if (outT.Value > checkoutCutoff)
-                            {
-                                status = "Missed Checkout";
-                            }
-                            else if (att.Status == 3 || isLate)
+                            if (att.Status == 3 || isLate)
                             {
                                 status = "Late";
                             }
@@ -987,6 +987,7 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                                 6 => "Leave",
                                 _ => "Absent"
                             };
+                            if (status == "Late") isLate = true;
                         }
                     }
 
@@ -1000,11 +1001,7 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                 }
                 else
                 {
-                    if (isSunday)
-                    {
-                        status = "Weekly Off";
-                    }
-                    else if (isHoliday)
+                    if (isHoliday)
                     {
                         status = "Holiday";
                     }
@@ -1041,9 +1038,9 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
 
                 logs.Add(new MyAttendanceLogItemDto
                 {
-                    Id = $"log-{d:yyyyMMdd}",
+                    Id = id,
                     Day = d.ToString("ddd"),
-                    Date = d.ToString("dd/MM/yyyy"),
+                    Date = d.ToString("MMM dd"),
                     RawDate = d.ToString("yyyy-MM-dd"),
                     Shift = shift,
                     InTime = inTime,
@@ -1051,6 +1048,7 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                     Hours = hours,
                     Device = device,
                     Status = status,
+                    IsLate = isLate,
                     CanRegularize = canRegularize,
                     IsToday = d.Date == now.Date,
                     RegularizationState = regState,
@@ -1087,28 +1085,29 @@ WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
                 lopDays = absentCount;
             }
 
-            // Effective working days elapsed up to today (prevents future days from deflating percentage)
-            int effectiveWorkingDays = elapsedWorkingDaysCount > 0 ? elapsedWorkingDaysCount : (workingDaysCount > 0 ? workingDaysCount : 1);
-            decimal attendancePercentage = Math.Round(((decimal)presentCount / effectiveWorkingDays) * 100m, 1);
-            if (attendancePercentage > 100m) attendancePercentage = 100m;
+            int attendancePercentage = totalWorkingDays > 0
+                ? (int)Math.Round(((double)presentCount / totalWorkingDays) * 100)
+                : 0;
+            if (attendancePercentage > 100) attendancePercentage = 100;
 
             string workingDaysSub = periodKey.Contains("month")
-                ? $"{start:MMMM yyyy} ({elapsedWorkingDaysCount} of {workingDaysCount} Days Elapsed)"
-                : $"{start:dd MMM} – {end:dd MMM yyyy} ({elapsedWorkingDaysCount} of {workingDaysCount} Days Elapsed)";
+                ? $"{start:MMMM yyyy}"
+                : $"{start:dd MMM} – {end:dd MMM yyyy}";
 
             var metrics = new MyAttendanceAnalyticsMetricsDto
             {
-                WorkingDays = $"{elapsedWorkingDaysCount} Days",
+                WorkingDays = $"{totalWorkingDays} Days",
                 WorkingDaysSub = workingDaysSub,
                 PresentDays = $"{presentCount} Days",
-                PresentDaysSub = $"{attendancePercentage}% Attendance",
+                PresentDaysSub = "Biometric / Portal verified",
                 Leaves = $"{leaveCount} Days",
-                LeavesSub = leaveCount > 0 ? $"{leaveCount} approved leave(s)" : "No leaves applied",
-                AbsentDays = $"{absentCount} Days",
-                AbsentDaysSub = lopDays > 0 ? $"{lopDays:0.#} LOP Day(s) (Admin Policy)" : "No loss of pay",
+                LeavesSub = leaveCount > 0 ? $"{leaveCount} Approved leave(s)" : "Approved leaves",
+                AbsentDays = $"{absentCount} Day" + (absentCount == 1 ? "" : "s"),
+                AbsentDaysSub = "Unexcused absences",
+                Holidays = $"{holidayCount} Days",
                 LopDays = $"{lopDays:0.#} Days",
                 LopDaysSub = lopPolicy.Enabled ? $"Policy: >{lopPolicy.AllowedLateLogins} late = {lopPolicy.PenaltyDays}d LOP per {lopPolicy.LateLoginsPerPenalty}" : "LOP disabled",
-                AttendancePercentage = $"{attendancePercentage}%"
+                AttendancePercentage = attendancePercentage
             };
 
             return new MyAttendanceHistoryResponse

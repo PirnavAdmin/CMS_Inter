@@ -451,6 +451,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "No leaves applied",
             absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
             absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "No absences",
+            holidays: rawMetrics.holidays || rawMetrics.Holidays || "0 Days",
+            attendancePercentage: rawMetrics.attendancePercentage ?? rawMetrics.AttendancePercentage ?? 0,
           },
         });
       }

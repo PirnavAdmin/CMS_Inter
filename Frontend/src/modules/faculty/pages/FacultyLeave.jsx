@@ -87,7 +87,7 @@ export default function FacultyLeave() {
       profileData?.facultyId ||
       a?.facultyId
     );
-    return id > 0 ? id : 1108;
+    return id > 0 ? id : null;
   }, [profileData]);
 
   const effectiveDepartmentId = useMemo(() => {
@@ -153,9 +153,11 @@ export default function FacultyLeave() {
         try {
           histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
         } catch {
-          histRes = await apiClient.get(
-            `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
-          );
+          if (effectiveStaffId) {
+            histRes = await apiClient.get(
+              `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
+            );
+          }
         }
         const histData = histRes?.data?.data || histRes?.data?.Data;
         if (histData) {

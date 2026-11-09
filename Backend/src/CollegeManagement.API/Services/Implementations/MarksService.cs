@@ -172,7 +172,40 @@ namespace CollegeManagement.API.Services.Implementations
             var json = System.Text.Json.JsonSerializer.Serialize(itemsToUpsert);
             await _marksRepository.BulkUpsertMarksAsync(json, 0, null);
 
-            return _mapper.Map<List<MarkResponseDto>>(dto.Marks);
+            try
+            {
+                return _mapper.Map<List<MarkResponseDto>>(dto.Marks);
+            }
+            catch
+            {
+                return dto.Marks.Select(item => new MarkResponseDto
+                {
+                    CampusId = item.CampusId,
+                    Board = item.Board,
+                    BoardId = item.BoardId,
+                    AcademicYearId = item.AcademicYearId,
+                    AcademicLevel = item.AcademicLevel,
+                    AcademicLevelId = item.AcademicLevelId,
+                    GroupId = item.GroupId,
+                    SectionId = item.SectionId,
+                    ExaminationId = item.ExaminationId,
+                    SubjectId = item.SubjectId,
+                    StudentId = item.StudentId,
+                    FacultyId = item.FacultyId,
+                    RollNo = item.RollNo,
+                    StudentName = item.StudentName,
+                    InternalMarks = item.InternalMarks,
+                    PracticalMarks = item.PracticalMarks,
+                    TheoryMarks = item.TheoryMarks,
+                    TotalMarks = item.IsAbsent ? 0 : (item.TotalMarks ?? (item.InternalMarks + item.PracticalMarks + item.TheoryMarks)),
+                    PassingMarks = item.PassingMarks > 0 ? item.PassingMarks : 35,
+                    IsAbsent = item.IsAbsent,
+                    Remarks = item.Remarks,
+                    Status = EvaluationStatus.SUBMITTED,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                }).ToList();
+            }
         }
 
         public async Task<MarkResponseDto> UpdateMarkAsync(int id, UpdateMarkDto dto)

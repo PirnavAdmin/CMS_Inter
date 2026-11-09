@@ -15,7 +15,28 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : (src.TotalMarks > 0 ? src.TotalMarks : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
                 .ForMember(dest => dest.IsPass, opt => opt.MapFrom(src => !src.IsAbsent && ((src.TotalMarks > 0 ? src.TotalMarks : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks)) >= src.PassingMarks)));
 
-            // 2. SaveMarkDto -> Mark Model Mapping
+            // 2. SaveMarkDto -> MarkResponseDto Mapping (used in bulk marks save responses)
+            CreateMap<SaveMarkDto, MarkResponseDto>()
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : ((src.TotalMarks.HasValue && src.TotalMarks.Value >= 0)
+                    ? src.TotalMarks.Value
+                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value >= 0)
+                        ? src.ObtainedMarks.Value
+                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks))))
+                .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => EvaluationStatus.SUBMITTED))
+                .ForMember(dest => dest.IsActive, opt => opt.MapFrom(_ => true))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
+                .ForMember(dest => dest.MarkId, opt => opt.Ignore())
+                .ForMember(dest => dest.IsVerified, opt => opt.Ignore())
+                .ForMember(dest => dest.IsPublished, opt => opt.Ignore())
+                .ForMember(dest => dest.IsLocked, opt => opt.Ignore())
+                .ForMember(dest => dest.VerifiedBy, opt => opt.Ignore())
+                .ForMember(dest => dest.VerifiedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.ApprovedBy, opt => opt.Ignore())
+                .ForMember(dest => dest.ApprovedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.PublishedAt, opt => opt.Ignore())
+                .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore());
+
+            // 2b. SaveMarkDto -> Mark Model Mapping
             CreateMap<SaveMarkDto, Mark>()
                 .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.IsAbsent ? 0 : ((src.TotalMarks.HasValue && src.TotalMarks.Value >= 0)
                     ? src.TotalMarks.Value
