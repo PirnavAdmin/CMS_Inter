@@ -1,4 +1,56 @@
 /* Fee Management page-specific styles can be added here during module API integration. */
+/* Gateway styles use their own scope because Accountant also imports this file. */
+.cms-fee-status-overdue { background: var(--cms-red-soft, #fee2e2); color: var(--cms-red, #b91c1c); border: 1px solid var(--cms-red, #b91c1c); }
+.cms-fee-status-reversed { background: var(--cms-red-soft, #fee2e2); color: var(--cms-red, #b91c1c); }
+.cms-fee-overdue-warning,
+.cms-fee-reversal-warning { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--cms-red, #b91c1c); border-radius: 8px; background: var(--cms-red-soft, #fee2e2); color: var(--cms-text); font-size: 13px; line-height: 1.5; }
+.cms-fee-overdue-warning > svg { flex-shrink: 0; color: var(--cms-red, #b91c1c); }
+.cms-fee-reversal-modal .cms-modal-body { display: grid; gap: 14px; }
+.cms-fee-reversal-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.cms-fee-reversal-details > div { min-width: 0; }
+.cms-fee-reversal-details dt { color: var(--cms-muted); font-size: 12px; }
+.cms-fee-reversal-details dd { margin: 3px 0 0; overflow-wrap: anywhere; font-weight: 600; font-size: 13px; }
+.cms-fee-omnichannel-modal .cms-fee-mobile-payment-link { display: grid; gap: 8px; width: 100%; min-width: 0; padding-top: 8px; border-top: 1px solid var(--cms-border); }
+.cms-fee-omnichannel-modal .cms-fee-mobile-payment-link > input { min-width: 0; width: 100%; padding: 8px; border: 1px solid var(--cms-border); border-radius: 6px; color: var(--cms-text); background: var(--cms-surface); }
+.cms-fee-omnichannel-modal .cms-fee-mobile-payment-link > p { margin: 0; font-size: 12px; }
+.cms-fee-omnichannel-modal { width: min(820px, calc(100vw - 28px)); }
+.cms-fee-omnichannel-modal .cms-fee-gateway-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.cms-fee-omnichannel-modal .cms-fee-gateway-modes .cms-btn {
+  white-space: normal;
+  min-height: 44px;
+  padding: 8px;
+}
+.cms-fee-omnichannel-modal .cms-fee-gateway-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
+.cms-fee-omnichannel-modal .cms-fee-gateway { display: grid; gap: 12px; margin-top: 12px; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-start { display: grid; gap: 10px; justify-items: start; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-start p { color: var(--cms-muted); font-size: 13px; margin: 0; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-order {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  background: var(--cms-surface);
+}
+.cms-fee-omnichannel-modal .cms-fee-gateway-order > img { width: 200px; height: 200px; background: white; padding: 8px; object-fit: contain; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-order > strong { font-size: 22px; color: var(--cms-text); }
+.cms-fee-omnichannel-modal .cms-fee-gateway-order > code { overflow-wrap: anywhere; max-width: 100%; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-order > p { margin: 0; font-size: 12.5px; }
+.cms-fee-omnichannel-modal .cms-fee-gateway-order > input { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--cms-border); border-radius: 6px; background: var(--cms-surface); color: var(--cms-text); }
+.cms-fee-gateway-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.cms-fee-gateway-toolbar > .cms-fee-tabs { margin-bottom: 0; }
+.cms-fee-utr-queue .cms-fee-pagination { padding-bottom: 0; }
+@media (max-width: 600px) {
+  .cms-fee-omnichannel-modal .cms-fee-gateway-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cms-fee-omnichannel-modal .cms-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .cms-fee-omnichannel-modal .cms-fee-context { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 /* ============================================================
    Fee Management module styles (admin ERP look, plain CSS)
    ============================================================ */

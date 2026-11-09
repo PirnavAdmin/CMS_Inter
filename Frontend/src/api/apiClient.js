@@ -188,7 +188,7 @@ apiClient.interceptors.request.use(
     const isHostelRequest = /\/api\/v1\/hostel/i.test(config.url || "");
 
     if (
-      !isHostelRequest &&
+      !config.requireRealBackend && !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
       !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
@@ -273,7 +273,7 @@ apiClient.interceptors.response.use(
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or forced mock mode
     // When real backend is offline, do NOT return mock data - let the request fail cleanly
     if (
-      !isHostelRequest &&
+      !originalRequest?.requireRealBackend && !isHostelRequest &&
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
@@ -295,7 +295,7 @@ apiClient.interceptors.response.use(
     // This ensures smooth navigation between modules without flashing 502 errors that would otherwise succeed on refresh.
     const maxProxyRetries = 2;
     const currentProxyRetries = originalRequest?._proxyRetryCount || 0;
-    if ((isProxyUnreachable || isNetworkError) && originalRequest && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
+    if ((isProxyUnreachable || isNetworkError) && originalRequest && !originalRequest.skipNetworkRetry && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
       originalRequest._proxyRetryCount = currentProxyRetries + 1;
       const delay = currentProxyRetries === 0 ? 300 : 700;
       await new Promise((resolve) => setTimeout(resolve, delay));
