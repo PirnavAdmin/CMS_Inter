@@ -133,6 +133,19 @@ export default function DriverTripsPage({ onNavigateTab, activeTripState, onStar
     };
   }, []);
 
+  useEffect(() => {
+    if (activeTripState?.morningTripStatus) {
+      setMorningTrip((prev) =>
+        prev ? { ...prev, status: activeTripState.morningTripStatus } : prev
+      );
+    }
+    if (activeTripState?.eveningTripStatus) {
+      setEveningTrip((prev) =>
+        prev ? { ...prev, status: activeTripState.eveningTripStatus } : prev
+      );
+    }
+  }, [activeTripState]);
+
   const handleStartMorning = async (id) => {
     try {
       await startTrip(id);

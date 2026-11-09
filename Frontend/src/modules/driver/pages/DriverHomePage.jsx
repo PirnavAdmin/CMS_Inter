@@ -111,8 +111,8 @@ export default function DriverHomePage({
   const morningTripObj = tripsData?.morningTrip;
   const eveningTripObj = tripsData?.eveningTrip;
 
-  const morningTripStatus = morningTripObj?.status || activeTripState?.morningTripStatus || "Scheduled";
-  const eveningTripStatus = eveningTripObj?.status || activeTripState?.eveningTripStatus || "Scheduled";
+  const morningTripStatus = activeTripState?.morningTripStatus || morningTripObj?.status || "Scheduled";
+  const eveningTripStatus = activeTripState?.eveningTripStatus || eveningTripObj?.status || "Scheduled";
 
   const isAllTripsCompleted = morningTripStatus === "Completed" && eveningTripStatus === "Completed";
   const isTripInProgress = morningTripStatus === "In Progress" || eveningTripStatus === "In Progress";

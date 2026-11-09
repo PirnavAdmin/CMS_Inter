@@ -178,7 +178,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
             catch
             {
-                return dto.Marks.Select(m => new MarkResponseDto
+return dto.Marks.Select(m => new MarkResponseDto
                 {
                     CampusId = m.CampusId,
                     Board = m.Board,

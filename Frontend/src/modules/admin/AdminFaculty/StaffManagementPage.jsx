@@ -3914,6 +3914,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
   const { selectedCampus } = useCampusContext();
+  const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
   const list = Array.isArray(records) ? records : [];
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");

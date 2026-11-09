@@ -23,7 +23,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
 
     public class MyAttendanceLogItemDto
     {
-        public string Id { get; set; } = string.Empty;
+        public object Id { get; set; } = string.Empty;
         public string Day { get; set; } = string.Empty;
         public string Date { get; set; } = string.Empty;
         public string RawDate { get; set; } = string.Empty;
@@ -33,6 +33,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string Hours { get; set; } = "0h 0m";
         public string Device { get; set; } = "--";
         public string Status { get; set; } = "--";
+        public bool IsLate { get; set; } = false;
         public bool CanRegularize { get; set; } = false;
         public bool IsToday { get; set; } = false;
         public string? RegularizationState { get; set; }
@@ -51,9 +52,10 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string LeavesSub { get; set; } = string.Empty;
         public string AbsentDays { get; set; } = "0 Days";
         public string AbsentDaysSub { get; set; } = string.Empty;
+        public string Holidays { get; set; } = "0 Days";
         public string LopDays { get; set; } = "0 Days";
         public string LopDaysSub { get; set; } = string.Empty;
-        public string AttendancePercentage { get; set; } = "0%";
+        public int AttendancePercentage { get; set; } = 0;
     }
 
     public class MyAttendanceHistoryResponse

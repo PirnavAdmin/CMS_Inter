@@ -353,11 +353,14 @@ namespace CollegeManagement.API.Controllers.V1
         [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
+        public async Task<IActionResult> GetMyAttendanceHistory(
+            [FromQuery] string period = "month",
+            [FromQuery] int? year = null,
+            [FromQuery] int? month = null)
         {
             var staffId = await ResolveStaffIdAsync();
-            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.Today);
-            return Ok(new { Status = true, Message = "Attendance history retrieved successfully.", Data = result });
+            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.UtcNow, year, month);
+            return Ok(new { Status = true, Message = "Staff attendance history retrieved successfully.", Data = result });
         }
 
         /// <summary>

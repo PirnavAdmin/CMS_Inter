@@ -378,7 +378,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int pageNumber = queryParams.PageNumber < 1 ? 1 : queryParams.PageNumber;
             int pageSize = queryParams.PageSize < 1 ? 5 : queryParams.PageSize;
 
-            if (!queryParams.CampusId.HasValue || queryParams.CampusId.Value <= 0)
+            if ((!queryParams.CampusId.HasValue || queryParams.CampusId.Value <= 0) && !queryParams.IsDriver.HasValue)
+            {
             {
                 try
                 {
@@ -426,6 +427,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     // Fallback to EF Core LINQ query if SP is missing or fails
                 }
+            }
             }
 
             var query = _context.Staffs
@@ -512,6 +514,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.CampusId == cid ||
                     s.TransferredFromCampusId == cid ||
                     s.StaffCampusAssignments.Any(a => a.CampusId == cid));
+            }
+
+            // 4.2 IsDriver filter
+            if (queryParams.IsDriver.HasValue)
+            {
+                query = query.Where(s => s.IsDriver == queryParams.IsDriver.Value);
             }
 
             // 5. Staff Type filter
