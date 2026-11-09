@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminPreview.js";
+import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminDataUtils.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
 import "./SubscriptionsPage.css";
 
@@ -17,17 +17,21 @@ export default function SubscriptionsPage({ section = "plans" }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const title = { plans: "Subscription Plans", subscriptions: "College Subscriptions", "account-usage": "Account Usage", renewals: "Renewals" }[section];
-  const usage = data.colleges.map((college) => {
+  const reportRows = section === "subscriptions" ? data.subscriptions : section === "account-usage" ? data.accountUsage : section === "renewals" ? data.renewals : [];
+  const sourceRows = reportRows.length ? reportRows.map((row) => {
+    const college = data.colleges.find((item) => String(item.id) === String(row.collegeId ?? row.id));
+    return { ...college, ...row, id: String(row.collegeId ?? row.id ?? college?.id ?? ""), name: row.collegeName ?? row.name ?? college?.name ?? "", plan: row.planName ?? row.plan ?? college?.plan ?? "Free", renewal: row.renewalDate ?? row.renewal ?? college?.renewal ?? "", activeAccounts: row.activeAccounts ?? row.accountCount, accountLimit: row.accountLimit ?? row.limit };
+  }) : data.colleges;
+  const usage = sourceRows.map((college) => {
     const plan = data.plans.find((item) => item.name === college.plan);
-    const active = activeAccountCount(data.users, college.id);
-    const limit = plan?.limit ?? 0;
+    const active = Number(college.activeAccounts ?? activeAccountCount(data.users, college.id));
+    const limit = Number(college.accountLimit ?? plan?.limit ?? 0);
     return { ...college, active, limit, available: Math.max(0, limit - active), percentage: limit > 0 ? active / limit * 100 : active ? 100 : 0,
       subscriptionStatus: section === "renewals" && subscriptionState(college) === "Active" && college.renewalHistory?.length ? "Renewed" : subscriptionState(college), days: renewalDaysRemaining(college.renewal), modules: plan?.modules ?? [] };
   });
   const rows = usage.filter((row) => (!planFilter || row.plan === planFilter) && (!statusFilter || row.subscriptionStatus === statusFilter)
     && (!from || (row.renewal && row.renewal >= from)) && (!to || (row.renewal && row.renewal <= to)));
-  const changeCollege = (college, changes, label) => update(`${label}: ${college.name}`, (current) => ({ ...current,
-    colleges: current.colleges.map((row) => row.id === college.id ? { ...row, ...changes } : row) }),
+  const changeCollege = (college, changes, label) => update(`${label}: ${college.name}`, null,
     { module: "Subscriptions", collegeId: college.id, actionType: label, oldValues: { plan: college.plan, renewal: college.renewal }, newValues: changes });
   const requestChange = (college, planName) => {
     const plan = data.plans.find((item) => item.name === planName);
@@ -35,7 +39,7 @@ export default function SubscriptionsPage({ section = "plans" }) {
     setConfirm({ title: "Change subscription?", message: `Change ${college.name} to ${planName}?${warning}`, run: () => changeCollege(college,
       { plan: planName, subscriptionStatus: planName === "Free" ? "Free" : "Active", ...(planName === "Free" ? { renewal: "" } : {}) }, "Changed subscription") });
   };
-  const renew = (college) => setConfirm({ title: "Renew subscription?", message: `Extend ${college.name}'s subscription by 30 days? This preview does not process a payment.`, run: () => {
+  const renew = (college) => setConfirm({ title: "Renew subscription?", message: `Extend ${college.name}'s subscription by 30 days?`, run: () => {
     const renewal = new Date(Math.max(Date.now(), new Date(`${college.renewal || new Date().toISOString().slice(0, 10)}T00:00:00`).getTime()) + 30 * 86400000).toISOString().slice(0, 10);
     const history = [...(college.renewalHistory ?? []), { at: new Date().toISOString(), previousRenewal: college.renewal, renewal, plan: college.plan }];
     return changeCollege(college, { renewal, subscriptionStatus: "Active", renewalHistory: history }, "Renewed subscription");
@@ -49,8 +53,8 @@ export default function SubscriptionsPage({ section = "plans" }) {
     if (data.plans.some((plan) => plan.name !== editing.originalName && plan.name.toLowerCase() === name.toLowerCase())) { setError("Plan name already exists."); return; }
     const plan = { ...editing, name, price, limit, durationDays, description: editing.description.trim() };
     delete plan.isNew; delete plan.originalName;
-    setConfirm({ title: "Save plan?", message: "Update this preview plan? Existing subscriptions and accounts will be preserved. Reduced limits do not delete accounts.", run: () => {
-      const saved = update(`Configured plan ${name}`, (current) => ({ ...current, plans: editing.isNew ? [...current.plans, plan] : current.plans.map((row) => row.name === editing.originalName ? plan : row) }), { module: "Plans", actionType: editing.isNew ? "Create" : "Update", planId: editing.planId, payload: plan, newValues: plan });
+    setConfirm({ title: "Save plan?", message: "Save this plan to the platform?", run: async () => {
+      const saved = await update(`Configured plan ${name}`, null, { module: "Plans", actionType: editing.isNew ? "Create" : "Update", planId: editing.planId, payload: plan, newValues: plan });
       if (saved) setEditing(null); return saved;
     } });
   };

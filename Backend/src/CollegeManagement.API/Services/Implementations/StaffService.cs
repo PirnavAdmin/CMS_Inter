@@ -675,7 +675,16 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 4b. Transactionally provision transport driver profile if role is Driver
-                bool effectiveIsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                bool effectiveIsDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
+                    || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+                if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
+                {
+                    effectiveIsDriver = false;
+                }
+                staff.IsDriver = effectiveIsDriver;
                 if (effectiveIsDriver)
                 {
                     await connection.ExecuteAsync(
@@ -1044,14 +1053,14 @@ namespace CollegeManagement.API.Services.Implementations
                     await _userRepository.UpdateStatusByStaffIdAsync(id, newIsActive, connection, dbTransaction);
                 }
 
+                string? effectiveRoleName = updatedRole?.RoleName;
                 if (updatedRole != null)
                 {
                     await _userRepository.UpdateRoleByStaffIdAsync(id, updatedRole.RoleId, connection, dbTransaction);
                 }
                 else
                 {
-                    // If role wasn't explicitly updated in DTO, sync updated profile details if current role is Driver
-                    var currentRoleName = await connection.QueryFirstOrDefaultAsync<string>(
+                    effectiveRoleName = await connection.QueryFirstOrDefaultAsync<string>(
                         @"SELECT r.RoleName 
                           FROM Users u 
                           INNER JOIN Roles r ON u.RoleId = r.RoleId 
@@ -1059,22 +1068,34 @@ namespace CollegeManagement.API.Services.Implementations
                           LIMIT 1;",
                         new { StaffId = id },
                         transaction: dbTransaction);
-                    bool isDriver = string.Equals(currentRoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
-                    existingStaff.IsDriver = isDriver;
-                    await connection.ExecuteAsync(
-                        "sp_SyncTransportDriverFromStaff",
-                        new { p_StaffId = id, p_IsDriverRole = isDriver ? (byte)1 : (byte)0 },
-                        transaction: dbTransaction,
-                        commandType: CommandType.StoredProcedure);
-
-                    bool isAttendant = string.Equals(currentRoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(currentRoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
-                    await connection.ExecuteAsync(
-                        "sp_SyncTransportAttendantFromStaff",
-                        new { p_StaffId = id, p_IsAttendantRole = isAttendant ? (byte)1 : (byte)0 },
-                        transaction: dbTransaction,
-                        commandType: CommandType.StoredProcedure);
                 }
+
+                bool isDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
+                    || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(effectiveRoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+
+                if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
+                {
+                    isDriver = false;
+                }
+
+                existingStaff.IsDriver = isDriver;
+                await connection.ExecuteAsync(
+                    "sp_SyncTransportDriverFromStaff",
+                    new { p_StaffId = id, p_IsDriverRole = isDriver ? (byte)1 : (byte)0 },
+                    transaction: dbTransaction,
+                    commandType: CommandType.StoredProcedure);
+
+                bool isAttendant = string.Equals(effectiveRoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(effectiveRoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                await connection.ExecuteAsync(
+                    "sp_SyncTransportAttendantFromStaff",
+                    new { p_StaffId = id, p_IsAttendantRole = isAttendant ? (byte)1 : (byte)0 },
+                    transaction: dbTransaction,
+                    commandType: CommandType.StoredProcedure);
+
 
                 if (!string.IsNullOrWhiteSpace(resolvedDesignationName))
                 {

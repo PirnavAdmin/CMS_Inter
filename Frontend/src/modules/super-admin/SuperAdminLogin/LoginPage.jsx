@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { GraduationCap, ShieldCheck } from "lucide-react";
-import { getPlatformSession, isSuperAdminRole, loginPreview, previewEmail, previewEnabled } from "../superAdminSession.js";
+import { getPlatformSession, isSuperAdminRole } from "../superAdminSession.js";
 import { loginUser } from "@/modules/auth/services/authService.js";
 import { saveAuthSession, clearAuthSession } from "@/modules/auth/authStorage.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
@@ -24,27 +24,13 @@ export default function LoginPage() {
     const password = form.password.trim();
 
     try {
-      // 1. Authenticate with real backend API
       clearAuthSession();
-      try {
-        const result = await loginUser({ emailOrMobile: email, password });
-        if (result?.token && isSuperAdminRole(result.user?.role)) {
-          saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, true);
-          navigate("/super-admin/dashboard", { replace: true });
-          return;
-        }
-        if (result?.token && !isSuperAdminRole(result.user?.role)) {
-          throw new Error("This account does not have Super Admin platform privileges.");
-        }
-      } catch (backendError) {
-        // If preview is explicitly enabled and matches preview email, allow preview fallback
-        if (previewEnabled && email.toLowerCase() === previewEmail) {
-          await loginPreview(email, password);
-          navigate("/super-admin/dashboard", { replace: true });
-          return;
-        }
-        throw backendError;
+      const result = await loginUser({ emailOrMobile: email, password });
+      if (!result?.token || !isSuperAdminRole(result.user?.role)) {
+        throw new Error("This account does not have Super Admin platform privileges.");
       }
+      saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, true);
+      navigate("/super-admin/dashboard", { replace: true });
     } catch (failure) {
       setError(getApiErrorMessage(failure));
     } finally {

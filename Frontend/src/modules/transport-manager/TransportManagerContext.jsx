@@ -538,8 +538,6 @@ export function TransportManagerProvider({ children }) {
           getMaintenanceRecords(params),
           getRoutes(params),
           getPickupPoints(params),
-          // Admin Transport requests the attendant master without campus/year
-          // query filters and scopes the returned DTOs client-side.
           getAttendants(),
           getTrips(params),
           getStudentAssignments(params),
@@ -553,7 +551,7 @@ export function TransportManagerProvider({ children }) {
         if (maintenanceRes.status === "fulfilled") setMaintenance(filterByScope(maintenanceRes.value));
         if (routesRes.status === "fulfilled") setRoutes(filterByScope(routesRes.value));
         if (pickupsRes.status === "fulfilled") setPickupPoints(filterByScope(pickupsRes.value));
-        if (attendantsRes.status === "fulfilled") setAttendants(filterByScope(attendantsRes.value));
+        if (attendantsRes.status === "fulfilled") setAttendants(attendantsRes.value);
         if (tripsRes.status === "fulfilled") setTrips(filterByScope(tripsRes.value));
         if (studentsRes.status === "fulfilled") setStudentAssignments(filterByScope(studentsRes.value));
       } catch (err) {
