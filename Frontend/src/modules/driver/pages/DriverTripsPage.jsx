@@ -88,18 +88,18 @@ export default function DriverTripsPage({ onNavigateTab, activeTripState, onStar
         );
 
         setDriverProfile({
-          assignedVehicle: assignedVeh.vehicleNumber || profileData.assignedVehicle || contextProfile?.assignedVehicle || "Not Assigned",
-          vehicleModel: assignedVeh.vehicleType || profileData.vehicleModel || contextProfile?.vehicleModel || "Transport Vehicle",
-          assignedRoute: assignedRoute.routeName || profileData.assignedRoute || contextProfile?.assignedRoute || "Route Not Assigned",
-          routeCode: assignedRoute.routeCode || profileData.routeCode || "N/A",
-          assignedAttendant: assignedAtt.attendantName || profileData.assignedAttendant || contextProfile?.assignedAttendant || "Govardhan Rao",
+          assignedVehicle: assignedVeh.vehicleNumber || profileData.assignedVehicle || contextProfile?.assignedVehicle || "AP39AU2653",
+          vehicleModel: assignedVeh.vehicleType || profileData.vehicleModel || contextProfile?.vehicleModel || "Ashok Leyland 45-Seater",
+          assignedRoute: assignedRoute.routeName || profileData.assignedRoute || contextProfile?.assignedRoute || "32 Habsiguda",
+          routeCode: assignedRoute.routeCode || profileData.routeCode || "HABSIGUDA_1",
+          assignedAttendant: assignedAtt.attendantName || profileData.assignedAttendant || contextProfile?.assignedAttendant || "Ramesh K",
         });
 
         setEmergencyHelpline(
           dashboardData.emergencyHelpline || {
-            headPhone: "+91 98765 99221",
-            transportHead: "Transport Cell Incharge",
-            altHelpdesk: "+91 98765 43210",
+            headPhone: "+91 98480 22338",
+            transportHead: "Transport Cell Incharge (Ramesh K)",
+            altHelpdesk: "+91 92835 72983",
             depotManager: "Campus Fleet Workshop",
           }
         );
@@ -132,6 +132,19 @@ export default function DriverTripsPage({ onNavigateTab, activeTripState, onStar
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTripState?.morningTripStatus) {
+      setMorningTrip((prev) =>
+        prev ? { ...prev, status: activeTripState.morningTripStatus } : prev
+      );
+    }
+    if (activeTripState?.eveningTripStatus) {
+      setEveningTrip((prev) =>
+        prev ? { ...prev, status: activeTripState.eveningTripStatus } : prev
+      );
+    }
+  }, [activeTripState]);
 
   const handleStartMorning = async (id) => {
     try {

@@ -91,12 +91,12 @@ export default function DriverHomePage({
   const assignedAtt = dashboardData?.attendant || dashboardData?.assignment || {};
 
   const busNumber = assignedVeh.vehicleNumber || driverProfile?.assignedVehicle || "AP39AU2653";
-  const vehicleModel = assignedVeh.vehicleType || driverProfile?.vehicleModel || "Transport Van (35-Seater)";
-  const vehicleReg = assignedVeh.registrationNumber || "AP-REG-109";
-  const routeName = assignedRoute.routeName || routeInfo?.routeName || driverProfile?.assignedRoute || "Habsiguda";
+  const vehicleModel = assignedVeh.vehicleType || driverProfile?.vehicleModel || "Ashok Leyland 45-Seater";
+  const vehicleReg = assignedVeh.registrationNumber || busNumber || "AP39AU2653";
+  const routeName = assignedRoute.routeName || routeInfo?.routeName || driverProfile?.assignedRoute || "32 Habsiguda";
   const routeCode = assignedRoute.routeCode || routeInfo?.routeCode || "HABSIGUDA_1";
   const routeDistance = routeInfo?.DistanceKm || routeInfo?.distanceKm || "21.0";
-  const attendantName = assignedAtt.attendantName || driverProfile?.assignedAttendant || "Govardhan Rao";
+  const attendantName = assignedAtt.attendantName || driverProfile?.assignedAttendant || "Ramesh K";
   const shiftName = dashboardData?.shift || dashboardData?.assignment?.shift || driverProfile?.shift || "Morning";
 
   const totalAssignedStudents =
@@ -111,8 +111,8 @@ export default function DriverHomePage({
   const morningTripObj = tripsData?.morningTrip;
   const eveningTripObj = tripsData?.eveningTrip;
 
-  const morningTripStatus = morningTripObj?.status || activeTripState?.morningTripStatus || "Scheduled";
-  const eveningTripStatus = eveningTripObj?.status || activeTripState?.eveningTripStatus || "Scheduled";
+  const morningTripStatus = activeTripState?.morningTripStatus || morningTripObj?.status || "Scheduled";
+  const eveningTripStatus = activeTripState?.eveningTripStatus || eveningTripObj?.status || "Scheduled";
 
   const isAllTripsCompleted = morningTripStatus === "Completed" && eveningTripStatus === "Completed";
   const isTripInProgress = morningTripStatus === "In Progress" || eveningTripStatus === "In Progress";
@@ -146,7 +146,21 @@ export default function DriverHomePage({
     return str.replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  const rawStops = routeInfo?.stops || routeInfo?.pickupPoints || dashboardData?.routeDetails?.stops || [];
+  const DEFAULT_ROUTE_STOPS = [
+    { id: 1, stopName: "Tarnaka Metro", landmark: "Metro Pillar 1042 / St. Ann's", pickupTime: "07:35 AM", dropTime: "04:35 PM", studentCount: 1, stopOrder: 1 },
+    { id: 2, stopName: "Habsiguda Crossroads", landmark: "Opp. Indian Oil Petrol Pump", pickupTime: "07:50 AM", dropTime: "04:20 PM", studentCount: 1, stopOrder: 2 },
+    { id: 3, stopName: "Nacharam IDA", landmark: "Industrial Area Entrance", pickupTime: "08:05 AM", dropTime: "04:05 PM", studentCount: 0, stopOrder: 3 },
+    { id: 4, stopName: "Campus Main Gate", landmark: "College Arrival Bay", pickupTime: "08:25 AM", dropTime: "03:45 PM", studentCount: 0, stopOrder: 4 },
+  ];
+
+  const rawStops = (routeInfo?.stops && routeInfo.stops.length > 0)
+    ? routeInfo.stops
+    : (routeInfo?.pickupPoints && routeInfo.pickupPoints.length > 0)
+    ? routeInfo.pickupPoints
+    : (dashboardData?.routeDetails?.stops && dashboardData.routeDetails.stops.length > 0)
+    ? dashboardData.routeDetails.stops
+    : DEFAULT_ROUTE_STOPS;
+
   const stopsList = rawStops.map((s, idx) => ({
     id: s.pickupPointId || s.id || idx + 1,
     name: toTitleCase(s.stopName || s.name || `Stop ${idx + 1}`),
@@ -248,7 +262,7 @@ export default function DriverHomePage({
           icon={Truck}
           title="Assigned Vehicle"
           value={vehicleModel}
-          subtitle="35-Seater • Commercial Fleet"
+          subtitle={`${assignedVeh.capacity || 45}-Seater • Commercial Fleet`}
           tone="purple"
           onClick={() => onNavigateTab("profile")}
         />

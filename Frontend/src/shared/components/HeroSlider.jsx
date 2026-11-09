@@ -3,14 +3,14 @@ import { heroSlides } from "@/data/heroSlides.js";
 import { useCampusImages } from "../../modules/admin/AdminSettings/campusImages.js";
 import "./HeroSlider.css";
 
-export default function HeroSlider({ variant = "card" }) {
+export default function HeroSlider({ variant = "card", autoRotate = true, showControls = true, imageOverride = "" }) {
   const images = useCampusImages();
-  const configuredImage = variant === "bg" ? images.loginImage : images.heroImage;
+  const configuredImage = imageOverride || (variant === "bg" ? images.loginImage : images.heroImage);
   const slides = configuredImage ? [{ src: configuredImage, alt: "Campus image" }] : heroSlides;
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
-    if (slides.length <= 1) return;
+    if (!autoRotate || slides.length <= 1) return;
     const id = window.setInterval(() => setIndex((current) => (current + 1) % slides.length), 2000);
     return () => window.clearInterval(id);
   }, [slides.length]);
@@ -36,7 +36,7 @@ export default function HeroSlider({ variant = "card" }) {
         ))}
         {isBackground ? <span className="cms-slide-overlay" /> : null}
       </div>
-      <div className="cms-slider-dots">
+      {showControls ? <div className="cms-slider-dots">
         {slides.length > 1 && slides.map((slide, slideIndex) => (
           <button
             key={slide.src}
@@ -47,7 +47,7 @@ export default function HeroSlider({ variant = "card" }) {
             onClick={() => setIndex(slideIndex)}
           />
         ))}
-      </div>
+      </div> : null}
     </div>
   );
 }

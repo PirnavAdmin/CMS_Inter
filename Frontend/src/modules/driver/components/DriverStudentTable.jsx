@@ -29,7 +29,17 @@ export default function DriverStudentTable({
         (st.class || st.academicClass || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
         (st.stop || "").toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesStop = selectedStop === "All" || st.stop === selectedStop;
+      const matchesStop = selectedStop === "All" || (() => {
+        const sNorm = (st.stop || "").toLowerCase().trim();
+        const selNorm = selectedStop.toLowerCase().trim();
+        if (sNorm === selNorm) return true;
+        if (selNorm.includes("tarnaka") && sNorm.includes("tarnaka")) return true;
+        if (selNorm.includes("habsiguda") && sNorm.includes("habsiguda")) return true;
+        if (selNorm.includes("nacharam") && sNorm.includes("nacharam")) return true;
+        if ((selNorm.includes("campus") || selNorm.includes("gate")) && (sNorm.includes("campus") || sNorm.includes("gate"))) return true;
+        return sNorm.includes(selNorm) || selNorm.includes(sNorm);
+      })();
+
       const matchesStatus = selectedStatus === "All" || st.status === selectedStatus;
 
       return matchesSearch && matchesStop && matchesStatus;
@@ -101,6 +111,7 @@ export default function DriverStudentTable({
                 <option value="All">All Statuses</option>
                 <option value="Picked Up">Picked Up</option>
                 <option value="Pending">Pending</option>
+                <option value="Missed">Missed</option>
                 <option value="Not Boarded">Not Boarded</option>
                 <option value="Absent">Absent</option>
               </select>
@@ -144,10 +155,10 @@ export default function DriverStudentTable({
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map((student) => (
+              {filteredStudents.map((student, idx) => (
                 <tr key={student.id} className={student.status === "Picked Up" ? "dp-row-picked" : ""}>
                   <td>
-                    <span className="dp-seat-badge">{student.seatNo || "—"}</span>
+                    <span className="dp-seat-badge">{student.seatNo || student.seat || `S-${String(idx + 1).padStart(2, "0")}`}</span>
                   </td>
                   <td>
                     <div className="dp-stu-cell">

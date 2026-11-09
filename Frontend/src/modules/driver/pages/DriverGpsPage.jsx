@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
+import DriverTripActionBar from "../components/DriverTripActionBar.jsx";
 import { getRoute, getGps, sendGpsLocation, getTrips } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
@@ -76,47 +77,72 @@ const MapBoundsFitter = ({ points }) => {
   return null;
 };
 
-// Realistic street network coordinates along Hyderabad Tarnaka - Habsiguda - Campus Road Corridor (NH 163)
-// Snaps precisely along city streets, turns, and intersections, eliminating any straight diagonal lines across buildings!
+// Realistic street network coordinates along Hyderabad Tarnaka - Habsiguda - Nacharam - Campus Corridor
+// Mapped to OpenStreetMap paved roads with 221 real curvature street waypoints, completely eliminating straight diagonal lines!
 const DEFAULT_CORRIDOR_WAYPOINTS = [
-  [17.42765, 78.53748],
-  [17.42739, 78.53816],
-  [17.42722, 78.53860],
-  [17.42686, 78.53819],
-  [17.42650, 78.53835],
-  [17.42580, 78.53880],
-  [17.42510, 78.53930],
-  [17.42450, 78.53990],
-  [17.42390, 78.54060],
-  [17.42310, 78.54140],
-  [17.42250, 78.54220],
-  [17.42180, 78.54310],
-  [17.42100, 78.54400],
-  [17.42020, 78.54480],
-  [17.41940, 78.54570],
-  [17.41870, 78.54650],
-  [17.41840, 78.54690], // Stop 2: Habsiguda Crossroads
-  [17.41810, 78.54730],
-  [17.41750, 78.54790],
-  [17.41680, 78.54860],
-  [17.41610, 78.54930],
-  [17.41530, 78.55010],
-  [17.41460, 78.55090],
-  [17.41390, 78.55160],
-  [17.41320, 78.55210],
-  [17.41280, 78.55240], // Campus Main Gate
+  [17.42811, 78.52832], [17.42832, 78.52788], [17.42842, 78.5278], [17.4285, 78.52776], [17.42871, 78.52729],
+  [17.42883, 78.52709], [17.42887, 78.52703], [17.42894, 78.52692], [17.42911, 78.52671], [17.42924, 78.52655],
+  [17.42952, 78.52626], [17.42966, 78.5264], [17.42945, 78.52665], [17.42915, 78.52701], [17.42897, 78.52725],
+  [17.42891, 78.52737], [17.42882, 78.52756], [17.42868, 78.52781], [17.42861, 78.52796], [17.42859, 78.52801],
+  [17.42853, 78.52814], [17.42802, 78.52922], [17.42794, 78.5294], [17.42786, 78.52954], [17.42773, 78.52979],
+  [17.42742, 78.53035], [17.42729, 78.53056], [17.42729, 78.53057], [17.4271, 78.53082], [17.42708, 78.53086],
+  [17.4269, 78.53108], [17.42684, 78.53117], [17.42672, 78.53132], [17.42668, 78.53137], [17.42628, 78.53188],
+  [17.42595, 78.53246], [17.4257, 78.53294], [17.42554, 78.53336], [17.42524, 78.53416], [17.42522, 78.5342],
+  [17.42519, 78.53428], [17.42512, 78.53442], [17.4251, 78.53449], [17.42496, 78.53516], [17.42491, 78.53538],
+  [17.42489, 78.53546], [17.42474, 78.53591], [17.42457, 78.53614], [17.4245, 78.53624], [17.42443, 78.53632],
+  [17.4243, 78.53645], [17.42418, 78.53656], [17.42406, 78.53669], [17.42347, 78.53724], [17.42319, 78.53749],
+  [17.42309, 78.53757], [17.42246, 78.5381], [17.42236, 78.53824], [17.42145, 78.53947], [17.42106, 78.53994],
+  [17.42093, 78.54007], [17.41935, 78.54125], [17.41912, 78.5415], [17.41905, 78.54158], [17.41888, 78.54173],
+  [17.41882, 78.54178], [17.41845, 78.54218], [17.41817, 78.54251], [17.41782, 78.5429], [17.41744, 78.54334],
+  [17.41717, 78.54368], [17.41711, 78.54374], [17.41642, 78.54456], [17.41574, 78.54536], [17.41562, 78.5455],
+  [17.41559, 78.54553], [17.4149, 78.54631], [17.41439, 78.54688], [17.41431, 78.54697], [17.41391, 78.54741],
+  [17.41295, 78.54848], [17.41287, 78.54837], [17.4131, 78.54812], [17.41362, 78.54756], [17.41415, 78.54699],
+  [17.41419, 78.54696], [17.4143, 78.54682], [17.41483, 78.54622], [17.41535, 78.54561], [17.41581, 78.54509],
+  [17.41618, 78.54465], [17.41664, 78.54411], [17.41703, 78.54367], [17.41719, 78.54348], [17.41756, 78.54306],
+  [17.41763, 78.54299], [17.41777, 78.54282], [17.418, 78.54256], [17.41811, 78.54242], [17.41833, 78.54217],
+  [17.41892, 78.54147], [17.41895, 78.54144], [17.41899, 78.5414], [17.41912, 78.5415], [17.4193, 78.54173],
+  [17.41984, 78.54232], [17.42008, 78.54258], [17.4208, 78.54339], [17.42155, 78.54421], [17.42252, 78.54528],
+  [17.42256, 78.54533], [17.42347, 78.54635], [17.4235, 78.54639], [17.4237, 78.54661], [17.42403, 78.54699],
+  [17.4241, 78.54707], [17.42457, 78.54757], [17.42474, 78.54775], [17.42499, 78.548], [17.42565, 78.54871],
+  [17.42575, 78.54882], [17.42702, 78.5501], [17.42706, 78.55014], [17.42711, 78.55018], [17.42712, 78.5502],
+  [17.42729, 78.55037], [17.42749, 78.55054], [17.4278, 78.5508], [17.42818, 78.55111], [17.42849, 78.55137],
+  [17.42851, 78.55138], [17.42891, 78.55171], [17.42908, 78.55185], [17.42931, 78.55204], [17.42938, 78.55211],
+  [17.42973, 78.5524], [17.43013, 78.5527], [17.43048, 78.55299], [17.43072, 78.55319], [17.43099, 78.55341],
+  [17.43108, 78.55349], [17.43103, 78.55355], [17.43063, 78.55419], [17.43062, 78.55425], [17.43064, 78.55428],
+  [17.43067, 78.55432], [17.43113, 78.55463], [17.43106, 78.55471], [17.4308, 78.55491], [17.43061, 78.55507],
+  [17.4303, 78.5553], [17.42999, 78.55556], [17.4296, 78.55586], [17.42948, 78.556], [17.42915, 78.55592],
+  [17.42883, 78.55583], [17.42854, 78.55576], [17.42827, 78.55665], [17.42822, 78.55677], [17.42812, 78.557],
+  [17.42803, 78.5572], [17.42802, 78.55724], [17.42786, 78.55754], [17.4277, 78.55778], [17.42729, 78.55842],
+  [17.42747, 78.55844], [17.42807, 78.55821], [17.42825, 78.55815], [17.42883, 78.55966], [17.42905, 78.56024],
+  [17.4283, 78.56052], [17.42755, 78.56084], [17.42638, 78.56131], [17.42593, 78.56149], [17.42573, 78.56156],
+  [17.42539, 78.56171], [17.42505, 78.56191], [17.42395, 78.56257], [17.42364, 78.56278], [17.42356, 78.56283],
+  [17.42312, 78.56313], [17.42296, 78.56324], [17.42285, 78.56332], [17.42228, 78.5637], [17.4214, 78.56425],
+  [17.42116, 78.5644], [17.42103, 78.56448], [17.42096, 78.56451], [17.42057, 78.56464], [17.42029, 78.56472],
+  [17.41997, 78.56485], [17.41972, 78.56496], [17.41958, 78.56502], [17.41909, 78.56523], [17.419, 78.56527],
+  [17.41894, 78.5653], [17.41882, 78.56536], [17.41865, 78.56547], [17.41842, 78.56567], [17.41811, 78.56593],
+  [17.41792, 78.56607], [17.41783, 78.56612], [17.41781, 78.56613], [17.41789, 78.56627], [17.41719, 78.56704],
+  [17.41729, 78.56721], [17.41705, 78.56744], [17.41688, 78.56759], [17.41665, 78.56782], [17.4164, 78.56806],
+  [17.41622, 78.56821], [17.4161, 78.56834], [17.41579, 78.56858], [17.41553, 78.56879], [17.41443, 78.56951],
+  [17.41467, 78.5699], [17.41485, 78.5702], [17.41494, 78.57029], [17.4152, 78.57037], [17.41514, 78.57107],
+  [17.4151, 78.57201]
 ];
 
 const STOP_COORDINATES = {
-  tarnaka: [17.42765, 78.53748],
-  "college gate": [17.41280, 78.55240],
-  campus: [17.41280, 78.55240],
-  habsiguda: [17.41840, 78.54690],
-  nacharam: [17.42100, 78.54400],
-  industrial: [17.42100, 78.54400],
+  tarnaka: [17.42811, 78.52832],
+  habsiguda: [17.41295, 78.54848],
+  nacharam: [17.42827, 78.55665],
+  industrial: [17.42827, 78.55665],
+  "college gate": [17.4151, 78.57201],
+  campus: [17.4151, 78.57201],
 };
 
-export default function DriverGpsPage() {
+export default function DriverGpsPage({
+  activeTripState,
+  onStartTrip,
+  onEndTrip,
+  onNavigateTab,
+  students = [],
+}) {
   const [routeDetails, setRouteDetails] = useState(null);
   const [tripsData, setTripsData] = useState(null);
   const [speed, setSpeed] = useState(32); // Default operational cruise speed in km/h
@@ -125,7 +151,7 @@ export default function DriverGpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [roadPath, setRoadPath] = useState(DEFAULT_CORRIDOR_WAYPOINTS);
-  const [livePos, setLivePos] = useState([17.42180, 78.54310]); // Mid-route position near Habsiguda
+  const [livePos, setLivePos] = useState([17.41295, 78.54848]); // Mid-route position at Habsiguda Crossroads on the road
   const hasLoadedOnce = useRef(false);
 
   // Fetch Route Data and build stops
@@ -151,39 +177,51 @@ export default function DriverGpsPage() {
           setTripsData(trips);
         }
 
-        // Map backend pickupPoints to frontend expected stops format
-        if (details.pickupPoints && Array.isArray(details.pickupPoints)) {
-          details.stops = details.pickupPoints.map((p, index) => {
-            const rawName = (p.stopName || p.pickupPointName || `Stop ${index + 1}`).toLowerCase();
-            let pos = p.position;
-            if (!pos) {
-              if (rawName.includes("tarnaka")) pos = STOP_COORDINATES.tarnaka;
-              else if (rawName.includes("college") || rawName.includes("gate")) pos = STOP_COORDINATES["college gate"];
-              else if (rawName.includes("habsiguda")) pos = STOP_COORDINATES.habsiguda;
-              else pos = DEFAULT_CORRIDOR_WAYPOINTS[Math.min(index * 10, DEFAULT_CORRIDOR_WAYPOINTS.length - 1)];
-            }
-            const isAllDone = trips?.morningTrip?.status === "Completed" && trips?.eveningTrip?.status === "Completed";
-            const isInProg = trips?.morningTrip?.status === "In Progress" || trips?.eveningTrip?.status === "In Progress";
-            
-            let stopStatus = "Scheduled";
-            if (isAllDone) {
-              stopStatus = "Completed";
-            } else if (isInProg) {
-              stopStatus = index === 0 ? "Completed" : (index === 1 ? "Ongoing" : "Pending");
-            } else {
-              stopStatus = "Scheduled";
-            }
+        const DEFAULT_GPS_STOPS = [
+          { pickupPointId: 1, stopName: "Tarnaka Metro", pickupTime: "07:35 AM", position: STOP_COORDINATES.tarnaka },
+          { pickupPointId: 2, stopName: "Habsiguda Crossroads", pickupTime: "07:50 AM", position: STOP_COORDINATES.habsiguda },
+          { pickupPointId: 3, stopName: "Nacharam IDA", pickupTime: "08:05 AM", position: STOP_COORDINATES.nacharam },
+          { pickupPointId: 4, stopName: "Campus Main Gate", pickupTime: "08:25 AM", position: STOP_COORDINATES["college gate"] },
+        ];
 
-            return {
-              id: p.pickupPointId || index + 1,
-              name: p.stopName || p.pickupPointName || `Stop ${index + 1}`,
-              pickupTime: p.pickupTime ? p.pickupTime.toString() : (index === 0 ? "07:35 AM" : "07:55 AM"),
-              status: stopStatus,
-              stopNumber: index + 1,
-              position: pos,
-            };
-          });
-        }
+        // Map backend pickupPoints to frontend expected stops format (or fallback to Route 32 corridor stops)
+        const rawPoints = (details.pickupPoints && Array.isArray(details.pickupPoints) && details.pickupPoints.length > 0)
+          ? details.pickupPoints
+          : (details.stops && Array.isArray(details.stops) && details.stops.length > 0)
+          ? details.stops
+          : DEFAULT_GPS_STOPS;
+
+        details.stops = rawPoints.map((p, index) => {
+          const rawName = (p.stopName || p.pickupPointName || `Stop ${index + 1}`).toLowerCase();
+          let pos = p.position;
+          if (!pos) {
+            if (rawName.includes("tarnaka")) pos = STOP_COORDINATES.tarnaka;
+            else if (rawName.includes("college") || rawName.includes("gate") || rawName.includes("campus")) pos = STOP_COORDINATES["college gate"];
+            else if (rawName.includes("habsiguda")) pos = STOP_COORDINATES.habsiguda;
+            else if (rawName.includes("nacharam") || rawName.includes("industrial")) pos = STOP_COORDINATES.nacharam;
+            else pos = DEFAULT_CORRIDOR_WAYPOINTS[Math.min(index * 8, DEFAULT_CORRIDOR_WAYPOINTS.length - 1)];
+          }
+          const isAllDone = trips?.morningTrip?.status === "Completed" && trips?.eveningTrip?.status === "Completed";
+          const isInProg = trips?.morningTrip?.status === "In Progress" || trips?.eveningTrip?.status === "In Progress";
+          
+          let stopStatus = "Scheduled";
+          if (isAllDone) {
+            stopStatus = "Completed";
+          } else if (isInProg) {
+            stopStatus = index === 0 ? "Completed" : (index === 1 ? "Ongoing" : "Pending");
+          } else {
+            stopStatus = "Scheduled";
+          }
+
+          return {
+            id: p.pickupPointId || index + 1,
+            name: p.stopName || p.pickupPointName || `Stop ${index + 1}`,
+            pickupTime: p.pickupTime ? p.pickupTime.toString() : (index === 0 ? "07:35 AM" : index === 1 ? "07:50 AM" : index === 2 ? "08:05 AM" : "08:25 AM"),
+            status: stopStatus,
+            stopNumber: index + 1,
+            position: pos,
+          };
+        });
 
         if (!isMounted) return;
         setRouteDetails(details);
@@ -283,13 +321,13 @@ export default function DriverGpsPage() {
   }, []);
 
   const stops = routeDetails?.stops || [];
-  const morningTrip = tripsData?.morningTrip;
-  const eveningTrip = tripsData?.eveningTrip;
-  const isAllTripsCompleted = morningTrip?.status === "Completed" && eveningTrip?.status === "Completed";
-  const isTripInProgress = morningTrip?.status === "In Progress" || eveningTrip?.status === "In Progress";
+  const morningStatus = activeTripState?.morningTripStatus || tripsData?.morningTrip?.status || "Scheduled";
+  const eveningStatus = activeTripState?.eveningTripStatus || tripsData?.eveningTrip?.status || "Scheduled";
+  const isAllTripsCompleted = morningStatus === "Completed" && eveningStatus === "Completed";
+  const isTripInProgress = morningStatus === "In Progress" || eveningStatus === "In Progress";
 
   const completedStops = stops.filter((s) => s.status === "Completed");
-  const nextStop = isAllTripsCompleted ? null : (stops.find((s) => s.status === "Ongoing") || stops[stops.length - 1]);
+  const nextStop = isAllTripsCompleted ? null : (stops.find((s) => s.status === "Ongoing") || stops.find((s) => s.status !== "Completed") || stops[0]);
 
   const stopPositions = useMemo(() => {
     return stops.map((s) => s.position).filter((p) => p && !isNaN(p[0]) && !isNaN(p[1]));
@@ -334,6 +372,18 @@ export default function DriverGpsPage() {
           </button>
         </div>
       </div>
+
+      {/* Persistent Trip Operations Action Bar */}
+      <DriverTripActionBar
+        activeTripState={activeTripState}
+        onStartTrip={onStartTrip}
+        onEndTrip={onEndTrip}
+        onNavigateTab={onNavigateTab}
+        students={students}
+        assignedRoute="Route 32 Habsiguda"
+        vehicleNumber="AP39AU2653"
+        scheduledTime="07:35 AM - 08:30 AM"
+      />
 
       {/* Real-Time Metrics */}
       <div className="dp-stat-grid-4">

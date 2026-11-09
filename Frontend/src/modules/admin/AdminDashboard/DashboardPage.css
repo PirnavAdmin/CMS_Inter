@@ -241,8 +241,9 @@
 }
 
 .dashboard-kpi-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
   color: var(--cms-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -307,8 +308,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 3px 6px;
+  gap: 6px;
+  padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--action-accent) 20%, var(--cms-border));
   border-radius: 6px;
   background: color-mix(in srgb, var(--action-accent) 6%, var(--cms-surface));
@@ -325,11 +326,77 @@
   transform: translateY(-1px);
 }
 
-.dashboard-quick-action.tone-green { --action-accent: #16a34a; }
-.dashboard-quick-action.tone-blue { --action-accent: #2563eb; }
-.dashboard-quick-action.tone-violet { --action-accent: #7c3aed; }
-.dashboard-quick-action.tone-cyan { --action-accent: #0891b2; }
-.dashboard-quick-action.tone-orange { --action-accent: #f07a1a; }
+.dashboard-quick-action.tone-green {
+  --action-accent: #16a34a;
+  border-color: #bbf7d0 !important;
+  background: #f0fdf4 !important;
+  color: #15803d !important;
+}
+.dashboard-quick-action.tone-green:hover {
+  border-color: #22c55e !important;
+  background: #dcfce7 !important;
+  color: #166534 !important;
+}
+
+.dashboard-quick-action.tone-blue {
+  --action-accent: #2563eb;
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+.dashboard-quick-action.tone-blue:hover {
+  border-color: #3b82f6 !important;
+  background: #dbeafe !important;
+  color: #1e40af !important;
+}
+
+.dashboard-quick-action.tone-violet {
+  --action-accent: #7c3aed;
+  border-color: #ddd6fe !important;
+  background: #f5f3ff !important;
+  color: #6d28d9 !important;
+}
+.dashboard-quick-action.tone-violet:hover {
+  border-color: #8b5cf6 !important;
+  background: #ede9fe !important;
+  color: #5b21b6 !important;
+}
+
+.dashboard-quick-action.tone-cyan {
+  --action-accent: #0891b2;
+  border-color: #a5f3fc !important;
+  background: #ecfeff !important;
+  color: #0e7490 !important;
+}
+.dashboard-quick-action.tone-cyan:hover {
+  border-color: #06b6d4 !important;
+  background: #cffafe !important;
+  color: #155e75 !important;
+}
+
+.dashboard-quick-action.tone-orange {
+  --action-accent: #f07a1a;
+  border-color: #fed7aa !important;
+  background: #fff7ed !important;
+  color: #c2410c !important;
+}
+.dashboard-quick-action.tone-orange:hover {
+  border-color: #f97316 !important;
+  background: #ffedd5 !important;
+  color: #9a3412 !important;
+}
+
+.dashboard-quick-action.tone-emerald {
+  --action-accent: #059669;
+  border-color: #a7f3d0 !important;
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+.dashboard-quick-action.tone-emerald:hover {
+  border-color: #10b981 !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
+}
 
 .dashboard-quick-action-icon {
   width: 17px;

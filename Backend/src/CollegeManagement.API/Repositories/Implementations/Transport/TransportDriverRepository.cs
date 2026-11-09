@@ -41,11 +41,25 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var items = new List<TransportDriverDto>();
             if (!multi.IsConsumed)
             {
-                totalCount = await multi.ReadFirstOrDefaultAsync<int>();
-            }
-            if (!multi.IsConsumed)
-            {
-                items = (await multi.ReadAsync<TransportDriverDto>()).ToList();
+                var firstSet = (await multi.ReadAsync<dynamic>()).ToList();
+                if (firstSet.Count > 0)
+                {
+                    var firstRow = (System.Collections.Generic.IDictionary<string, object>)firstSet[0];
+                    if (firstRow.ContainsKey("TotalCount"))
+                    {
+                        totalCount = Convert.ToInt32(firstRow["TotalCount"]);
+                        if (!multi.IsConsumed)
+                        {
+                            items = (await multi.ReadAsync<TransportDriverDto>()).ToList();
+                        }
+                    }
+                    else
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(firstSet);
+                        items = System.Text.Json.JsonSerializer.Deserialize<List<TransportDriverDto>>(json, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new List<TransportDriverDto>();
+                        totalCount = items.Count;
+                    }
+                }
             }
 
             return new PagedResult<TransportDriverDto>
