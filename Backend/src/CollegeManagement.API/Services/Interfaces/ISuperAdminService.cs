@@ -27,6 +27,7 @@ namespace CollegeManagement.API.Services.Interfaces
         // 4. Global Users
         Task<(IEnumerable<GlobalUserDto> Users, int TotalCount)> GetGlobalUsersPagedAsync(string? searchTerm, int? collegeId, string? role, string? status, int page, int pageSize);
         Task<GlobalUserDto?> GetUserDetailAsync(int userId);
+        Task<bool> UpdateUserAsync(int userId, SuperAdminUpdateUserRequest request, string currentUserName);
         Task<bool> UpdateUserStatusAsync(int userId, bool isActive, string currentUserName);
         Task<bool> ResetUserPasswordAsync(int userId, string newPassword, string currentUserName);
 

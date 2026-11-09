@@ -73,7 +73,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Status = (string)c.Status,
                 Registered = c.RegisteredAt != null ? ((DateTime)c.RegisteredAt).ToString("yyyy-MM-dd") : "",
                 ActiveAccounts = Convert.ToInt32(c.ActiveUsersCount ?? 0),
-                AccountLimit = Convert.ToInt32(c.AccountLimit ?? 25)
+                AccountLimit = Convert.ToInt32(c.AccountLimit ?? 25),
+                Students = Convert.ToInt32(c.TotalStudents ?? c.TotalStudentsCount ?? 0),
+                TotalStudents = Convert.ToInt32(c.TotalStudents ?? c.TotalStudentsCount ?? 0)
             }).ToList();
 
             return (list, totalCount);
@@ -188,8 +190,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Id = "U-" + ((int)r.UserId).ToString(),
                 Name = (string)r.FullName,
                 Email = (string)r.Email,
+                Phone = (string)(r.PhoneNumber ?? ""),
+                PhoneNumber = (string)(r.PhoneNumber ?? ""),
+                LastLogin = r.LastLogin != null ? ((DateTime)r.LastLogin).ToString("yyyy-MM-dd HH:mm:ss") : null,
                 CollegeId = (int)(r.CollegeId ?? 0),
-                CollegeName = (string)(r.CollegeName ?? "Platform"),
+                CollegeName = (string)(r.CollegeName ?? ""),
+                CollegeCode = (string)(r.CollegeCode ?? ""),
                 Role = "CollegeAdmin",
                 Active = Convert.ToBoolean(r.IsActive),
                 LoginEnabled = true,
@@ -203,6 +209,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_CollegeId", request.CollegeId);
             p.Add("p_FullName", request.Name);
             p.Add("p_Email", request.Email.Trim().ToLower());
+            p.Add("p_PhoneNumber", request.PhoneNumber ?? request.Phone ?? "+91 9000000000");
             p.Add("p_PasswordHash", defaultPasswordHash);
             p.Add("p_CreatedBy", 1);
             p.Add("p_NewUserId", dbType: DbType.Int32, direction: ParameterDirection.Output);
@@ -241,6 +248,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Id = "U-" + ((int)r.UserId).ToString(),
                 Name = (string)r.FullName,
                 Email = (string)r.Email,
+                Phone = (string)(r.PhoneNumber ?? ""),
+                PhoneNumber = (string)(r.PhoneNumber ?? ""),
                 CollegeId = r.CollegeId != null ? "COL-" + ((int)r.CollegeId).ToString("D3") : null,
                 CollegeName = (string)(r.CollegeName ?? "Platform"),
                 Role = (string)(r.RoleName ?? "User"),
@@ -281,6 +290,30 @@ namespace CollegeManagement.API.Repositories.Implementations
                 LastLogin = r.LastLogin != null ? ((DateTime)r.LastLogin).ToString("yyyy-MM-dd HH:mm") : null,
                 CreatedAt = r.CreatedAt != null ? ((DateTime)r.CreatedAt).ToString("yyyy-MM-dd") : null
             };
+        }
+
+        public async Task<bool> UpdateUserAsync(int userId, SuperAdminUpdateUserRequest request)
+        {
+            var p = new DynamicParameters();
+            p.Add("UserId", userId);
+            p.Add("FullName", request.Name ?? request.FullName);
+            p.Add("Email", request.Email?.Trim().ToLower());
+            p.Add("PhoneNumber", request.Phone ?? request.PhoneNumber);
+            p.Add("IsActive", request.Active ?? request.IsActive);
+            p.Add("CollegeId", request.CollegeId);
+
+            var sql = @"
+                UPDATE Users
+                SET FullName = COALESCE(@FullName, FullName),
+                    Email = COALESCE(@Email, Email),
+                    PhoneNumber = COALESCE(@PhoneNumber, PhoneNumber),
+                    IsActive = COALESCE(@IsActive, IsActive),
+                    CollegeId = COALESCE(@CollegeId, CollegeId),
+                    UpdatedAt = CURRENT_TIMESTAMP(6)
+                WHERE UserId = @UserId;";
+
+            int rows = await Connection.ExecuteAsync(sql, p);
+            return rows > 0;
         }
 
         public async Task<bool> UpdateUserStatusAsync(int userId, bool isActive)
@@ -417,15 +450,16 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return rows.Select(r => new CollegeSubscriptionDto
             {
-                SubscriptionId = (int)r.SubscriptionId,
+                SubscriptionId = (int)(r.SubscriptionId ?? 0),
                 CollegeId = (int)r.CollegeId,
-                Name = (string)r.CollegeName,
-                Plan = (string)r.PlanName,
+                Name = (string)(r.CollegeName ?? ""),
+                Code = (string)(r.CollegeCode ?? ""),
+                Plan = (string)(r.PlanName ?? "-"),
                 Active = Convert.ToInt32(r.ActiveUsersCount ?? 0),
-                Limit = Convert.ToInt32(r.AccountLimit ?? 25),
+                Limit = r.AccountLimit != null ? Convert.ToInt32(r.AccountLimit) : (int?)null,
                 SubscriptionStart = r.StartDate != null ? ((DateTime)r.StartDate).ToString("yyyy-MM-dd") : null,
                 Renewal = r.RenewalDate != null ? ((DateTime)r.RenewalDate).ToString("yyyy-MM-dd") : null,
-                SubscriptionStatus = (string)r.Status,
+                SubscriptionStatus = (string)(r.Status ?? "-"),
                 Days = r.RenewalDate != null ? (int?)Math.Round(((DateTime)r.RenewalDate - DateTime.Today).TotalDays) : null
             });
         }
@@ -684,9 +718,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 AuditLogId = (int)r.AuditLogId,
                 Id = "AUD-" + ((int)r.AuditLogId).ToString(),
                 Message = (string)(r.Description ?? r.Action),
-                PerformedBy = "Super Admin",
+                PerformedBy = (string)(r.UserName ?? "Super Administrator"),
+                Role = (string)(r.UserName != null && ((string)r.UserName).Contains("ADM") ? "College Admin" : "Super Admin"),
                 Module = (string)(r.EntityName ?? "Platform"),
-                College = (string)(r.CollegeName ?? "Platform Global"),
+                College = (string)(r.CollegeName ?? "All Colleges"),
                 At = r.CreatedAt != null ? ((DateTime)r.CreatedAt).ToString("o") : DateTime.UtcNow.ToString("o"),
                 ActionType = (string)r.Action,
                 Status = "Success",

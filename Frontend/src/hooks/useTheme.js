@@ -61,7 +61,7 @@ export function isUserAdmin() {
     // 3. Fallback: Path-based detection for Admin Portal
     const pathname = window.location?.pathname || "";
     if (
-      pathname.startsWith("/dashboard/settings") ||
+      pathname.startsWith("/super-admin") || pathname.startsWith("/dashboard/settings") ||
       pathname === "/dashboard" ||
       (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/student"))
     ) {

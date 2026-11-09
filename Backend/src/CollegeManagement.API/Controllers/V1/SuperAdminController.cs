@@ -159,6 +159,25 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
+        [HttpPut("college-admins/{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateCollegeAdmin(int id, [FromBody] SuperAdminUpdateUserRequest request)
+        {
+            try
+            {
+                bool ok = await _service.UpdateUserAsync(id, request, GetCurrentUserName());
+                if (!ok) return NotFound(new { success = false, message = "Administrator not found or no changes made." });
+                var updated = await _service.GetUserDetailAsync(id);
+                return Ok(new { success = true, data = updated, message = "College Administrator updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
         #endregion
 
         #region 4. Global Users
@@ -184,6 +203,25 @@ namespace CollegeManagement.API.Controllers.V1
             var user = await _service.GetUserDetailAsync(id);
             if (user == null) return NotFound(new { success = false, message = "User not found." });
             return Ok(new { success = true, data = user });
+        }
+
+        [HttpPut("global-users/{id:int}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UpdateGlobalUser(int id, [FromBody] SuperAdminUpdateUserRequest request)
+        {
+            try
+            {
+                bool ok = await _service.UpdateUserAsync(id, request, GetCurrentUserName());
+                if (!ok) return NotFound(new { success = false, message = "User not found or no changes made." });
+                var updated = await _service.GetUserDetailAsync(id);
+                return Ok(new { success = true, data = updated, message = "User updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         [HttpPatch("global-users/{id:int}/status")]
