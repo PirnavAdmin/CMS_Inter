@@ -2,6 +2,13 @@ import { getAuthToken, getAuthUser } from "@/modules/auth/authStorage.js";
 
 export const isSuperAdminRole = (value) => String(value || "").replace(/[\s_-]/g, "").toLowerCase() === "superadmin";
 
+export function logoutPreview() {
+  try {
+    sessionStorage.removeItem("super_admin_preview");
+    localStorage.removeItem("super_admin_preview");
+  } catch {}
+}
+
 export function getPlatformSession() {
   try {
     const token = getAuthToken();
