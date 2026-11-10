@@ -317,9 +317,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _repository.PunchOutAsync(facultyId, request, clientIp, userId);
         }
 
-        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate)
+        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate, int? year = null, int? month = null)
         {
-            return await _repository.GetMyAttendanceHistoryAsync(facultyId, period, targetDate);
+            return await _repository.GetMyAttendanceHistoryAsync(facultyId, period, targetDate, year, month);
         }
 
         public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)

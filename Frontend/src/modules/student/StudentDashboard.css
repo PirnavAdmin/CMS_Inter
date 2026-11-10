@@ -903,8 +903,8 @@
 
 .sp-table th {
   padding: 9px 10px;
-  background: var(--sp-soft);
-  color: var(--sp-muted);
+  background: var(--cms-table-header, var(--sp-soft));
+  color: var(--cms-text-secondary, var(--sp-muted));
   font-size: 10px;
   letter-spacing: .04em;
   text-align: left;
@@ -1103,7 +1103,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 0 0;
-  color: var(--sp-muted);
+  color: var(--cms-muted, var(--sp-muted));
   font-size: 11px;
   background: var(--cms-subtle, var(--sp-soft));
   border-top: 1px solid var(--sp-border);

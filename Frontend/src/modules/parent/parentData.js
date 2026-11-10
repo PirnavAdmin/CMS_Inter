@@ -50,7 +50,7 @@ export const initialChildren = [
     mentorDesignation: "Faculty In-Charge",
     mentorMobile: "+91 98480 12345",
     mentorEmail: "anitha.rao@college.edu",
-    avatar: "https://ui-avatars.com/api/?name=niharika&background=0D8ABC&color=fff&size=128",
+    avatar: "https://ui-avatars.com/api/?name=N&background=10B981&color=fff&size=128",
     attendance: {
       overall: 92,
       presentDays: 12,
@@ -59,10 +59,10 @@ export const initialChildren = [
       status: "Excellent",
     },
     academics: {
-      sgpa: "8.8",
-      cgpa: "8.9",
+      sgpa: "9.0",
+      cgpa: "9.0",
       grade: "A+",
-      rank: "3rd in Class",
+      rank: "2nd in Class",
       totalCredits: 24,
       performanceTrend: "+4.2% from last term",
     },
@@ -91,7 +91,7 @@ export const initialChildren = [
     mentorDesignation: "Faculty In-Charge",
     mentorMobile: "+91 98480 12345",
     mentorEmail: "anitha.rao@college.edu",
-    avatar: "https://ui-avatars.com/api/?name=Neha+K&background=10B981&color=fff&size=128",
+    avatar: "https://ui-avatars.com/api/?name=NK&background=10B981&color=fff&size=128",
     attendance: {
       overall: 88,
       presentDays: 11,
@@ -100,12 +100,12 @@ export const initialChildren = [
       status: "Good",
     },
     academics: {
-      sgpa: "8.5",
-      cgpa: "8.6",
-      grade: "A",
-      rank: "5th in Class",
+      sgpa: "9.4",
+      cgpa: "9.4",
+      grade: "A+",
+      rank: "1st in Class",
       totalCredits: 24,
-      performanceTrend: "+3.1% from last term",
+      performanceTrend: "+5.2% from last term",
     },
     fees: {
       total: 70000,
@@ -291,7 +291,7 @@ export const useParentPortal = () => {
 // ==========================================================================
 
 export const subjectAttendanceData = {
-  "860": [
+    "860": [
     { code: "MAT1A", subject: "Mathematics IA", faculty: "Dr. Anitha Rao", total: 25, present: 24, absent: 1, percentage: 96, status: "Excellent" },
     { code: "PHY1", subject: "Physics", faculty: "Mr. Suresh Kumar", total: 25, present: 23, absent: 2, percentage: 92, status: "Good" },
     { code: "CHE1", subject: "Chemistry", faculty: "Mrs. Lakshmi Devi", total: 20, present: 19, absent: 1, percentage: 95, status: "Excellent" },
@@ -422,7 +422,7 @@ export const recentAttendanceLogs = {
 // ==========================================================================
 
 export const academicSubjectsData = {
-  "860": [
+    "860": [
     { code: "MAT1A", name: "Mathematics IA", credits: 4, internals: "23 / 25", assignments: "9.5 / 10", attendance: "96%", grade: "A+", faculty: "Dr. Anitha Rao", status: "High Performer" },
     { code: "PHY1", name: "Physics", credits: 4, internals: "21 / 25", assignments: "8.5 / 10", attendance: "92%", grade: "A", faculty: "Mr. Suresh Kumar", status: "Good" },
     { code: "CHE1", name: "Chemistry", credits: 4, internals: "22 / 25", assignments: "9.0 / 10", attendance: "95%", grade: "A+", faculty: "Mrs. Lakshmi Devi", status: "Consistent" },
@@ -506,7 +506,7 @@ export const academicSubjectsData = {
 };
 
 export const examResultsData = {
-  "860": [
+    "860": [
     {
       examName: "Quarterly Examination 2026",
       period: "Sep 2026",
@@ -1187,7 +1187,7 @@ export const saveStoredFeeRecords = (records) => {
 // ==========================================================================
 
 export const timetableData = {
-  "860": [
+    "860": [
     { period: "Period 1", time: "09:00 - 10:00 AM", mon: "Mathematics IA (Room 203)", tue: "Physics (Room 203)", wed: "Chemistry (Room 203)", thu: "Mathematics IA (Room 203)", fri: "Computer Science (Lab 1)", sat: "Mathematics IA (Room 203)" },
     { period: "Period 2", time: "10:00 - 11:00 AM", mon: "Physics (Room 203)", tue: "Mathematics IA (Room 203)", wed: "English (Room 203)", thu: "Computer Science (Lab 1)", fri: "Physics (Room 203)", sat: "Chemistry (Room 203)" },
     { period: "Break", time: "11:00 - 11:15 AM", mon: "Short Break", tue: "Short Break", wed: "Short Break", thu: "Short Break", fri: "Short Break", sat: "Short Break", isBreak: true },

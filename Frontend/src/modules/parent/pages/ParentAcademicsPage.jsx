@@ -65,12 +65,12 @@ export default function ParentAcademicsPage() {
     if (curriculumSubjects && curriculumSubjects.length > 0) {
       return curriculumSubjects;
     }
-    return academicSubjectsData[activeChildId] || academicSubjectsData["860"] || [];
+    return academicSubjectsData[activeChildId] || [];
   }, [curriculumSubjects, activeChildId]);
 
   const rawResults = (contextResults && contextResults.length > 0)
     ? contextResults
-    : (examResultsData[activeChildId] || examResultsData["860"] || []);
+    : (examResultsData[activeChildId] || []);
   const yearResults = rawResults.filter((r) => r.academicYear === currentAcademicYear || !r.academicYear);
   const currentExam = (selectedResult && (selectedResult.academicYear === currentAcademicYear || !selectedResult.academicYear))
     ? selectedResult
@@ -81,19 +81,30 @@ export default function ParentAcademicsPage() {
     if (currentExam?.examinationId && fetchExamMemo) {
       fetchExamMemo(currentExam.examinationId);
     }
-  }, [currentExam?.examinationId, fetchExamMemo]);
+  }, [currentExam?.examinationId, fetchExamMemo, activeChildId]);
 
   const activeMemo = currentExam?.examinationId ? memoMap?.[`${child?.id}_${currentExam.examinationId}`] : null;
-  const currentExamEffective = useMemo(() => {
+    const currentExamEffective = useMemo(() => {
     if (!currentExam) return null;
+    const baseRank = currentExam.classRank && currentExam.classRank !== "—" ? currentExam.classRank : (child?.academics?.rank || "—");
     if (activeMemo && Array.isArray(activeMemo.subjects) && activeMemo.subjects.length > 0) {
       return {
         ...currentExam,
         subjects: transformMemoSubjects(activeMemo),
+        obtainedMarks: activeMemo.totalMarks ?? currentExam.obtainedMarks,
+        maxMarks: activeMemo.maxTotalMarks ?? currentExam.maxMarks,
+        percentage: typeof activeMemo.percentage === "number" ? `${activeMemo.percentage}%` : (activeMemo.percentage || currentExam.percentage),
+        sgpa: activeMemo.sgpa || (typeof activeMemo.percentage === "number" ? (activeMemo.percentage / 10).toFixed(1) : currentExam.sgpa),
+        grade: activeMemo.grade || currentExam.grade,
+        resultStatus: activeMemo.resultStatus || currentExam.resultStatus,
+        classRank: activeMemo.rank ? `#${activeMemo.rank}` : baseRank,
       };
     }
-    return currentExam;
-  }, [currentExam, activeMemo]);
+    return {
+      ...currentExam,
+      classRank: baseRank,
+    };
+  }, [currentExam, activeMemo, child?.academics?.rank]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -294,8 +305,8 @@ export default function ParentAcademicsPage() {
                 >
                   {yearResults.length > 0 ? (
                     <optgroup label={`Academic Year (${currentAcademicYear}) Examinations`}>
-                      {yearResults.map((res) => (
-                        <option key={res.examName} value={res.examName}>
+                      {yearResults.map((res, idx) => (
+                        <option key={`${res.resultId || res.examinationId || res.examCode || res.examName}-${idx}`} value={res.examName}>
                           {res.examName} ({res.period})
                         </option>
                       ))}
@@ -370,10 +381,10 @@ export default function ParentAcademicsPage() {
                       </thead>
                       <tbody>
                         {(currentExamEffective.subjects || []).length > 0 ? (
-                          (currentExamEffective.subjects || []).map((sub) => {
+                          (currentExamEffective.subjects || []).map((sub, idx) => {
                             const subPercent = sub.max ? ((sub.obtained / sub.max) * 100).toFixed(1) : 0;
                             return (
-                              <tr key={sub.code}>
+                              <tr key={sub.subjectId ? `stmt-${sub.subjectId}-${idx}` : `${sub.code || 'sub'}-${idx}`}>
                                 <td>
                                   <strong>{sub.subject}</strong>
                                   <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>Code: {sub.code}</div>
@@ -472,8 +483,8 @@ export default function ParentAcademicsPage() {
                         </td>
                       </tr>
                     ) : (
-                      subjects.map((sub) => (
-                      <tr key={sub.code}>
+                      subjects.map((sub, sIdx) => (
+                      <tr key={sub.id || sub.subjectId ? `sub-${sub.id || sub.subjectId}-${sIdx}` : `${sub.code || 'sub'}-${sIdx}`}>
                         <td>
                           <strong>{sub.name}</strong>
                           <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>Code: {sub.code}</div>
@@ -580,8 +591,8 @@ export default function ParentAcademicsPage() {
                 <div className="parent-meta-item"><span>Roll Number:</span> <strong>{child.roll}</strong></div>
                 <div className="parent-meta-item"><span>Academic Year:</span> <strong>{currentExam.academicYear || child.academicYear}</strong></div>
                 <div className="parent-meta-item"><span>Course:</span> <strong>{child.programme}</strong></div>
-                <div className="parent-meta-item"><span>Class Rank:</span> <strong>{currentExam.classRank}</strong></div>
-                <div className="parent-meta-item"><span>SGPA:</span> <strong>{currentExam.sgpa} / 10.0</strong></div>
+                <div className="parent-meta-item"><span>Class Rank:</span> <strong>{currentExamEffective.classRank || currentExam.classRank || child?.academics?.rank || "—"}</strong></div>
+                <div className="parent-meta-item"><span>SGPA:</span> <strong>{currentExamEffective.sgpa || currentExam.sgpa} / 10.0</strong></div>
               </div>
 
               <table className="parent-receipt-table">
@@ -596,8 +607,8 @@ export default function ParentAcademicsPage() {
                 </thead>
                 <tbody>
                   {(currentExamEffective.subjects || []).length > 0 ? (
-                    (currentExamEffective.subjects || []).map((s) => (
-                      <tr key={s.code}>
+                    (currentExamEffective.subjects || []).map((s, idx) => (
+                      <tr key={s.subjectId ? `memo-sub-${s.subjectId}-${idx}` : `${s.code || 'sub'}-${idx}`}>
                         <td><strong>{s.subject}</strong> ({s.code})</td>
                         <td>{s.max}</td>
                         <td><strong>{s.obtained}</strong></td>

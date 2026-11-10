@@ -386,7 +386,7 @@ export default function ParentDashboard() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {subjects.length > 0 ? (
                     subjects.slice(0, 4).map((sub, idx) => (
-                      <div key={sub.subjectId ?? sub.code ?? idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                      <div key={sub.subjectId ? `dash-sub-${sub.subjectId}-${idx}` : `${sub.code || "sub"}-${idx}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
                         <div>
                           <strong>{sub.subject}</strong>
                           <span style={{ fontSize: 12, color: "var(--cms-muted)", marginLeft: 6 }}>({sub.present}/{sub.total} classes)</span>
@@ -536,8 +536,8 @@ export default function ParentDashboard() {
               </div>
               <div className="parent-card-body">
                 <div className="parent-list-stack">
-                  {exams.slice(0, 3).map((ex) => (
-                    <div key={ex.id} className="parent-list-row">
+                  {exams.slice(0, 3).map((ex, idx) => (
+                    <div key={ex.id ? `exam-${ex.id}-${idx}` : `ex-${idx}`} className="parent-list-row">
                       <div className="parent-list-info" style={{ minWidth: 0 }}>
                         <h4 style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ex.subject} ({ex.code})</h4>
                         <p>{ex.date} • {ex.time}</p>
@@ -799,8 +799,8 @@ export default function ParentDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {exams.map((ex) => (
-                    <tr key={ex.id}>
+                  {exams.map((ex, idx) => (
+                    <tr key={ex.id ? `ht-${ex.id}-${idx}` : `ht-${idx}`}>
                       <td>{ex.date}</td>
                       <td>{ex.time}</td>
                       <td><strong>{ex.subject}</strong> ({ex.code})</td>

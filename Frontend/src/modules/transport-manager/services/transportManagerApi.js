@@ -5,6 +5,7 @@
 
 import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getAllTransportPages } from "@/modules/admin/AdminTransport/transportContext.js";
 
 const extractList = (data) => {
   let payload = data;
@@ -18,17 +19,6 @@ const extractList = (data) => {
     payload = nested;
   }
   return [];
-};
-
-export const getTransportDashboardStats = async (params = {}) => {
-  try {
-    const res = await apiClient.get(apiEndpoints.transport.dashboard, { params });
-    const payload = res.data?.data ?? res.data ?? {};
-    return payload.summary || payload;
-  } catch (error) {
-    console.warn("Transport dashboard summary failed:", error);
-    return null;
-  }
 };
 
 export const getTransportLookups = async (params = {}) => {
@@ -72,8 +62,9 @@ export const getPickupPoints = async (params = {}) => {
 
 export const getAttendants = async (params = {}) => {
   try {
-    const res = await apiClient.get(apiEndpoints.transport.attendants, { params: { PageNumber: 1, PageSize: 1000, ...params } });
-    return extractList(res.data?.data ?? res.data);
+    // This lookup returns the selectable attendant rows directly; it is not a paged master response.
+    const res = await apiClient.get(apiEndpoints.transport.lookups.attendants, { params });
+    return extractList(res.data);
   } catch (error) {
     console.warn("Transport attendants fetch failed:", error);
     return [];

@@ -13,7 +13,6 @@ import { getDrivers } from "./services/transportDriverManagementApi.js";
 import { getVehicleAssignments } from "./services/transportAssignmentApi.js";
 import { getMaintenanceRecords } from "./services/transportMaintenanceApi.js";
 import {
-  getTransportDashboardStats,
   getRoutes,
   getPickupPoints,
   getAttendants,
@@ -449,6 +448,7 @@ export function TransportManagerProvider({ children }) {
   // Scope filter helper
   const filterByScope = useCallback((list) => {
     if (!Array.isArray(list)) return [];
+    return list;
     return list.filter((item) => {
       if (!item) return false;
       const cId = item.campusId ?? item.CampusId;
@@ -480,6 +480,7 @@ export function TransportManagerProvider({ children }) {
   // with unrelated or stale academic metadata remains available to transport.
   const filterDriversByCampus = useCallback((list) => {
     if (!Array.isArray(list)) return [];
+    return list;
     return list.filter((item) => {
       if (!item) return false;
       const campusId = item.campusId ?? item.CampusId;
@@ -502,7 +503,7 @@ export function TransportManagerProvider({ children }) {
   // Fetch transport entities strictly using user's profile campus, board & academic year
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
+    setLoading(false);
     setError(null);
 
     const loadData = async () => {
@@ -521,7 +522,6 @@ export function TransportManagerProvider({ children }) {
           driversRes,
           assignmentsRes,
           maintenanceRes,
-          statsRes,
           routesRes,
           pickupsRes,
           attendantsRes,
@@ -536,10 +536,9 @@ export function TransportManagerProvider({ children }) {
           }),
           getVehicleAssignments(params),
           getMaintenanceRecords(params),
-          getTransportDashboardStats(params),
           getRoutes(params),
           getPickupPoints(params),
-          getAttendants(params),
+          getAttendants(),
           getTrips(params),
           getStudentAssignments(params),
         ]);
@@ -550,10 +549,9 @@ export function TransportManagerProvider({ children }) {
         if (driversRes.status === "fulfilled") setDrivers(filterDriversByCampus(driversRes.value));
         if (assignmentsRes.status === "fulfilled") setAssignments(filterByScope(assignmentsRes.value));
         if (maintenanceRes.status === "fulfilled") setMaintenance(filterByScope(maintenanceRes.value));
-        if (statsRes.status === "fulfilled") setDashboardMetrics(statsRes.value);
         if (routesRes.status === "fulfilled") setRoutes(filterByScope(routesRes.value));
         if (pickupsRes.status === "fulfilled") setPickupPoints(filterByScope(pickupsRes.value));
-        if (attendantsRes.status === "fulfilled") setAttendants(filterByScope(attendantsRes.value));
+        if (attendantsRes.status === "fulfilled") setAttendants(attendantsRes.value);
         if (tripsRes.status === "fulfilled") setTrips(filterByScope(tripsRes.value));
         if (studentsRes.status === "fulfilled") setStudentAssignments(filterByScope(studentsRes.value));
       } catch (err) {
@@ -565,7 +563,7 @@ export function TransportManagerProvider({ children }) {
       }
     };
 
-    loadData();
+    // loadData(); // Handled directly in TransportManagerModuleView to avoid duplicate requests
 
     return () => {
       isMounted = false;

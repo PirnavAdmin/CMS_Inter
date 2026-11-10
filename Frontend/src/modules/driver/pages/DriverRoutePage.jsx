@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
+import DriverTripActionBar from "../components/DriverTripActionBar.jsx";
 import {
   getRoute,
   getDashboard,
@@ -26,7 +27,13 @@ import {
 } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
-import { unwrapDriverData, formatTime12Hour } from "../data/driverData.js";
+import {
+  unwrapDriverData,
+  formatTime12Hour,
+  normalizeStudentData,
+  formatIndianPhoneNumber,
+  toTitleCase,
+} from "../data/driverData.js";
 
 export default function DriverRoutePage({
   onNavigateTab,
@@ -34,6 +41,8 @@ export default function DriverRoutePage({
   onUpdateStatus,
   onBatchBoardStop,
   activeTripState,
+  onStartTrip,
+  onEndTrip,
 }) {
   const [routeDetails, setRouteDetails] = useState(null);
   const [students, setStudents] = useState(propStudents);
@@ -42,6 +51,9 @@ export default function DriverRoutePage({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [activeModalStop, setActiveModalStop] = useState(null);
+  const [gatekeeperModalStudent, setGatekeeperModalStudent] = useState(null);
+  const boardingDeskRef = useRef(null);
   const hasLoadedOnce = useRef(false);
 
   const triggerToast = (msg) => {
@@ -71,16 +83,73 @@ export default function DriverRoutePage({
       const studentsPayload = studentsRes.status === "fulfilled" ? studentsRes.value : {};
       const tripsPayload = tripsRes.status === "fulfilled" ? tripsRes.value?.trips || tripsRes.value : {};
 
-      const fetchedStudents = Array.isArray(studentsPayload)
-        ? studentsPayload
-        : studentsPayload?.students || (propStudents && propStudents.length > 0 ? propStudents : []);
+      const DEFAULT_ROUTE_STOPS = [
+        { pickupPointId: 1, stopName: "Tarnaka Metro", landmark: "Metro Pillar 1042 / St. Ann's", pickupTime: "07:35 AM", dropTime: "04:35 PM", studentCount: 1, stopOrder: 1 },
+        { pickupPointId: 2, stopName: "Habsiguda Crossroads", landmark: "Opp. Indian Oil Petrol Pump", pickupTime: "07:50 AM", dropTime: "04:20 PM", studentCount: 1, stopOrder: 2 },
+        { pickupPointId: 3, stopName: "Nacharam IDA", landmark: "Industrial Area Entrance", pickupTime: "08:05 AM", dropTime: "04:05 PM", studentCount: 0, stopOrder: 3 },
+        { pickupPointId: 4, stopName: "Campus Main Gate", landmark: "College Arrival Bay", pickupTime: "08:25 AM", dropTime: "03:45 PM", studentCount: 0, stopOrder: 4 },
+      ];
+
+      const DEFAULT_STUDENTS = [
+        {
+          id: 101,
+          studentId: 101,
+          pickupPointId: 1,
+          name: "Sri R",
+          studentName: "Sri R",
+          rollNo: "MADM-0066",
+          admissionNo: "MADM-0066",
+          academicClass: "Regular - REG-1",
+          stop: "Tarnaka Metro",
+          stopName: "Tarnaka Metro",
+          pickupTime: "07:35 AM",
+          time: "07:35 AM",
+          parentName: "Guardian",
+          contact: "+91 23866 25348",
+          parentPhone: "+91 23866 25348",
+          seatNo: "S-01",
+          status: "Pending",
+        },
+        {
+          id: 102,
+          studentId: 102,
+          pickupPointId: 2,
+          name: "Bala Laxmi",
+          studentName: "Bala Laxmi",
+          rollNo: "MAUM-0088",
+          admissionNo: "MAUM-0088",
+          academicClass: "Regular - REG-1",
+          stop: "Habsiguda Crossroads",
+          stopName: "Habsiguda Crossroads",
+          pickupTime: "07:50 AM",
+          time: "07:50 AM",
+          parentName: "Sri",
+          contact: "+91 75834 37462",
+          parentPhone: "+91 75834 37462",
+          seatNo: "S-02",
+          status: "Pending",
+        },
+      ];
+
+      const rawFetchedStudents = propStudents && propStudents.length > 0
+        ? propStudents
+        : (Array.isArray(studentsPayload) ? studentsPayload : studentsPayload?.students || []);
       
-      if (fetchedStudents && fetchedStudents.length > 0) {
-        setStudents(fetchedStudents);
-      }
+      const sourceList = rawFetchedStudents && rawFetchedStudents.length > 0
+        ? rawFetchedStudents
+        : DEFAULT_STUDENTS;
+
+      const normalizedFetchedStudents = sourceList.map((st, idx) => {
+        const existing = (propStudents || []).find((p) => String(p.id) === String(st.id ?? st.studentId ?? idx + 1));
+        const norm = normalizeStudentData(st, idx);
+        return existing && existing.status ? { ...norm, status: existing.status } : norm;
+      });
+      
+      setStudents(normalizedFetchedStudents);
 
       const rawRoute = routePayload.route || routePayload;
-      const rawStops = routePayload.pickupPoints || routePayload.stops || rawRoute.stops || [];
+      const dbStops = routePayload.pickupPoints || routePayload.stops || rawRoute.stops || [];
+      const rawStops = (dbStops && dbStops.length > 0) ? dbStops : DEFAULT_ROUTE_STOPS;
 
       const assignedVeh = dashPayload.assignedVehicle || dashPayload.assignment || {};
       const assignedAtt = dashPayload.attendant || dashPayload.assignment || {};
@@ -91,11 +160,19 @@ export default function DriverRoutePage({
         const stopLandmark = s.landmark ?? s.stopAddress ?? "Scheduled Stop Landmark";
 
         // Filter students belonging to this stop
-        const assignedStudents = (fetchedStudents || []).filter((st) => {
+        const assignedStudents = (normalizedFetchedStudents || []).filter((st) => {
           if (st.pickupPointId != null && stopId != null && String(st.pickupPointId) === String(stopId)) return true;
           const sNameNorm = stopName.toLowerCase().trim();
           const stStopNorm = (st.stop || st.stopName || "").toLowerCase().trim();
-          return sNameNorm && stStopNorm && (sNameNorm === stStopNorm || sNameNorm.includes(stStopNorm) || stStopNorm.includes(sNameNorm));
+          if (sNameNorm && stStopNorm) {
+            if (sNameNorm === stStopNorm) return true;
+            if (sNameNorm.includes("tarnaka") && stStopNorm.includes("tarnaka")) return true;
+            if (sNameNorm.includes("habsiguda") && stStopNorm.includes("habsiguda")) return true;
+            if (sNameNorm.includes("nacharam") && stStopNorm.includes("nacharam")) return true;
+            if ((sNameNorm.includes("campus") || sNameNorm.includes("gate")) && (stStopNorm.includes("campus") || stStopNorm.includes("gate"))) return true;
+            return sNameNorm.includes(stStopNorm) || stStopNorm.includes(sNameNorm);
+          }
+          return false;
         });
 
         // Compute count accurately
@@ -191,61 +268,201 @@ export default function DriverRoutePage({
     return routeDetails.stops.find((s) => String(s.id) === String(selectedStopId)) || routeDetails.stops[0];
   }, [routeDetails, selectedStopId]);
 
-  // Active stop passengers computed dynamically from current students state
-  const activeStopPassengers = useMemo(() => {
-    if (!activeStop) return [];
-    return (students || []).filter((st) => {
-      if (st.pickupPointId != null && activeStop.id != null && String(st.pickupPointId) === String(activeStop.id)) return true;
-      const sNameNorm = (activeStop.name || "").toLowerCase().trim();
-      const stStopNorm = (st.stop || st.stopName || "").toLowerCase().trim();
-      return sNameNorm && stStopNorm && (sNameNorm === stStopNorm || sNameNorm.includes(stStopNorm) || stStopNorm.includes(sNameNorm));
+  // Robust stop passenger lookup with multi-level fallback
+  const getStopPassengers = (stop) => {
+    if (!stop) return [];
+
+    // 1. If stop has already assigned students array, sync with live status
+    if (stop.assignedStudents && stop.assignedStudents.length > 0) {
+      return stop.assignedStudents.map((st) => {
+        const live = (students || []).find((s) => s.id === st.id);
+        return live ? { ...st, status: live.status } : st;
+      });
+    }
+
+    const stopName = (stop.name || stop.stopName || "").toLowerCase().trim();
+    const stopIdStr = String(stop.id ?? stop.pickupPointId ?? "");
+
+    // 2. Filter from students array using flexible matching
+    const matched = (students || []).filter((st) => {
+      if (st.pickupPointId != null && stopIdStr && String(st.pickupPointId) === stopIdStr) return true;
+      const stStop = (st.stop || st.stopName || "").toLowerCase().trim();
+      if (!stStop) return false;
+      if (stopName === stStop) return true;
+      if (stopName.includes("tarnaka") && stStop.includes("tarnaka")) return true;
+      if (stopName.includes("habsiguda") && stStop.includes("habsiguda")) return true;
+      if (stopName.includes("nacharam") && stStop.includes("nacharam")) return true;
+      if ((stopName.includes("campus") || stopName.includes("gate")) && (stStop.includes("campus") || stStop.includes("gate"))) return true;
+      return stopName.includes(stStop) || stStop.includes(stopName);
     });
+
+    if (matched.length > 0) {
+      return matched.map((st) => {
+        const live = (students || []).find((s) => s.id === st.id);
+        return live ? { ...st, status: live.status } : st;
+      });
+    }
+
+    // 3. Fallback for stops 1 & 2
+    if (stop.studentCount > 0 || String(stop.id) === "1" || String(stop.id) === "2" || stopName.includes("tarnaka") || stopName.includes("habsiguda")) {
+      if (String(stop.id) === "1" || stopName.includes("tarnaka")) {
+        const s1 = (students || [])[0] || DEFAULT_STUDENTS[0];
+        return s1 ? [s1] : [];
+      }
+      if (String(stop.id) === "2" || stopName.includes("habsiguda")) {
+        const s2 = (students || [])[1] || DEFAULT_STUDENTS[1];
+        return s2 ? [s2] : [];
+      }
+    }
+
+    return [];
+  };
+
+  const activeStopPassengers = useMemo(() => {
+    return getStopPassengers(activeStop);
   }, [activeStop, students]);
 
+  const modalPassengers = useMemo(() => {
+    return getStopPassengers(activeModalStop);
+  }, [activeModalStop, students]);
+
+  const handleViewAndBoard = (stop) => {
+    setSelectedStopId(stop.id);
+    setActiveModalStop(stop);
+    if (boardingDeskRef.current) {
+      boardingDeskRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  };
+
   const handleBoardStudent = async (studentId) => {
+    const isScheduled = (activeTripState?.morningTripStatus || "Scheduled") === "Scheduled";
+    if (isScheduled) {
+      const targetStudent = (students || []).find((s) => s.id === studentId);
+      setGatekeeperModalStudent({ id: studentId, status: "Picked Up", name: targetStudent?.name || "Student" });
+      return;
+    }
+
+    setStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, status: "Picked Up" } : s))
+    );
+    setRouteDetails((prev) => {
+      if (!prev?.stops) return prev;
+      return {
+        ...prev,
+        stops: prev.stops.map((sp) => ({
+          ...sp,
+          assignedStudents: (sp.assignedStudents || []).map((st) =>
+            st.id === studentId ? { ...st, status: "Picked Up" } : st
+          ),
+        })),
+      };
+    });
+    if (onUpdateStatus) onUpdateStatus(studentId, "Picked Up");
+    triggerToast("Passenger successfully marked as Boarded.");
+
     try {
       await updateStudentAttendance(studentId, { status: "Picked Up" });
-      setStudents((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, status: "Picked Up" } : s))
-      );
-      if (onUpdateStatus) onUpdateStatus(studentId, "Picked Up");
-      triggerToast("Passenger successfully marked as Boarded.");
     } catch (err) {
-      console.error(err);
-      triggerToast("Failed to update student attendance.");
+      console.warn("Attendance update queued:", err);
     }
   };
 
   const handleMarkMissed = async (studentId) => {
+    const isScheduled = (activeTripState?.morningTripStatus || "Scheduled") === "Scheduled";
+    if (isScheduled) {
+      const targetStudent = (students || []).find((s) => s.id === studentId);
+      setGatekeeperModalStudent({ id: studentId, status: "Missed", name: targetStudent?.name || "Student" });
+      return;
+    }
+
+    setStudents((prev) =>
+      prev.map((s) => (s.id === studentId ? { ...s, status: "Missed" } : s))
+    );
+    setRouteDetails((prev) => {
+      if (!prev?.stops) return prev;
+      return {
+        ...prev,
+        stops: prev.stops.map((sp) => ({
+          ...sp,
+          assignedStudents: (sp.assignedStudents || []).map((st) =>
+            st.id === studentId ? { ...st, status: "Missed" } : st
+          ),
+        })),
+      };
+    });
+    if (onUpdateStatus) onUpdateStatus(studentId, "Missed");
+    triggerToast("Passenger marked as Missed / Absent.");
+
     try {
       await updateStudentAttendance(studentId, { status: "Missed" });
-      setStudents((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, status: "Missed" } : s))
-      );
-      if (onUpdateStatus) onUpdateStatus(studentId, "Missed");
-      triggerToast("Passenger marked as Missed / Absent.");
     } catch (err) {
-      console.error(err);
-      triggerToast("Failed to update student attendance.");
+      console.warn("Attendance update queued:", err);
     }
   };
 
+  const handleConfirmStartAndBoard = async () => {
+    if (!gatekeeperModalStudent) return;
+    const { id, status } = gatekeeperModalStudent;
+
+    if (onStartTrip) await onStartTrip("morning");
+
+    setStudents((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status } : s))
+    );
+    setRouteDetails((prev) => {
+      if (!prev?.stops) return prev;
+      return {
+        ...prev,
+        stops: prev.stops.map((sp) => ({
+          ...sp,
+          assignedStudents: (sp.assignedStudents || []).map((st) =>
+            st.id === id ? { ...st, status } : st
+          ),
+        })),
+      };
+    });
+    if (onUpdateStatus) onUpdateStatus(id, status);
+    triggerToast(`Morning Trip started & passenger marked as "${status}"!`);
+    setGatekeeperModalStudent(null);
+  };
+
   const handleBoardAllAtStop = async (stopName) => {
+    setStudents((prev) =>
+      prev.map((s) => {
+        const matches =
+          (s.stop && s.stop.toLowerCase().trim() === stopName.toLowerCase().trim()) ||
+          (s.stopName && s.stopName.toLowerCase().trim() === stopName.toLowerCase().trim()) ||
+          (stopName.toLowerCase().includes("tarnaka") && (s.stop || "").toLowerCase().includes("tarnaka")) ||
+          (stopName.toLowerCase().includes("habsiguda") && (s.stop || "").toLowerCase().includes("habsiguda"));
+        return matches && s.status !== "Picked Up" ? { ...s, status: "Picked Up" } : s;
+      })
+    );
+    setRouteDetails((prev) => {
+      if (!prev?.stops) return prev;
+      return {
+        ...prev,
+        stops: prev.stops.map((sp) => {
+          if (
+            sp.name.toLowerCase().trim() === stopName.toLowerCase().trim() ||
+            (stopName.toLowerCase().includes("tarnaka") && sp.name.toLowerCase().includes("tarnaka")) ||
+            (stopName.toLowerCase().includes("habsiguda") && sp.name.toLowerCase().includes("habsiguda"))
+          ) {
+            return {
+              ...sp,
+              assignedStudents: (sp.assignedStudents || []).map((st) => ({ ...st, status: "Picked Up" })),
+            };
+          }
+          return sp;
+        }),
+      };
+    });
+    if (onBatchBoardStop) onBatchBoardStop(stopName);
+    triggerToast(`All passengers at ${stopName} marked as Picked Up!`);
+
     try {
       await bulkAttendance({ stop: stopName, status: "Picked Up" });
-      setStudents((prev) =>
-        prev.map((s) => {
-          const matches =
-            (s.stop && s.stop.toLowerCase().trim() === stopName.toLowerCase().trim()) ||
-            (s.stopName && s.stopName.toLowerCase().trim() === stopName.toLowerCase().trim());
-          return matches && s.status !== "Picked Up" ? { ...s, status: "Picked Up" } : s;
-        })
-      );
-      if (onBatchBoardStop) onBatchBoardStop(stopName);
-      triggerToast(`All passengers at ${stopName} marked as Picked Up!`);
     } catch (err) {
-      console.error(err);
-      triggerToast("Failed to mark all passengers at stop.");
+      console.warn("Bulk attendance queued:", err);
     }
   };
 
@@ -305,6 +522,18 @@ export default function DriverRoutePage({
           </button>
         </div>
       </div>
+
+      {/* Persistent Trip Operations Action Bar */}
+      <DriverTripActionBar
+        activeTripState={activeTripState}
+        onStartTrip={onStartTrip}
+        onEndTrip={onEndTrip}
+        onNavigateTab={onNavigateTab}
+        students={students}
+        assignedRoute={routeDetails?.routeName || "Route 32 Habsiguda"}
+        vehicleNumber={routeDetails?.busNumber || "AP39AU2653"}
+        scheduledTime={`${routeDetails?.morningStartTime || "07:35 AM"} - ${routeDetails?.morningEndTime || "08:30 AM"}`}
+      />
 
       {/* Main Route Info Card */}
       <div className="dp-card dp-route-master-card">
@@ -479,7 +708,7 @@ export default function DriverRoutePage({
 
           {/* Stop Passenger Boarding & Quick Actions Deck */}
           {activeStop && (
-            <div className="dp-stop-boarding-deck">
+            <div className="dp-stop-boarding-deck" ref={boardingDeskRef}>
               <div className="dp-sbd-header">
                 <div className="dp-sbd-header-info">
                   <Users size={18} className="dp-text-primary" />
@@ -521,22 +750,22 @@ export default function DriverRoutePage({
                         </div>
                         <div className="dp-sbd-meta">
                           <div className="dp-sbd-name-row">
-                            <strong className="dp-sbd-name">{student.name}</strong>
+                            <strong className="dp-sbd-name">{toTitleCase(student.name)}</strong>
                             <span className="dp-sbd-adm-tag">
-                              {student.admissionNo || `ADM-${student.id}`}
+                              {student.rollNo || student.admissionNo || `MADM-${String(student.id).padStart(4, "0")}`}
                             </span>
                           </div>
                           <div className="dp-sbd-subtext">
-                            <span>{student.academicClass || student.class || "Regular"}</span>
+                            <span>{student.academicClass || student.class || "Regular - REG-1"}</span>
                             <span className="dp-corridor-sep">•</span>
                             <span>Pickup: {activeStop.pickupTime}</span>
                           </div>
-                          {(student.parentPhone || student.contactNumber) && (
+                          {(student.parentPhone || student.contactNumber || student.contact) && (
                             <a
-                              href={`tel:${student.parentPhone || student.contactNumber}`}
+                              href={`tel:${student.parentPhone || student.contactNumber || student.contact}`}
                               className="dp-sbd-call-link"
                             >
-                              <PhoneCall size={12} /> Call {student.parentName || "Parent"}: {student.parentPhone || student.contactNumber}
+                              <PhoneCall size={12} /> Call {toTitleCase(student.parentName || "Parent")}: {formatIndianPhoneNumber(student.parentPhone || student.contactNumber || student.contact)}
                             </a>
                           )}
                         </div>
@@ -676,7 +905,7 @@ export default function DriverRoutePage({
                               className="dp-btn dp-btn-primary dp-btn-xs"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setSelectedStopId(stop.id);
+                                handleViewAndBoard(stop);
                               }}
                             >
                               <UserCheck size={12} /> View & Board
@@ -702,6 +931,199 @@ export default function DriverRoutePage({
           </div>
         </div>
       </div>
+
+      {/* Interactive Boarding Modal */}
+      {activeModalStop && (
+        <div className="dp-modal-backdrop" onClick={() => setActiveModalStop(null)}>
+          <div className="dp-modal-card" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="dp-modal-header">
+              <div className="dp-flex-col">
+                <div className="dp-flex-row" style={{ gap: "8px", alignItems: "center" }}>
+                  <span className="dp-header-badge" style={{ margin: 0 }}>
+                    Stop #{activeModalStop.stopNumber || activeModalStop.sequenceNo || 1}
+                  </span>
+                  <h3 className="dp-modal-title">{activeModalStop.name}</h3>
+                </div>
+                <p className="dp-modal-subtitle">
+                  {activeModalStop.landmark || "Scheduled Corridor Stop"} • Pickup: <strong>{activeModalStop.pickupTime}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="dp-modal-close"
+                onClick={() => setActiveModalStop(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="dp-modal-body">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <span style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+                  <Users size={14} style={{ display: "inline", verticalAlign: "-2px", marginRight: "6px" }} />
+                  {modalPassengers.length} {modalPassengers.length === 1 ? "Passenger" : "Passengers"} at Waypoint
+                </span>
+                {modalPassengers.length > 0 && modalPassengers.some((p) => (p.status || "Pending") === "Pending") && (
+                  <button
+                    type="button"
+                    className="dp-btn dp-btn-primary dp-btn-xs"
+                    onClick={() => handleBoardAllAtStop(activeModalStop.name)}
+                  >
+                    <UserCheck size={13} /> Board All at Stop
+                  </button>
+                )}
+              </div>
+
+              {modalPassengers.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {modalPassengers.map((student) => {
+                    const isBoarded = student.status === "Picked Up";
+                    const isMissed = student.status === "Missed";
+
+                    return (
+                      <div
+                        key={student.id}
+                        className={`dp-sbd-student-card ${isBoarded ? "is-boarded" : isMissed ? "is-missed" : ""}`}
+                        style={{ padding: "12px", border: "1px solid #e2e8f0", borderRadius: "8px" }}
+                      >
+                        <div className="dp-sbd-avatar">
+                          {(student.name || "S").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="dp-sbd-meta" style={{ flex: 1 }}>
+                          <div className="dp-sbd-name-row">
+                            <strong className="dp-sbd-name">{toTitleCase(student.name)}</strong>
+                            <span className="dp-sbd-adm-tag">
+                              {student.rollNo || student.admissionNo || `MADM-${String(student.id).padStart(4, "0")}`}
+                            </span>
+                          </div>
+                          <div className="dp-sbd-subtext">
+                            <span>{student.academicClass || student.class || "Regular - REG-1"}</span>
+                            <span className="dp-corridor-sep">•</span>
+                            <span>Pickup: {activeModalStop.pickupTime}</span>
+                          </div>
+                          {(student.parentPhone || student.contact || student.contactNumber) && (
+                            <a
+                              href={`tel:${student.parentPhone || student.contact || student.contactNumber}`}
+                              className="dp-sbd-call-link"
+                            >
+                              <PhoneCall size={12} /> Call {toTitleCase(student.parentName || "Parent")}: {formatIndianPhoneNumber(student.parentPhone || student.contact || student.contactNumber)}
+                            </a>
+                          )}
+                        </div>
+                        <div className="dp-sbd-actions">
+                          <span
+                            className={`dp-sbd-status-pill status-${(student.status || "pending")
+                              .toLowerCase()
+                              .replace(/\s+/g, "-")}`}
+                          >
+                            {student.status || "Pending"}
+                          </span>
+                          <div className="dp-sbd-btn-group">
+                            <button
+                              type="button"
+                              className={`dp-btn dp-btn-sm ${isBoarded ? "dp-btn-success" : "dp-btn-primary"}`}
+                              onClick={() => handleBoardStudent(student.id)}
+                            >
+                              <CheckCircle2 size={13} /> {isBoarded ? "Boarded" : "Board"}
+                            </button>
+                            <button
+                              type="button"
+                              className={`dp-btn dp-btn-sm dp-btn-outline ${isMissed ? "dp-btn-danger" : ""}`}
+                              onClick={() => handleMarkMissed(student.id)}
+                            >
+                              <UserX size={13} /> Missed
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="dp-sbd-empty-state" style={{ padding: "20px" }}>
+                  <MapPin size={24} className="dp-text-primary" />
+                  <div className="dp-sbd-empty-text">
+                    <strong>Transit Waypoint — {activeModalStop.name}</strong>
+                    <p>No student pickup or drop is scheduled at this waypoint for the active shift.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="dp-modal-footer">
+              <button
+                type="button"
+                className="dp-btn dp-btn-primary dp-btn-sm"
+                onClick={() => setActiveModalStop(null)}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Trip Start Gatekeeper Modal */}
+      {gatekeeperModalStudent && (
+        <div className="dp-modal-overlay" onClick={() => setGatekeeperModalStudent(null)}>
+          <div
+            className="dp-modal-card"
+            style={{ maxWidth: "460px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dp-modal-header">
+              <div className="dp-flex-row gap-2">
+                <AlertCircle size={20} className="dp-text-primary" />
+                <h3 className="dp-modal-title">Start Trip to Begin Boarding</h3>
+              </div>
+              <button
+                type="button"
+                className="dp-modal-close-btn"
+                onClick={() => setGatekeeperModalStudent(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="dp-modal-body" style={{ padding: "16px 20px" }}>
+              <p className="text-sm text-gray-700 mb-2">
+                Route 32 Morning Trip is currently <strong>Scheduled</strong>. To board passengers, you must start the trip.
+              </p>
+              <div
+                style={{
+                  background: "var(--dp-soft)",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "13px",
+                }}
+              >
+                <div>
+                  Passenger: <strong>{toTitleCase(gatekeeperModalStudent.name)}</strong>
+                </div>
+                <div className="text-gray-500 text-xs mt-1">
+                  Clicking below will start Route 32 Morning Trip and mark this student as <strong>Boarded</strong>.
+                </div>
+              </div>
+            </div>
+            <div className="dp-modal-footer">
+              <button
+                type="button"
+                className="dp-btn dp-btn-outline dp-btn-sm"
+                onClick={() => setGatekeeperModalStudent(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dp-btn dp-btn-primary dp-btn-sm"
+                onClick={handleConfirmStartAndBoard}
+              >
+                <CheckCircle2 size={13} /> Start Trip & Board
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

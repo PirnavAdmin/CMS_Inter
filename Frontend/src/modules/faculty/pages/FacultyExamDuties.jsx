@@ -47,7 +47,7 @@ function getFacultyStaffId(context) {
       // ignore
     }
   }
-  return 1108; // Active staff Tanjiro Kamado
+  return null;
 }
 
 export default function FacultyExamDuties() {
