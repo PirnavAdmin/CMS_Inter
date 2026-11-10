@@ -1546,6 +1546,8 @@
 .att-student-summary .att-summary-copy { gap: 3px; }
 .att-student-summary .att-summary-copy > span { font-size: 12px; }
 .att-student-summary .att-summary-copy > b { font-size: 21px; }
+.att-student-summary .att-summary-copy > span { color: var(--cms-text); }
+.att-student-summary .att-summary-copy > b { color: var(--cms-text); }
 .att-student-summary .att-summary-present { --attendance-summary-accent: #2783d8; }
 .att-student-summary .att-summary-absent { --attendance-summary-accent: #dc4b5b; }
 .att-student-summary .att-summary-leave { --attendance-summary-accent: #dd8a14; }

@@ -79,6 +79,9 @@ namespace CollegeManagement.API.Services.Implementations
         public Task<GlobalUserDto?> GetUserDetailAsync(int userId) =>
             _repository.GetUserDetailAsync(userId);
 
+        public Task<bool> UpdateUserAsync(int userId, SuperAdminUpdateUserRequest request, string currentUserName) =>
+            _repository.UpdateUserAsync(userId, request);
+
         public Task<bool> UpdateUserStatusAsync(int userId, bool isActive, string currentUserName) =>
             _repository.UpdateUserStatusAsync(userId, isActive);
 

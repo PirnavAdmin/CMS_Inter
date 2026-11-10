@@ -329,6 +329,8 @@ public class FeePaymentResponse
     public string ReceiptNumber { get; set; } = string.Empty;
     public string? Note { get; set; }
     public string? Remarks { get => Note; set => Note = value; }
+    public int? GatewayTransactionId { get; set; }
+    public string? GatewayStatus { get; set; }
 }
 
 public class FeeReceiptResponse

@@ -269,20 +269,21 @@ export const wardenMenu = [
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/blocks", label: "Hostel Blocks", icon: hostelManagementIcon },
       { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
       { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
       { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
       { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
-      { to: "/warden-dashboard/transfers", label: "Transfers & Vacate", icon: promotionIcon },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
     ],
   },
   {
-    section: "Residents & Reports",
+    section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
-      { to: "/warden-dashboard/wardens", label: "Resident Wardens", icon: staffIcon },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon },
+      { to: "/warden-dashboard/expenses", label: "Expenses & Reimbursements", icon: reimbursementIcon },
     ],
   },
 ];

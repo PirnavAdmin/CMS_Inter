@@ -196,6 +196,16 @@ export const apiEndpoints = {
     byGroup: (groupId) => `/api/v1/groups/${encodeURIComponent(groupId)}/programs`,
     mappedByGroup: (groupId) => `/api/v1/programs/group/${encodeURIComponent(groupId)}`,
   },
+  feeGateway: {
+    createOrder: "/api/v1/fee-payments/gateway/create-order",
+    verify: "/api/v1/fee-payments/gateway/verify",
+    status: (studentFeeId) => `/api/v1/fee-payments/gateway/status/${encodeURIComponent(studentFeeId)}`,
+    submitUtr: "/api/v1/fee-payments/gateway/submit-utr",
+    pendingUtrs: "/api/v1/fee-payments/gateway/pending-utrs",
+    approveUtr: "/api/v1/fee-payments/gateway/approve-utr",
+    exportLedger: "/api/v1/fee-payments/gateway/export-ledger",
+    reverse: "/api/v1/fee-payments/gateway/reverse",
+  },
   fee: {
     feeTypes: "/api/v1/fees/types",
     feeTypeById: (feeTypeId) => `/api/v1/fees/types/${encodeURIComponent(feeTypeId)}`,

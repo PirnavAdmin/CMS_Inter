@@ -1,0 +1,953 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   PaymentsInvoicesPage.css
+   Pixel-perfect match to user's uploaded mockups (Invoices & Payments tabs)
+   Pirnav CMS Green Theme
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.pip-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 24px 32px;
+  background: #f7faf7;
+  min-height: calc(100vh - 64px);
+  color: #1f2937;
+  box-sizing: border-box;
+}
+
+/* ── BREADCRUMB ── */
+.pip-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.pip-bc-sep {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.pip-bc-active {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+/* ── HEADER BANNER CARD ── */
+.pip-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #f2f8f3 0%, #e8f4ea 100%);
+  border: 1px solid rgba(40, 100, 51, 0.15);
+  border-radius: 16px;
+  padding: 16px 24px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(40, 100, 51, 0.04);
+}
+
+.pip-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 2;
+}
+
+.pip-header-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(40, 100, 51, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #286433;
+  box-shadow: 0 4px 12px rgba(40, 100, 51, 0.1);
+  flex-shrink: 0;
+}
+
+.pip-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.pip-header-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.pip-header-subtitle {
+  font-size: 12.5px;
+  color: #4b5563;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+/* Header Art SVG */
+.pip-header-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+/* ── TAB PILLS ROW ── */
+.pip-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pip-tab-btn {
+  padding: 8px 24px;
+  border-radius: 24px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.18s ease;
+  background: #ffffff;
+  color: #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pip-tab-btn:hover {
+  background: #f0f6f1;
+  color: #1e4529;
+}
+
+.pip-tab-btn.active {
+  background: #286433;
+  color: #ffffff;
+  border-color: #286433;
+  box-shadow: 0 4px 12px rgba(40, 100, 51, 0.25);
+}
+
+/* ── FILTERS BAR ── */
+.pip-filters-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #ffffff;
+  border: 1px solid #e2ece3;
+  border-radius: 14px;
+  padding: 10px 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.pip-filters-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+/* Search Box */
+.pip-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 7px 12px;
+  min-width: 280px;
+  max-width: 380px;
+  flex: 1;
+  transition: all 0.15s ease;
+}
+
+.pip-search-box:focus-within {
+  background: #ffffff;
+  border-color: #286433;
+  box-shadow: 0 0 0 2px rgba(40, 100, 51, 0.15);
+}
+
+.pip-search-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
+.pip-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12.5px;
+  color: #111827;
+  width: 100%;
+}
+
+.pip-search-input::placeholder {
+  color: #9ca3af;
+}
+
+/* Dropdowns */
+.pip-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pip-select {
+  appearance: none;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 7px 28px 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.pip-select:focus,
+.pip-select:hover {
+  border-color: #286433;
+}
+
+.pip-select-arrow {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: #6b7280;
+}
+
+/* Date Range Inputs */
+.pip-date-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.pip-date-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.pip-date-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+}
+
+/* Export Button */
+.pip-btn-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #286433;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 7px 18px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(40, 100, 51, 0.2);
+  flex-shrink: 0;
+}
+
+.pip-btn-export:hover {
+  background: #1e4529;
+  box-shadow: 0 4px 12px rgba(40, 100, 51, 0.3);
+}
+
+/* Reset Button */
+.pip-btn-reset {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pip-btn-reset:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+/* ── TABLE CARD ── */
+.pip-table-card {
+  background: #ffffff;
+  border: 1px solid #e2ece3;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.pip-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.pip-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12.5px;
+}
+
+.pip-table th {
+  background: #f4f8f4;
+  color: #286433;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e1ebe2;
+  white-space: nowrap;
+}
+
+.pip-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f1;
+  color: #374151;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.pip-table tr:hover td {
+  background: #f9fcf9;
+}
+
+/* Row Number */
+.pip-cell-num {
+  font-weight: 700;
+  color: #6b7280;
+  width: 40px;
+}
+
+/* Invoice / Txn Link */
+.pip-invoice-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #15803d;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.pip-invoice-link:hover {
+  color: #166534;
+  text-decoration: underline;
+}
+
+.pip-doc-icon {
+  color: #286433;
+}
+
+/* College Cell */
+.pip-college-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pip-college-icon {
+  color: #286433;
+  flex-shrink: 0;
+}
+
+/* Plan Badges */
+.pip-plan-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.pip-plan-enterprise {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #e9d5ff;
+}
+
+.pip-plan-professional,
+.pip-plan-premium {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.pip-plan-standard {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.pip-plan-basic {
+  background: #fef9c3;
+  color: #a16207;
+  border: 1px solid #fef08a;
+}
+
+.pip-plan-free {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+/* Amount Cell */
+.pip-cell-amount {
+  font-weight: 800;
+  color: #111827;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* Dates */
+.pip-cell-date {
+  color: #4b5563;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Payment Method */
+.pip-method-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Status Badges */
+.pip-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pip-status-paid {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.pip-status-pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.pip-status-overdue,
+.pip-status-failed {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+/* Actions Column */
+.pip-actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pip-action-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pip-action-icon-btn:hover {
+  background: #edf7ee;
+  border-color: #286433;
+  color: #286433;
+  transform: translateY(-1px);
+}
+
+/* Empty State */
+.pip-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.pip-empty-icon {
+  color: #9ca3af;
+  margin-bottom: 12px;
+}
+
+.pip-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.pip-empty-desc {
+  font-size: 12.5px;
+  color: #6b7280;
+}
+
+/* ── PAGINATION BAR ── */
+.pip-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: #ffffff;
+  border-top: 1px solid #edf2ed;
+  font-size: 12px;
+  color: #4b5563;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.pip-pagination-info {
+  font-weight: 600;
+  color: #374151;
+}
+
+.pip-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pip-rows-per-page {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pip-page-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pip-page-nav-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pip-page-nav-btn:hover:not(:disabled) {
+  background: #edf7ee;
+  border-color: #286433;
+  color: #286433;
+}
+
+.pip-page-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pip-page-num-btn {
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.pip-page-num-btn:hover {
+  background: #f0f6f1;
+  border-color: #286433;
+  color: #286433;
+}
+
+.pip-page-num-btn.active {
+  background: #286433;
+  border-color: #286433;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.pip-page-ellipsis {
+  padding: 0 4px;
+  color: #9ca3af;
+  font-weight: 700;
+}
+
+/* ── MODAL STYLING ── */
+.pip-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: pipFadeIn 0.15s ease-out;
+}
+
+@keyframes pipFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.pip-modal-card {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 580px;
+  max-width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  animation: pipSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes pipSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pip-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.pip-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pip-modal-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0;
+}
+
+.pip-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pip-modal-close-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.pip-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pip-invoice-paper {
+  background: #fbfdfb;
+  border: 1px solid #dcf0de;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.pip-invoice-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed #d1e7d4;
+}
+
+.pip-invoice-id {
+  font-size: 18px;
+  font-weight: 800;
+  color: #1e4529;
+}
+
+.pip-invoice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  font-size: 12.5px;
+}
+
+.pip-invoice-label {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pip-invoice-val {
+  font-weight: 700;
+  color: #111827;
+  margin-top: 2px;
+}
+
+.pip-invoice-breakdown {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e2ece3;
+}
+
+.pip-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.pip-breakdown-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0 0;
+  margin-top: 8px;
+  border-top: 1px solid #1e4529;
+  font-size: 15px;
+  font-weight: 800;
+  color: #1e4529;
+}
+
+.pip-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 0 0 16px 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE & THEME PALETTE OVERRIDES FOR PAYMENTS & INVOICES
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .pip-page-container {
+  background: var(--cms-bg, #0b1120) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-header-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .pip-header-icon-wrap {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-primary, #6ee7b7) !important;
+}
+
+[data-theme="dark"] .pip-header-title {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-header-subtitle {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn.active {
+  background: var(--cms-primary, #10b981) !important;
+  color: #ffffff !important;
+  border-color: var(--cms-primary, #10b981) !important;
+}
+
+[data-theme="dark"] .pip-filters-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-search-box {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+}
+
+[data-theme="dark"] .pip-search-input {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-search-input::placeholder {
+  color: var(--cms-muted, #64748b) !important;
+}
+
+[data-theme="dark"] .pip-select,
+[data-theme="dark"] .pip-date-input {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-reset-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-table-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .pip-table thead th {
+  background: rgba(15, 23, 42, 0.8) !important;
+  color: var(--cms-muted, #94a3b8) !important;
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-table tbody tr {
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.06)) !important;
+}
+
+[data-theme="dark"] .pip-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme="dark"] .pip-table tbody td {
+  color: var(--cms-text, #e2e8f0) !important;
+}
+
+[data-theme="dark"] .pip-cell-num {
+  color: var(--cms-muted, #64748b) !important;
+}
+
+[data-theme="dark"] .pip-college-cell span {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-cell-amount {
+  color: var(--cms-primary, #6ee7b7) !important;
+}
+
+[data-theme="dark"] .pip-cell-date {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-action-icon-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-text, #e2e8f0) !important;
+}
+
+[data-theme="dark"] .pip-action-icon-btn:hover {
+  background: var(--cms-primary, #10b981) !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .pip-modal-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-modal-header {
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-modal-header h3 {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-invoice-sheet,
+[data-theme="dark"] .pip-receipt-sheet {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-invoice-val,
+[data-theme="dark"] .pip-invoice-id {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-modal-footer {
+  background: var(--cms-surface, #1e293b) !important;
+  border-top-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+

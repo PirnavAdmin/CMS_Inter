@@ -2054,8 +2054,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             examinationId: examId,
             sectionId: sectionId,
             subjectId: config.subjectId,
-            facultyId: config.facultyId || ev?.facultyId || "1",
-            faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
+            facultyId: ev?.facultyId || config.facultyId || "1",
+            faculty: { name: ev?.facultyName || config.facultyName || "Assigned Faculty", code: ev?.facultyCode || config.facultyCode || "", employeeCode: ev?.facultyCode || config.facultyCode || "" },
+            facultyName: ev?.facultyName || config.facultyName || "Assigned Faculty",
+            facultyCode: ev?.facultyCode || config.facultyCode || "",
             subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
             status: evalStatus,
             mode: config.mode,
@@ -2407,8 +2409,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               examinationId: entryExamId,
               sectionId: entry.filters.section,
               subjectId: config.subjectId,
-              facultyId: config.facultyId || existing.facultyId || "1",
-              faculty: { name: config.facultyName || existing.faculty?.name || "Assigned Faculty", employeeCode: "" },
+              facultyId: existing.facultyId || config.facultyId || "1",
+              faculty: { name: existing.faculty?.name || existing.facultyName || config.facultyName || "Assigned Faculty", code: existing.faculty?.code || existing.facultyCode || config.facultyCode || "", employeeCode: existing.faculty?.employeeCode || existing.facultyCode || config.facultyCode || "" },
+              facultyName: existing.faculty?.name || existing.facultyName || config.facultyName || "Assigned Faculty",
+              facultyCode: existing.faculty?.code || existing.facultyCode || config.facultyCode || "",
               subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
               status: evalStatus,
               mode: config.mode,
@@ -3528,8 +3532,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           examinationId: evalState.filters.exam,
           sectionId: evalState.filters.section,
           subjectId: config.subjectId,
-          facultyId: config.facultyId || ev?.facultyId || "1",
-          faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
+          facultyId: ev?.facultyId || config.facultyId || "1",
+          faculty: { name: ev?.facultyName || config.facultyName || "Assigned Faculty", code: ev?.facultyCode || config.facultyCode || "", employeeCode: ev?.facultyCode || config.facultyCode || "" },
+          facultyName: ev?.facultyName || config.facultyName || "Assigned Faculty",
+          facultyCode: ev?.facultyCode || config.facultyCode || "",
           subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
           status: evalStatus,
           mode: config.mode,
@@ -3581,6 +3587,17 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 
         const statusStr = String(ev.status || ev.statusCode || "").trim().toUpperCase() || "APPROVED";
 
+        if (evalMap[key] && ev.facultyName) {
+          evalMap[key].facultyName = ev.facultyName;
+          evalMap[key].facultyCode = ev.facultyCode || evalMap[key].facultyCode || "";
+          evalMap[key].facultyId = ev.facultyId || evalMap[key].facultyId;
+          evalMap[key].faculty = {
+            name: ev.facultyName,
+            code: ev.facultyCode || evalMap[key].faculty?.code || "",
+            employeeCode: ev.facultyCode || evalMap[key].faculty?.employeeCode || "",
+          };
+        }
+
         if (!evalMap[key] || evalMap[key].status === "NOT STARTED") {
           evalMap[key] = {
             ...(evalMap[key] || {}),
@@ -3589,7 +3606,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             sectionId: evalState.filters.section,
             subjectId: evSubId,
             facultyId: ev.facultyId || "1",
-            faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+            faculty: { name: ev.facultyName || "Assigned Faculty", code: ev.facultyCode || "", employeeCode: ev.facultyCode || "" },
+            facultyName: ev.facultyName || "Assigned Faculty",
+            facultyCode: ev.facultyCode || "",
             subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
             status: statusStr,
             mode: ev.mode || "REGULAR",
@@ -4368,7 +4387,21 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                           : `/api/v1/evaluations/${evalId}/students`;
                         try {
                           const res = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
-                          markItems = res.data?.students || res.data?.marksList || [];
+                          const resPayload = res.data?.data !== undefined ? res.data.data : res.data;
+                          markItems = resPayload?.students || resPayload?.marksList || [];
+                          if (resPayload?.facultyName) {
+                            targetItem = {
+                              ...targetItem,
+                              facultyId: resPayload.facultyId || targetItem.facultyId,
+                              facultyName: resPayload.facultyName,
+                              facultyCode: resPayload.facultyCode || targetItem.facultyCode,
+                              faculty: {
+                                name: resPayload.facultyName,
+                                code: resPayload.facultyCode || targetItem.faculty?.code || "",
+                                employeeCode: resPayload.facultyCode || targetItem.faculty?.employeeCode || "",
+                              },
+                            };
+                          }
                         } catch {
                           // If evaluation endpoint records not ready, load from marks table
                           const marksRes = await apiClient.get(
@@ -5113,10 +5146,10 @@ function EvaluationList({
                 <small className="cms-row-subtitle">{item.subject?.code}</small>
               </td>
               <td>
-                <div>{item.faculty?.name || "—"}</div>
-                {(item.faculty?.code || item.facultyId) ? (
+                <div>{item.faculty?.name || item.facultyName || "—"}</div>
+                {(item.faculty?.code || item.faculty?.employeeCode || item.facultyCode || item.facultyId) ? (
                   <small className="cms-row-subtitle">
-                    {item.faculty?.code || `EMP-${item.facultyId}`}
+                    {item.faculty?.code || item.faculty?.employeeCode || item.facultyCode || (item.facultyId ? (String(item.facultyId).startsWith("EMP") ? String(item.facultyId) : `EMP-${item.facultyId}`) : "")}
                   </small>
                 ) : null}
               </td>
