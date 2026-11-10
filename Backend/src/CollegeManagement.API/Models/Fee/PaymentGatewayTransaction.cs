@@ -34,6 +34,13 @@ public class PaymentGatewayTransaction
     [Required, MaxLength(100)]
     public string OrderId { get; set; } = string.Empty;
 
+    /// <summary>Razorpay Single-Use QR Code ID (e.g. "qr_OIGs892348") when created via Razorpay QR API.</summary>
+    [MaxLength(100)]
+    public string? GatewayQrCodeId { get; set; }
+
+    /// <summary>Optional campus affiliation for campus-scoped secret lookup and reporting.</summary>
+    public int? CampusId { get; set; }
+
     /// <summary>Razorpay Payment ID after capture (e.g. "pay_OIGs892348").</summary>
     [MaxLength(100)]
     public string? GatewayPaymentId { get; set; }
@@ -101,6 +108,8 @@ public class PaymentGatewayTransaction
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? SettledAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+    public DateTime? LastGatewaySyncAtUtc { get; set; }
 
     // Navigation Properties
     public Student? Student { get; set; }

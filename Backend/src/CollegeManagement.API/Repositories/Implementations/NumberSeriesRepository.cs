@@ -9,6 +9,7 @@ using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -71,6 +72,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                 "sp_GetNumberSeriesByCode",
                 parameters,
+                transaction: _context.Database.CurrentTransaction?.GetDbTransaction(),
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -115,6 +117,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                 "sp_GenerateNextNumberSeries",
                 parameters,
+                transaction: _context.Database.CurrentTransaction?.GetDbTransaction(),
                 commandType: CommandType.StoredProcedure);
         }
 
