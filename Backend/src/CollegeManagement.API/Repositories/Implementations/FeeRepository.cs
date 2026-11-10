@@ -562,6 +562,14 @@ public class FeeRepository : IFeeRepository
     public async Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int studentId)
     {
         var c = Connection();
+        var list = (await GetFeePaymentsCoreAsync(studentId)).ToList();
+        await EnrichGatewayMetadataAsync(c, list);
+        return list;
+    }
+
+    private async Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsCoreAsync(int studentId)
+    {
+        var c = Connection();
         return await c.QueryAsync<FeePaymentResponse>(
             "sp_FeePayment_GetHistoryByStudent",
             new { p_StudentId = studentId },
@@ -582,7 +590,9 @@ public class FeeRepository : IFeeRepository
                 new { p_StudentIds = string.Join(",", ids) },
                 commandType: CommandType.StoredProcedure);
 
-            var grouped = payments.GroupBy(p => p.StudentId).ToDictionary(g => g.Key, g => (IEnumerable<FeePaymentResponse>)g.ToList());
+            var paymentList = payments.ToList();
+            await EnrichGatewayMetadataAsync(c, paymentList);
+            var grouped = paymentList.GroupBy(p => p.StudentId).ToDictionary(g => g.Key, g => (IEnumerable<FeePaymentResponse>)g.ToList());
             foreach (var id in ids)
             {
                 result[id] = grouped.TryGetValue(id, out var list) ? list : Enumerable.Empty<FeePaymentResponse>();
@@ -601,11 +611,52 @@ public class FeeRepository : IFeeRepository
 
     public async Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id)
     {
+        var payment = await GetFeePaymentByIdCoreAsync(id);
+        if (payment != null)
+            await EnrichGatewayMetadataAsync(Connection(), new[] { payment });
+        return payment;
+    }
+
+    private async Task<FeePaymentResponse?> GetFeePaymentByIdCoreAsync(int id)
+    {
         var c = Connection();
         return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
             "sp_FeePayment_GetById",
             new { p_FeePaymentId = id },
             commandType: CommandType.StoredProcedure);
+    }
+
+    private static async Task EnrichGatewayMetadataAsync(IDbConnection c, IEnumerable<FeePaymentResponse> payments)
+    {
+        var list = payments?.ToList();
+        if (list == null || !list.Any()) return;
+
+        var paymentIds = list.Select(p => p.FeePaymentId).Where(id => id > 0).Distinct().ToList();
+        if (!paymentIds.Any()) return;
+
+        try
+        {
+            var txns = await c.QueryAsync<(int FeePaymentId, int GatewayTransactionId, string GatewayStatus)>(
+                "SELECT FeePaymentId, Id AS GatewayTransactionId, Status AS GatewayStatus FROM PaymentGatewayTransactions WHERE FeePaymentId IN @Ids",
+                new { Ids = paymentIds });
+
+            var lookup = txns
+                .GroupBy(t => t.FeePaymentId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.GatewayTransactionId).First());
+
+            foreach (var p in list)
+            {
+                if (lookup.TryGetValue(p.FeePaymentId, out var meta))
+                {
+                    p.GatewayTransactionId = meta.GatewayTransactionId;
+                    p.GatewayStatus = meta.GatewayStatus;
+                }
+            }
+        }
+        catch
+        {
+            // Safe fallback if PaymentGatewayTransactions table hasn't been initialized yet
+        }
     }
 
     public async Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber)
