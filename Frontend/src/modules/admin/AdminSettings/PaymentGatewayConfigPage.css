@@ -1,0 +1,23 @@
+.cms-payment-config { max-width: 1060px; margin: 12px auto; padding: 16px; border: 1px solid var(--cms-border); border-radius: 12px; background: var(--cms-surface); color: var(--cms-text); }
+.cms-payment-config * { box-sizing: border-box; }
+.cms-payment-config-head, .cms-payment-config-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cms-payment-config h2 { margin: 0; font-size: 18px; }
+.cms-payment-config p { font-size: 13px; line-height: 1.5; }
+.cms-payment-config-head p { margin: 4px 0; color: var(--cms-muted); }
+.cms-payment-config-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 14px 0; margin-bottom: 14px; border-bottom: 1px solid var(--cms-border); }
+.cms-payment-config fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cms-payment-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cms-payment-config .cms-field { min-width: 0; }
+.cms-payment-config input:not([type=checkbox]):not([type=radio]), .cms-payment-config select { width: 100%; min-width: 0; }
+.cms-payment-config input[aria-invalid=true] { border-color: var(--cms-red, #b91c1c); }
+.cms-payment-config #payment-config-currency[readonly] { background: var(--cms-bg, #f8fafc); color: var(--cms-muted); cursor: default; }
+.cms-payment-config small { display: block; margin-top: 5px; color: var(--cms-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.cms-payment-config .cms-error { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.cms-payment-config-toggle, .cms-payment-config-mode { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0; font-size: 13px; }
+.cms-payment-config-toggle input, .cms-payment-config-mode input { accent-color: var(--cms-primary); }
+.cms-payment-config-webhook { margin-top: 14px; }
+.cms-payment-config-webhook > div { display: flex; gap: 8px; }
+.cms-payment-config-note { color: var(--cms-muted); }
+.cms-payment-config-success { color: var(--cms-green, #15803d); }
+.cms-payment-config-actions { justify-content: flex-end; padding-top: 14px; border-top: 1px solid var(--cms-border); }
+@media (max-width: 600px) { .cms-payment-config { padding: 12px; } .cms-payment-config-grid { grid-template-columns: 1fr; } .cms-payment-config-head { align-items: flex-start; } }

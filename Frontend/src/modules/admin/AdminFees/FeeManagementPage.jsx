@@ -54,6 +54,7 @@ import {
   todayISO,
 } from "@/data/feeManagementData.js";
 import "./FeeManagementPage.css";
+import { PaymentSettingsLink } from "../AdminSettings/PaymentGatewayConfigPage.jsx";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
 const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
@@ -1226,6 +1227,7 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     assignmentId,
     studentFeeAssignmentId: assignmentId,
     studentFeeId: assignmentId,
+    campusId: read(item, "campusId", "CampusId") ?? read(detail, "campusId", "CampusId"),
     studentId,
     studentName: textValue(item, "studentName", "StudentName", "name", "Name")
       || textValue(detail, "studentName", "StudentName", "name", "Name")
@@ -1968,7 +1970,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 }
 
 /* ---------------------------- Collect payment ---------------------------- */
-function CollectPaymentModal({ account, onClose, onSaved, onPending }) {
+function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending }) {
   const pending = pendingInstallments(account);
   const [mode, setMode] = useState("UPI_QR");
   const [gatewayLocked, setGatewayLocked] = useState(false);
@@ -2181,7 +2183,7 @@ function CollectPaymentModal({ account, onClose, onSaved, onPending }) {
           </> : null}
         </div>
         </fieldset>
-        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onSaved={onSaved} onPending={onPending} /> : null}
+        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
         {cashUncertain ? <p className="cms-error" role="alert">Review payment history before collecting again; this request may already have been recorded.</p> : null}
       </div>
@@ -5190,6 +5192,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       title="Fee Management"
       subtitle="Manage fee structures, scholarships, student balances and collections."
       breadcrumb={["Administration"]}
+      actions={<PaymentSettingsLink />}
     >
       <div className="cms-fee-tabs" role="tablist">
         {TABS.map((item) => (
@@ -5269,6 +5272,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         <CollectPaymentModal
           key={`${selected.id}:${gatewayScopeKey}`}
           account={selected}
+          campusId={selectedCampusValue}
           onClose={() => setCollecting(false)}
           onSaved={paymentSaved}
           onPending={() => setToast("UTR submitted for verification. No fee credit has been applied.")}

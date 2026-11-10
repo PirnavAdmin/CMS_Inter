@@ -4,6 +4,9 @@ import { todayISO } from "@/data/feeManagementData.js";
 import {
   gatewayData,
   reversalPayload,
+  normalizePaymentConfig,
+  paymentConfigCampusId,
+  paymentConfigPayload,
 } from "../modules/admin/AdminFees/services/paymentGatewaySession.js";
 
 const config = {
@@ -132,6 +135,26 @@ export const feePaymentGatewayApi = {
 };
 
 export const reversePaymentApi = (payload, signal) => feePaymentGatewayApi.reverse(payload, signal);
+
+export async function getPaymentGatewayConfigApi(campusId, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.get(apiEndpoints.feeGateway.config, {
+    ...config, params: { campusId: id }, signal,
+    headers: { "X-Campus-Id": String(id) },
+  });
+  return normalizePaymentConfig(response.data, id);
+}
+
+export async function updatePaymentGatewayConfigApi(form, signal) {
+  const payload = paymentConfigPayload(form, form.campusId);
+  const data = await post(apiEndpoints.feeGateway.config, payload, signal);
+  if (data.campusId != null && Number(data.campusId) !== payload.campusId)
+    throw new Error("The backend acknowledged a different campus. Refresh before retrying.");
+  // A successful transport response alone is not proof of persistence.
+  if (data.success !== true && Number(data.campusId) !== payload.campusId)
+    throw new Error("The backend did not acknowledge the configuration update. Refresh before retrying.");
+  return data;
+}
 
 let checkoutPromise;
 export function loadRazorpayCheckout() {
