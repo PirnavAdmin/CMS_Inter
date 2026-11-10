@@ -64,7 +64,15 @@ export function normalizePaymentConfig(payload, campusId) {
   return result;
 }
 
-export function paymentConfigErrors(form) {
+export const PAYMENT_CONFIG_SECTIONS = Object.freeze({
+  bank: ["bankName", "accountHolderName", "accountNumber", "confirmAccountNumber", "ifscCode", "branchName", "accountType", "enableOfflineUtr"],
+  upi: ["payeeVpa", "payeeName", "currency", "mcc", "enableCounterUpiQr"],
+  razorpay: ["provider", "isLiveMode", "razorpayKeyId", "razorpayKeySecret", "razorpayWebhookSecret", "autoCapture", "enableRazorpay"],
+  advanced: ["pollingIntervalMs", "monitoringTimeoutSeconds", "baseAppUrl", "frontendPort"],
+});
+
+export function paymentConfigErrors(form, section) {
+  if (section && !PAYMENT_CONFIG_SECTIONS[section]) throw new Error("Unknown payment configuration section.");
   const errors = {};
   for (const key of ["bankName", "accountHolderName", "accountNumber", "ifscCode"])
     if (!String(form[key] || "").trim()) errors[key] = "This field is required.";
@@ -78,7 +86,7 @@ export function paymentConfigErrors(form) {
   if (form.mcc && !/^\d{4}$/.test(form.mcc)) errors.mcc = "MCC must contain four digits.";
   if (form.enableRazorpay && !new RegExp(`^rzp_${form.isLiveMode ? "live" : "test"}_[A-Za-z0-9]+$`).test(form.razorpayKeyId)) errors.razorpayKeyId = "Enter a Razorpay key ID matching the selected mode.";
   for (const [key, flag] of [["razorpayKeySecret", "hasRazorpayKeySecret"], ["razorpayWebhookSecret", "hasRazorpayWebhookSecret"]]) {
-    if ((form.enableRazorpay || form[flag]) && !form[key].trim()) errors[key] = form[flag]
+    if ((section ? form.enableRazorpay && !form[flag] : form.enableRazorpay || form[flag]) && !form[key].trim()) errors[key] = form[flag]
       ? "Saved secret exists. Blank-secret preservation is not verified; provide a replacement before saving."
       : "A secret is required when Razorpay is enabled.";
   }
@@ -90,11 +98,11 @@ export function paymentConfigErrors(form) {
       if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
     } catch { errors.baseAppUrl = "Enter an HTTP(S) application URL without credentials, query or fragment."; }
   }
-  return errors;
+  return section ? Object.fromEntries(Object.entries(errors).filter(([key]) => PAYMENT_CONFIG_SECTIONS[section].includes(key))) : errors;
 }
 
-export function paymentConfigPayload(form, campusId) {
-  const errors = paymentConfigErrors(form);
+export function paymentConfigPayload(form, campusId, section) {
+  const errors = paymentConfigErrors(form, section);
   if (Object.keys(errors).length) throw new Error("Correct the payment configuration fields before saving.");
   const payload = { campusId: paymentConfigCampusId(campusId) };
   for (const key of paymentConfigFields) {

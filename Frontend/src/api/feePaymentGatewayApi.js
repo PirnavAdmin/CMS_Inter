@@ -145,8 +145,8 @@ export async function getPaymentGatewayConfigApi(campusId, signal) {
   return normalizePaymentConfig(response.data, id);
 }
 
-export async function updatePaymentGatewayConfigApi(form, signal) {
-  const payload = paymentConfigPayload(form, form.campusId);
+export async function updatePaymentGatewayConfigApi(form, signal, section) {
+  const payload = paymentConfigPayload(form, form.campusId, section);
   const data = await post(apiEndpoints.feeGateway.config, payload, signal);
   if (data.campusId != null && Number(data.campusId) !== payload.campusId)
     throw new Error("The backend acknowledged a different campus. Refresh before retrying.");
