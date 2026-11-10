@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle, Copy, CreditCard, QrCode } from "lucide-react";
-import { feePaymentGatewayApi, loadRazorpayCheckout } from "@/api/feePaymentGatewayApi.js";
+import { feePaymentGatewayApi, getPaymentGatewayConfigApi, loadRazorpayCheckout } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { formatCurrency, todayISO, COLLEGE_NAME } from "@/data/feeManagementData.js";
 import { collectionPayload, mobilePaymentLinkFor } from "../services/paymentGatewaySession.js";
@@ -8,6 +8,7 @@ import { usePaymentPolling } from "../hooks/usePaymentPolling.js";
 
 export default function GatewayPaymentPanel({
   mode,
+  campusId,
   account,
   target,
   selectedIds,
@@ -24,6 +25,7 @@ export default function GatewayPaymentPanel({
   const [linkCopy, setLinkCopy] = useState({ busy: false, message: "", error: "" });
   const [submitted, setSubmitted] = useState(false);
   const [uncertain, setUncertain] = useState(false);
+  const [configurationUnavailable, setConfigurationUnavailable] = useState(false);
   const [draft, setDraft] = useState({
     utrNumber: "",
     bankName: "",
@@ -109,7 +111,7 @@ export default function GatewayPaymentPanel({
       await action(controller.signal);
     } catch (failure) {
       if (!alive.current || controller.signal.aborted) return;
-      setError(getApiErrorMessage(failure));
+      setError(failure.gatewayConfigurationMessage || getApiErrorMessage(failure));
       if (!failure.gatewayRetrySafe && (!failure.response || failure.response.status >= 500))
         setUncertain(true);
     } finally {
@@ -129,6 +131,23 @@ export default function GatewayPaymentPanel({
     }
     primeAudio();
     run(async (signal) => {
+      let settings;
+      try {
+        if (account.campusId && Number(account.campusId) !== Number(campusId))
+          throw new Error("This fee account belongs to another campus. Select its campus before collecting.");
+        settings = await getPaymentGatewayConfigApi(campusId, signal);
+        if (mode === "UPI_QR" && (!settings.enableCounterUpiQr || !settings.payeeVpa || !settings.payeeName))
+          throw new Error("Dynamic UPI QR is disabled or incomplete for this campus. Review Payment Settings.");
+        if (mode === "RAZORPAY" && (!settings.enableRazorpay || !settings.razorpayKeyId || !settings.hasRazorpayKeySecret || !settings.hasRazorpayWebhookSecret))
+          throw new Error("Razorpay is disabled or incomplete for this campus. Review Payment Settings.");
+      } catch (failure) {
+        failure.gatewayRetrySafe = true; // No order was submitted.
+        if (failure.response?.status === 404)
+          failure.gatewayConfigurationMessage = "Payment configuration API is unavailable (404). The backend team must deploy the gateway configuration and order endpoints. QR/Card collection is disabled; reopen after the backend is ready.";
+        if (!signal.aborted) setConfigurationUnavailable(true);
+        throw failure;
+      }
+      if (signal.aborted) return;
       const Checkout = mode === "RAZORPAY" ? await loadRazorpayCheckout() : null;
       if (signal.aborted) return;
       const data = await feePaymentGatewayApi.createOrder(
@@ -148,7 +167,7 @@ export default function GatewayPaymentPanel({
       if (
         mode === "UPI_QR" &&
         (!/^data:image\/png;base64,[A-Za-z0-9+/=\s]+$/.test(data.qrCodeBase64 || "") ||
-          !String(data.upiUri).startsWith("upi://pay?"))
+          (Boolean(data.upiUri) && !String(data.upiUri).startsWith("upi://pay?")))
       )
         throw new Error("The backend did not return a valid UPI QR and URI.");
       if (mode === "RAZORPAY" && !data.keyId)
@@ -157,6 +176,8 @@ export default function GatewayPaymentPanel({
       const currentOrder = {
         ...data,
         ...payload,
+        pollingIntervalMs: Number(settings.pollingIntervalMs),
+        monitoringTimeoutSeconds: Number(settings.monitoringTimeoutSeconds),
         expiresAt: Number.isFinite(expiresAt) ? expiresAt : undefined,
       };
       setOrder(currentOrder);
@@ -347,7 +368,7 @@ export default function GatewayPaymentPanel({
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
-                disabled={busy || uncertain}
+                disabled={busy || uncertain || configurationUnavailable}
                 onClick={startOrder}
               >
                 {mode === "UPI_QR" ? <QrCode size={16} /> : <CreditCard size={16} />}
@@ -385,7 +406,14 @@ export default function GatewayPaymentPanel({
                   {String(polling.secondsLeft % 60).padStart(2, "0")}
                 </p>
               )}
-              {mode === "UPI_QR" && !order.monitorOnly && polling.status === "PENDING" && (
+              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && (
+                <p className="cms-fee-note" role="note">
+                  Direct Bank VPA Mode: Razorpay keys are not configured. Auto-settlement webhook is
+                  unavailable; switch to Bank Transfer / UTR to enter the transaction reference after
+                  payment.
+                </p>
+              )}
+              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && polling.status === "PENDING" && (
                 <>
                   <button type="button" className="cms-btn cms-btn-ghost" onClick={copyUri}>
                     <Copy size={14} /> Copy UPI URI

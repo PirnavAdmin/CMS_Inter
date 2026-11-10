@@ -2,25 +2,26 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
-using CollegeManagement.API.Settings;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace CollegeManagement.API.Controllers.V1;
 
 /// <summary>
-/// Omnichannel Payment Gateway APIs for Admin Fee Collection.
-/// Handles dynamic UPI QR generation, Razorpay checkout, webhook settlement,
-/// offline UTR verification, and audit ledger CSV export.
+/// Omnichannel Payment Gateway APIs for Admin Fee Collection & Portal Settlement.
+/// Handles Razorpay checkout, Razorpay Dynamic QR / direct UPI QR generation,
+/// fail-closed HMAC-SHA256 webhook settlement, IDOR-protected status polling & PDF receipts,
+/// offline UTR verification, accounting reversals, and DB-backed audit ledger CSV export.
 /// </summary>
 [ApiController]
 [Route("api/v1/fee-payments/gateway")]
@@ -32,7 +33,7 @@ public class FeePaymentGatewayController : ControllerBase
     private readonly IPaymentSettlementService _settlementService;
     private readonly IPaymentLedgerService _ledgerService;
     private readonly IFeeReceiptPdfService _receiptPdfService;
-    private readonly PaymentGatewaySettings _settings;
+    private readonly AppDbContext _dbContext;
     private readonly ILogger<FeePaymentGatewayController> _logger;
 
     public FeePaymentGatewayController(
@@ -40,14 +41,14 @@ public class FeePaymentGatewayController : ControllerBase
         IPaymentSettlementService settlementService,
         IPaymentLedgerService ledgerService,
         IFeeReceiptPdfService receiptPdfService,
-        IOptions<PaymentGatewaySettings> settings,
+        AppDbContext dbContext,
         ILogger<FeePaymentGatewayController> logger)
     {
         _gatewayService = gatewayService;
         _settlementService = settlementService;
         _ledgerService = ledgerService;
         _receiptPdfService = receiptPdfService;
-        _settings = settings.Value;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -59,12 +60,56 @@ public class FeePaymentGatewayController : ControllerBase
         return int.TryParse(claim, out var id) ? id : null;
     }
 
+    private bool IsPrivilegedStaff()
+    {
+        return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin") ||
+               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance") ||
+               User.IsInRole("Teacher") || User.IsInRole("Staff");
+    }
+
+    /// <summary>
+    /// Prevents Insecure Direct Object Reference (IDOR) when Student or Parent roles access gateway APIs.
+    /// Privileged staff roles are permitted; Students must match their own StudentId claim;
+    /// Parents must pass sp_CheckParentStudentMapping for the target student.
+    /// </summary>
+    private async Task<bool> IsAuthorizedForStudentAsync(int targetStudentId)
+    {
+        if (targetStudentId <= 0) return false;
+        if (IsPrivilegedStaff()) return true;
+
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
+        {
+            var studentIdClaim = User.FindFirst("StudentId")?.Value ?? User.FindFirst("studentId")?.Value;
+            return int.TryParse(studentIdClaim, out int ownStudentId) && ownStudentId == targetStudentId;
+        }
+
+        if (string.Equals(userRole, "Parent", StringComparison.OrdinalIgnoreCase))
+        {
+            var parentUserId = GetCurrentUserId();
+            if (!parentUserId.HasValue) return false;
+
+            var conn = _dbContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync();
+
+            var count = await conn.ExecuteScalarAsync<int>(
+                "sp_CheckParentStudentMapping",
+                new { p_ParentUserId = parentUserId.Value, p_StudentId = targetStudentId },
+                commandType: System.Data.CommandType.StoredProcedure);
+
+            return count > 0;
+        }
+
+        return false;
+    }
+
     // ========================= ORDER CREATION =========================
 
     /// <summary>
-    /// Creates a payment gateway order and generates dynamic NPCI UPI QR code.
-    /// Returns the QR code as Base64 PNG data URI for countertop display.
-    /// Accessible by Cashiers, Admins, and Parents/Students.
+    /// Creates a payment gateway order and generates a Razorpay Dynamic UPI QR (when configured)
+    /// or a direct bank NPCI UPI QR (requiring manual UTR verification).
+    /// Enforces Student/Parent ownership to prevent IDOR.
     /// </summary>
     [HttpPost("create-order")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
@@ -73,6 +118,13 @@ public class FeePaymentGatewayController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        if (!await IsAuthorizedForStudentAsync(request.StudentId))
+            return Forbid();
+
+        var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+        if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
+            return Forbid();
+
         var result = await _gatewayService.CreateOrderAsync(request, GetCurrentUserId());
         return result.Success ? Ok(result) : BadRequest(result);
     }
@@ -80,8 +132,8 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= PAYMENT VERIFICATION =========================
 
     /// <summary>
-    /// Verifies Razorpay checkout payment signature and settles the payment.
-    /// Called by frontend after Razorpay modal success callback.
+    /// Verifies Razorpay checkout payment signature (fail-closed) and settles the payment.
+    /// Enforces Student/Parent ownership.
     /// </summary>
     [HttpPost("verify")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
@@ -89,6 +141,12 @@ public class FeePaymentGatewayController : ControllerBase
     public async Task<IActionResult> VerifyPayment([FromBody] VerifyPaymentRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var ownerStudentId = await _gatewayService.GetStudentIdForTransactionAsync(request.OrderId)
+            ?? await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+
+        if (!IsPrivilegedStaff() && (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value)))
+            return Forbid();
 
         var result = await _gatewayService.VerifyAndSettleAsync(request, GetCurrentUserId());
         return result.Success
@@ -109,9 +167,8 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= STATUS POLLING =========================
 
     /// <summary>
-    /// Lightweight polling endpoint called every 1200ms by the frontend
-    /// usePaymentPolling hook. Returns current settlement status.
-    /// Accessible by Cashiers, Admins, and Parents/Students.
+    /// Lightweight polling endpoint called every 1200ms by the frontend usePaymentPolling hook.
+    /// Performs throttled active Razorpay sync and enforces Student/Parent ownership to block IDOR.
     /// </summary>
     [HttpGet("status/{studentFeeId:int}")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
@@ -121,6 +178,13 @@ public class FeePaymentGatewayController : ControllerBase
         if (string.IsNullOrWhiteSpace(orderId))
             return BadRequest(new { success = false, message = "orderId is required." });
 
+        var ownerStudentId = await _gatewayService.GetStudentIdForFeeAsync(studentFeeId);
+        if (!IsPrivilegedStaff())
+        {
+            if (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value))
+                return Forbid();
+        }
+
         var result = await _gatewayService.GetOrderStatusAsync(studentFeeId, orderId);
         return Ok(result);
     }
@@ -128,8 +192,9 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= RAZORPAY WEBHOOK =========================
 
     /// <summary>
-    /// Razorpay webhook listener for payment.captured and order.paid events.
-    /// Anonymous endpoint (no JWT required) secured via HMAC-SHA256 signature.
+    /// Razorpay webhook listener for payment.captured, order.paid, and qr_code.credited events.
+    /// Anonymous endpoint secured via strict fail-closed HMAC-SHA256 signature verification
+    /// using the database-configured (or appsettings) webhook secret.
     /// </summary>
     [HttpPost("webhook")]
     [AllowAnonymous]
@@ -140,36 +205,78 @@ public class FeePaymentGatewayController : ControllerBase
         var rawBody = await reader.ReadToEndAsync();
 
         var signature = Request.Headers["X-Razorpay-Signature"].FirstOrDefault() ?? "";
-        if (!string.IsNullOrWhiteSpace(_settings.Razorpay.WebhookSecret) &&
-            !_settings.Razorpay.WebhookSecret.Contains("your_") &&
-            !WebhookSecurityHelper.VerifyRazorpaySignature(
-                rawBody, signature, _settings.Razorpay.WebhookSecret))
+        if (string.IsNullOrWhiteSpace(rawBody) || string.IsNullOrWhiteSpace(signature))
         {
-            _logger.LogWarning("Webhook signature verification failed");
-            return Unauthorized(new { message = "Invalid webhook signature." });
+            _logger.LogWarning("Webhook rejected: missing body or X-Razorpay-Signature header.");
+            return Unauthorized(new { message = "Missing webhook signature." });
         }
 
         try
         {
             using var doc = JsonDocument.Parse(rawBody);
             var root = doc.RootElement;
-            var eventType = root.GetProperty("event").GetString() ?? "";
+            var eventType = root.TryGetProperty("event", out var evtProp) ? evtProp.GetString() ?? "" : "";
             var payload = root.GetProperty("payload");
-            var payment = payload.GetProperty("payment").GetProperty("entity");
 
-            var orderId = payment.GetProperty("order_id").GetString() ?? "";
-            var paymentId = payment.GetProperty("id").GetString() ?? "";
-            var amountPaise = payment.GetProperty("amount").GetInt64();
-            var amount = amountPaise / 100m;
+            string orderId = string.Empty;
+            string paymentId = string.Empty;
+            string? qrCodeId = null;
+            decimal amount = 0m;
+
+            if (payload.TryGetProperty("payment", out var paymentWrapper) &&
+                paymentWrapper.TryGetProperty("entity", out var paymentEntity))
+            {
+                if (paymentEntity.TryGetProperty("order_id", out var oProp) && oProp.ValueKind == JsonValueKind.String)
+                    orderId = oProp.GetString() ?? "";
+                if (paymentEntity.TryGetProperty("id", out var pProp) && pProp.ValueKind == JsonValueKind.String)
+                    paymentId = pProp.GetString() ?? "";
+                if (paymentEntity.TryGetProperty("amount", out var aProp) && aProp.ValueKind == JsonValueKind.Number)
+                    amount = aProp.GetInt64() / 100m;
+            }
+
+            if (payload.TryGetProperty("qr_code", out var qrWrapper) &&
+                qrWrapper.TryGetProperty("entity", out var qrEntity))
+            {
+                if (qrEntity.TryGetProperty("id", out var qrIdProp) && qrIdProp.ValueKind == JsonValueKind.String)
+                    qrCodeId = qrIdProp.GetString();
+                if (amount <= 0 && qrEntity.TryGetProperty("payment_amount", out var qrAmtProp) && qrAmtProp.ValueKind == JsonValueKind.Number)
+                    amount = qrAmtProp.GetInt64() / 100m;
+            }
+
+            int? txnCampusId = null;
+            if (!string.IsNullOrWhiteSpace(qrCodeId) || !string.IsNullOrWhiteSpace(orderId))
+            {
+                txnCampusId = await _dbContext.PaymentGatewayTransactions
+                    .AsNoTracking()
+                    .Where(t => (!string.IsNullOrEmpty(qrCodeId) && t.GatewayQrCodeId == qrCodeId) ||
+                                (!string.IsNullOrEmpty(orderId) && t.OrderId == orderId))
+                    .Select(t => t.CampusId)
+                    .FirstOrDefaultAsync();
+            }
+
+            var webhookSecret = await _gatewayService.ResolveWebhookSecretAsync(txnCampusId);
+            if (string.IsNullOrWhiteSpace(webhookSecret) ||
+                !WebhookSecurityHelper.VerifyRazorpaySignature(rawBody, signature, webhookSecret))
+            {
+                _logger.LogWarning("Webhook rejected: invalid or unconfigured webhook signature.");
+                return Unauthorized(new { message = "Invalid webhook signature." });
+            }
 
             _logger.LogInformation(
-                "Webhook received: Event={Event}, OrderId={OrderId}, PaymentId={PaymentId}, Amount={Amount}",
-                eventType, orderId, paymentId, amount);
+                "Webhook verified: Event={Event}, OrderId={OrderId}, QrCodeId={QrCodeId}, PaymentId={PaymentId}, Amount={Amount}",
+                eventType, orderId, qrCodeId, paymentId, amount);
 
             var result = await _gatewayService.ProcessWebhookAsync(
-                eventType, orderId, paymentId, amount);
+                eventType, orderId, paymentId, amount, qrCodeId);
 
-            return Ok(new { success = result.Success });
+            return result.Success
+                ? Ok(new { success = true })
+                : BadRequest(new { success = false, message = result.ErrorMessage });
+        }
+        catch (JsonException jex)
+        {
+            _logger.LogWarning(jex, "Webhook rejected: malformed JSON payload.");
+            return BadRequest(new { message = "Invalid webhook JSON payload." });
         }
         catch (Exception ex)
         {
@@ -218,8 +325,8 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= PAYMENT REVERSAL & REFUND =========================
 
     /// <summary>
-    /// Reverses a settled payment, restores student account balance,
-    /// marks transaction and installment as reversed, and records in the audit ledger.
+    /// Reverses a settled payment, restores student account & student profile balances,
+    /// marks payment and installments reversed, and appends an immutable Reversal entry to PaymentLedgerEntries.
     /// Strictly restricted to Accounting & Administrative roles.
     /// </summary>
     [HttpPost("reverse")]
@@ -240,13 +347,20 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Generates and downloads the official QuestPDF fee payment receipt.
-    /// Accessible by Cashiers, Admins, Parents, and Students.
+    /// Enforces Student/Parent ownership to prevent IDOR.
     /// </summary>
     [HttpGet("receipt/{feePaymentId:int}/pdf")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> GetReceiptPdf(int feePaymentId)
     {
+        var ownerStudentId = await _gatewayService.GetStudentIdForPaymentAsync(feePaymentId);
+        if (!IsPrivilegedStaff())
+        {
+            if (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value))
+                return Forbid();
+        }
+
         var result = await _receiptPdfService.GenerateReceiptPdfAsync(feePaymentId);
         if (result == null)
             return NotFound(new { message = "Receipt not found or could not be generated." });
@@ -257,8 +371,8 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= AUDIT LEDGER EXPORT =========================
 
     /// <summary>
-    /// Exports all gateway payments as a UTF-8 BOM CSV file for audit.
-    /// Formula injection characters (=, +, -, @) are escaped for Excel safety.
+    /// Exports payment ledger entries from the database as a UTF-8 BOM CSV file.
+    /// Formula injection characters (=, +, -, @, tab, CR) are neutralized for Excel safety.
     /// </summary>
     [HttpGet("export-ledger")]
     public async Task<IActionResult> ExportLedger(
@@ -275,19 +389,18 @@ public class FeePaymentGatewayController : ControllerBase
     /// <summary>
     /// Gets active payment receiving bank details, UPI VPA, and gateway configuration.
     /// Secrets are masked for security.
-    /// Accessible by Admin, SuperAdmin, Accountant, Finance, Principal.
     /// </summary>
     [HttpGet("config")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> GetConfig([FromQuery] int? campusId)
     {
-        var config = await _gatewayService.GetConfigAsync(campusId);
+        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var config = await _gatewayService.GetConfigAsync(campusId, apiBaseUrl);
         return Ok(config);
     }
 
     /// <summary>
     /// Updates receiving bank account details, UPI VPA, and Razorpay gateway credentials.
-    /// Accessible by Admin, SuperAdmin, Accountant, Finance, Principal.
     /// </summary>
     [HttpPost("config")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
@@ -295,7 +408,8 @@ public class FeePaymentGatewayController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var updated = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId());
+        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var updated = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId(), apiBaseUrl);
         return Ok(new { success = true, message = "Payment gateway configuration saved successfully.", data = updated });
     }
 }
