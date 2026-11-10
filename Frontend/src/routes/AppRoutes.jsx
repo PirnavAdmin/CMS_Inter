@@ -96,6 +96,7 @@ import {
   HostelAttendanceRegister,
   HostelReports,
 } from "@/modules/admin/AdminHostel/index.js";
+const WardenWorkspacePage = lazy(() => import("@/modules/warden/WardenWorkspacePage.jsx"));
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -170,6 +171,10 @@ export default function AppRoutes() {
         <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
         <Route path="/warden-dashboard/profile" element={<HostelDashboard />} />
         <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/my-attendance" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="attendance" /></Suspense>} />
+        <Route path="/warden-dashboard/my-leaves" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="leaves" /></Suspense>} />
+        <Route path="/warden-dashboard/holidays" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="holidays" /></Suspense>} />
+        <Route path="/warden-dashboard/expenses" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="expenses" /></Suspense>} />
         <Route path="/warden-dashboard/*" element={<HostelDashboard />} />
 
         {/* Legacy /warden Aliases redirect to /warden-dashboard */}
