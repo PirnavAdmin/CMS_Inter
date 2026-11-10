@@ -114,7 +114,7 @@ function resolveFacultyId(profile, auth) {
       return Number(c);
     }
   }
-  return 6;
+  return null;
 }
 
 function getLectureStatus(startTimeStr, endTimeStr) {

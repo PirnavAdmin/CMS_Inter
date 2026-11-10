@@ -11,6 +11,7 @@ import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.js
 import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
 import { isSuperAdminRole } from "@/modules/super-admin/superAdminSession.js";
+import { isStaffPortalUnlocked } from "@/modules/faculty/profileCompletion.js";
 
 const fields = [
   {
@@ -215,11 +216,7 @@ export default function Login() {
         navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         const pStatus = result?.user?.profileStatus;
-        const statusClean = String(pStatus || "").toLowerCase();
-        const isCompleted =
-          statusClean === "completed" ||
-          statusClean === "approved" ||
-          (result?.user?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
+        const isCompleted = isStaffPortalUnlocked(pStatus, result?.user?.isOnboarded === true);
 
         if (!isCompleted) {
           navigate("/faculty-dashboard/profile", { replace: true });

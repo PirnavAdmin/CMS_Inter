@@ -66,16 +66,6 @@ export default function FacultyLeave() {
         }
       } catch { }
     }
-    try {
-      const saved = localStorage.getItem("staff_profile_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const s = Number(parsed?.staffId || parsed?.id);
-        if (s > 0 && parsed?.role !== "Admin" && parsed?.role !== "Super Admin") {
-          return s;
-        }
-      }
-    } catch { }
     const a = getAuthUser();
     const id = Number(
       profileData?.staffId ||

@@ -397,9 +397,12 @@ export default function DashboardPage() {
   const { selectedCampus, selectedCampusId } = useCampusContext();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
 
-  const campusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
-  const boardId = selectedBoard?.id || selectedBoard?.code || selectedBoard?.boardId;
-  const academicYearId = selectedAcademicYear?.id || selectedAcademicYear?.code || selectedAcademicYear?.academicYearId;
+  const rawCampusId = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id;
+  const rawBoardId = selectedBoard?.boardId || selectedBoard?.id;
+  const rawAcademicYearId = selectedAcademicYear?.academicYearId || selectedAcademicYear?.id;
+  const campusId = Number.isFinite(Number(rawCampusId)) && Number(rawCampusId) > 0 ? Number(rawCampusId) : undefined;
+  const boardId = Number.isFinite(Number(rawBoardId)) && Number(rawBoardId) > 0 ? Number(rawBoardId) : undefined;
+  const academicYearId = Number.isFinite(Number(rawAcademicYearId)) && Number(rawAcademicYearId) > 0 ? Number(rawAcademicYearId) : undefined;
   const todayDate = useMemo(() => {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -696,41 +699,75 @@ export default function DashboardPage() {
           let markedCount = 0;
 
           rows.forEach((row) => {
-            const morning = normalizeStudentStatus(row.morningStatus ?? row.status);
-            const afternoon = normalizeStudentStatus(row.afternoonStatus ?? row.status);
-            const isMarked = Boolean(row.isAttendanceMarked) || (morning !== null && morning !== undefined) || (afternoon !== null && afternoon !== undefined);
+            const mRaw = row.morningStatus ?? row.MorningStatus;
+            const aRaw = row.afternoonStatus ?? row.AfternoonStatus;
+            const fallbackRaw = row.status ?? row.Status;
+
+            const morning = normalizeStudentStatus(mRaw ?? (aRaw == null ? fallbackRaw : null));
+            const afternoon = normalizeStudentStatus(aRaw ?? (mRaw == null ? fallbackRaw : null));
+
+            const rawNorm = (v) => String(v ?? "").toLowerCase().replace(/[\s_-]/g, "");
+            const mNum = Number(mRaw);
+            const aNum = Number(aRaw);
+            const statusNum = Number(fallbackRaw);
+            const mStr = rawNorm(mRaw);
+            const aStr = rawNorm(aRaw);
+            const statusStr = rawNorm(fallbackRaw);
+
+            const isLateOrHalfDay =
+              morning === "Half Day" || afternoon === "Half Day" ||
+              (morning === "Present" && afternoon === "Absent") ||
+              (afternoon === "Present" && morning === "Absent") ||
+              mNum === 3 || mNum === 4 || aNum === 3 || aNum === 4 ||
+              mStr === "late" || mStr === "halfday" ||
+              aStr === "late" || aStr === "halfday" ||
+              (mRaw == null && aRaw == null && (statusNum === 3 || statusNum === 4 || statusStr === "late" || statusStr === "halfday"));
+
+            const isPresent =
+              morning === "Present" || afternoon === "Present" ||
+              (mRaw == null && aRaw == null && (statusNum === 1 || statusStr === "present"));
+
+            const isAbsent =
+              morning === "Absent" || afternoon === "Absent" ||
+              mNum === 6 || aNum === 6 || mStr === "leave" || aStr === "leave" ||
+              (mRaw == null && aRaw == null && (statusNum === 2 || statusNum === 6 || statusStr === "absent" || statusStr === "leave"));
+
+            const isMarked =
+              Boolean(row.isAttendanceMarked || row.IsAttendanceMarked) ||
+              (morning !== null && morning !== undefined) ||
+              (afternoon !== null && afternoon !== undefined) ||
+              isLateOrHalfDay || isPresent || isAbsent;
 
             if (isMarked) {
-              markedCount++;
-              if (
-                morning === "Half Day" || afternoon === "Half Day" ||
-                (morning === "Present" && afternoon === "Absent") ||
-                (afternoon === "Present" && morning === "Absent") ||
-                Number(row.status) === 4
-              ) {
+              if (isLateOrHalfDay) {
                 halfDay++;
-              } else if (morning === "Present" || afternoon === "Present" || Number(row.status) === 1) {
+                markedCount++;
+              } else if (isPresent) {
                 present++;
-              } else if (morning === "Absent" || afternoon === "Absent" || Number(row.status) === 2) {
+                markedCount++;
+              } else if (isAbsent) {
                 absent++;
+                markedCount++;
               }
             }
           });
 
-          const percentage = markedCount > 0 && totalEnrolled > 0
-            ? Number((((present + 0.5 * halfDay) / totalEnrolled) * 100).toFixed(1))
-            : 0;
+          if (markedCount > 0) {
+            const percentage = totalEnrolled > 0
+              ? Number((((present + 0.5 * halfDay) / totalEnrolled) * 100).toFixed(1))
+              : 0;
 
-          attendance = {
-            total: totalEnrolled,
-            marked: markedCount,
-            markedStudents: markedCount,
-            present,
-            absent,
-            halfDay,
-            percentage,
-            hasMarked: markedCount > 0,
-          };
+            attendance = {
+              total: totalEnrolled,
+              marked: markedCount,
+              markedStudents: markedCount,
+              present,
+              absent,
+              halfDay,
+              percentage,
+              hasMarked: true,
+            };
+          }
         }
       } catch (err) {
         // Fallback to Dashboard SP below
@@ -742,19 +779,29 @@ export default function DashboardPage() {
           params: { ...params, viewBy: "Overall" },
         });
         const att = unwrap(res.data) || {};
-        const total = att.totalStudents ?? att.total ?? 0;
-        const marked = att.markedStudents ?? att.markedCount ?? ((att.present ?? 0) + (att.absent ?? 0) + (att.halfDay ?? 0));
+        const total = att.totalStudents ?? att.total ?? att.totalCount ?? 0;
+        const present = att.present ?? att.presentCount ?? 0;
+        const absent = att.absent ?? att.absentCount ?? 0;
+        const halfDay = att.halfDay ?? att.halfDayCount ?? att.late ?? 0;
+        const marked = (att.markedStudents != null && att.markedStudents > 0)
+          ? att.markedStudents
+          : (att.markedCount != null && att.markedCount > 0)
+            ? att.markedCount
+            : (present + absent + halfDay);
+        const hasMarked = marked > 0 || (present + halfDay > 0);
+        const percentage = att.attendancePercentage ?? att.percentage ?? (hasMarked && total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0);
+
         attendance = {
           total,
           marked,
           markedStudents: marked,
-          present: att.present ?? att.presentCount ?? 0,
-          absent: att.absent ?? att.absentCount ?? 0,
-          halfDay: att.halfDay ?? att.late ?? 0,
-          percentage: att.attendancePercentage ?? att.percentage ?? 0,
-          hasMarked: marked > 0,
+          present,
+          absent,
+          halfDay,
+          percentage: Number(Number(percentage).toFixed(1)),
+          hasMarked,
         };
-        lastUpdated = att.lastUpdated || "Today";
+        lastUpdated = att.lastUpdated || att.lastUpdatedTime || "Today";
       }
 
       if (studentAttSeq.current === seq) {
@@ -799,46 +846,61 @@ export default function DashboardPage() {
           let nonTeachingCount = 0;
 
           rows.forEach((row) => {
-            const isTeaching = row.staffType === 1 || row.staffType === "Teaching" ||
-              (String(row.staffType || "").toLowerCase().includes("teaching") && !String(row.staffType || "").toLowerCase().includes("non"));
+            const sType = row.staffType ?? row.StaffType;
+            const isTeaching = sType === 1 || sType === "Teaching" ||
+              (String(sType || "").toLowerCase().includes("teaching") && !String(sType || "").toLowerCase().includes("non"));
             if (isTeaching) teachingCount++;
             else nonTeachingCount++;
 
-            const isMarked = Boolean(row.isAttendanceMarked);
+            const statusVal = row.status ?? row.Status;
+            const inTimeVal = row.inTime ?? row.InTime;
+            const isMarked = Boolean(row.isAttendanceMarked || row.IsAttendanceMarked) || statusVal != null || Boolean(inTimeVal);
             if (isMarked) {
-              markedCount++;
-              const st = Number(row.status);
-              if (st === 1 || row.status === "Present") {
-                present++;
-              } else if (st === 2 || row.status === "Absent") {
-                absent++;
-              } else if (st === 3 || row.status === "Late" || row.isLate) {
+              const stNum = Number(statusVal);
+              const stStr = String(statusVal ?? "").toLowerCase().replace(/[\s_-]/g, "");
+              const isLateFlag = Boolean(row.isLate || row.IsLate);
+              if (stNum === 3 || stStr === "late") {
                 late++;
-              } else if (st === 4 || row.status === "Leave" || row.status === "HalfDay") {
+                markedCount++;
+              } else if (stNum === 1 || stStr === "present") {
+                if (isLateFlag) late++;
+                else present++;
+                markedCount++;
+              } else if (stNum === 2 || stStr === "absent") {
+                absent++;
+                markedCount++;
+              } else if (stNum === 4 || stNum === 6 || stStr === "leave" || stStr === "halfday") {
                 onLeave++;
+                markedCount++;
+              } else if (inTimeVal && stNum !== 5 && stStr !== "holiday") {
+                if (isLateFlag) late++;
+                else present++;
+                markedCount++;
               }
             }
           });
 
-          // In Staff Attendance (biometric/HR):
-          // Attendance % = ((Present + Late) / TotalStaff) * 100
-          const percentage = markedCount > 0 && totalStaff > 0
-            ? Number((((present + late) / totalStaff) * 100).toFixed(1))
-            : 0;
+          if (markedCount > 0) {
+            // In Staff Attendance (biometric/HR):
+            // Attendance % = ((Present + Late) / TotalStaff) * 100
+            const percentage = totalStaff > 0
+              ? Number((((present + late) / totalStaff) * 100).toFixed(1))
+              : 0;
 
-          staffData = {
-            total: totalStaff,
-            marked: markedCount,
-            markedStaff: markedCount,
-            present,
-            absent,
-            late,
-            onLeave,
-            percentage,
-            teachingCount,
-            nonTeachingCount,
-            hasMarked: markedCount > 0,
-          };
+            staffData = {
+              total: totalStaff,
+              marked: markedCount,
+              markedStaff: markedCount,
+              present,
+              absent,
+              late,
+              onLeave,
+              percentage,
+              teachingCount,
+              nonTeachingCount,
+              hasMarked: true,
+            };
+          }
         }
       } catch (err) {
         // Fallback to Dashboard SP below
@@ -855,22 +917,33 @@ export default function DashboardPage() {
         };
         const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
         const stf = unwrap(res.data) || {};
-        const total = stf.totalStaff ?? stf.total ?? 0;
-        const marked = stf.markedStaff ?? stf.markedCount ?? ((stf.present ?? 0) + (stf.absent ?? 0) + (stf.late ?? 0) + (stf.onLeave ?? 0));
+        const total = stf.totalStaff ?? stf.total ?? stf.totalCount ?? 0;
+        const present = stf.present ?? stf.presentCount ?? 0;
+        const absent = stf.absent ?? stf.absentCount ?? 0;
+        const late = stf.late ?? stf.lateCount ?? 0;
+        const onLeave = stf.onLeave ?? stf.onLeaveCount ?? stf.leaveCount ?? 0;
+        const marked = (stf.markedStaff != null && stf.markedStaff > 0)
+          ? stf.markedStaff
+          : (stf.markedCount != null && stf.markedCount > 0)
+            ? stf.markedCount
+            : (present + absent + late + onLeave);
+        const hasMarked = (present + late + onLeave > 0) || marked > 0;
+        const percentage = stf.attendancePercentage ?? stf.percentage ?? (hasMarked && total > 0 ? Number((((present + late) / total) * 100).toFixed(1)) : 0);
+
         staffData = {
           total,
           marked,
           markedStaff: marked,
-          present: stf.present ?? stf.presentCount ?? 0,
-          absent: stf.absent ?? stf.absentCount ?? 0,
-          late: stf.late ?? stf.lateCount ?? 0,
-          onLeave: stf.onLeave ?? stf.onLeaveCount ?? 0,
-          percentage: stf.attendancePercentage ?? stf.percentage ?? 0,
+          present,
+          absent,
+          late,
+          onLeave,
+          percentage: Number(Number(percentage).toFixed(1)),
           teachingCount: stf.teachingCount,
           nonTeachingCount: stf.nonTeachingCount,
-          hasMarked: marked > 0,
+          hasMarked,
         };
-        lastUpdated = stf.lastUpdated || "Today";
+        lastUpdated = stf.lastUpdated || stf.lastUpdatedTime || "Today";
       }
 
       if (staffAttSeq.current === seq) {
@@ -1422,12 +1495,12 @@ export default function DashboardPage() {
       total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
     }
 
-    const hasMarkedRecords = marked > 0 || (present + absent + halfDay > 0);
+    const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + halfDay > 0);
 
-    if (percentage === undefined || percentage === null) {
-      percentage = hasMarkedRecords && total > 0
-        ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1))
-        : 0;
+    if (hasMarkedRecords && total > 0) {
+      percentage = Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1));
+    } else if (percentage === undefined || percentage === null || !hasMarkedRecords) {
+      percentage = 0;
     } else {
       percentage = Number(Number(percentage).toFixed(1));
     }
@@ -1471,12 +1544,12 @@ export default function DashboardPage() {
       ? staffStatsState.data.nonTeachingStaff
       : (metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]) ?? nonTeachingFromStats);
 
-    const hasMarkedRecords = marked > 0 || (present + absent + late + onLeave > 0);
+    const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + late + onLeave > 0);
 
-    if (percentage === undefined || percentage === null) {
-      percentage = hasMarkedRecords && total > 0
-        ? Number((((present + late) / total) * 100).toFixed(1))
-        : 0;
+    if (hasMarkedRecords && total > 0) {
+      percentage = Number((((present + late) / total) * 100).toFixed(1));
+    } else if (percentage === undefined || percentage === null || !hasMarkedRecords) {
+      percentage = 0;
     } else {
       percentage = Number(Number(percentage).toFixed(1));
     }

@@ -31,25 +31,25 @@ BEGIN
     SET v_NextDate = DATE_ADD(v_TargetDate, INTERVAL 1 DAY);
 
     -- Check if target date is an official holiday for staff
-    SELECT COUNT(1) INTO v_IsHoliday
-    FROM `Holidays` h
-    WHERE h.IsDeleted = 0
-      AND h.Status = 'Active'
-      AND v_TargetDate >= DATE(h.StartDate)
-      AND v_TargetDate <= DATE(h.EndDate)
-      AND (h.AppliesTo = 'All Students & Staff' OR h.AppliesTo = 'Staff Only')
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR h.CampusId = p_CampusId);
+    SELECT COUNT(*) INTO v_IsHoliday
+    FROM `Holidays`
+    WHERE IsDeleted = 0 
+      AND Status = 'Active'
+      AND v_TargetDate >= DATE(StartDate) 
+      AND v_TargetDate <= DATE(EndDate)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = 0 OR CampusId = p_CampusId)
+      AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only' OR AppliesTo IS NULL);
 
-    -- Main query with index seeks and clean left joins
+    -- Main query with deduplicated daily attendance per FacultyId and clean left joins
     SELECT 
         s.Id AS FacultyId,
-        COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
+        COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%'), 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         s.DepartmentId,
         COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, NULLIF(s.Designation, ''), 'Staff') AS DesignationName,
         CASE 
-            WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 
+            WHEN LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%') THEN 2 
             ELSE 1 
         END AS StaffType,
         CASE 
@@ -80,16 +80,22 @@ BEGIN
             WHEN tc.Id IS NOT NULL AND sa.OutTime IS NOT NULL AND sa.OutTime < tc.EarlyCheckoutThreshold THEN 1
             ELSE 0
         END AS IsEarlyCheckout
-    FROM `Staffs` s
+    FROM `Staff` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     LEFT JOIN `Designations` des ON s.DesignationId = des.Id
-    LEFT JOIN `StaffAttendanceSessions` sas ON sas.AttendanceDate >= v_TargetDate 
-                                          AND sas.AttendanceDate < v_NextDate
-                                          AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas.CampusId = p_CampusId)
-                                          AND (p_StaffType IS NULL OR p_StaffType <= 0 OR sas.StaffType = p_StaffType)
-    LEFT JOIN `StaffAttendances` sa ON sa.StaffSessionId = sas.StaffSessionId 
-                                   AND sa.FacultyId = s.Id 
-                                   AND sa.IsActive = 1
+    LEFT JOIN (
+        SELECT 
+            sa_inner.*,
+            ROW_NUMBER() OVER (PARTITION BY sa_inner.FacultyId ORDER BY sa_inner.StaffAttendanceId DESC) AS rn
+        FROM `StaffAttendances` sa_inner
+        INNER JOIN `StaffAttendanceSessions` sas_inner ON sa_inner.StaffSessionId = sas_inner.StaffSessionId
+        WHERE sas_inner.AttendanceDate >= v_TargetDate 
+          AND sas_inner.AttendanceDate < v_NextDate
+          AND sa_inner.IsActive = 1
+          AND sas_inner.IsActive = 1
+          AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas_inner.CampusId = p_CampusId OR sas_inner.CampusId = 0 OR sas_inner.CampusId IS NULL)
+          AND (p_StaffType IS NULL OR p_StaffType <= 0 OR sas_inner.StaffType = p_StaffType)
+    ) sa ON sa.FacultyId = s.Id AND sa.rn = 1
     LEFT JOIN `StaffLeaveRequests` lr ON lr.StaffId = s.Id 
                                      AND lr.IsActive = 1 
                                      AND lr.Status = 2  -- Approved
@@ -99,19 +105,20 @@ BEGIN
         SELECT tc2.Id 
         FROM `AttendanceTimingConfigs` tc2 
         WHERE tc2.IsActive = 1 
-          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 ELSE 1 END)
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%') THEN 2 ELSE 1 END)
           AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
         ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
         LIMIT 1
     )
     WHERE s.IsDeleted = 0
+      AND (s.Status = 'Active' OR s.Status IS NULL)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR s.BoardId = p_BoardId OR s.BoardId IS NULL OR s.BoardId = 0)
       AND (p_DepartmentId IS NULL OR p_DepartmentId <= 0 OR s.DepartmentId = p_DepartmentId)
       AND (p_FacultyId IS NULL OR p_FacultyId <= 0 OR s.Id = p_FacultyId)
       AND (p_StaffType IS NULL OR p_StaffType <= 0 
-           OR (p_StaffType = 1 AND (s.StaffType IS NULL OR LOWER(s.StaffType) = 'teaching'))
-           OR (p_StaffType = 2 AND s.StaffType IS NOT NULL AND LOWER(s.StaffType) != 'teaching'))
+           OR (p_StaffType = 1 AND (s.StaffType = 'Teaching' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) LIKE '%teach%' AND LOWER(s.StaffType) NOT LIKE '%non%') OR s.StaffType IS NULL OR s.StaffType = ''))
+           OR (p_StaffType = 2 AND (LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%'))))
       AND (p_Status IS NULL OR p_Status <= 0 
            OR (p_Status = 1 AND sa.Status = 1)
            OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.StaffLeaveRequestId IS NULL AND v_IsHoliday = 0)))
@@ -551,11 +558,11 @@ BEGIN
 
     -- Resolve Staff
     SELECT 
-        IF(LOWER(StaffType) LIKE '%non%', 2, 1),
+        IF(LOWER(COALESCE(StaffType, 'Teaching')) LIKE '%non%', 2, 1),
         DepartmentId,
-        COALESCE(p_CampusId, CampusId, 1)
+        COALESCE(NULLIF(p_CampusId, 0), CampusId, 1)
     INTO v_StaffType, v_DepartmentId, p_CampusId
-    FROM `Staffs`
+    FROM `Staff`
     WHERE Id = p_FacultyId AND IsDeleted = 0
     LIMIT 1;
 
@@ -577,7 +584,7 @@ BEGIN
     FROM `StaffAttendanceSessions`
     WHERE AttendanceDate >= v_TargetDate AND AttendanceDate < v_NextDate
       AND StaffType = v_StaffType
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId OR CampusId = 0)
     LIMIT 1;
 
     IF v_SessionId <= 0 THEN
@@ -586,7 +593,7 @@ BEGIN
             TotalStaffCount, PresentCount, AbsentCount, LateCount, LeaveCount,
             IsLocked, Remarks, IsActive, CreatedByUserId, CreatedAt
         ) VALUES (
-            NOW(), p_CampusId, v_DepartmentId, v_StaffType,
+            NOW(), COALESCE(NULLIF(p_CampusId, 0), 1), v_DepartmentId, v_StaffType,
             1, 0, 0, 0, 0, 0, 'Auto-created by punch system', 1, p_UserId, UTC_TIMESTAMP()
         );
         SET v_SessionId = LAST_INSERT_ID();

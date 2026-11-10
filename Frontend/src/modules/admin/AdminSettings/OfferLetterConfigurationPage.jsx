@@ -156,16 +156,19 @@ const PRESET_TEMPLATES = [
 const DEFAULT_PLACEHOLDER_TOKENS = [
   { token: "{{StaffName}}", label: "Staff Name", category: "Candidate" },
   { token: "{{EmployeeId}}", label: "Employee ID", category: "Candidate" },
+  { token: "{{DateOfJoining}}", label: "Date of Joining", category: "Candidate" },
   { token: "{{Designation}}", label: "Designation", category: "Position" },
+  { token: "{{Department}}", label: "Department", category: "Position" },
   { token: "{{PrimaryCampus}}", label: "Campus Name", category: "Position" },
   { token: "{{BoardName}}", label: "Board Name (BIEAP / TGBIE)", category: "Position" },
   { token: "{{RoleCategory}}", label: "Role Category", category: "Position" },
-  { token: "{{DateOfJoining}}", label: "Date of Joining", category: "Position" },
-  { token: "{{OfferDate}}", label: "Offer Issue Date", category: "Document" },
-  { token: "{{DepartmentOffice}}", label: "Issuing Directorate", category: "Document" },
+  { token: "{{ReportingAuthority}}", label: "Reporting Authority", category: "Position" },
   { token: "{{BasicSalary}}", label: "Basic Monthly Salary", category: "Compensation" },
   { token: "{{GrossSalary}}", label: "Gross Monthly Salary", category: "Compensation" },
+  { token: "{{MonthlyGross}}", label: "Monthly Gross Pay", category: "Compensation" },
   { token: "{{AnnualCTC}}", label: "Annual CTC", category: "Compensation" },
+  { token: "{{OfferDate}}", label: "Offer Issue Date", category: "Document" },
+  { token: "{{DepartmentOffice}}", label: "Issuing Directorate", category: "Document" },
   { token: "{{InstitutionName}}", label: "Institution Name", category: "Branding" },
 ];
 
@@ -199,6 +202,7 @@ const BLANK_TEMPLATE = {
 export default function OfferLetterConfigurationPage() {
   const navigate = useNavigate();
   const { selectedCampus } = useCampusContext?.() || {};
+  const { selectedBoard } = useAcademicContext?.() || {};
 
   // 3 Tabs: catalog, editor, automation
   const [activeTab, setActiveTab] = useState("catalog");
@@ -362,12 +366,144 @@ export default function OfferLetterConfigurationPage() {
 
   const currentDraft = isCreatingNew ? newTemplateDraft : activeTemplate;
 
+  // Live staff options for realistic candidate proofing & actual salary verification
+  const [proofingStaffList, setProofingStaffList] = useState([]);
+  const [selectedProofingStaffId, setSelectedProofingStaffId] = useState("sample");
+  const [proofingStaffPayroll, setProofingStaffPayroll] = useState(null);
+  const [loadingProofingPayroll, setLoadingProofingPayroll] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadProofingStaff() {
+      try {
+        const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
+        const res = await apiClient.get(apiEndpoints.faculty.list, {
+          params: { PageNumber: 1, PageSize: 50, CampusId: campusId || undefined }
+        });
+        const items = res?.data?.items || res?.data?.data || (Array.isArray(res?.data) ? res.data : []);
+        if (isMounted && Array.isArray(items)) {
+          setProofingStaffList(items);
+        }
+      } catch (err) {
+        console.warn("Failed to load staff list for offer letter proofing:", err);
+      }
+    }
+    loadProofingStaff();
+    return () => { isMounted = false; };
+  }, [selectedCampus]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchProofingPayroll() {
+      if (selectedProofingStaffId === "sample") {
+        setProofingStaffPayroll(null);
+        return;
+      }
+      setLoadingProofingPayroll(true);
+      try {
+        const res = await apiClient.get(`/api/v1/staff/${selectedProofingStaffId}/payroll-details`);
+        if (isMounted && res?.data) {
+          setProofingStaffPayroll(res.data);
+        }
+      } catch (err) {
+        // Fallback: extract from staff record directly
+        const staffObj = proofingStaffList.find((s) => String(s.id) === String(selectedProofingStaffId));
+        if (staffObj && isMounted) {
+          let parsedBank = {};
+          try { parsedBank = typeof staffObj.bankDetailsJson === "string" ? JSON.parse(staffObj.bankDetailsJson) : (staffObj.bankDetailsJson || {}); } catch {}
+          setProofingStaffPayroll({
+            basicSalary: parsedBank.BasicSalary || null,
+            grossSalary: parsedBank.GrossSalary || parsedBank.MonthlyGross || null
+          });
+        }
+      } finally {
+        if (isMounted) setLoadingProofingPayroll(false);
+      }
+    }
+    fetchProofingPayroll();
+    return () => { isMounted = false; };
+  }, [selectedProofingStaffId, proofingStaffList]);
+
   const activeCandidate = useMemo(() => {
-    const campusName = selectedCampus?.campusName || "Main Campus (HQ)";
-    const campusCode = selectedCampus?.campusCode || "PC";
-    const boardName = "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+    const campusName = selectedCampus?.campusName || selectedCampus?.name || "Main Campus (HQ)";
+    const campusCode = selectedCampus?.campusCode || selectedCampus?.code || "PC";
+    const boardName = selectedBoard?.name || selectedBoard?.boardName || "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
     const now = new Date();
     const dateStr = now.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+    // Check if admin selected a real staff member for live offer letter proofing
+    const realStaff = selectedProofingStaffId !== "sample"
+      ? proofingStaffList.find((s) => String(s.id) === String(selectedProofingStaffId))
+      : null;
+
+    if (realStaff) {
+      const sFullName = realStaff.fullName || [realStaff.firstName, realStaff.lastName].filter(Boolean).join(" ") || "Faculty Member";
+      const empId = realStaff.employeeId || `STF${realStaff.id}`;
+      const desig = realStaff.designation || currentDraft.roleCategory || "Junior Lecturer";
+      const dept = realStaff.department || "Intermediate Academics";
+      const roleCat = realStaff.staffType || currentDraft.roleCategory || "Teaching Staff";
+      const sCampus = realStaff.campusName || campusName;
+      const sBoard = realStaff.boardName || realStaff.board || boardName;
+
+      // Authentic salary resolution from payroll API or staff details without fake fallbacks
+      let basicVal = proofingStaffPayroll?.basicSalary;
+      let grossVal = proofingStaffPayroll?.grossSalary;
+
+      if (!basicVal || !grossVal) {
+        try {
+          const bank = typeof realStaff.bankDetailsJson === "string" ? JSON.parse(realStaff.bankDetailsJson) : (realStaff.bankDetailsJson || {});
+          if (!basicVal) basicVal = bank.BasicSalary;
+          if (!grossVal) grossVal = bank.GrossSalary || bank.MonthlyGross;
+        } catch {}
+      }
+
+      const basicNum = Number(basicVal);
+      const grossNum = Number(grossVal);
+
+      const basicStr = !isNaN(basicNum) && basicNum > 0
+        ? `₹${basicNum.toLocaleString("en-IN")}`
+        : "As per institutional pay scale";
+
+      const grossStr = !isNaN(grossNum) && grossNum > 0
+        ? `₹${grossNum.toLocaleString("en-IN")}`
+        : "As per institutional pay scale";
+
+      const ctcStr = !isNaN(grossNum) && grossNum > 0
+        ? `₹${(grossNum * 12).toLocaleString("en-IN")}`
+        : "As per institutional pay scale";
+
+      return {
+        id: `staff-${realStaff.id}`,
+        isRealStaff: true,
+        staffId: realStaff.id,
+        label: `${sFullName} (${empId})`,
+        data: {
+          StaffName: sFullName,
+          EmployeeId: empId,
+          Designation: desig,
+          Department: dept,
+          PrimaryCampus: sCampus,
+          BoardName: sBoard,
+          RoleCategory: roleCat,
+          DateOfJoining: realStaff.joiningDate ? new Date(realStaff.joiningDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : dateStr,
+          OfferDate: dateStr,
+          DepartmentOffice: currentDraft.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
+          ReportingManager: currentDraft.reportingAuthority || "Campus Principal",
+          ProbationPeriod: `${currentDraft.probationPeriodMonths || 6} Months`,
+          BasicSalary: basicStr,
+          GrossSalary: grossStr,
+          MonthlyGross: grossStr,
+          Salary: grossStr,
+          AnnualCTC: ctcStr,
+          BasicPay: basicStr,
+          AnnualCtc: ctcStr,
+          Hra: "As per institutional bylaws",
+          SpecialAllowance: "Included in Gross Salary",
+          InstitutionName: currentDraft.institutionName || "PIRNAV EDUCATIONAL SOCIETY",
+        },
+      };
+    }
+
     const isPrincipal = (currentDraft.roleCategory || "").toLowerCase().includes("principal");
     const isNonTeaching = (currentDraft.roleCategory || "").toLowerCase().includes("non-teaching");
     const desig = isPrincipal
@@ -381,24 +517,33 @@ export default function OfferLetterConfigurationPage() {
     return {
       id: "proofing-candidate",
       isRealStaff: false,
-      label: `Candidate Appointee (${desig})`,
+      label: `Sample Appointee (${desig})`,
       data: {
         StaffName: "Candidate / Appointee Name",
         EmployeeId: empId,
         Designation: desig,
+        Department: "Intermediate Academics",
         PrimaryCampus: campusName,
         BoardName: boardName,
         RoleCategory: roleCat,
         DateOfJoining: dateStr,
         OfferDate: dateStr,
         DepartmentOffice: currentDraft.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
-        BasicSalary: isPrincipal ? "Rs. 85,000.00" : isNonTeaching ? "Rs. 32,000.00" : "Rs. 45,000.00",
-        GrossSalary: isPrincipal ? "Rs. 1,35,000.00" : isNonTeaching ? "Rs. 48,000.00" : "Rs. 68,500.00",
-        AnnualCTC: isPrincipal ? "Rs. 16,20,000.00" : isNonTeaching ? "Rs. 5,76,000.00" : "Rs. 8,22,000.00",
+        ReportingManager: currentDraft.reportingAuthority || (isPrincipal ? "Board of Governors" : "Campus Principal"),
+        ProbationPeriod: `${currentDraft.probationPeriodMonths || 6} Months`,
+        BasicSalary: isPrincipal ? "₹85,000" : isNonTeaching ? "₹32,000" : "₹45,000",
+        GrossSalary: isPrincipal ? "₹1,35,000" : isNonTeaching ? "₹48,000" : "₹68,500",
+        MonthlyGross: isPrincipal ? "₹1,35,000" : isNonTeaching ? "₹48,000" : "₹68,500",
+        Salary: isPrincipal ? "₹1,35,000" : isNonTeaching ? "₹48,000" : "₹68,500",
+        AnnualCTC: isPrincipal ? "₹16,20,000" : isNonTeaching ? "₹5,76,000" : "₹8,22,000",
+        BasicPay: isPrincipal ? "₹85,000" : isNonTeaching ? "₹32,000" : "₹45,000",
+        AnnualCtc: isPrincipal ? "₹16,20,000" : isNonTeaching ? "₹5,76,000" : "₹8,22,000",
+        Hra: "As per institutional bylaws",
+        SpecialAllowance: "Included in Gross Salary",
         InstitutionName: currentDraft.institutionName || "PIRNAV EDUCATIONAL SOCIETY",
       },
     };
-  }, [selectedCampus, currentDraft]);
+  }, [selectedCampus, selectedBoard, currentDraft, selectedProofingStaffId, proofingStaffList, proofingStaffPayroll]);
 
   // Fetch live number series config from ID & Number Series module with fallback to cached/canonical
   const [liveSeriesConfig, setLiveSeriesConfig] = useState(null);
@@ -1693,17 +1838,27 @@ export default function OfferLetterConfigurationPage() {
                   </button>
                 </div>
                 <div className="olc-placeholders-tokens">
-                  {availableTokens.map((item) => (
-                    <button
-                      key={item.token}
-                      type="button"
-                      className="olc-token-pill"
-                      onClick={() => handleInsertToken(item.token)}
-                      title={`Insert ${item.label} (${item.token})`}
-                    >
-                      {item.token}
-                    </button>
-                  ))}
+                  {availableTokens.map((item) => {
+                    const catClass = item.category === "Compensation"
+                      ? "is-compensation"
+                      : item.category === "Candidate"
+                      ? "is-candidate"
+                      : item.category === "Position"
+                      ? "is-position"
+                      : "is-document";
+                    return (
+                      <button
+                        key={item.token}
+                        type="button"
+                        className={`olc-token-pill ${catClass}`}
+                        onClick={() => handleInsertToken(item.token)}
+                        title={`Insert ${item.label} (${item.token}) - ${item.category}`}
+                      >
+                        <span className="olc-token-tag">{item.category}</span>
+                        <span className="olc-token-code">{item.token}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1878,9 +2033,30 @@ export default function OfferLetterConfigurationPage() {
             <div className="olc-editor-preview-col">
               <div className="olc-sticky-preview-wrap">
                 <div className="olc-preview-head">
-                  <div>
+                  <div style={{ minWidth: "160px" }}>
                     <h4 className="olc-preview-title">Live Editor Proofing</h4>
-                    <span className="olc-preview-subtitle">Visual parity preview with live candidate data</span>
+                    <span className="olc-preview-subtitle">Visual parity preview</span>
+                  </div>
+
+                  {/* Staff Selector for Live Salary & Details Verification */}
+                  <div className="olc-proofing-selector-wrap">
+                    <UserCheck size={13} style={{ color: "var(--cms-primary, #355e3b)", flexShrink: 0 }} />
+                    <select
+                      className="olc-proofing-staff-select"
+                      value={selectedProofingStaffId}
+                      onChange={(e) => setSelectedProofingStaffId(e.target.value)}
+                      title="Select actual staff to preview their real salary and profile details"
+                    >
+                      <option value="sample">✨ Sample Appointee ({currentDraft.roleCategory || "Teaching"})</option>
+                      {proofingStaffList.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          👤 {st.employeeId ? `[${st.employeeId}] ` : ""}{st.firstName} {st.lastName} ({st.designation || st.department || st.staffType})
+                        </option>
+                      ))}
+                    </select>
+                    {loadingProofingPayroll && (
+                      <span className="olc-fetching-indicator">Fetching salary...</span>
+                    )}
                   </div>
 
                   {/* Export Button with Dropdown (PDF and Excel / Document) */}

@@ -3,6 +3,7 @@ import { useOutlet } from "react-router-dom";
 import FacultyLayout from "./layout/FacultyLayout.jsx";
 import { FacultyProvider, useFacultySafe, useFaculty } from "./FacultyContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { isStaffPortalUnlocked } from "./profileCompletion.js";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";
@@ -39,11 +40,10 @@ function FacultyDashboardInner() {
   const outlet = useOutlet();
   const authUser = getAuthUser();
   const profileStatus = profileData?.profileStatus || authUser?.profileStatus;
-  const statusClean = String(profileStatus || "").toLowerCase();
-  const isCompleted =
-    statusClean === "completed" ||
-    statusClean === "approved" ||
-    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
+  const isCompleted = isStaffPortalUnlocked(
+    profileStatus,
+    profileData?.isOnboarded === true || authUser?.isOnboarded === true
+  );
   const roleLower = String(authUser?.role || "").toLowerCase();
   const staffTypeLower = String(authUser?.staffType || "").toLowerCase();
   const isFaculty =

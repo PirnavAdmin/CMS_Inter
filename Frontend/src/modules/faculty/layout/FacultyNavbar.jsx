@@ -11,7 +11,6 @@ import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import TransparentAvatar from "@/shared/components/TransparentAvatar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
-import { facultyMockData } from "../data/facultyMockData.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
@@ -147,13 +146,7 @@ export default function FacultyNavbar() {
   const availableBoards = useMemo(() => {
     const allBoards = (Array.isArray(boards) && boards.length > 0)
       ? boards
-      : (Array.isArray(facultyMockData.boards) && facultyMockData.boards.length > 0
-          ? facultyMockData.boards.map((b) => ({
-              ...b,
-              name: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
-              boardName: b.name === "BIEAP" ? "Board of Intermediate Education, Andhra Pradesh" : b.name,
-            }))
-          : FALLBACK_BOARDS);
+      : FALLBACK_BOARDS;
 
     const authUser = getAuthUser();
 
@@ -380,7 +373,7 @@ export default function FacultyNavbar() {
 
   // Search Index Filtering
   const searchSuggestions = useMemo(() => {
-    const searchIndex = [...STAFF_SEARCH_INDEX, ...(facultyMockData.searchIndex || [])];
+    const searchIndex = [...STAFF_SEARCH_INDEX];
     const q = searchQuery.trim().toLowerCase();
     if (!q) return searchIndex.slice(0, 8);
     return searchIndex
