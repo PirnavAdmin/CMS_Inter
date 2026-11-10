@@ -108,8 +108,12 @@ function normalizeLiveData(sources) {
     actionType: row.actionType ?? row.action ?? "",
     scope: row.scope ?? "Platform"
   }));
-  data.notifications = choose(sources.notifications, bootstrap, "notifications").map((row) => ({ ...row, id: idOf(row), notificationId: Number(row.notificationId ?? row.id ?? 0), date: row.date ?? row.createdAt ?? "", read: row.read ?? (row.isRead ? "Read" : "Unread") }));
-  data.readNotificationIds = data.notifications.filter((row) => row.read === "Read").map((row) => row.id);
+  data.notifications = choose(sources.notifications, bootstrap, "notifications").map((row) => {
+    const readValue = row.isRead ?? row.read ?? row.status;
+    const isRead = readValue === true || readValue === 1 || ["true", "1", "read"].includes(String(readValue ?? "").toLowerCase());
+    return { ...row, id: idOf(row), notificationId: Number(row.notificationId ?? row.id ?? 0), date: row.date ?? row.createdAt ?? "", isRead, read: isRead ? "Read" : "Unread" };
+  });
+  data.readNotificationIds = data.notifications.filter((row) => row.isRead).map((row) => row.id);
   const rawSubs = list(sources.subscriptions, "subscriptions");
   data.subscriptions = rawSubs.map((row) => {
     const plan = row.plan || row.planName;
@@ -212,7 +216,7 @@ export default function SuperAdminProvider({ session, children }) {
     if (failed.length) setMessage(`Some platform data could not be loaded: ${failed.join(", ")}.`);
     setLoading(false);
     return true;
-  }, []);
+  }, [session?.preview]);
 
   useEffect(() => { loadLivePlatformData(); }, [loadLivePlatformData]);
 
@@ -274,7 +278,6 @@ export default function SuperAdminProvider({ session, children }) {
 
       if (result === undefined) throw new Error(`No API action is configured for ${mod || "this feature"} / ${act || "this operation"}.`);
       await loadLivePlatformData();
-      setMessage(result?.message ?? `${label} completed successfully.`);
       return true;
     } catch (error) {
       console.error(`Super Admin API operation failed (${label}):`, error);
@@ -284,12 +287,35 @@ export default function SuperAdminProvider({ session, children }) {
   };
 
   const refresh = async () => {
-    const success = await loadLivePlatformData();
-    if (success) setMessage("Platform data refreshed from the API.");
-    return success;
+    return loadLivePlatformData();
   };
 
-  return <Context.Provider value={{ session, data, loading, update, refresh, message, clearMessage: () => setMessage("") }}>{children}</Context.Provider>;
+  const markNotificationsRead = async (notificationIds) => {
+    const ids = [...new Set((notificationIds || []).map(Number).filter((id) => Number.isFinite(id) && id > 0))];
+    if (!ids.length) return true;
+    const previous = latest.current;
+    const idSet = new Set(ids);
+    const next = {
+      ...previous,
+      notifications: previous.notifications.map((item) => idSet.has(Number(item.notificationId ?? item.id))
+        ? { ...item, isRead: true, read: "Read" }
+        : item),
+      readNotificationIds: [...new Set([...(previous.readNotificationIds || []), ...ids.map(String)])],
+    };
+    latest.current = next;
+    setData(next);
+    try {
+      await Promise.all(ids.map((id) => superAdminApi.markNotificationRead(id)));
+      return true;
+    } catch (error) {
+      latest.current = previous;
+      setData(previous);
+      setMessage(getApiErrorMessage(error));
+      return false;
+    }
+  };
+
+  return <Context.Provider value={{ session, data, loading, update, refresh, markNotificationsRead, message, clearMessage: () => setMessage("") }}>{children}</Context.Provider>;
 }
 
 export const useSuperAdmin = () => useContext(Context);

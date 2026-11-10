@@ -1,6 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import {
+  getCollegeCodeSeriesSettings,
+  formatCollegeCode,
+  incrementCollegeCodeSequence,
+} from "../superAdminNumberSeries.js";
 import {
   Check, ChevronRight, ChevronLeft,
   Building2, Layers, UserCheck, ShieldCheck,
@@ -229,21 +234,27 @@ export default function RegisterCollegePage() {
   /* ── Helpers ── */
   const pp = (key, val) => setProfile((p) => ({ ...p, [key]: val }));
 
+  // Initialize code from user-configured College Code Series
+  useEffect(() => {
+    const seriesConf = getCollegeCodeSeriesSettings();
+    const baseCount = Math.max(Number(seriesConf.currentSequence) || 0, data?.colleges?.length || 14);
+    const initialCode = formatCollegeCode(seriesConf, baseCount + 1);
+    setProfile((prev) => ({ ...prev, code: prev.code || initialCode }));
+  }, [data?.colleges?.length]);
+
   /* Smart auto-code generation for Step 1 */
   const handleCollegeNameChange = (val) => {
     setProfile((prev) => {
       let nextCode = prev.code;
       if (prev.codeAuto) {
         const words = val.trim().split(/\s+/).filter(Boolean);
-        if (words.length >= 2) {
-          nextCode = words.map((w) => w[0]).join("").toUpperCase() + "01";
-        } else if (val.trim().length >= 3) {
-          nextCode = val.trim().slice(0, 4).toUpperCase() + "01";
-        } else {
-          nextCode = "";
-        }
+        const acronym = words.length >= 2 ? words.map((w) => w[0]).join("").toUpperCase() : val.trim().slice(0, 4).toUpperCase();
+        const seriesConf = getCollegeCodeSeriesSettings();
+        const baseCount = Math.max(Number(seriesConf.currentSequence) || 0, data?.colleges?.length || 14);
+        nextCode = formatCollegeCode(seriesConf, baseCount + 1, acronym || seriesConf.prefix);
+        return { ...prev, name: val, code: nextCode };
       }
-      return { ...prev, name: val, code: nextCode };
+      return { ...prev, name: val };
     });
   };
 
@@ -353,13 +364,16 @@ export default function RegisterCollegePage() {
   };
 
   /* ── Dynamic Checklist for Step 1 ── */
-  const step1Requirements = [
-    { label: "College basic details", done: Boolean(profile.name.trim() && profile.code.trim()) },
-    { label: "College type selected", done: Boolean(profile.collegeType) },
-    { label: "Location & address details", done: Boolean(profile.address.trim()) },
-    { label: "City, state & pincode", done: Boolean(profile.pincode.length === 6 && profile.city && profile.state) },
-    { label: "Official contact information", done: Boolean(profile.email.trim() && profile.phone.trim()) },
-  ];
+  const step1Requirements = useMemo(
+    () => [
+      { label: "College basic details", done: Boolean(profile.name.trim() && profile.code.trim()) },
+      { label: "College type selected", done: Boolean(profile.collegeType) },
+      { label: "Location & address details", done: Boolean(profile.address.trim()) },
+      { label: "City, state & pincode", done: Boolean(profile.pincode.length === 6 && profile.city && profile.state) },
+      { label: "Official contact information", done: Boolean(profile.email.trim() && profile.phone.trim()) },
+    ],
+    [profile]
+  );
 
   const step1CompletedCount = useMemo(
     () => step1Requirements.filter((r) => r.done).length,
@@ -440,7 +454,14 @@ export default function RegisterCollegePage() {
 
     try {
       const ok = await update("Registered new college", null, { module: "Colleges", actionType: "Create", payload });
-      if (ok) navigate("/super-admin/college-management");
+      if (ok) {
+        try {
+          incrementCollegeCodeSequence();
+        } catch (err) {
+          console.warn("Failed to increment college code sequence:", err);
+        }
+        navigate("/super-admin/college-management");
+      }
       else setError("Failed to register college. Please verify details and try again.");
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "An unexpected error occurred.");

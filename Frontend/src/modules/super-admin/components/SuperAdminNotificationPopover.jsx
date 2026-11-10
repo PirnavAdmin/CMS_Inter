@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useRef } from "react";
 import {
   Bell,
   Search,
@@ -17,7 +16,6 @@ import {
   RefreshCw
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import superAdminApi from "@/api/superAdminApi.js";
 import "./SuperAdminNotificationPopover.css";
 
 // Helper for relative timestamps (e.g. "2 hours ago", "Yesterday")
@@ -87,39 +85,22 @@ function getNotificationCategoryIcon(category = "", title = "") {
   };
 }
 
-export default function SuperAdminNotificationPopover({ isOpen, onClose }) {
-  const { data, update, refresh } = useSuperAdmin?.() || { data: {} };
-  const navigate = useNavigate();
+export default function SuperAdminNotificationPopover({ isOpen }) {
+  const { data, markNotificationsRead } = useSuperAdmin?.() || { data: {} };
   const popoverRef = useRef(null);
 
   // Filter States
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'unread' | 'read'
+  const [activeTab, setActiveTab] = useState("unread"); // 'all' | 'unread' | 'read'
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [markingAll, setMarkingAll] = useState(false);
 
-  // Ingest real DB notifications only
-  const rawList = data?.notifications || [];
-
-  // Local read set to reflect clicks instantly
-  const [readIds, setReadIds] = useState(new Set());
-
-  useEffect(() => {
-    const initialReads = new Set();
-    rawList.forEach((n) => {
-      if (n.read === "Read" || n.isRead === true) {
-        initialReads.add(n.id || n.notificationId);
-      }
-    });
-    setReadIds(initialReads);
-  }, [rawList]);
-
   // Unified items
   const items = useMemo(() => {
-    return rawList.map((n) => {
+    return (data?.notifications || []).map((n) => {
       const id = n.id || n.notificationId;
-      const isItemRead = readIds.has(id) || n.read === "Read" || n.isRead === true;
+      const isItemRead = n.read === "Read" || n.isRead === true || n.read === true;
       return {
         ...n,
         id,
@@ -127,7 +108,7 @@ export default function SuperAdminNotificationPopover({ isOpen, onClose }) {
         timeAgo: formatTimeAgo(n.date || n.createdAt)
       };
     });
-  }, [rawList, readIds]);
+  }, [data?.notifications]);
 
   // Counts
   const totalCount = items.length;
@@ -176,38 +157,17 @@ export default function SuperAdminNotificationPopover({ isOpen, onClose }) {
   // Mark single notification as read
   const handleItemClick = async (item) => {
     if (item.isRead) return;
-    const id = item.id;
-    setReadIds((prev) => new Set(prev).add(id));
-
-    try {
-      const numId = Number(item.notificationId || String(id).replace("notif-", ""));
-      if (numId) {
-        await superAdminApi.markNotificationRead(numId);
-      }
-      refresh?.();
-    } catch {
-      // Keep optimistic update
-    }
+    const numId = Number(item.notificationId || String(item.id).replace("notif-", ""));
+    if (numId) await markNotificationsRead?.([numId]);
   };
 
   // Mark all visible unread as read
   const handleMarkAllAsRead = async () => {
     setMarkingAll(true);
     const unreadItems = filteredItems.filter((i) => !i.isRead);
-    const nextReads = new Set(readIds);
-    unreadItems.forEach((i) => nextReads.add(i.id));
-    setReadIds(nextReads);
-
     try {
-      await Promise.all(
-        unreadItems.map((i) => {
-          const numId = Number(i.notificationId || String(i.id).replace("notif-", ""));
-          return numId ? superAdminApi.markNotificationRead(numId) : Promise.resolve();
-        })
-      );
-      refresh?.();
-    } catch {
-      // Optimistic
+      const ids = unreadItems.map((i) => Number(i.notificationId || String(i.id).replace("notif-", ""))).filter(Boolean);
+      await markNotificationsRead?.(ids);
     } finally {
       setMarkingAll(false);
     }

@@ -5,10 +5,10 @@
 
 /* Prevent browser autofill from coloring inputs yellow or light blue */
 input:-webkit-autofill,
-input:-webkit-autofill:hover, 
+input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--cms-surface) inset !important;
   -webkit-text-fill-color: var(--cms-text, #1e293b) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
@@ -934,7 +934,7 @@ input:-webkit-autofill:active {
   transition: width 0.3s ease;
 }
 
-/* ── STEP 4 REVIEW & ACTIVATE (Image Reference) ── */
+/* ── STEP 4 PREVIEW & ACTIVATE (Image Reference) ── */
 .rcf-review-sections-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1327,4 +1327,45 @@ input:-webkit-autofill:active {
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE ADAPTATIONS FOR REGISTER COLLEGE WIZARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .rcf-page {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rcf-card,
+[data-theme="dark"] .rcf-stepper-bar,
+[data-theme="dark"] .rcf-aside,
+[data-theme="dark"] .rcf-aside-box,
+[data-theme="dark"] .rcf-plan-card,
+[data-theme="dark"] .rcf-module-item,
+[data-theme="dark"] .rcf-review-section,
+[data-theme="dark"] .rcf-footer {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rcf-input,
+[data-theme="dark"] .rcf-select,
+[data-theme="dark"] .rcf-textarea {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rcf-page-title,
+[data-theme="dark"] .rcf-card-title,
+[data-theme="dark"] .rcf-label {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rcf-page-subtitle,
+[data-theme="dark"] .rcf-card-subtitle {
+  color: var(--cms-muted);
 }

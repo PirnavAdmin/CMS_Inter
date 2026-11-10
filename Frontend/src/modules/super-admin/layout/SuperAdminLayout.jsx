@@ -11,6 +11,7 @@ import { clearAuthSession } from "@/modules/auth/authStorage.js";
 import { logoutPreview } from "../superAdminSession.js";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import "./SuperAdminLayout.css";
+import "../SuperAdminTheme.css";
 
 const groups = [
   ["Overview", [["dashboard", "Dashboard", LayoutDashboard]]],
@@ -85,7 +86,15 @@ export default function SuperAdminLayout() {
 
         <div className="sa-topbar-end">
           <ThemeToggle variant="dashboard"/>
-
+          <button
+            type="button"
+            className="sa-palette-btn"
+            onClick={() => setThemePaletteOpen(true)}
+            title="Theme Palette & Appearance"
+            aria-label="Choose Theme Palette"
+          >
+            <Palette size={18} />
+          </button>
           {/* Topbar Notification Bell with Popover */}
           <div className="sa-notif-btn-wrap" ref={notifRef}>
             <button

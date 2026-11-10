@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
+import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeSubscriptionsPage.css";
 
 const getDaysRemaining = (dateStr) => {
@@ -91,9 +92,9 @@ export default function CollegeSubscriptionsPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState("list"); // 'list' or 'grid'
 
-  // Sorting
-  const [sortField, setSortField] = useState("collegeName");
-  const [sortOrder, setSortOrder] = useState("asc");
+  // Sorting - default newest records at the top
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -311,6 +312,11 @@ export default function CollegeSubscriptionsPage() {
       .sort((a, b) => {
         let valA = a[sortField] || "";
         let valB = b[sortField] || "";
+        const numA = Number(String(valA).replace(/\D/g, ""));
+        const numB = Number(String(valB).replace(/\D/g, ""));
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return sortOrder === "asc" ? numA - numB : numB - numA;
+        }
         if (typeof valA === "string") valA = valA.toLowerCase();
         if (typeof valB === "string") valB = valB.toLowerCase();
 
@@ -1256,66 +1262,17 @@ export default function CollegeSubscriptionsPage() {
           </div>
         )}
 
-        {/* ── Table Footer & Pagination ── */}
-        <footer className="csp-footer">
-          <div className="csp-footer-info">
-            {totalRecords > 0 ? (
-              <span>
-                Showing {startIndex + 1}-{Math.min(startIndex + rowsPerPage, totalRecords)} of{" "}
-                {totalRecords} subscriptions
-              </span>
-            ) : (
-              <span>Showing 0 of 0 subscriptions</span>
-            )}
-          </div>
-
-          <div className="csp-footer-right">
-            <div className="csp-rows-selector">
-              <span>Rows per page:</span>
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="csp-rows-select"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-              </select>
-            </div>
-
-            <div className="csp-pagination">
-              <button
-                type="button"
-                className="csp-page-btn"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
-                <button
-                  key={pNum}
-                  type="button"
-                  className={`csp-page-btn ${pNum === currentPage ? "is-active" : ""}`}
-                  onClick={() => setPage(pNum)}
-                >
-                  {pNum}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="csp-page-btn"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </footer>
+        {/* ── Standardized Super Admin Pagination ── */}
+        <SuperAdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalRecords={totalRecords}
+          rowsPerPage={rowsPerPage}
+          onPageChange={setPage}
+          onRowsPerPageChange={setRowsPerPage}
+          rowsOptions={[5, 10, 20]}
+          unit="subscriptions"
+        />
       </div>
 
       {/* ── BOTTOM KEY ACTIONS PANEL (Left to Right Full Width) ── */}

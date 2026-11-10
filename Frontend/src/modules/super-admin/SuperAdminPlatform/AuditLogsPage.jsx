@@ -34,6 +34,7 @@ import {
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import auditIllustration from "@/assets/settings-3d/audit-logs.png";
+import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./AuditLogsPage.css";
 
 // Helper to clean & parse JSON activity descriptions into human-readable text
@@ -656,82 +657,17 @@ export default function AuditLogsPage() {
       </div>
 
       {/* ── PAGINATION BAR ── */}
-      <div className="sal-pagination-bar">
-        <div className="sal-pagination-info">
-          Showing {totalRecords === 0 ? 0 : startIndex + 1} - {Math.min(startIndex + rowsPerPage, totalRecords)} of {totalRecords} records
-        </div>
-
-        <div className="sal-pagination-controls">
-          {/* Rows per page selector */}
-          <div className="sal-rpp-wrap">
-            <span className="sal-rpp-label">Rows per page:</span>
-            <select
-              className="sal-rpp-select"
-              value={rowsPerPage}
-              onChange={(e) => {
-                setRowsPerPage(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-            >
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-
-          {/* Page Buttons */}
-          <div className="sal-page-buttons">
-            <button
-              type="button"
-              className="sal-page-nav-btn"
-              onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-              disabled={currentPage <= 1}
-            >
-              <ChevronLeft size={13} />
-              <span>Previous</span>
-            </button>
-
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => {
-              // Show pages around current
-              if (
-                num === 1 ||
-                num === totalPages ||
-                (num >= currentPage - 1 && num <= currentPage + 1)
-              ) {
-                return (
-                  <button
-                    key={num}
-                    type="button"
-                    className={`sal-page-num-btn ${currentPage === num ? "active" : ""}`}
-                    onClick={() => setCurrentPage(num)}
-                  >
-                    {num}
-                  </button>
-                );
-              }
-              if (num === currentPage - 2 || num === currentPage + 2) {
-                return (
-                  <span key={num} className="sal-page-ellipsis">
-                    ...
-                  </span>
-                );
-              }
-              return null;
-            })}
-
-            <button
-              type="button"
-              className="sal-page-nav-btn"
-              onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-              disabled={currentPage >= totalPages}
-            >
-              <span>Next</span>
-              <ChevronRight size={13} />
-            </button>
-          </div>
-        </div>
-      </div>
+      <SuperAdminPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalRecords={totalRecords}
+        rowsPerPage={rowsPerPage}
+        onPageChange={setCurrentPage}
+        onRowsPerPageChange={(r) => {
+          setRowsPerPage(r);
+          setCurrentPage(1);
+        }}
+      />
     </div>
   );
 }

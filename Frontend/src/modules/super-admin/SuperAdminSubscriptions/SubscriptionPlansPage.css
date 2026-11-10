@@ -640,3 +640,103 @@
   padding: 11px 14px;
   vertical-align: middle;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE ADAPTATIONS FOR SUBSCRIPTION PLANS PAGE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .plans-page {
+  background: var(--cms-bg);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .spp-hero-banner {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, var(--cms-surface) 100%);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .spp-hero-title,
+[data-theme="dark"] .spp-plan-name {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .spp-hero-desc,
+[data-theme="dark"] .spp-plan-desc {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .spp-plan-card,
+[data-theme="dark"] .spp-table-card,
+[data-theme="dark"] .spp-matrix-card,
+[data-theme="dark"] .spp-feature-category-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .spp-list-table thead th {
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .spp-list-table tbody tr {
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .spp-list-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .spp-view-switcher {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .spp-view-btn.active {
+  background: var(--cms-surface);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .spp-compare-wrap {
+  background: var(--cms-surface) !important;
+  border-color: var(--cms-border) !important;
+}
+
+[data-theme="dark"] .spp-compare-table thead th {
+  background: rgba(15, 23, 42, 0.8) !important;
+  border-bottom-color: var(--cms-border) !important;
+  color: var(--cms-text) !important;
+}
+
+[data-theme="dark"] .spp-compare-table tbody tr {
+  border-bottom-color: var(--cms-border) !important;
+}
+
+[data-theme="dark"] .spp-compare-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme="dark"] .spp-compare-table td {
+  color: var(--cms-text) !important;
+}
+
+[data-theme="dark"] .spp-compare-cat-row {
+  background: rgba(0, 0, 0, 0.4) !important;
+  color: var(--cms-muted) !important;
+}
+
+[data-theme="dark"] .spp-popover-menu {
+  background: var(--cms-surface) !important;
+  border-color: var(--cms-border) !important;
+}
+
+[data-theme="dark"] .spp-popover-item {
+  color: var(--cms-text) !important;
+}
+
+[data-theme="dark"] .spp-popover-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+

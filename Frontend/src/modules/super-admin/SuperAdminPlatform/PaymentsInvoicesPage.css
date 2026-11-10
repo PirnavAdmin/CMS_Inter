@@ -793,3 +793,161 @@
   background: #f9fafb;
   border-radius: 0 0 16px 16px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE & THEME PALETTE OVERRIDES FOR PAYMENTS & INVOICES
+   ═══════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .pip-page-container {
+  background: var(--cms-bg, #0b1120) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-header-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .pip-header-icon-wrap {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-primary, #6ee7b7) !important;
+}
+
+[data-theme="dark"] .pip-header-title {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-header-subtitle {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-tab-btn.active {
+  background: var(--cms-primary, #10b981) !important;
+  color: #ffffff !important;
+  border-color: var(--cms-primary, #10b981) !important;
+}
+
+[data-theme="dark"] .pip-filters-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-search-box {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+}
+
+[data-theme="dark"] .pip-search-input {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-search-input::placeholder {
+  color: var(--cms-muted, #64748b) !important;
+}
+
+[data-theme="dark"] .pip-select,
+[data-theme="dark"] .pip-date-input {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-reset-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-table-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .pip-table thead th {
+  background: rgba(15, 23, 42, 0.8) !important;
+  color: var(--cms-muted, #94a3b8) !important;
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-table tbody tr {
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.06)) !important;
+}
+
+[data-theme="dark"] .pip-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+[data-theme="dark"] .pip-table tbody td {
+  color: var(--cms-text, #e2e8f0) !important;
+}
+
+[data-theme="dark"] .pip-cell-num {
+  color: var(--cms-muted, #64748b) !important;
+}
+
+[data-theme="dark"] .pip-college-cell span {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-cell-amount {
+  color: var(--cms-primary, #6ee7b7) !important;
+}
+
+[data-theme="dark"] .pip-cell-date {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .pip-action-icon-btn {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-text, #e2e8f0) !important;
+}
+
+[data-theme="dark"] .pip-action-icon-btn:hover {
+  background: var(--cms-primary, #10b981) !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .pip-modal-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .pip-modal-header {
+  border-bottom-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-modal-header h3 {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-invoice-sheet,
+[data-theme="dark"] .pip-receipt-sheet {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+[data-theme="dark"] .pip-invoice-val,
+[data-theme="dark"] .pip-invoice-id {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .pip-modal-footer {
+  background: var(--cms-surface, #1e293b) !important;
+  border-top-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+}
+

@@ -1,6 +1,7 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
+import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import { activeAccountCount } from "../superAdminPreview.js";
@@ -56,8 +57,8 @@ export default function CollegesPage() {
   const [openMoreId, setOpenMoreId] = useState(null);
 
   // Sorting state
-  const [sortField, setSortField] = useState("name");
-  const [sortDir, setSortDir] = useState("asc");
+  const [sortField, setSortField] = useState("id");
+  const [sortDir, setSortDir] = useState("desc");
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -74,12 +75,12 @@ export default function CollegesPage() {
     return [...(data.colleges || [])].sort((a, b) => {
       const idA = Number(a.collegeId ?? a.id ?? 0);
       const idB = Number(b.collegeId ?? b.id ?? 0);
-      return idA - idB;
+      return idB - idA;
     });
   }, [data.colleges]);
 
   // Find admins for each college
-  const getAdminsForCollege = (row) => {
+  const getAdminsForCollege = useCallback((row) => {
     const cidStr = String(row.collegeId ?? row.id ?? "");
     const cidNum = Number(row.collegeId ?? row.id ?? 0);
     return (data.users || []).filter((u) => {
@@ -92,7 +93,7 @@ export default function CollegesPage() {
         (u.collegeName && row.name && u.collegeName.toLowerCase() === row.name.toLowerCase())
       );
     });
-  };
+  }, [data.users]);
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -122,7 +123,7 @@ export default function CollegesPage() {
         const matchAdmin = !adminFilter || (row.adminSetup === "Admin Assigned" ? adminFilter === "assigned" : adminFilter === "unassigned");
         return matchSearch && matchStatus && matchAdmin;
       });
-  }, [source, data.users, searchTerm, statusFilter, adminFilter]);
+  }, [source, getAdminsForCollege, searchTerm, statusFilter, adminFilter]);
 
   // Handle column sort
   const handleSort = (field) => {
@@ -139,6 +140,11 @@ export default function CollegesPage() {
     return [...filteredRows].sort((a, b) => {
       let valA = a[sortField];
       let valB = b[sortField];
+      if (sortField === "id") {
+        const idA = Number(String(a.id || "").replace(/\D/g, "")) || 0;
+        const idB = Number(String(b.id || "").replace(/\D/g, "")) || 0;
+        return sortDir === "asc" ? idA - idB : idB - idA;
+      }
       if (sortField === "students") {
         valA = Number(valA) || 0;
         valB = Number(valB) || 0;
@@ -745,61 +751,16 @@ export default function CollegesPage() {
             </table>
           </div>
 
-          {/* Table Footer with Pagination matching Renewals */}
-          <footer className="rnp-footer">
-            <span className="rnp-footer-info">
-              Showing {totalRecords > 0 ? start + 1 : 0} – {Math.min(start + pageSize, totalRecords)} of {totalRecords} colleges
-            </span>
-
-            <div className="rnp-footer-right">
-              <div className="rnp-rows-selector">
-                <span>Rows per page:</span>
-                <select
-                  className="rnp-rows-select"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                </select>
-              </div>
-
-              <div className="rnp-pagination">
-                <button
-                  type="button"
-                  className="rnp-page-btn"
-                  disabled={currentPage <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  title="Previous Page"
-                >
-                  &lt;
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    className={`rnp-page-btn ${currentPage === num ? "is-active" : ""}`}
-                    onClick={() => setPage(num)}
-                  >
-                    {num}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="rnp-page-btn"
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  title="Next Page"
-                >
-                  &gt;
-                </button>
-              </div>
-            </div>
-          </footer>
+          <SuperAdminPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            rowsPerPage={pageSize}
+            onPageChange={setPage}
+            onRowsPerPageChange={setPageSize}
+            rowsOptions={[5, 10, 20]}
+            unit="colleges"
+          />
         </div>
       ) : (
         /* Card / Grid View */

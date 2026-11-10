@@ -89,13 +89,32 @@
 .sa-shell .sa-nav-icon, .sa-shell .sa-page-title-icon { background: transparent; border: 0; box-shadow: none; }
 .sa-shell .sa-sidebar nav a.active .sa-nav-icon, [data-theme="dark"] .sa-shell :is(.sa-nav-icon, .sa-page-title-icon) { box-shadow: none; border: 0; }
 
-
 /* ── Topbar Right & Profile Dropdown ── */
 .sa-topbar-end {
   display: flex;
   align-items: center;
   gap: 16px;
   position: relative;
+}
+
+.sa-palette-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sa-palette-btn:hover {
+  color: var(--cms-primary);
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-soft);
 }
 
 .sa-profile-wrap {
