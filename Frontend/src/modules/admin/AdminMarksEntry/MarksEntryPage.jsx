@@ -716,6 +716,28 @@ const reconcileRosterWithMarks = (
 };
 
 const calculateEvaluationStatistics = (workspace) => {
+  const hasAuthoritativeTotal =
+    workspace?.totalStudents !== undefined &&
+    workspace?.totalStudents !== null &&
+    Number(workspace.totalStudents) > 0;
+  const hasAuthoritativeAvg =
+    workspace?.averageMarks !== undefined &&
+    workspace?.averageMarks !== null;
+
+  if (hasAuthoritativeTotal && hasAuthoritativeAvg) {
+    return {
+      studentsCount: Number(workspace.totalStudents),
+      average: String(workspace.averageMarks),
+      highest:
+        workspace.highestMarks !== undefined && workspace.highestMarks !== null
+          ? String(workspace.highestMarks)
+          : (workspace.highest ?? "—"),
+      lowest:
+        workspace.lowestMarks !== undefined && workspace.lowestMarks !== null
+          ? String(workspace.lowestMarks)
+          : (workspace.lowest ?? "—"),
+    };
+  }
   if (!workspace?.rows?.length) {
     const totalCount = Number(workspace?.totalStudents ?? workspace?.studentsCount ?? 0);
     const avg =
@@ -737,12 +759,19 @@ const calculateEvaluationStatistics = (workspace) => {
       lowest: low,
     };
   }
-  const values = workspace.rows
+  const activeRows = (workspace.rows || []).filter((row) => {
+    if (row.absent) return true;
+    if (row.markId) return true;
+    const val = workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total;
+    return val !== "" && val !== null && val !== undefined;
+  });
+  const targetRows = activeRows.length > 0 ? activeRows : workspace.rows;
+  const values = targetRows
     .filter((row) => !row.absent && (row.total !== "" || row.obtainedMarks !== ""))
     .map((row) => Number(workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total))
     .filter(Number.isFinite);
   return {
-    studentsCount: workspace.rows.length,
+    studentsCount: Number(workspace?.totalStudents || targetRows.length),
     average: values.length
       ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)
       : workspace?.averageMarks !== undefined && workspace?.averageMarks !== null
@@ -2422,8 +2451,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               theoryMax: config.theoryMax,
               passPercentage: config.passPercentage,
               rejectionReason: existing.rejectionReason || currentWs?.rejectionReason || "",
-              totalStudents: loadedRows.length,
-              studentsCount: loadedRows.length,
+              totalStudents: existing.totalStudents || currentWs?.totalStudents || config?.totalStudents || loadedRows.length,
+              studentsCount: existing.studentsCount || existing.totalStudents || currentWs?.studentsCount || currentWs?.totalStudents || config?.totalStudents || loadedRows.length,
               rows: loadedRows,
               dirty: false,
               validationErrors: {},
@@ -3587,18 +3616,45 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 
         const statusStr = String(ev.status || ev.statusCode || "").trim().toUpperCase() || "APPROVED";
 
-        if (evalMap[key] && ev.facultyName) {
-          evalMap[key].facultyName = ev.facultyName;
-          evalMap[key].facultyCode = ev.facultyCode || evalMap[key].facultyCode || "";
-          evalMap[key].facultyId = ev.facultyId || evalMap[key].facultyId;
-          evalMap[key].faculty = {
-            name: ev.facultyName,
-            code: ev.facultyCode || evalMap[key].faculty?.code || "",
-            employeeCode: ev.facultyCode || evalMap[key].faculty?.employeeCode || "",
-          };
-        }
+        if (evalMap[key]) {
+          if (ev.facultyName) {
+            evalMap[key].facultyName = ev.facultyName;
+            evalMap[key].facultyCode = ev.facultyCode || evalMap[key].facultyCode || "";
+            evalMap[key].facultyId = ev.facultyId || evalMap[key].facultyId;
+            evalMap[key].faculty = {
+              name: ev.facultyName,
+              code: ev.facultyCode || evalMap[key].faculty?.code || "",
+              employeeCode: ev.facultyCode || evalMap[key].faculty?.employeeCode || "",
+            };
+          }
+          if (statusStr && statusStr !== "NOT STARTED") {
+            evalMap[key].status = statusStr;
+          }
+          if (ev.totalStudents !== undefined && ev.totalStudents !== null && Number(ev.totalStudents) > 0) {
+            evalMap[key].totalStudents = Number(ev.totalStudents);
+            evalMap[key].studentsCount = Number(ev.totalStudents);
+          }
+          if (ev.averageMarks !== undefined && ev.averageMarks !== null) {
+            evalMap[key].averageMarks = ev.averageMarks;
+            evalMap[key].average = String(ev.averageMarks);
+          }
+          if (ev.highestMarks !== undefined && ev.highestMarks !== null) {
+            evalMap[key].highestMarks = ev.highestMarks;
+            evalMap[key].highest = String(ev.highestMarks);
+          }
+          if (ev.lowestMarks !== undefined && ev.lowestMarks !== null) {
+            evalMap[key].lowestMarks = ev.lowestMarks;
+            evalMap[key].lowest = String(ev.lowestMarks);
+          }
+          if (ev.presentStudents !== undefined && ev.presentStudents !== null) {
+            evalMap[key].presentStudents = Number(ev.presentStudents);
+          }
+          if (ev.absentStudents !== undefined && ev.absentStudents !== null) {
+            evalMap[key].absentStudents = Number(ev.absentStudents);
+          }
+        } else {
 
-        if (!evalMap[key] || evalMap[key].status === "NOT STARTED") {
+
           evalMap[key] = {
             ...(evalMap[key] || {}),
             evaluationId: ev.evaluationId || `${evSubId}_${evalState.filters.section}_${evalState.filters.exam}`,
@@ -4435,16 +4491,16 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                         targetItem = {
                           ...item,
                           rows,
-                          totalStudents: rows.length,
-                          studentsCount: rows.length,
+                          totalStudents: item.totalStudents || rows.length,
+                          studentsCount: item.studentsCount || item.totalStudents || rows.length,
                         };
                         setWorkspaces((all) => ({
                           ...all,
                           [key]: {
                             ...all[key],
                             rows,
-                            totalStudents: rows.length,
-                            studentsCount: rows.length,
+                            totalStudents: item.totalStudents || rows.length,
+                            studentsCount: item.studentsCount || item.totalStudents || rows.length,
                           },
                         }));
                       } catch (err) {
@@ -4501,8 +4557,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                   />
                 ) : (
                   <section className="cms-card cms-main-card">
-                    <div className="cms-eval-table-toolbar">
-                      <div className="cms-eval-toolbar-left">
+                    <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+              
                         <div className="cms-subtab-pill-group">
                           <button
                             type="button"
@@ -5086,8 +5142,8 @@ function EvaluationList({
 
   return (
     <section className="cms-card cms-main-card">
-      <div className="cms-eval-table-toolbar">
-        <div className="cms-eval-toolbar-left">
+      <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+
           {setSubTab && (
             <div className="cms-subtab-pill-group">
               <button
@@ -5131,7 +5187,7 @@ function EvaluationList({
           <SearchBox
             value={search}
             onChange={setSearch}
-            placeholder="Search subject, faculty, status..."
+            placeholder="Search records..."
           />
         </div>
       </div>
@@ -5153,12 +5209,12 @@ function EvaluationList({
                   </small>
                 ) : null}
               </td>
-              <td className="cms-cell-center">{item.studentsCount}</td>
+              <td className="cms-cell-center">{item.totalStudents || item.studentsCount}</td>
               <td className="cms-cell-center">
-                {item.average} / {item.maxMarks}
+                {(item.averageMarks !== undefined && item.averageMarks !== null ? item.averageMarks : item.average)} / {item.maxMarks}
               </td>
-              <td className="cms-cell-center">{item.highest}</td>
-              <td className="cms-cell-center">{item.lowest}</td>
+              <td className="cms-cell-center">{item.highestMarks !== undefined && item.highestMarks !== null ? item.highestMarks : item.highest}</td>
+              <td className="cms-cell-center">{item.lowestMarks !== undefined && item.lowestMarks !== null ? item.lowestMarks : item.lowest}</td>
               <td className="cms-cell-center">
                 <Badge status={item.status} />
               </td>
@@ -5305,8 +5361,8 @@ function StudentList({
   const shown = rows.slice((page - 1) * currentLimit, page * currentLimit);
   return (
     <section className="cms-card cms-main-card">
-      <div className="cms-eval-table-toolbar">
-        <div className="cms-eval-toolbar-left">
+      <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+
           {setSubTab && (
             <div className="cms-subtab-pill-group">
               <button
@@ -5726,13 +5782,15 @@ const Num = ({ value, max, disabled, onChange, title = "Marks input" }) => {
   );
 };
 
-const SearchBox = ({ value, onChange }) => (
+const SearchBox = ({ value, onChange, placeholder = "Search records..." }) => (
   <div className="cms-search-wrap">
     <input
       className="cms-search-input cms-search-input-plain"
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      placeholder="Search records..."
+      placeholder={placeholder}
+      title={placeholder}
+      aria-label={placeholder}
     />
   </div>
 );
