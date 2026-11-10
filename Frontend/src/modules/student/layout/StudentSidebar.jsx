@@ -15,6 +15,7 @@ import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { Settings } from "lucide-react";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
@@ -42,6 +43,7 @@ export const studentMenuGroups = [
 
 export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
   const { canView } = usePermissions();
+  const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
 
   return (
     <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
@@ -51,6 +53,12 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
       <nav aria-label="Student Portal pages">
         {studentMenuGroups.map(([heading, links]) => {
           const visibleLinks = links.filter(([label, path, icon, moduleKey]) => {
+            if (path === "transport" || path === "hostel" || moduleKey === "transport" || moduleKey === "hostel-management") {
+              if (facilityAccess.loading) return false;
+              if (facilityAccess.type === "transport") return path === "transport";
+              if (facilityAccess.type === "hostel") return path === "hostel";
+              return false;
+            }
             if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
             return canView(moduleKey);
           });

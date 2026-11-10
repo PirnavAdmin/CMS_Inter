@@ -7,11 +7,11 @@
 .cap-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
   width: 100%;
-  max-width: 1440px;
+  max-width: none;
   margin: 0 auto;
-  padding: 8px 4px 40px;
+  padding: 4px 4px 16px;
   animation: capFadeIn 0.25s ease-out;
   position: relative;
 }
@@ -392,7 +392,7 @@
   background: #ffffff;
   border: 1px solid var(--cms-border, #e2e8f0);
   border-radius: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   flex-wrap: wrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
@@ -832,7 +832,7 @@
 }
 
 .cap-table th {
-  padding: 12px 14px;
+  padding: 10px 12px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -857,7 +857,7 @@
 }
 
 .cap-table td {
-  padding: 13px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid #f1f5f9;
   color: var(--cms-text, #334155);
   vertical-align: middle;

@@ -765,7 +765,7 @@
 }
 
 [data-theme="dark"] .mpp-header-card {
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
+  background: linear-gradient(135deg, var(--cms-surface) 0%, var(--cms-bg) 100%) !important;
   border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
 }
@@ -813,7 +813,7 @@
 }
 
 [data-theme="dark"] .mpp-avatar-circle {
-  background: linear-gradient(135deg, #10b981, #059669) !important;
+  background: linear-gradient(135deg, var(--cms-primary), var(--cms-primary-hover, var(--cms-primary))) !important;
   color: #ffffff !important;
 }
 

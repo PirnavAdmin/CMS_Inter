@@ -797,10 +797,27 @@
   margin-top: 1px;
 }
 
-/* Plan Badge / Dropdown Pill */
-.csp-plan-pill-wrap {
-  position: relative;
-  display: inline-block;
+/* Current plan and its history are visible directly in the table. */
+.csp-plan-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 112px;
+}
+
+.csp-plan-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 220px;
+  color: var(--cms-muted, #64748b);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.csp-plan-history span {
+  white-space: nowrap;
 }
 
 .csp-plan-pill {
@@ -812,8 +829,8 @@
   font-size: 12px;
   font-weight: 700;
   border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  cursor: default;
+  transition: none;
   white-space: nowrap;
 }
 
