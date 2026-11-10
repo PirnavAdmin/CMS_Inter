@@ -31,6 +31,14 @@ import { Modal, SkeletonRow, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import GatewayPaymentPanel from "./components/GatewayPaymentPanel.jsx";
+import OfflineUtrQueueTab from "./components/OfflineUtrQueueTab.jsx";
+import PaymentReversalModal from "./components/PaymentReversalModal.jsx";
+import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData } from "./services/paymentGatewaySession.js";
+import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
+import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
+import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import {
@@ -53,9 +61,10 @@ const LEDGER_TABS = [
   { id: "Fee Collection", label: "Fee Collection" },
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
+  { id: "Pending UTRs", label: "Pending UTR Queue" },
 ];
 const feeSetupSlugs = { "Fee Types": "fee-types", "Fee Structure": "fee-structure", "Hostel Fees": "hostel-fees", "Transport Fees": "transport-fees", Scholarships: "scholarships", Fine: "fine" };
-const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history" };
+const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history", "Pending UTRs": "pending-utrs" };
 const resolveFeeView = (params, initialTab, initialSetupTab, initialLedgerTab) => {
   const tabKey = params.get("tab");
   const tab = tabKey === "setup" ? "Fee Setup" : tabKey === "student-ledger" ? "Student Fee Ledger" : tabKey === "overview" || tabKey ? "Overview" : initialTab;
@@ -376,7 +385,7 @@ const applyFineRulesToAccount = (account = {}, fineRules = []) => {
     totalFine,
     totalPayable: Number(account.totalPayable || 0) + totalFine,
     balance,
-    feeStatus: accountStatusFor({
+    feeStatus: account.backendFeeStatus || accountStatusFor({
       payable: Number(account.totalPayable || 0) + totalFine,
       paid: account.totalPaid,
       balance,
@@ -917,6 +926,11 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
   return {
     id: String(read(item, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id") ?? `${account.id || "payment"}-TXN-${index + 1}`),
     feePaymentId: read(item, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id"),
+    gatewayTransactionId: gatewayTransactionIdFor(item),
+    gatewayStatus: textValue(item, "gatewayStatus", "GatewayStatus", "transactionStatus", "TransactionStatus", "status", "Status"),
+    orderId: textValue(item, "orderId", "OrderId", "gatewayOrderId", "GatewayOrderId"),
+    isReversed: isReversedPayment(item),
+    reversalReason: textValue(item, "reversalReason", "ReversalReason"),
     studentId: read(item, "studentId", "StudentId") ?? read(student, "studentId", "StudentId", "id", "Id") ?? account.studentId,
     studentFeeId: read(item, "studentFeeId", "StudentFeeId", "studentFeeAssignmentId", "StudentFeeAssignmentId") ?? account.studentFeeId ?? account.studentFeeAssignmentId,
     receiptNo: textValue(item, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || account.receiptNo || "-",
@@ -952,7 +966,7 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
     method: textValue(item, "paymentMethod", "PaymentMethod", "paymentMode", "PaymentMode", "method", "Method") || "-",
     reference: textValue(item, "transactionNumber", "TransactionNumber", "reference", "Reference", "transactionReference", "TransactionReference"),
     date: textValue(item, "paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt") || todayISO(),
-    status: textValue(item, "status", "Status", "paymentStatus", "PaymentStatus") || "Paid",
+    status: isReversedPayment(item) ? "Reversed" : textValue(item, "status", "Status", "paymentStatus", "PaymentStatus") || "Paid",
     previousBalance: optionalNumberValue(item, "previousBalance", "PreviousBalance", "previousOutstanding", "PreviousOutstanding"),
     balance: optionalNumberValue(item, "balance", "Balance", "remainingBalance", "RemainingBalance", "outstandingBalance", "OutstandingBalance"),
   };
@@ -1046,6 +1060,7 @@ const normalizeReceipt = (payload, fallback = {}) => {
     ?? row?.amount;
   return {
     ...(row || fallback),
+    status: isReversedPayment(data) || isReversedPayment(fallback) ? "Reversed" : row?.status,
     receiptNo: textValue(data, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || fallback.receiptNo || "-",
     amount: optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount,
     date: textValue(data, "receiptDate", "ReceiptDate", "paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt") || fallback.date || "",
@@ -1120,7 +1135,8 @@ const normalizeInstallmentRows = (rows, account) => rows.map((item, index) => ({
   paid: optionalNumberValue(item, "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"),
   balance: optionalNumberValue(item, "balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
   dueDate: textValue(item, "dueDate", "DueDate", "date", "Date"),
-  status: textValue(item, "status", "Status") || account.feeStatus || "Pending",
+  backendStatus: Object.hasOwn(item, "backendStatus") ? item.backendStatus : textValue(item, "status", "Status"),
+  status: textValue(item, "status", "Status") || "Pending",
 })).map((item) => ({
   ...item,
   paid: item.paid ?? (item.balance !== undefined ? Math.max(Number(item.amount || 0) - Number(item.balance || 0), 0) : 0),
@@ -1200,6 +1216,7 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const nextDueDate = textValue(item, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate")
     || textValue(detail, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate");
   const rawStatus = textValue(item, "feeStatus", "FeeStatus", "status", "Status") || textValue(detail, "feeStatus", "FeeStatus", "status", "Status");
+  const backendFeeStatus = Object.hasOwn(item, "backendFeeStatus") ? item.backendFeeStatus : rawStatus;
   const totalPayable = rawTotalPayable <= 0 && detailTotal > 0 ? detailTotal : rawTotalPayable;
   const balance = rawBalance !== undefined && !(rawBalance <= 0 && totalPayable > totalPaid && normalizeKey(rawStatus) === "pending")
     ? rawBalance
@@ -1239,7 +1256,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     totalPaid,
     balance,
     concessionAmount: numberValue(item, "concessionAmount", "ConcessionAmount", "discountAmount", "DiscountAmount"),
-    feeStatus: accountStatusFor({ payable: totalPayable, paid: totalPaid, balance, dueDate: nextDueDate, status: rawStatus }),
+    backendFeeStatus,
+    feeStatus: accountStatusFor({ payable: totalPayable, paid: totalPaid, balance, status: rawStatus }),
     nextDueDate,
     feeItems: normalizedItems,
     transactions: [],
@@ -1253,6 +1271,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0] || null;
   return {
     ...derived,
+    // Preserve backend balances and worker statuses; the shared helper derives demo schedules.
+    installments: account.installments,
     totalPayable: account.totalPayable ?? derived.totalPayable,
     totalPaid: account.totalPaid ?? derived.totalPaid,
     balance: account.balance ?? derived.balance,
@@ -1543,12 +1563,12 @@ const printFeeList = (title, columns, rows) => {
 };
 
 function StatusBadge({ status }) {
-  return <span className={`cms-badge ${feeStatusTone(status)}`}>{status}</span>;
+  return <span className={`cms-badge ${feeStatusTone(status)} ${normalizeKey(status) === "overdue" ? "cms-fee-status-overdue" : ""}`}>{status}</span>;
 }
 
 function PaymentStatusBadge({ status }) {
   const value = status || "Paid";
-  const tone = ["success", "paid", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
+  const tone = ["reversed", "refunded"].includes(normalizeKey(value)) ? "cms-fee-status-reversed" : ["success", "paid", "captured", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
   return <span className={`cms-badge ${tone}`}>{value}</span>;
 }
 
@@ -1948,8 +1968,10 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 }
 
 /* ---------------------------- Collect payment ---------------------------- */
-function CollectPaymentModal({ account, onClose, onSaved }) {
-  const pending = account.installments.filter((item) => normalizeKey(item.status) !== "paid" && Number(item.balance || 0) > 0);
+function CollectPaymentModal({ account, onClose, onSaved, onPending }) {
+  const pending = pendingInstallments(account);
+  const [mode, setMode] = useState("UPI_QR");
+  const [gatewayLocked, setGatewayLocked] = useState(false);
   const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id || null;
   const firstPendingId = pending.length ? installmentIdFor(pending[0]) : null;
   const [target, setTarget] = useState(firstPendingId ? "schedules" : "full");
@@ -1966,6 +1988,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const [cashUncertain, setCashUncertain] = useState(false);
+  const cashRequestRef = useRef(null);
+  useEffect(() => () => cashRequestRef.current?.abort(), []);
   const isReferenceRequired = method && method !== "Cash";
 
   const setFullBalanceTarget = () => {
@@ -1997,10 +2022,14 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
       : "Select pending fee schedules";
 
   const save = async () => {
-    if (savingRef.current) return null;
+    if (savingRef.current || cashUncertain) return null;
+    try { collectionPayload(account, target, selectedInstallmentIds, amount); }
+    catch (failure) { return setError(failure.message); }
     const value = Number(amount || 0);
     const discountValue = Number(discount || 0);
     const fineValue = Number(fine || 0);
+    if (![discountValue, fineValue].every((number) => Number.isFinite(number) && number >= 0)) return setError("Discount and fine must be valid non-negative amounts");
+    if (!date || !Number.isFinite(new Date(date).getTime())) return setError("Enter a valid payment date");
     const selectedIds = target === "full" ? [] : selectedInstallmentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
     if (!Number.isFinite(value) || value <= 0) return setError("Enter a valid payment amount");
     if (discountValue > value + fineValue) return setError("Discount cannot exceed the payment amount plus fine");
@@ -2017,6 +2046,8 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
     if (!Number.isFinite(studentIdValue) || studentIdValue <= 0) return setError("Student ID is required to collect payment");
     savingRef.current = true;
     setSaving(true);
+    const controller = new AbortController();
+    cashRequestRef.current = controller;
     try {
       const response = await apiClient.post(apiEndpoints.fee.collect, {
         studentId: studentIdValue,
@@ -2030,10 +2061,16 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         fine: fineValue,
         transactionReference: reference,
         note,
-      });
-      const saved = getObject(response.data);
+      }, { requireRealBackend: true, skipNetworkRetry: true, signal: controller.signal });
+      if (controller.signal.aborted) return null;
+      const saved = gatewayData(response.data);
+      if (!read(saved, "feePaymentId", "paymentId", "id") || !textValue(saved, "receiptNo", "receiptNumber")
+        || !(numberValue(saved, "amount", "paidAmount") > 0)
+        || (saved.status && !["paid", "success", "completed"].includes(normalizeKey(saved.status)))) {
+        setCashUncertain(true);
+        throw new Error("The server did not return a saved payment and receipt. Check payment history before collecting again.");
+      }
       setSaving(false);
-      savingRef.current = false;
       return onSaved({
         amount: numberValue(saved, "amount", "Amount", "paidAmount", "PaidAmount") || value,
         baseAmount: numberValue(saved, "baseAmount", "BaseAmount", "amount", "Amount") || value,
@@ -2046,7 +2083,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         receiptNo: textValue(saved, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || "-",
       });
     } catch (err) {
+      if (controller.signal.aborted) return null;
       setError(getApiErrorMessage(err));
+      if (!err.response || err.response.status >= 500) setCashUncertain(true);
       setSaving(false);
       savingRef.current = false;
       return null;
@@ -2056,11 +2095,12 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   return (
     <Modal
       title="Collect Payment"
-      onClose={onClose}
+      className="cms-fee-omnichannel-modal"
+      onClose={saving ? () => {} : onClose}
       footer={(
         <>
-          <button className="cms-btn cms-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="cms-btn cms-btn-primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Payment"}</button>
+          <button className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>Close</button>
+          {mode === "CASH" ? <button className="cms-btn cms-btn-primary" onClick={save} disabled={saving || cashUncertain}>{saving ? "Saving..." : "Save Payment"}</button> : null}
         </>
       )}
     >
@@ -2072,6 +2112,10 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
           <div className="cms-fee-context-item"><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
         </div>
 
+        <div className="cms-fee-gateway-modes" role="tablist" aria-label="Collection method">
+          {[["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"], ["CASH", "Cash / Manual"]].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={mode === id} className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`} disabled={gatewayLocked || saving || cashUncertain} onClick={() => { setMode(id); setError(""); }}>{label}</button>)}
+        </div>
+        <fieldset className="cms-fee-gateway-fields" disabled={gatewayLocked || saving || cashUncertain}>
         <div className="cms-form-grid cols-3">
           <div className="cms-field full">
             <label>Pay Towards</label>
@@ -2105,8 +2149,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
           </div>
           <div className="cms-field">
             <label htmlFor="collect-amount">Amount <span className="req">*</span></label>
-            <input id="collect-amount" type="number" min="0" value={amount} disabled={target === "full"} onChange={(event) => setAmount(event.target.value)} />
+            <input id="collect-amount" type="number" min="0" step="0.01" value={amount} disabled={target === "full" && mode !== "BANK_TRANSFER"} onChange={(event) => setAmount(event.target.value)} />
           </div>
+          {mode === "CASH" ? <>
           <div className="cms-field">
             <label htmlFor="collect-date">Payment Date</label>
             <input id="collect-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -2133,8 +2178,12 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
             <label htmlFor="collect-note">Note</label>
             <textarea id="collect-note" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
+          </> : null}
         </div>
+        </fieldset>
+        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
+        {cashUncertain ? <p className="cms-error" role="alert">Review payment history before collecting again; this request may already have been recorded.</p> : null}
       </div>
     </Modal>
   );
@@ -2200,6 +2249,7 @@ function ReceiptModal({ receipt, onClose }) {
           <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
         </header>
         <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
+        {isReversedPayment(receipt) ? <p className="cms-fee-reversal-warning" role="alert">REVERSED PAYMENT — This receipt is retained as a historical record. It does not represent a current credit to the student's fee account.</p> : null}
         <div className="cms-fee-receipt-meta">
           <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
           <span><b>Payment Date</b> {receipt.date ? formatDate(receipt.date) : "-"}</span>
@@ -2235,7 +2285,7 @@ function ReceiptModal({ receipt, onClose }) {
 }
 
 /* --------------------------- Student fee details -------------------------- */
-function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false, reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const accountPrintRef = useRef(null);
   const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
     original: totals.original + Number(item.originalAmount || 0),
@@ -2298,6 +2348,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
         </div>
 
         <div ref={accountPrintRef} className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
+          {backendOverdue(account) ? <div className="cms-fee-overdue-warning" role="status"><AlertCircle size={16} /><span><strong>Payment Overdue:</strong> The backend has marked this fee account or one of its installments overdue. Review the saved schedule and outstanding balance below.</span></div> : null}
           <section className="cms-fee-block">
             <h3>Student Information</h3>
             <div className="cms-fee-kv">
@@ -2395,7 +2446,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             <div className="cms-table-wrap">
               <table className="cms-table">
                 <thead>
-                  <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Action</th></tr>
+                  <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Status</th><th>Action</th></tr>
                 </thead>
                 <tbody>
                   {account.transactions.map((txn) => (
@@ -2405,10 +2456,12 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       <td className="num">{formatCurrency(txn.amount)}</td>
                       <td>{txn.method}</td>
                       <td>{formatDate(txn.date)}</td>
+                      <td><PaymentStatusBadge status={txn.status} /></td>
                       <td>
                         <button className="cms-action-btn" title="View receipt" onClick={() => viewReceipt(txn)}>
                           <Eye size={15} />
                         </button>
+                        {canReversePayment(txn, reversalAuthorized) && !reversalBlocked.has(gatewayTransactionIdFor(txn)) ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={() => onReverse(txn)}>Reverse Payment</button> : null}
                       </td>
                     </tr>
                   ))}
@@ -4350,9 +4403,10 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
   );
 }
 
-function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
+function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors, gatewayScope, gatewayAccess, onSettled, onToast, onExport, exporting, onReverse, reversalBlocked }) {
   return (
     <div className="cms-fee-stack">
+      <div className="cms-fee-gateway-toolbar">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Student fee ledger">
         {LEDGER_TABS.map((item) => (
           <button
@@ -4367,15 +4421,18 @@ function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts,
           </button>
         ))}
       </div>
+      <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={exporting || !gatewayAccess.export} onClick={onExport}>{exporting ? "Exporting…" : "Export Payments Ledger (CSV)"}</button>
+      </div>
       {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} fineRules={fineRules} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
       {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
-      {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} /> : null}
+      {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} reversalAuthorized={gatewayAccess.reverse} onReverse={onReverse} reversalBlocked={reversalBlocked} /> : null}
+      {ledgerTab === "Pending UTRs" ? <OfflineUtrQueueTab scope={gatewayScope} canView={gatewayAccess.view} canReview={gatewayAccess.review} onSettled={onSettled} onToast={onToast} Pagination={TablePagination} /> : null}
     </div>
   );
 }
 
 /* ---------------------------- Payment history ---------------------------- */
-function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" }) {
+function HistoryTab({ transactions = [], onReceipt, loading = false, error = "", reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const [search, setSearch] = useState("");
   const [loadingReceiptId, setLoadingReceiptId] = useState("");
   const [page, setPage] = useState(1);
@@ -4483,6 +4540,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
                 <td><PaymentStatusBadge status={row.status || "Paid"} /></td>
                 <td>
                   <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ReceiptText size={15} /></button>
+                  {canReversePayment(row, reversalAuthorized) && !reversalBlocked.has(gatewayTransactionIdFor(row)) ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={() => onReverse(row)}>Reverse Payment</button> : null}
                 </td>
               </tr>
             ))}
@@ -4496,6 +4554,14 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
 
 /* -------------------------------- Page ---------------------------------- */
 export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTab = FEE_SETUP_TABS[0], initialLedgerTab = LEDGER_TABS[0].id } = {}) {
+  const gatewayPermissions = useEffectivePermissions();
+  const gatewayAccess = {
+    view: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canView("fee-management"),
+    review: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.APPROVE_REJECT, "fee-collection"),
+    export: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.EXPORT),
+    reverse: !gatewayPermissions.loading && !gatewayPermissions.error && hasPaymentReversalRole(getAuthUser() || {}, getAuthItem("role"))
+      && gatewayPermissions.canDo("fee-management", ACTIONS.EDIT, "fee-collection"),
+  };
   const {
     boards: contextBoards,
     academicYears: contextAcademicYears,
@@ -4540,7 +4606,19 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     if (next.toString() !== searchParams.toString()) setSearchParams(next);
   }, [searchParams, setSearchParams]);
   const [collecting, setCollecting] = useState(false);
-  useEffect(() => { setCollecting(false); }, [selectedId, selectedSource]);
+  const [reversing, setReversing] = useState(null);
+  const [reversalBlocked, setReversalBlocked] = useState(new Set());
+  const [confirmedReversals, setConfirmedReversals] = useState(new Set());
+  useEffect(() => { setCollecting(false); }, [selectedId, selectedSource, selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
+  const gatewayScope = cleanParams({ campusId: selectedCampusValue, academicYearId: selectedAcademicYearId });
+  const gatewayScopeKey = JSON.stringify([selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
+  const gatewayScopeRef = useRef(gatewayScopeKey);
+  gatewayScopeRef.current = gatewayScopeKey;
+  useEffect(() => { setReversing(null); }, [gatewayScopeKey]);
+  const [exporting, setExporting] = useState(false);
+  const exportGuard = useRef(false);
+  const exportController = useRef(null);
+  useEffect(() => () => { exportController.current?.abort(); }, [gatewayScopeKey]);
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
@@ -5019,7 +5097,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();
     if (tab === "Student Fee Ledger" && ledgerTab === "Fee Collection") loadFeeAccounts("collection");
-    if (tab === "Student Fee Ledger" && ledgerTab !== "Fee Collection") loadFeeAccounts("ledger");
+    if (tab === "Student Fee Ledger" && ["Student Fee Ledger", "Payment History"].includes(ledgerTab)) loadFeeAccounts("ledger");
   }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, selectedCampusValue, tab]);
 
   useEffect(() => {
@@ -5044,6 +5122,68 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;
     loadMissingPaymentHistories(ledgerAccounts);
   }, [ledgerAccounts, ledgerTab, loadMissingPaymentHistories, tab]);
+
+  const refreshAfterSettlement = () => {
+    feeDetailCacheRef.current.clear();
+    setSelectedDetail(null);
+    setSelectedDetailVersion((current) => current + 1);
+    return Promise.allSettled([loadFeeAccounts("ledger"), loadFeeAccounts("collection"), loadOverviewData()]);
+  };
+  const exportGatewayLedger = async () => {
+    if (exportGuard.current || !gatewayAccess.export) return;
+    exportGuard.current = true; setExporting(true);
+    const controller = new AbortController(); exportController.current = controller;
+    try { await feePaymentGatewayApi.exportLedger(gatewayScope, controller.signal); if (!controller.signal.aborted) setToast("Payments ledger exported."); }
+    catch (failure) { if (!controller.signal.aborted) setToast(getApiErrorMessage(failure)); }
+    finally { exportGuard.current = false; setExporting(false); }
+  };
+  const paymentSaved = async (saved) => {
+    if (gatewayScopeRef.current !== gatewayScopeKey) return;
+    const scopeAtPayment = gatewayScopeKey;
+    const accountAtPayment = selected;
+    setCollecting(false);
+    setToast(`Payment of ${formatCurrency(saved.amount)} confirmed${saved.receiptNo ? ` - receipt ${saved.receiptNo}` : ""}`);
+    refreshAfterSettlement();
+    if (!saved.gatewayConfirmed) {
+      setReceipt(normalizeReceipt(saved, accountAtPayment));
+      setPaymentHistoryExtras((current) => [withPaymentContext(saved, [accountAtPayment]), ...current]);
+      return;
+    }
+    if (!saved.receiptNo) { setToast("Payment confirmed. The backend has not returned a receipt number; review Payment History."); return; }
+    try {
+      const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(saved.receiptNo), { requireRealBackend: true, skipGlobalLoader: true });
+      if (gatewayScopeRef.current !== scopeAtPayment) return;
+      const official = gatewayData(response.data);
+      const receiptNumber = textValue(official, "receiptNumber", "receiptNo");
+      if (receiptNumber !== saved.receiptNo || !read(official, "receiptDate", "paymentDate", "date") || Math.abs(Number(official.amount) - Number(saved.amount)) > 0.005 || !Number.isFinite(Number(official.amount))) throw new Error("The official receipt does not match the confirmed payment.");
+      setReceipt(normalizeReceipt(official, { ...accountAtPayment, ...saved }));
+    } catch (failure) {
+      if (gatewayScopeRef.current === scopeAtPayment) setToast(`Payment confirmed. Official receipt unavailable: ${getApiErrorMessage(failure)}. View it from Payment History once available.`);
+    }
+  };
+
+  const requestReversal = (transaction) => {
+    if (canReversePayment(transaction, gatewayAccess.reverse) && !reversalBlocked.has(gatewayTransactionIdFor(transaction))) setReversing(transaction);
+  };
+  const reversalAttemptState = (id, state) => {
+    setReversalBlocked((current) => {
+      const next = new Set(current);
+      if (state === "rejected") next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const paymentReversed = (_result, transaction) => {
+    const id = gatewayTransactionIdFor(transaction);
+    setConfirmedReversals((current) => new Set([...current, id]));
+    setReceipt(null);
+    setToast("Payment reversal confirmed by the backend. Refreshing balances and payment history.");
+    refreshAfterSettlement();
+  };
+  // Status-only overlay prevents stale historical copies from appearing captured after reversal.
+  // Balances, paid totals and schedule allocations are refreshed exclusively from the backend.
+  const withConfirmedReversal = (transaction) => confirmedReversals.has(gatewayTransactionIdFor(transaction))
+    ? { ...transaction, status: "Reversed", gatewayStatus: "Reversed", isReversed: true } : transaction;
 
   return (
     <DashboardLayout
@@ -5089,11 +5229,14 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       ) : null}
       {tab === "Student Fee Ledger" && selected && !collecting ? (
         <StudentFeeAccountScreen
-          account={selected}
+          account={{ ...selected, transactions: selected.transactions.map(withConfirmedReversal) }}
           onClose={() => { navigateFeeAccount(null); setCollecting(false); }}
           onCollect={() => setCollecting(true)}
           onReceipt={setReceipt}
           allowCollect={selectedSource === "collection"}
+          reversalAuthorized={gatewayAccess.reverse}
+          onReverse={requestReversal}
+          reversalBlocked={reversalBlocked}
         />
       ) : null}
       {tab === "Student Fee Ledger" && (!selected || collecting) ? (
@@ -5102,7 +5245,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           onLedgerTabChange={setLedgerTab}
           ledgerAccounts={ledgerAccounts}
           collectionAccounts={collectionAccounts}
-          paymentHistoryRows={paymentHistoryRows}
+          paymentHistoryRows={paymentHistoryRows.map(withConfirmedReversal)}
           fineRules={fineRules}
           onView={(id) => navigateFeeAccount(id, "ledger")}
           onPrint={printStudentStatement}
@@ -5111,30 +5254,29 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           masters={syncedMasters}
           loading={accountLoading}
           errors={accountErrors}
+          gatewayScope={gatewayScope}
+          gatewayAccess={gatewayAccess}
+          onSettled={refreshAfterSettlement}
+          onToast={setToast}
+          onExport={exportGatewayLedger}
+          exporting={exporting}
+          onReverse={requestReversal}
+          reversalBlocked={reversalBlocked}
         />
       ) : null}
 
       {selected && collecting ? (
         <CollectPaymentModal
+          key={`${selected.id}:${gatewayScopeKey}`}
           account={selected}
           onClose={() => setCollecting(false)}
-          onSaved={(saved) => {
-            setCollecting(false);
-            setToast(`Payment of ${formatCurrency(saved.amount)} recorded - receipt ${saved.receiptNo}`);
-            setReceipt(normalizeReceipt(saved, selected));
-            setPaymentHistoryExtras((current) => [withPaymentContext(saved, [selected]), ...current]);
-            setSelectedDetail(null);
-            setSelectedDetailVersion((current) => current + 1);
-            Promise.allSettled([
-              loadFeeAccounts("ledger"),
-              loadFeeAccounts("collection"),
-              loadOverviewData(),
-            ]);
-          }}
+          onSaved={paymentSaved}
+          onPending={() => setToast("UTR submitted for verification. No fee credit has been applied.")}
         />
       ) : null}
 
       {receipt ? <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} /> : null}
+      {reversing ? <PaymentReversalModal key={`${gatewayScopeKey}:${gatewayTransactionIdFor(reversing)}`} transaction={reversing} authorized={gatewayAccess.reverse} onClose={() => setReversing(null)} onSuccess={paymentReversed} onAttemptState={reversalAttemptState} /> : null}
 
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>

@@ -330,6 +330,7 @@ export default function FacultyMarks() {
   // View Results Modal State
   const [viewResultsEval, setViewResultsEval] = useState(null);
   const [resultsModalPage, setResultsModalPage] = useState(1);
+  const [resultsModalLoading, setResultsModalLoading] = useState(false);
   const resultsPageSize = 5;
 
   // Report Tab Filters & Pagination State
@@ -384,6 +385,7 @@ export default function FacultyMarks() {
             status: normalizedStatus,
             statusCode: normalizedStatus,
             adminRemarks: ev.rejectionReason || ev.remarks || ev.adminRemarks || "",
+            totalStudents: Number(ev.totalStudents || (Array.isArray(ev.students) ? ev.students.length : (Array.isArray(ev.rows) ? ev.rows.length : 0))),
             rows: ev.rows || ev.students || [],
             submittedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.submittedAt ? String(ev.submittedAt).split("T")[0] : ""),
             updatedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.updatedAt ? String(ev.updatedAt).split("T")[0] : ""),
@@ -407,7 +409,7 @@ export default function FacultyMarks() {
           return merged;
         });
       } else {
-        setEvaluationsLedger({});
+        setEvaluationsLedger({}); // EVAL_EMPTY
       }
     } catch (err) {
       console.warn("Could not load faculty evaluations from API:", err);
@@ -731,6 +733,7 @@ export default function FacultyMarks() {
               subjectName: s.subjectName,
               subjectCode: s.subjectCode || "",
             });
+
           }
         }
       }
@@ -1116,28 +1119,43 @@ export default function FacultyMarks() {
       let effectiveRoster = [];
 
       if (marksMap.size > 0) {
-        // When marks exist: strictly show ONLY students who have marks in this examination/subject (e.g. exactly 5 students!)
-        const seenIds = new Set();
+        // Match section students: strictly from this section roster (no foreign students injected)
         rawStudentList.forEach((st) => {
-          const sId = String(st.studentId);
-          if (marksMap.has(sId)) {
+
+          const targetStudentId = String(st.studentId);
+          if (marksMap.has(targetStudentId) || liveStatus === "NOT STARTED" || liveStatus === "DRAFT") {
             effectiveRoster.push(st);
-            seenIds.add(sId);
+
           }
         });
-        marksMap.forEach((mark, sId) => {
-          if (!seenIds.has(String(sId))) {
-            effectiveRoster.push({
-              studentId: Number(sId),
-              admissionNo: mark.admissionNo || "",
-              rollNo: String(mark.rollNo || ""),
-              name: mark.studentName || `Student #${sId}`,
-              admissionDate: null,
-            });
-            seenIds.add(String(sId));
+        if (effectiveRoster.length === 0) { effectiveRoster = rawStudentList; }
+      } else {
+        /* STRAY_OLD_CODE_START
+
+        }
+// CLEAN_SECTION_DONE
+// UNUSED_MARKS_LOOP
+
+
+
+
+
+          }
+        });
+
+
+
+
+
+
+
+
+
+
           }
         });
       } else {
+        STRAY_OLD_CODE_END */
         // Fresh entry: show eligible section students filtered by admission date
         effectiveRoster = rawStudentList.filter((student) => {
           const studentJoinDate = student.admissionDate || student.allocatedDate || student.dateOfAdmission;
@@ -1541,9 +1559,221 @@ export default function FacultyMarks() {
   };
 
   // Open Results Modal from Report Tab
-  const handleViewResults = (ev) => {
+  const handleViewResults = async (ev) => {
     setViewResultsEval(ev);
     setResultsModalPage(1);
+    const evalId = ev.evaluationId || `${ev.subjectId}_${ev.sectionId}_${ev.examId}`;
+    if (!evalId) return;
+
+    setResultsModalLoading(true);
+    try {
+      const authUser = getAuthUser();
+      const effectiveCampusId = context?.profile?.campusId || context?.profileData?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
+      const keyPrimary = ev.evaluationId || `${ev.subjectId}_${ev.sectionId}_${ev.examId}`;
+      const keyLegacy = `${ev.sectionId}_${ev.examId}_${ev.subjectId}`;
+
+      // Authoritative evaluation endpoints (try official evaluation object FIRST to get exact submitted students)
+      const endpointsToTry = [
+        `/api/v1/evaluations/${keyPrimary}`,
+        `/api/v1/faculty/evaluations/${keyPrimary}`,
+        `/api/v1/evaluations/${keyLegacy}`,
+        `/api/v1/faculty/evaluations/${keyLegacy}`,
+        `/api/v1/faculty/evaluations/${keyPrimary}/students`,
+        `/api/v1/evaluations/${keyPrimary}/students`,
+      ];
+      /* OLD_CLOSE
+
+
+
+      ];
+      OLD_CLOSE_END */
+      let resData = null;
+      for (const url of endpointsToTry) {
+        try {
+          const res = await apiClient.get(url, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+          });
+          const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+          if (payload && (Array.isArray(payload.students) || Array.isArray(payload.marksList) || Array.isArray(payload))) {
+            resData = payload;
+            break;
+          }
+        } catch {
+          // try next endpoint
+        }
+      }
+
+      // If direct GET did not find students, search via /api/v1/evaluations/search
+      if (!resData || !(resData.students?.length || resData.marksList?.length)) {
+        try {
+          const searchPayload = {
+            campusId: Number(effectiveCampusId) || 1,
+            sectionId: Number(ev.sectionId),
+            examinationId: Number(ev.examId || ev.examinationId),
+            subjectId: Number(ev.subjectId),
+          };
+          const searchRes = await apiClient.post("/api/v1/evaluations/search", searchPayload, {
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+            skipGlobalLoader: true,
+          }).catch(() => null);
+          const evalList = searchRes?.data?.data || searchRes?.data || [];
+          if (Array.isArray(evalList) && evalList.length > 0) {
+            const matched = evalList.find((item) => {
+              if (item.evaluationId && String(item.evaluationId).trim() === String(keyPrimary).trim()) return true;
+              return String(item.subjectId) === String(ev.subjectId) && String(item.sectionId) === String(ev.sectionId);
+            }) || evalList[0];
+            if (matched && (Array.isArray(matched.students) || Array.isArray(matched.marksList))) {
+              resData = matched;
+            }
+          }
+        } catch {}
+      }
+
+      if (!resData) {
+        try {
+          const examId = ev.examId || ev.examinationId;
+          const marksRes = await apiClient.get(`/api/v1/marks/exam/${examId}`, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+          });
+          const raw = marksRes?.data?.data || marksRes?.data || [];
+          const list = Array.isArray(raw) ? raw : (raw?.items || []);
+          const filtered = list.filter((m) => String(m.subjectId) === String(ev.subjectId) && (!ev.sectionId || String(m.sectionId) === String(ev.sectionId)));
+          if (filtered.length) {
+            resData = { students: filtered };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let rawStudents = Array.isArray(resData)
+        ? resData
+        : (resData?.students || resData?.marksList || resData?.rows || []);
+
+      // If resData didn't have students, check ev.rows or evaluationsLedger
+      if (!rawStudents.length && (ev.rows?.length || evaluationsLedger[keyPrimary]?.rows?.length || evaluationsLedger[keyLegacy]?.rows?.length)) {
+        rawStudents = ev.rows?.length
+          ? ev.rows
+          : (evaluationsLedger[keyPrimary]?.rows || evaluationsLedger[keyLegacy]?.rows || []);
+      }
+
+      // Filter strictly to submitted section students:
+      // 1. Exclude any records belonging to a different section if sectionId is present
+      if (ev.sectionId && rawStudents.some((s) => s.sectionId && String(s.sectionId) !== String(ev.sectionId))) {
+        rawStudents = rawStudents.filter((s) => !s.sectionId || String(s.sectionId) === String(ev.sectionId));
+      }
+
+      // 2. Filter out extraneous unsubmitted students who have no markId and no submission marks
+      // Submitted students have markId > 0, "Faculty Submission" remarks, isSubmitted flag, or evaluated marks/absent
+      if (rawStudents.length > 0) {
+        const submittedOnly = rawStudents.filter((s) => {
+          const hasMarkId = s.markId != null && Number(s.markId) > 0;
+          const hasSubRemarks = s.remarks && String(s.remarks).toLowerCase().includes("submission");
+          const isSubStatus = s.isSubmitted === true || ["SUBMITTED", "APPROVED", "VERIFIED", "PUBLISHED"].includes(String(s.status || s.statusCode || "").toUpperCase());
+          const isAbsent = Boolean(s.isAbsent ?? s.absent);
+          const hasMarks = (s.totalMarks != null && Number(s.totalMarks) > 0) ||
+                           (s.total != null && Number(s.total) > 0) ||
+                           (s.theory != null && Number(s.theory) > 0) ||
+                           (s.theoryMarks != null && Number(s.theoryMarks) > 0) ||
+                           (s.obtainedMarks != null && Number(s.obtainedMarks) > 0);
+
+          return hasMarkId || hasSubRemarks || isSubStatus || isAbsent || hasMarks;
+        });
+
+        if (submittedOnly.length > 0 && submittedOnly.length < rawStudents.length) {
+          rawStudents = submittedOnly;
+        }
+      }
+
+      // 3. If resData has explicit totalStudents (e.g. 25 in the official response) and rawStudents is still longer
+      const expectedTotal = Number(resData?.totalStudents || ev.totalStudents || 0);
+      if (expectedTotal > 0 && rawStudents.length > expectedTotal) {
+        rawStudents.sort((a, b) => {
+          const aSub = (a.markId ? 2 : 0) + (String(a.remarks || "").toLowerCase().includes("submission") ? 1 : 0);
+          const bSub = (b.markId ? 2 : 0) + (String(b.remarks || "").toLowerCase().includes("submission") ? 1 : 0);
+          return bSub - aSub;
+        });
+        rawStudents = rawStudents.slice(0, expectedTotal);
+      }
+
+      // 4. Stable sort by Roll No then Name matching Marks Entry roster
+      rawStudents.sort((a, b) => {
+        const rollA = String(a.rollNo || a.admissionNo || "");
+        const rollB = String(b.rollNo || b.admissionNo || "");
+        if (rollA && rollB) {
+          const cmp = rollA.localeCompare(rollB, undefined, { numeric: true });
+          if (cmp !== 0) return cmp;
+        }
+        return String(a.studentName || a.name || "").localeCompare(String(b.studentName || b.name || ""));
+      });
+
+      if (rawStudents.length > 0) {
+        const configuredMax = Number(
+          currentConfig?.maxTotal ||
+          (resData?.maxMarks && Number(resData.maxMarks) >= 100 ? resData.maxMarks : 0) ||
+          (ev.maxMarks && Number(ev.maxMarks) >= 100 ? ev.maxMarks : 0) ||
+          100
+        );
+        const mappedRows = rawStudents.map((s, idx) => {
+          const isAbsent = Boolean(s.isAbsent ?? s.absent);
+          const internal = s.internal !== undefined && s.internal !== null ? s.internal : (s.internalMarks ?? 0);
+          const practical = s.practical !== undefined && s.practical !== null ? s.practical : (s.practicalMarks ?? 0);
+          const theory = s.theory !== undefined && s.theory !== null ? s.theory : (s.theoryMarks ?? 0);
+          const totalVal = s.total !== undefined && s.total !== null ? s.total : (s.totalMarks !== undefined && s.totalMarks !== null ? s.totalMarks : (s.obtainedMarks ?? 0));
+          const numTotal = Number(totalVal) || 0;
+          const studentMax = Number(s.maxMarks || 0);
+          const maxM = Math.max(100, studentMax >= 100 ? studentMax : configuredMax, numTotal);
+          let pct = "—";
+          if (!isAbsent) {
+            if (s.percentage !== null && s.percentage !== undefined && s.percentage !== "") {
+              const parsedPct = parseFloat(String(s.percentage));
+              pct = !isNaN(parsedPct) ? `${Math.min(100, Math.max(0, parsedPct)).toFixed(2)}%` : String(s.percentage);
+            } else {
+              const calcPct = Math.min(100, Math.max(0, (numTotal / maxM) * 100));
+              pct = `${calcPct.toFixed(2)}%`;
+            }
+          }
+
+
+
+
+          return {
+            studentId: s.studentId || idx,
+            rollNo: s.rollNo || s.admissionNo || "—",
+            name: s.studentName || s.name || "Student",
+            studentName: s.studentName || s.name || "Student",
+            admissionNo: s.admissionNo || "",
+            internal: isAbsent ? "—" : internal,
+            practical: isAbsent ? "—" : practical,
+            theory: isAbsent ? "—" : theory,
+            total: isAbsent ? "—" : totalVal,
+            totalScore: isAbsent ? "—" : totalVal,
+            obtainedMarks: isAbsent ? "—" : totalVal,
+            percentage: isAbsent ? "—" : pct,
+            absent: isAbsent,
+            isAbsent,
+            remarks: s.remarks || "",
+          };
+        });
+
+        setViewResultsEval((prev) => ({
+          ...(prev || ev),
+          ...(typeof resData === "object" ? resData : {}),
+          rows: mappedRows,
+          totalStudents: mappedRows.length,
+          subjectName: resData?.subjectName || ev.subjectName,
+          examName: resData?.examinationName || ev.examName,
+          section: resData?.sectionName || ev.section,
+          status: resData?.status || resData?.statusCode || ev.status,
+        }));
+      }
+    } catch (e) {
+      console.warn("Could not fetch evaluation students for modal:", e);
+    } finally {
+      setResultsModalLoading(false);
+    }
   };
 
   // Bulk Import File Handler
@@ -2030,12 +2260,12 @@ export default function FacultyMarks() {
                   </div>
 
                   {/* Student Table */}
-                  <div className="cms-table-wrap">
-                    <table className="cms-table">
+                  <div className="cms-table-wrap" style={{ width: "100%", overflowX: "auto" }}>
+                    <table className="cms-table" style={{ width: "100%", tableLayout: "auto" }}>
                       <thead>
                         <tr>
                           <th className="cms-cell-center" style={{ width: 90 }}>ROLL NO</th>
-                          <th>STUDENT</th>
+                          <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
                           {currentConfig.isObjective ? (
                             <th className="cms-cell-center" style={{ width: 180 }}>
                               OBJECTIVE MARKS / {currentConfig.maxTotal || 100}
@@ -2054,7 +2284,7 @@ export default function FacultyMarks() {
                             </>
                           )}
                           <th className="cms-cell-center" style={{ width: 110 }}>PERCENTAGE</th>
-                          <th className="cms-cell-center" style={{ width: 80 }}>ABSENT</th>
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 65 }}>ABSENT</th>
                           <th style={{ width: 160 }}>REMARKS</th>
                         </tr>
                       </thead>
@@ -2415,9 +2645,24 @@ export default function FacultyMarks() {
       {/* BULK IMPORT MODAL                                        */}
       {/* ======================================================== */}
       {showBulkModal && (
-        <div className="sp-modal-backdrop" onClick={() => setShowBulkModal(false)}>
-          <div className="sp-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #E6E7DE)", paddingBottom: 12 }}>
+        <div className="sp-modal-backdrop cms-overlay" onClick={() => setShowBulkModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(13, 27, 51, 0.55)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px", zIndex: 10000 }}>
+          <div
+            className="sp-modal cms-modal sm"
+            style={{
+              width: "min(520px, calc(100vw - 32px))",
+              maxWidth: "520px",
+              background: "var(--cms-surface, #ffffff)",
+              color: "var(--cms-text, #10203c)",
+              borderRadius: "16px",
+              border: "1px solid var(--cms-border, #e4e8f0)",
+              boxShadow: "var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18))",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sp-modal-header cms-modal-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #e4e8f0)", padding: "16px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <div>
                 <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>Bulk Import Marks</h3>
                 <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
@@ -2434,7 +2679,7 @@ export default function FacultyMarks() {
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: "16px 0" }}>
+            <div className="sp-modal-body cms-modal-body" style={{ padding: "16px 22px", background: "var(--cms-surface, #ffffff)", maxHeight: "calc(85vh - 120px)", overflowY: "auto" }}>
               <div
                 style={{
                   border: "2px dashed var(--cms-border, #E6E7DE)",
@@ -2464,7 +2709,7 @@ export default function FacultyMarks() {
               />
             </div>
 
-            <div className="sp-modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid var(--cms-border, #E6E7DE)", paddingTop: 12 }}>
+            <div className="sp-modal-footer cms-modal-foot" style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid var(--cms-border, #e4e8f0)", padding: "14px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
@@ -2493,9 +2738,24 @@ export default function FacultyMarks() {
       {/* VIEW RESULTS MODAL                                       */}
       {/* ======================================================== */}
       {viewResultsEval && (
-        <div className="sp-modal-backdrop" onClick={() => setViewResultsEval(null)}>
-          <div className="sp-modal" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #E6E7DE)", paddingBottom: 12 }}>
+        <div className="sp-modal-backdrop cms-overlay" onClick={() => setViewResultsEval(null)} style={{ position: "fixed", inset: 0, background: "rgba(13, 27, 51, 0.55)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px", zIndex: 10000 }}>
+          <div
+            className="sp-modal cms-modal"
+            style={{
+              width: "min(920px, calc(100vw - 32px))",
+              maxWidth: "920px",
+              background: "var(--cms-surface, #ffffff)",
+              color: "var(--cms-text, #10203c)",
+              borderRadius: "16px",
+              border: "1px solid var(--cms-border, #e4e8f0)",
+              boxShadow: "var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18))",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sp-modal-header cms-modal-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #e4e8f0)", padding: "16px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <div>
                 <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>
                   {viewResultsEval.subjectName} — Results Inspection
@@ -2514,22 +2774,31 @@ export default function FacultyMarks() {
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: "16px 0" }}>
-              <div className="cms-table-wrap">
-                <table className="cms-table">
+            <div className="sp-modal-body cms-modal-body" style={{ padding: "16px 22px", background: "var(--cms-surface, #ffffff)", maxHeight: "calc(85vh - 120px)", overflowY: "auto" }}>
+              <div className="cms-table-wrap" style={{ width: "100%", overflowX: "auto" }}>
+                <table className="cms-table" style={{ width: "100%", tableLayout: "auto" }}>
                   <thead>
                     <tr>
-                      <th className="cms-cell-center" style={{ width: 80 }}>ROLL NO</th>
-                      <th>STUDENT</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>INTERNAL</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>THEORY</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>TOTAL</th>
-                      <th className="cms-cell-center" style={{ width: 100 }}>PERCENTAGE</th>
-                      <th className="cms-cell-center" style={{ width: 80 }}>ABSENT</th>
+                      <th className="cms-cell-center" style={{ width: "13%", minWidth: 70 }}>ROLL NO</th>
+                      <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>INTERNAL</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>THEORY</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>TOTAL</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 80 }}>PERCENTAGE</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 65 }}>ABSENT</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
+                      if (resultsModalLoading) {
+                        return (
+                          <tr>
+                            <td colSpan={7} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
+                              Loading student scores...
+                            </td>
+                          </tr>
+                        );
+                      }
                       const rows = viewResultsEval.rows || [];
                       const start = (resultsModalPage - 1) * resultsPageSize;
                       const pagedRows = rows.slice(start, start + resultsPageSize);
@@ -2545,10 +2814,10 @@ export default function FacultyMarks() {
                       return pagedRows.map((r, idx) => (
                         <tr key={r.studentId || idx}>
                           <td className="cms-cell-center" style={{ fontWeight: 600 }}>{r.rollNo}</td>
-                          <td style={{ fontWeight: 600 }}>{r.name}</td>
+                          <td style={{ fontWeight: 600 }}>{r.studentName || r.name}</td>
                           <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
                           <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
-                          <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : r.totalScore}</td>
+                          <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : (r.totalScore ?? r.totalMarks ?? r.total ?? r.obtainedMarks ?? "—")}</td>
                           <td className="cms-cell-center">{r.absent ? "—" : r.percentage}</td>
                           <td className="cms-cell-center">{r.absent ? "Yes" : "No"}</td>
                         </tr>
@@ -2591,7 +2860,7 @@ export default function FacultyMarks() {
               )}
             </div>
 
-            <div className="sp-modal-footer" style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--cms-border, #E6E7DE)", paddingTop: 12 }}>
+            <div className="sp-modal-footer cms-modal-foot" style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--cms-border, #e4e8f0)", padding: "14px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
