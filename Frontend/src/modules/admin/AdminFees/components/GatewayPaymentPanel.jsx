@@ -167,7 +167,7 @@ export default function GatewayPaymentPanel({
       if (
         mode === "UPI_QR" &&
         (!/^data:image\/png;base64,[A-Za-z0-9+/=\s]+$/.test(data.qrCodeBase64 || "") ||
-          !String(data.upiUri).startsWith("upi://pay?"))
+          (Boolean(data.upiUri) && !String(data.upiUri).startsWith("upi://pay?")))
       )
         throw new Error("The backend did not return a valid UPI QR and URI.");
       if (mode === "RAZORPAY" && !data.keyId)
@@ -406,7 +406,14 @@ export default function GatewayPaymentPanel({
                   {String(polling.secondsLeft % 60).padStart(2, "0")}
                 </p>
               )}
-              {mode === "UPI_QR" && !order.monitorOnly && polling.status === "PENDING" && (
+              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && (
+                <p className="cms-fee-note" role="note">
+                  Direct Bank VPA Mode: Razorpay keys are not configured. Auto-settlement webhook is
+                  unavailable; switch to Bank Transfer / UTR to enter the transaction reference after
+                  payment.
+                </p>
+              )}
+              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && polling.status === "PENDING" && (
                 <>
                   <button type="button" className="cms-btn cms-btn-ghost" onClick={copyUri}>
                     <Copy size={14} /> Copy UPI URI

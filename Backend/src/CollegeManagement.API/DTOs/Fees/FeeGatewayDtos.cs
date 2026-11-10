@@ -22,6 +22,10 @@ public class CreateGatewayOrderResponse
     public string Currency { get; set; } = "INR";
     public string? UpiUri { get; set; }
     public string? QrCodeBase64 { get; set; }
+    public string? GatewayQrCodeId { get; set; }
+    public string? GatewayQrImageUrl { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+    public bool RequiresManualUtr { get; set; }
     public string? PaymentLink { get; set; }
     public string? KeyId { get; set; }
     public string? ErrorMessage { get; set; }

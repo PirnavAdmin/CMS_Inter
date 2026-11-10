@@ -3,6 +3,7 @@ using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -538,6 +539,7 @@ public class FeeRepository : IFeeRepository
         }
 
         int collectedById = request.CollectedBy ?? 0;
+        var activeTx = _db.Database.CurrentTransaction?.GetDbTransaction();
 
         return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
             "sp_FeePayment_Collect",
@@ -556,6 +558,7 @@ public class FeeRepository : IFeeRepository
                 p_ReceiptNumber = finalReceiptNo,
                 p_CollectedBy = collectedById
             },
+            transaction: activeTx,
             commandType: CommandType.StoredProcedure);
     }
 
@@ -626,7 +629,7 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-    private static async Task EnrichGatewayMetadataAsync(IDbConnection c, IEnumerable<FeePaymentResponse> payments)
+    private async Task EnrichGatewayMetadataAsync(IDbConnection c, IEnumerable<FeePaymentResponse> payments)
     {
         var list = payments?.ToList();
         if (list == null || !list.Any()) return;
@@ -636,9 +639,11 @@ public class FeeRepository : IFeeRepository
 
         try
         {
+            var activeTx = _db.Database.CurrentTransaction?.GetDbTransaction();
             var txns = await c.QueryAsync<(int FeePaymentId, int GatewayTransactionId, string GatewayStatus)>(
                 "SELECT FeePaymentId, Id AS GatewayTransactionId, Status AS GatewayStatus FROM PaymentGatewayTransactions WHERE FeePaymentId IN @Ids",
-                new { Ids = paymentIds });
+                new { Ids = paymentIds },
+                transaction: activeTx);
 
             var lookup = txns
                 .GroupBy(t => t.FeePaymentId)

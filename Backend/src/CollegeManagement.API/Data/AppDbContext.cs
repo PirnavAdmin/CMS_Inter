@@ -405,6 +405,7 @@ namespace CollegeManagement.API.Data
         public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions { get; set; }
         public DbSet<FeePaymentAllocation> FeePaymentAllocations { get; set; }
         public DbSet<PaymentGatewayConfig> PaymentGatewayConfigs { get; set; }
+        public DbSet<PaymentLedgerEntryRecord> PaymentLedgerEntries { get; set; }
         public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
@@ -952,6 +953,8 @@ namespace CollegeManagement.API.Data
                 entity.HasIndex(x => x.UtrNumber);
                 entity.HasIndex(x => x.Status);
                 entity.HasIndex(x => x.StudentFeeId);
+                entity.HasIndex(x => x.GatewayQrCodeId);
+                entity.HasIndex(x => x.CampusId);
 
                 entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.StudentFee).WithMany().HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Restrict);
@@ -981,6 +984,22 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.Currency).IsRequired().HasMaxLength(10);
                 entity.Property(x => x.Provider).IsRequired().HasMaxLength(50);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+            });
+
+            modelBuilder.Entity<PaymentLedgerEntryRecord>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.EntryType).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.StudentName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.PaymentMethod).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.PaymentGatewayTransactionId);
+                entity.HasIndex(x => new { x.CampusId, x.CreatedAt });
+                entity.HasIndex(x => x.AcademicYearId);
+                entity.HasIndex(x => x.StudentId);
             });
 
             #region Section relational keys
