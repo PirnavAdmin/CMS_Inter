@@ -755,3 +755,85 @@
   .mpp-right-col { grid-column: auto; display: flex; flex-direction: column; }
   .mpp-header-illustration-wrap { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE & THEME PALETTE OVERRIDES FOR MY PROFILE
+   ══════════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"] .mpp-page {
+  background: var(--cms-bg, #0b1120) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .mpp-header-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .mpp-page-title {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .mpp-page-desc {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .mpp-card {
+  background: var(--cms-surface, #1e293b) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.1)) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+[data-theme="dark"] .mpp-card-title {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .mpp-field-label {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .mpp-field-val {
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .mpp-input {
+  background: var(--cms-bg, #0f172a) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.15)) !important;
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .mpp-btn-cancel {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.12)) !important;
+  color: var(--cms-text, #f1f5f9) !important;
+}
+
+[data-theme="dark"] .mpp-btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] .mpp-avatar-circle {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .mpp-user-display-name {
+  color: var(--cms-text, #f8fafc) !important;
+}
+
+[data-theme="dark"] .mpp-user-email {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .mpp-session-item {
+  border-color: var(--cms-border, rgba(255, 255, 255, 0.08)) !important;
+}
+
+[data-theme="dark"] .mpp-session-label {
+  color: var(--cms-muted, #94a3b8) !important;
+}
+
+[data-theme="dark"] .mpp-session-val {
+  color: var(--cms-text, #f1f5f9) !important;
+}
+

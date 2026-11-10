@@ -21,6 +21,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./PaymentsInvoicesPage.css";
 
 // SVG Illustration for Invoices tab (Invoice document + Rupee + Coins)
@@ -754,85 +755,17 @@ export default function PaymentsInvoicesPage() {
         </div>
 
         {/* ── PAGINATION BAR ── */}
-        <div className="pip-pagination-bar">
-          <span className="pip-pagination-info">
-            Showing {totalRecords > 0 ? (currentPage - 1) * rowsPerPage + 1 : 0} –{" "}
-            {Math.min(currentPage * rowsPerPage, totalRecords)} of {totalRecords}{" "}
-            {activeTab === "invoices" ? "invoices" : "payments"}
-          </span>
-
-          <div className="pip-pagination-controls">
-            <div className="pip-rows-per-page">
-              <span>Rows per page:</span>
-              <div className="pip-select-wrap">
-                <select
-                  className="pip-select"
-                  style={{ padding: "4px 24px 4px 8px", fontSize: "11.5px" }}
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  <option value={5}>5</option>
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                </select>
-                <ChevronDown size={11} className="pip-select-arrow" />
-              </div>
-            </div>
-
-            <div className="pip-page-btn-group">
-              <button
-                type="button"
-                className="pip-page-nav-btn"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-              >
-                &lt; Previous
-              </button>
-
-              {Array.from({ length: totalPages }).map((_, i) => {
-                const pageNum = i + 1;
-                // Show first, last, and window around current page
-                if (
-                  pageNum === 1 ||
-                  pageNum === totalPages ||
-                  (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                ) {
-                  return (
-                    <button
-                      key={pageNum}
-                      type="button"
-                      className={`pip-page-num-btn ${currentPage === pageNum ? "active" : ""}`}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                }
-                if (pageNum === currentPage - 2 || pageNum === currentPage + 2) {
-                  return (
-                    <span key={pageNum} className="pip-page-ellipsis">
-                      ...
-                    </span>
-                  );
-                }
-                return null;
-              })}
-
-              <button
-                type="button"
-                className="pip-page-nav-btn"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-              >
-                Next &gt;
-              </button>
-            </div>
-          </div>
-        </div>
+        <SuperAdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalRecords={totalRecords}
+          rowsPerPage={rowsPerPage}
+          onPageChange={setCurrentPage}
+          onRowsPerPageChange={(r) => {
+            setRowsPerPage(r);
+            setCurrentPage(1);
+          }}
+        />
       </div>
 
       {/* ── VIEW INVOICE MODAL ── */}

@@ -402,6 +402,9 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
+        public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions { get; set; }
+        public DbSet<FeePaymentAllocation> FeePaymentAllocations { get; set; }
+        public DbSet<PaymentGatewayConfig> PaymentGatewayConfigs { get; set; }
         public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
@@ -934,6 +937,51 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(x => x.FeePayment).WithOne(x => x.Receipt).HasForeignKey<FeeReceipt>(x => x.FeePaymentId).OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<PaymentGatewayTransaction>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.OrderId).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.PaymentMethod).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.OrderId).IsUnique();
+                entity.HasIndex(x => x.IdempotencyKey);
+                entity.HasIndex(x => x.RequestPayloadHash);
+                entity.HasIndex(x => x.UtrNumber);
+                entity.HasIndex(x => x.Status);
+                entity.HasIndex(x => x.StudentFeeId);
+
+                entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.StudentFee).WithMany().HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+
+            modelBuilder.Entity<FeePaymentAllocation>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.AllocatedAmount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.AllocationDate).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.FeePaymentId);
+                entity.HasIndex(x => x.FeeInstallmentId);
+
+                entity.HasOne(x => x.FeePayment).WithMany().HasForeignKey(x => x.FeePaymentId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.FeeInstallment).WithMany().HasForeignKey(x => x.FeeInstallmentId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PaymentGatewayConfig>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.CampusId);
+                entity.Property(x => x.PayeeVpa).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.PayeeName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.Currency).IsRequired().HasMaxLength(10);
+                entity.Property(x => x.Provider).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+            });
 
             #region Section relational keys
             modelBuilder.Entity<Section>(entity =>

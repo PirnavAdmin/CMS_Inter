@@ -903,6 +903,14 @@
   cursor: not-allowed;
 }
 
+.sa-colleges-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 46px; padding: 5px 14px; border-top: 1px solid var(--cms-border); background: var(--cms-subtle); color: var(--cms-muted); font-size: 14px; font-weight: 600; }
+.sa-colleges-pagination-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sa-colleges-pagination-actions > span { color: var(--cms-text); white-space: nowrap; }
+.sa-colleges-pagination-actions button { min-width: 36px; height: 36px; padding: 0 9px; border: 1px solid var(--cms-border); border-radius: 9px; background: var(--cms-surface); color: var(--cms-text); font: inherit; font-weight: 700; cursor: pointer; }
+.sa-colleges-pagination-actions button:hover:not(:disabled) { border-color: var(--cms-primary); background: var(--cms-primary-soft); color: var(--cms-primary); }
+.sa-colleges-pagination-actions button:disabled { cursor: not-allowed; opacity: .45; }
+@media (max-width: 640px) { .sa-colleges-pagination { align-items: flex-start; flex-direction: column; } }
+
 /* ── GRID / CARD VIEW ── */
 .rnp-grid-wrap {
   width: 100%;
@@ -1070,4 +1078,217 @@
   font-size: 12px;
   font-weight: 600;
   margin: 0;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE & THEME PALETTE ADAPTATION FOR COLLEGE MANAGEMENT DIRECTORY
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .rnp-page {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-page-title {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-page-desc {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-kpi-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .rnp-kpi-card.tone-purple {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+[data-theme="dark"] .rnp-kpi-card.tone-green {
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(22, 163, 74, 0.35);
+}
+
+[data-theme="dark"] .rnp-kpi-card.tone-blue {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+[data-theme="dark"] .rnp-kpi-card.tone-orange {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(234, 88, 12, 0.35);
+}
+
+[data-theme="dark"] .rnp-kpi-title {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-kpi-value {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-circle-text {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-circle-bg {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+/* Preset pills */
+[data-theme="dark"] .rnp-preset-pill {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-preset-pill:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-preset-pill.is-active {
+  background: var(--cms-primary-soft, rgba(255, 255, 255, 0.1));
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .rnp-preset-count {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cms-text);
+}
+
+/* Toolbar */
+[data-theme="dark"] .rnp-toolbar {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .rnp-search-input,
+[data-theme="dark"] .rnp-select {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-icon-btn,
+[data-theme="dark"] .rnp-filter-btn {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-view-switcher {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .rnp-view-btn.is-active {
+  background: var(--cms-surface);
+  color: var(--cms-primary);
+}
+
+/* Table Card */
+[data-theme="dark"] .rnp-table-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .rnp-table th {
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-table td {
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .rnp-college-title {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-college-code {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-college-icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .rnp-admin-name {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-admin-email {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .rnp-students-pill {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-action-btn.view {
+  background: rgba(37, 99, 235, 0.2);
+  border-color: rgba(37, 99, 235, 0.35);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .rnp-action-btn.edit {
+  background: rgba(22, 163, 74, 0.2);
+  border-color: rgba(22, 163, 74, 0.35);
+  color: #86efac;
+}
+
+[data-theme="dark"] .rnp-action-btn.key {
+  background: rgba(217, 119, 6, 0.2);
+  border-color: rgba(217, 119, 6, 0.35);
+  color: #fdba74;
+}
+
+[data-theme="dark"] .rnp-action-btn.more {
+  background: rgba(124, 58, 237, 0.2);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] .rnp-more-popover {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-popover-item {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .rnp-popover-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .rnp-card-item {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sa-form-grid input {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sa-form-grid label {
+  color: var(--cms-text);
 }

@@ -2,6 +2,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { BACKEND_ADMIN_JWT, BACKEND_PARENT_JWT, BACKEND_EXAM_CELL_JWT, BACKEND_NON_TEACHING_JWT, BACKEND_TRANSPORT_MANAGER_JWT } from "@/modules/auth/authStorage.js";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
+import { isStaffPortalUnlocked } from "@/modules/faculty/profileCompletion.js";
 
 
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
@@ -860,11 +861,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     0
   );
   const rawIsOnboarded = data.IsOnboarded ?? data.isOnboarded ?? payload.IsOnboarded ?? payload.isOnboarded ?? data.user?.isOnboarded ?? payload.user?.isOnboarded;
-  const statusClean = String(profileStatus || "").toLowerCase();
-  const isCompleted =
-    statusClean === "completed" ||
-    statusClean === "approved" ||
-    (rawIsOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
+  const isCompleted = isStaffPortalUnlocked(profileStatus, rawIsOnboarded === true);
   const isOnboarded = isCompleted || isAdmin;
 
   const user = {

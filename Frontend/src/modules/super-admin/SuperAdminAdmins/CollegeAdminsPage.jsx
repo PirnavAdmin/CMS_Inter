@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
+import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeAdminsPage.css";
 
 // Avatar color palettes for admin badges
@@ -75,9 +76,9 @@ export default function CollegeAdminsPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState("list"); // 'list' or 'grid'
 
-  // Sorting
-  const [sortField, setSortField] = useState("name");
-  const [sortOrder, setSortOrder] = useState("asc");
+  // Sorting: default newest records on TOP
+  const [sortField, setSortField] = useState("id");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -203,6 +204,11 @@ export default function CollegeAdminsPage() {
         return matchesQuery && matchesCollege && matchesStatus && matchesPreset;
       })
       .sort((a, b) => {
+        if (sortField === "id" || sortField === "userId") {
+          const numA = Number(a.userId || a.id) || 0;
+          const numB = Number(b.userId || b.id) || 0;
+          return sortOrder === "asc" ? numA - numB : numB - numA;
+        }
         let valA = a[sortField] || "";
         let valB = b[sortField] || "";
         if (typeof valA === "string") valA = valA.toLowerCase();
@@ -1230,68 +1236,17 @@ export default function CollegeAdminsPage() {
           </div>
         )}
 
-        {/* ── Table Footer & Pagination (Image 1 Reference) ── */}
-        <footer className="cap-footer">
-          <div className="cap-footer-info">
-            {totalRecords > 0 ? (
-              <span>
-                Showing {startIndex + 1}-{Math.min(startIndex + rowsPerPage, totalRecords)} of{" "}
-                {totalRecords} college administrators
-              </span>
-            ) : (
-              <span>Showing 0 of 0 college administrators</span>
-            )}
-          </div>
-
-          <div className="cap-footer-right">
-            {/* Rows Per Page Selector */}
-            <div className="cap-rows-selector">
-              <span>Rows per page:</span>
-              <select
-                value={rowsPerPage}
-                onChange={(e) => {
-                  setRowsPerPage(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="cap-rows-select"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-              </select>
-            </div>
-
-            {/* Page Buttons */}
-            <div className="cap-pagination">
-              <button
-                type="button"
-                className="cap-page-btn"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pNum) => (
-                <button
-                  key={pNum}
-                  type="button"
-                  className={`cap-page-btn ${pNum === currentPage ? "is-active" : ""}`}
-                  onClick={() => setPage(pNum)}
-                >
-                  {pNum}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="cap-page-btn"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </footer>
+        {/* ── Standardized Super Admin Pagination (Image 5 Reference: [ Previous ]  Page X of Y  [ Next ]) ── */}
+        <SuperAdminPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalRecords={totalRecords}
+          rowsPerPage={rowsPerPage}
+          onPageChange={setPage}
+          onRowsPerPageChange={setRowsPerPage}
+          rowsOptions={[5, 10, 20]}
+          unit="college administrators"
+        />
       </div>
 
       {/* ── INTERACTIVE SLIDE-OVER PROFILE DRAWER ── */}

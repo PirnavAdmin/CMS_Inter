@@ -715,3 +715,60 @@
   border-radius: 8px;
   border: 1px dashed #e2e8f0;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE & PALETTE ADAPTATION FOR SUPER ADMIN DASHBOARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .sa-dashboard-page {
+  background: var(--cms-bg);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sad-kpi-card,
+[data-theme="dark"] .sad-card,
+[data-theme="dark"] .sad-table-card,
+[data-theme="dark"] .sad-panel,
+[data-theme="dark"] .sad-date-select {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sad-card-header {
+  border-bottom-color: var(--cms-border);
+}
+
+[data-theme="dark"] .sad-card-title {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sad-kpi-title {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .sad-kpi-value {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sad-table th {
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .sad-table td {
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sad-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .sad-empty-placeholder {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: var(--cms-border);
+  color: var(--cms-muted);
+}

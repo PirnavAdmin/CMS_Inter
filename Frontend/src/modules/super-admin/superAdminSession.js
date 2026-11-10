@@ -6,7 +6,9 @@ export function logoutPreview() {
   try {
     sessionStorage.removeItem("super_admin_preview");
     localStorage.removeItem("super_admin_preview");
-  } catch {}
+  } catch (err) {
+    console.warn("Failed to clear preview storage:", err);
+  }
 }
 
 export function getPlatformSession() {

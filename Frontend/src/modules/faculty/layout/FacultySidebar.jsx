@@ -15,6 +15,7 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { useFaculty } from "../FacultyContext.jsx";
 import { useFacultyPermissions } from "../PermissionContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { calculateStaffProfileCompletion, isStaffPortalUnlocked } from "../profileCompletion.js";
 import { readCampusImages } from "@/modules/admin/AdminSettings/campusImages.js";
 import { campusContentDefaults } from "@/modules/admin/AdminSettings/campusContent.js";
 
@@ -81,17 +82,11 @@ export default function FacultySidebar() {
     Boolean(authUser?.staffId) ||
     Boolean(authUser?.employeeId) ||
     Boolean(profileData?.employeeId);
-  const compPct = Number(
-    authUser?.profileCompletionPercentage ||
-    profileData?.profileCompletion ||
-    profileData?.profileCompletionPercentage ||
-    0
+  const compPct = useMemo(() => calculateStaffProfileCompletion(profileData), [profileData]);
+  const isCompleted = isStaffPortalUnlocked(
+    profileStatus,
+    profileData?.isOnboarded === true || authUser?.isOnboarded === true
   );
-  const statusClean = String(profileStatus || "").toLowerCase();
-  const isCompleted =
-    statusClean === "completed" ||
-    statusClean === "approved" ||
-    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
   const isPendingOnboarding = isFaculty && !isCompleted;
 
   const [supportContact, setSupportContact] = useState({
@@ -227,7 +222,7 @@ export default function FacultySidebar() {
 
             {/* Profile Completion Progress Card */}
             {(() => {
-              const comp = profileData?.profileCompletionPercentage || 41;
+              const comp = compPct;
               return (
                 <div style={{
                   background: "rgba(255, 255, 255, 0.7)",

@@ -18,7 +18,6 @@ import {
   Gift,
   RefreshCw,
   Calendar,
-  ChevronDown,
   TrendingUp,
   TrendingDown,
   CreditCard,
@@ -133,32 +132,23 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const { data, refresh } = useSuperAdmin?.() || { data: {} };
 
-  const colleges = data?.colleges || [];
-  const subscriptions = data?.subscriptions || [];
-  const activities = data?.activities || [];
-  const plans = data?.plans || [];
-  const payments = data?.payments || [];
-  const users = data?.users || [];
+  const colleges = useMemo(() => data?.colleges || [], [data?.colleges]);
+  const subscriptions = useMemo(() => data?.subscriptions || [], [data?.subscriptions]);
+  const activities = useMemo(() => data?.activities || [], [data?.activities]);
+  const plans = useMemo(() => data?.plans || [], [data?.plans]);
+  const payments = useMemo(() => data?.payments || [], [data?.payments]);
+  const users = useMemo(() => data?.users || [], [data?.users]);
   const dashboard = data?.dashboard || {};
 
-  const [dateRange, setDateRange] = useState("30days");
   const [refreshing, setRefreshing] = useState(false);
   const [regTimeframe, setRegTimeframe] = useState("6months");
   const [revenuePeriod, setRevenuePeriod] = useState("monthly");
-  const [toastMsg, setToastMsg] = useState(null);
-
-  const showToast = (msg) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3500);
-  };
-
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
       await refresh?.();
-      showToast("Dashboard refreshed successfully!");
-    } catch {
-      showToast("Dashboard refreshed.");
+    } catch (error) {
+      console.error("Super Admin dashboard refresh failed:", error);
     } finally {
       setTimeout(() => setRefreshing(false), 500);
     }
@@ -341,7 +331,7 @@ export default function DashboardPage() {
 
   // ── RECENT 3 REAL REGISTERED COLLEGES ──
   const recentColleges = useMemo(() => {
-    return colleges.slice(0, 3).map((c) => ({
+    return [...colleges].sort((a, b) => (Number(String(b.id || "").replace(/\D/g, "")) || 0) - (Number(String(a.id || "").replace(/\D/g, "")) || 0)).slice(0, 3).map((c) => ({
       id: c.id || c.collegeId,
       name: c.name || "—",
       code: c.code || "—",
@@ -437,14 +427,6 @@ export default function DashboardPage() {
 
   return (
     <div className="sa-dashboard-page">
-      {/* Toast Feedback */}
-      {toastMsg && (
-        <div className="sad-toast-notification">
-          <CheckCircle2 size={16} color="#4ade80" />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
       {/* ── HEADER ── */}
       <header className="sad-header">
         <div className="sad-header-left">
@@ -463,20 +445,6 @@ export default function DashboardPage() {
         </div>
 
         <div className="sad-header-controls">
-          <div className="sad-date-select-wrap">
-            <Calendar size={14} className="sad-date-select-icon" />
-            <select
-              className="sad-date-select"
-              value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
-            >
-              <option value="30days">Last 30 Days</option>
-              <option value="6months">Last 6 Months</option>
-              <option value="1year">This Year</option>
-            </select>
-            <ChevronDown size={13} className="sad-date-chevron" />
-          </div>
-
           <button
             type="button"
             className="sad-btn-refresh"

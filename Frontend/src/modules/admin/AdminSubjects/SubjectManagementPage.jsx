@@ -47,6 +47,7 @@ const displayLanguageName = (name = "") => String(name).trim().replace(/\s*-\s*(
 const normalizeSubjectCode = (code = "") => String(code).trim().toUpperCase();
 const normalizeDuplicateName = (name = "") => String(name).trim().toLowerCase().replace(/\s+/g, " ");
 const SUBJECT_CODE_PATTERN = /^[A-Za-z0-9_-]+$/;
+const LANGUAGE_PAGE_SIZE = 5;
 const normalizeSubjectName = (name = "") => displaySubjectName(name)
   .toLowerCase()
   .replace(/[^a-z0-9]+/g, " ")
@@ -107,6 +108,7 @@ export default function SubjectManagementPage() {
 
 function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYearId }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [languagePage, setLanguagePage] = useState(1);
   const subjectView = searchParams.get("view") === "languages" ? "languages" : "subjects";
   const subjectModal = searchParams.get("modal");
   const navigationSubjectId = searchParams.get("subjectId") || "";
@@ -235,6 +237,15 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     });
     return [...byName.values()];
   }, [commonSubjects, hiddenLanguageNames, languages, secondLanguageSubjects]);
+  const languageTotalPages = Math.max(1, Math.ceil(languageSubjects.length / LANGUAGE_PAGE_SIZE));
+  const currentLanguagePage = Math.min(languagePage, languageTotalPages);
+  const visibleLanguageSubjects = useMemo(() => languageSubjects.slice(
+    (currentLanguagePage - 1) * LANGUAGE_PAGE_SIZE,
+    currentLanguagePage * LANGUAGE_PAGE_SIZE,
+  ), [currentLanguagePage, languageSubjects]);
+  useEffect(() => {
+    if (languagePage > languageTotalPages) setLanguagePage(languageTotalPages);
+  }, [languagePage, languageTotalPages]);
   const available = useMemo(() => {
     const source = searchResults.length ? searchResults : activeSubjects.length ? activeSubjects : master;
     return source.filter((subject) => !commonSubjectIds.includes(subject.id) && !contextSubjects.some((item) => item.id === subject.id));
@@ -680,7 +691,7 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     <main className="subject-screen subject-master-screen subject-allocation-screen subject-management-page">
       {subjectView === "languages" ? <>
         <button className="cms-back-link subject-language-back" type="button" onClick={() => setSubjectView("subjects")}><ArrowLeft size={15} /> Back to Subjects</button>
-        <section className="subject-table-card subject-language-list"><header className="subject-table-head"><div><h2>Language Subjects</h2><p>Reusable language records for group-wise allocation.</p></div><button className="cms-btn cms-btn-primary" type="button" onClick={() => { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); setLanguageModalOpen(true); }}><Plus size={16} /> Add Language</button></header><div className="subject-table-scroll"><table className="subject-table subject-master-table subject-language-table"><thead><tr><th>Language</th><th>Subject Code</th><th>Total Marks</th><th>Passing Marks</th><th>Action</th></tr></thead><tbody>{languageSubjects.map((subject, sIdx) => { const scope = /^english$/i.test(displayLanguageName(subject.name)) ? "common" : "secondLanguage"; return <tr key={`${subjectKey(subject)}-${sIdx}`}><td>{displayLanguageName(subject.name)}</td><td><b>{subject.code}</b></td><td>{total(subject.marks)}</td><td>{markValue(subject.marks?.passing)}</td><td><div className="subject-master-actions"><button className="cms-action-btn" title="Edit language" onClick={() => openConfiguredLanguageEdit(subject, scope)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete language" onClick={() => setRemoving({ ...subject, scope })}><Trash2 size={16} /></button></div></td></tr>; })}</tbody></table></div></section>
+        <section className="subject-table-card subject-language-list"><header className="subject-table-head"><div><h2>Language Subjects</h2><p>Reusable language records for group-wise allocation.</p></div><button className="cms-btn cms-btn-primary" type="button" onClick={() => { setLanguageDraft(emptyLanguageDraft()); setLanguageSelection(""); setLanguageModalOpen(true); }}><Plus size={16} /> Add Language</button></header><div className="subject-table-scroll"><table className="subject-table subject-master-table subject-language-table"><thead><tr><th>Language</th><th>Subject Code</th><th>Total Marks</th><th>Passing Marks</th><th>Action</th></tr></thead><tbody>{visibleLanguageSubjects.map((subject, sIdx) => { const scope = /^english$/i.test(displayLanguageName(subject.name)) ? "common" : "secondLanguage"; return <tr key={`${subjectKey(subject)}-${sIdx}`}><td>{displayLanguageName(subject.name)}</td><td><b>{subject.code}</b></td><td>{total(subject.marks)}</td><td>{markValue(subject.marks?.passing)}</td><td><div className="subject-master-actions"><button className="cms-action-btn" title="Edit language" onClick={() => openConfiguredLanguageEdit(subject, scope)}><Pencil size={16} /></button><button className="cms-action-btn subject-remove-btn" title="Delete language" onClick={() => setRemoving({ ...subject, scope })}><Trash2 size={16} /></button></div></td></tr>; })}</tbody></table></div><footer className="subject-language-pagination"><span>Showing {languageSubjects.length ? (currentLanguagePage - 1) * LANGUAGE_PAGE_SIZE + 1 : 0}-{Math.min(currentLanguagePage * LANGUAGE_PAGE_SIZE, languageSubjects.length)} of {languageSubjects.length} languages</span><div className="subject-language-pagination-actions"><button type="button" disabled={currentLanguagePage === 1} onClick={() => setLanguagePage(currentLanguagePage - 1)}>Previous</button><span>Page {currentLanguagePage} of {languageTotalPages}</span><button type="button" disabled={currentLanguagePage === languageTotalPages} onClick={() => setLanguagePage(currentLanguagePage + 1)}>Next</button></div></footer></section>
       </> : <>
       <section className="subject-master-context"><Select label="Academic Level" value={context.levelId} options={levels} disabled={subjectBusy || levelsLoading || !navbarBoardId || !levels.length} onChange={(levelId) => { setContextSubjects([]); setContextSubjectsReady(false); updateContext({ levelId, groupId: levelId ? context.groupId : "" }); }} placeholder={levelsLoading ? "Loading academic levels..." : !navbarBoardId ? "No active boards available" : !levels.length ? "No academic levels available" : "Select Academic Level"} /><GroupCombobox value={context.groupId} options={groups} onChange={(groupId) => { setContextSubjects([]); setContextSubjectsReady(false); updateContext({ ...context, groupId }); }} disabled={subjectBusy || !academicContextValid || groupsLevelId !== context.levelId || !context.levelId} /></section>
       <section className="subject-allocation-columns" aria-label="Group subject allocation">

@@ -1644,3 +1644,222 @@
 .cap-toast-close:hover {
   color: #ffffff;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE & THEME PALETTE ADAPTATION FOR COLLEGE ADMINS DIRECTORY
+   Ensures seamless contrast across all palettes and light/dark mode
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .cap-page {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-title {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-subtitle {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-kpi-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="dark"] .cap-kpi-card.tone-purple {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+[data-theme="dark"] .cap-kpi-card.tone-green {
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(22, 163, 74, 0.35);
+}
+
+[data-theme="dark"] .cap-kpi-card.tone-blue {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(37, 99, 235, 0.35);
+}
+
+[data-theme="dark"] .cap-kpi-card.tone-orange {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.15) 0%, var(--cms-surface) 100%);
+  border-color: rgba(234, 88, 12, 0.35);
+}
+
+[data-theme="dark"] .tone-purple .cap-kpi-icon-wrap {
+  background: rgba(124, 58, 237, 0.25);
+  color: #c4b5fd;
+}
+
+[data-theme="dark"] .tone-green .cap-kpi-icon-wrap {
+  background: rgba(22, 163, 74, 0.25);
+  color: #86efac;
+}
+
+[data-theme="dark"] .tone-blue .cap-kpi-icon-wrap {
+  background: rgba(37, 99, 235, 0.25);
+  color: #93c5fd;
+}
+
+[data-theme="dark"] .tone-orange .cap-kpi-icon-wrap {
+  background: rgba(234, 88, 12, 0.25);
+  color: #fdba74;
+}
+
+[data-theme="dark"] .cap-kpi-title {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-kpi-value {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-circle-text {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-circle-bg {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+/* Preset tabs */
+[data-theme="dark"] .cap-preset-pill {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-preset-pill:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-preset-pill.is-active {
+  background: var(--cms-primary-soft, rgba(255, 255, 255, 0.1));
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .cap-preset-count {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cms-text);
+}
+
+/* Toolbar */
+[data-theme="dark"] .cap-toolbar {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .cap-search-input,
+[data-theme="dark"] .cap-select {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-icon-btn,
+[data-theme="dark"] .cap-filter-btn {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-icon-btn:hover,
+[data-theme="dark"] .cap-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--cms-primary);
+}
+
+[data-theme="dark"] .cap-view-switcher {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .cap-view-btn.is-active {
+  background: var(--cms-surface);
+  color: var(--cms-primary);
+}
+
+/* Table Card */
+[data-theme="dark"] .cap-table-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .cap-table th {
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-table td {
+  border-bottom-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .cap-cell-admin strong {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-college-title {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-college-code {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-college-icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .cap-copyable-cell {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-copyable-cell:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .cap-filter-panel,
+[data-theme="dark"] .cap-actions-popover,
+[data-theme="dark"] .cap-drawer,
+[data-theme="dark"] .cap-admin-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-popover-item {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .cap-popover-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .cap-drawer-header {
+  border-bottom-color: var(--cms-border);
+}
+
+[data-theme="dark"] .cap-drawer-tab-btn {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cap-drawer-tab-btn.is-active {
+  color: var(--cms-primary);
+  border-bottom-color: var(--cms-primary);
+}
+
+[data-theme="dark"] .cap-drawer-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: var(--cms-border);
+}

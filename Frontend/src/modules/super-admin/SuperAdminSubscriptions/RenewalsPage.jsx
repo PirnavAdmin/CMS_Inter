@@ -203,8 +203,8 @@ export default function RenewalsPage() {
   const [periodFilter, setPeriodFilter] = useState("all");
   const [activeKpiFilter, setActiveKpiFilter] = useState(null); // 'upcoming' | '7days' | '30days' | 'expired'
   const [viewMode, setViewMode] = useState("table"); // 'table' | 'grid'
-  const [sortField, setSortField] = useState("collegeName");
-  const [sortDirection, setSortDirection] = useState("asc");
+  const [sortField, setSortField] = useState("collegeId");
+  const [sortDirection, setSortDirection] = useState("desc");
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -341,6 +341,12 @@ export default function RenewalsPage() {
     result.sort((a, b) => {
       let valA = a[sortField];
       let valB = b[sortField];
+
+      const numA = Number(String(valA).replace(/\D/g, ""));
+      const numB = Number(String(valB).replace(/\D/g, ""));
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        return sortDirection === "asc" ? numA - numB : numB - numA;
+      }
 
       // Handle nulls in sorting: push nulls to the end
       if (valA == null && valB == null) return 0;
@@ -1326,33 +1332,24 @@ export default function RenewalsPage() {
               <div className="rnp-pagination">
                 <button
                   type="button"
-                  className="rnp-page-btn"
+                  className="sa-pagination-btn"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   title="Previous Page"
                 >
-                  <ChevronLeft size={14} />
+                  Previous
                 </button>
-
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`rnp-page-btn ${currentPage === p ? "is-active" : ""}`}
-                    onClick={() => setCurrentPage(p)}
-                  >
-                    {p}
-                  </button>
-                ))}
-
+                <span className="sa-pagination-page-indicator">
+                  Page {currentPage} of {totalPages}
+                </span>
                 <button
                   type="button"
-                  className="rnp-page-btn"
+                  className="sa-pagination-btn"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   title="Next Page"
                 >
-                  <ChevronRight size={14} />
+                  Next
                 </button>
               </div>
             </div>
@@ -1468,29 +1465,22 @@ export default function RenewalsPage() {
             <div className="rnp-pagination">
               <button
                 type="button"
-                className="rnp-page-btn"
+                className="sa-pagination-btn"
                 disabled={currentPage <= 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               >
-                <ChevronLeft size={16} />
+                Previous
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={`rnp-page-btn ${currentPage === p ? "is-active" : ""}`}
-                  onClick={() => setCurrentPage(p)}
-                >
-                  {p}
-                </button>
-              ))}
+              <span className="sa-pagination-page-indicator">
+                Page {currentPage} of {totalPages}
+              </span>
               <button
                 type="button"
-                className="rnp-page-btn"
+                className="sa-pagination-btn"
                 disabled={currentPage >= totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               >
-                <ChevronRight size={16} />
+                Next
               </button>
             </div>
           </footer>

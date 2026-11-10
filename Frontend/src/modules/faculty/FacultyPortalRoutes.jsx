@@ -2,7 +2,8 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import FacultyDashboard from "./FacultyDashboard.jsx";
 import { PermissionProvider, useFacultyPermissions } from "./PermissionContext.jsx";
-import { FacultyProvider } from "./FacultyContext.jsx";
+import { FacultyProvider, useFacultySafe } from "./FacultyContext.jsx";
+import { isStaffPortalUnlocked } from "./profileCompletion.js";
 import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
@@ -83,17 +84,10 @@ function PermissionRoute({ permission, moduleName, children }) {
 }
 
 export function OnboardingRoute({ children }) {
+  const facultyCtx = useFacultySafe();
   const authUser = getAuthUser();
-  let profileStatus = authUser?.profileStatus;
-  if (!profileStatus) {
-    try {
-      const cached = localStorage.getItem("staff_profile_data");
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        profileStatus = parsed?.profileStatus;
-      }
-    } catch {}
-  }
+  const profileData = facultyCtx?.profileData;
+  const profileStatus = profileData?.profileStatus || authUser?.profileStatus;
   const roleLower = String(authUser?.role || "").toLowerCase();
   const staffTypeLower = String(authUser?.staffType || "").toLowerCase();
   const isFaculty =
@@ -104,24 +98,12 @@ export function OnboardingRoute({ children }) {
     roleLower.includes("staff") ||
     staffTypeLower.includes("teach") ||
     Boolean(authUser?.staffId) ||
-    Boolean(authUser?.employeeId);
-  let compPct = Number(authUser?.profileCompletionPercentage || 0);
-  try {
-    const cached = localStorage.getItem("staff_profile_data");
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (!profileStatus && parsed?.profileStatus) profileStatus = parsed.profileStatus;
-      if (!compPct && (parsed?.profileCompletion || parsed?.profileCompletionPercentage)) {
-        compPct = Number(parsed.profileCompletion || parsed.profileCompletionPercentage || 0);
-      }
-    }
-  } catch {}
-
-  const statusClean = String(profileStatus || "").toLowerCase();
-  const isCompleted =
-    statusClean === "completed" ||
-    statusClean === "approved" ||
-    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
+    Boolean(authUser?.employeeId) ||
+    Boolean(profileData?.employeeId);
+  const isCompleted = isStaffPortalUnlocked(
+    profileStatus,
+    profileData?.isOnboarded === true || authUser?.isOnboarded === true
+  );
 
   if (isFaculty && !isCompleted) {
     return <Navigate to="/faculty-dashboard/profile" replace />;

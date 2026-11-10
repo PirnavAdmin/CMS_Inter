@@ -1018,3 +1018,40 @@
   justify-content: center;
   flex-wrap: wrap;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE ADAPTATIONS FOR ADD COLLEGE ADMIN WIZARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .aca-page {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-form-card,
+[data-theme="dark"] .aca-step-indicator-card,
+[data-theme="dark"] .aca-preview-sidebar,
+[data-theme="dark"] .aca-success-card,
+[data-theme="dark"] .aca-success-summary-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-input,
+[data-theme="dark"] .aca-select {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-title,
+[data-theme="dark"] .aca-step-title,
+[data-theme="dark"] .aca-label {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-subtitle,
+[data-theme="dark"] .aca-step-desc {
+  color: var(--cms-muted);
+}
