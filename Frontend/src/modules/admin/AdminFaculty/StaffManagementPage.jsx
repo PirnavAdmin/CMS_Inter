@@ -2769,8 +2769,11 @@ function Field({
           }
         }
 
-        // If no department match in both API and static map, return empty array to prevent showing unrelated designations
-        return [];
+        // Fallback: If no direct department match, return all available designations for this staff type from API so dropdown is never locked
+        if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+          return Array.from(new Set(designationOptions.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
+        }
+        return isTeaching ? teachingDesignations : nonTeachingDesignations;
       }
 
       // With no department selected, show every available designation.

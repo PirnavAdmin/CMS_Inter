@@ -290,6 +290,7 @@ public class DashboardController : ControllerBase
     /// Retrieves today's staff attendance metrics filtered by staff type.
     /// </summary>
     [HttpGet("staff-attendance-today")]
+    [BypassPermission]
     [ProducesResponseType(typeof(StaffAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

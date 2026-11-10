@@ -423,6 +423,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Update an existing staff member.
         /// </summary>
         [HttpPut("{id:int}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -529,6 +530,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Saves profile section draft by staff ID.
         /// </summary>
         [HttpPost("{id:int}/save-profile-draft")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SaveProfileDraft(int id, [FromBody] UpdateStaffProfileSectionDto dto)
         {
@@ -561,6 +563,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Final submission of staff profile.
         /// </summary>
         [HttpPost("{id:int}/submit-profile")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> SubmitProfile(int id)
         {
@@ -660,6 +663,7 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{id:int}/pdf")]
         [HttpGet("{id:int}/profile-pdf")]
         [HttpGet("{id:int}/print")]
+        [BypassPermission]
         public async Task<IActionResult> PrintProfilePdf(int id)
         {
             if (!IsAdminOrPrincipal())
@@ -674,6 +678,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         /// <summary>
         [HttpGet("{id:int}/offer-letter-pdf")]
+        [BypassPermission]
         public async Task<IActionResult> DownloadOfferLetterPdf(int id)
         {
             if (!IsAdminOrPrincipal())
@@ -698,6 +703,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Uploads an individual document for a staff member.
         /// </summary>
         [HttpPost("{id:int}/documents/upload")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadDocument(int id, [FromForm] UploadStaffDocumentDto dto)
@@ -731,6 +737,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Removes an individual uploaded document.
         /// </summary>
         [HttpDelete("{id:int}/documents/{documentType}")]
+        [BypassPermission]
         [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> DeleteDocument(int id, string documentType)
         {
@@ -762,6 +769,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Upload or replace staff member photo.
         /// </summary>
         [HttpPost("upload-photo")]
+        [BypassPermission]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(StaffResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadStaffPhotoDto dto)
@@ -964,6 +972,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("offer-letter-workflow/config")]
         [Authorize]
+        [BypassPermission]
         public async Task<IActionResult> GetOfferLetterWorkflowConfig()
         {
             var config = await _staffService.GetOfferLetterWorkflowConfigAsync();

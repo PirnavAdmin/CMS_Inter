@@ -2339,6 +2339,11 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateOfferLetterPdfAsync(int id)
         {
             var profile = await GetStaffProfileFullAsync(id);
+            var staff = await _staffRepository.GetByIdAsync(id);
+            if (staff != null)
+            {
+                await EnsureStaffPayrollStructureProvisionedAsync(staff);
+            }
             var payroll = await GetStaffPayrollDetailsAsync(id);
 
             var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
@@ -2457,6 +2462,47 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
+            // Resolve authentic staff salary components without fake mock fallbacks
+            decimal? basicSalary = payroll?.BasicSalary;
+            decimal? grossSalary = payroll?.GrossSalary;
+
+            if (staff != null && !string.IsNullOrWhiteSpace(staff.BankDetailsJson))
+            {
+                try
+                {
+                    using var bankDoc = System.Text.Json.JsonDocument.Parse(staff.BankDetailsJson);
+                    var root = bankDoc.RootElement;
+                    if ((!basicSalary.HasValue || basicSalary.Value == 0) && root.TryGetProperty("BasicSalary", out var bsProp))
+                    {
+                        if (bsProp.TryGetDecimal(out var bsVal)) basicSalary = bsVal;
+                        else if (decimal.TryParse(bsProp.GetString(), out var bsParsed)) basicSalary = bsParsed;
+                    }
+                    if ((!grossSalary.HasValue || grossSalary.Value == 0) && root.TryGetProperty("GrossSalary", out var gsProp))
+                    {
+                        if (gsProp.TryGetDecimal(out var gsVal)) grossSalary = gsVal;
+                        else if (decimal.TryParse(gsProp.GetString(), out var gsParsed)) grossSalary = gsParsed;
+                    }
+                    if ((!grossSalary.HasValue || grossSalary.Value == 0) && root.TryGetProperty("MonthlyGross", out var mgProp))
+                    {
+                        if (mgProp.TryGetDecimal(out var mgVal)) grossSalary = mgVal;
+                        else if (decimal.TryParse(mgProp.GetString(), out var mgParsed)) grossSalary = mgParsed;
+                    }
+                }
+                catch { }
+            }
+
+            string basicSalaryFormatted = basicSalary.HasValue && basicSalary.Value > 0
+                ? $"₹{basicSalary.Value:N0}"
+                : "As per institutional pay scale";
+
+            string grossSalaryFormatted = grossSalary.HasValue && grossSalary.Value > 0
+                ? $"₹{grossSalary.Value:N0}"
+                : "As per institutional pay scale";
+
+            string annualCtcFormatted = grossSalary.HasValue && grossSalary.Value > 0
+                ? $"₹{(grossSalary.Value * 12):N0}"
+                : "As per institutional pay scale";
+
             // Replace dynamic tokens in opening statement and terms
             string ResolveTokens(string input)
             {
@@ -2470,9 +2516,11 @@ namespace CollegeManagement.API.Services.Implementations
                     .Replace("{{BoardName}}", boardName)
                     .Replace("{{InstitutionName}}", institutionName)
                     .Replace("{{ReportingAuthority}}", reportingAuthority)
-                    .Replace("{{BasicSalary}}", payroll?.BasicSalary.HasValue == true ? $"₹{payroll.BasicSalary.Value:N0}" : "₹45,000")
-                    .Replace("{{GrossSalary}}", payroll?.GrossSalary.HasValue == true ? $"₹{payroll.GrossSalary.Value:N0}" : "₹68,500")
-                    .Replace("{{AnnualCTC}}", payroll?.GrossSalary.HasValue == true ? $"₹{(payroll.GrossSalary.Value * 12):N0}" : "₹8,22,000")
+                    .Replace("{{BasicSalary}}", basicSalaryFormatted)
+                    .Replace("{{GrossSalary}}", grossSalaryFormatted)
+                    .Replace("{{MonthlyGross}}", grossSalaryFormatted)
+                    .Replace("{{Salary}}", grossSalaryFormatted)
+                    .Replace("{{AnnualCTC}}", annualCtcFormatted)
                     .Replace("{{DateOfJoining}}", (profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date).ToString("dd MMM yyyy"));
             }
 
@@ -2494,8 +2542,8 @@ namespace CollegeManagement.API.Services.Implementations
                 BoardName = boardName,
                 RoleCategory = roleCategory,
                 DateOfJoining = profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date,
-                BasicSalary = payroll?.BasicSalary,
-                GrossSalary = payroll?.GrossSalary,
+                BasicSalary = basicSalary,
+                GrossSalary = grossSalary,
                 ReportingAuthority = reportingAuthority,
                 AuthorizedSignatoryName = signatoryName,
                 AuthorizedSignatoryRole = signatoryRole,
@@ -2504,7 +2552,36 @@ namespace CollegeManagement.API.Services.Implementations
 
             var doc = new CollegeManagement.API.Services.Exports.StaffOfferLetterDocument(model);
             byte[] bytes = doc.GeneratePdf();
-            return (bytes, "application/pdf", $"Offer_Letter_{profile.EmployeeId}.pdf");
+
+            // Persist generated Offer Letter PDF to local storage (under uploads/offer-letters/)
+            // and save the local path in database, identical to staff photo storage
+            var rootPath = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadDir = Path.Combine(rootPath, "uploads", "offer-letters");
+            if (!Directory.Exists(uploadDir))
+            {
+                Directory.CreateDirectory(uploadDir);
+            }
+
+            var safeEmpId = string.Concat((profile.EmployeeId ?? $"staff_{id}").Split(Path.GetInvalidFileNameChars()));
+            var fileName = $"OfferLetter_{safeEmpId}_{id}.pdf";
+            var physicalPath = Path.Combine(uploadDir, fileName);
+
+            try
+            {
+                await File.WriteAllBytesAsync(physicalPath, bytes);
+                var relativePath = $"/uploads/offer-letters/{fileName}";
+                await _staffRepository.UpdateOfferLetterPathAsync(id, relativePath);
+                if (staff != null)
+                {
+                    staff.OfferLetterPath = relativePath;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist offer letter PDF file to disk for staff ID {StaffId}", id);
+            }
+
+            return (bytes, "application/pdf", fileName);
         }
 
         public async Task<StaffExperienceSummaryDto> GetStaffExperienceSummaryAsync(int id)
@@ -3068,11 +3145,11 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            if (dto.Experience != null && dto.Experience.Any())
+            if (dto.Experience != null && (dto.Experience.Any() || string.Equals(dto.SectionName, "Experience", StringComparison.OrdinalIgnoreCase)))
             {
                 staff.ExperienceJson = JsonSerializer.Serialize(dto.Experience);
                 var total = dto.Experience.Sum(e => e.TotalYears);
-                if (total > 0) staff.Experience = total;
+                staff.Experience = total;
             }
 
             if (dto.Bank != null)
@@ -3089,9 +3166,12 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.EmergencyContactJson = JsonSerializer.Serialize(dto.Emergency);
             }
 
-            if (dto.Documents != null && dto.Documents.Any())
+            if (dto.Documents != null && (dto.Documents.Any() || string.Equals(dto.SectionName, "Documents", StringComparison.OrdinalIgnoreCase)))
             {
-                staff.DocumentsJson = JsonSerializer.Serialize(dto.Documents);
+                var cleanedDocs = dto.Documents
+                    .Where(d => d != null && (!string.IsNullOrWhiteSpace(d.type) || !string.IsNullOrWhiteSpace(d.name) || !string.IsNullOrWhiteSpace(d.url)))
+                    .ToList();
+                staff.DocumentsJson = JsonSerializer.Serialize(cleanedDocs);
             }
 
             if (dto.Employment != null)
@@ -3245,15 +3325,22 @@ namespace CollegeManagement.API.Services.Implementations
                 void AddOrUpdateDoc(string type, string? fileName)
                 {
                     if (string.IsNullOrWhiteSpace(fileName)) return;
+                    var trimmed = fileName.Trim();
+                    string resolvedUrl = trimmed.StartsWith("/", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("blob:", StringComparison.OrdinalIgnoreCase)
+                        ? trimmed
+                        : $"/uploads/staff-documents/{trimmed}";
                     docList.RemoveAll(d => string.Equals(d.type, type, StringComparison.OrdinalIgnoreCase));
                     docList.Add(new StaffDocumentPayloadItem
                     {
                         id = System.Guid.NewGuid().ToString(),
                         type = type,
-                        name = fileName,
+                        name = trimmed,
                         size = "Unknown",
-                        url = $"/uploads/staff-documents/{fileName}",
-                        format = Path.GetExtension(fileName).TrimStart('.').ToUpper()
+                        url = resolvedUrl,
+                        format = Path.GetExtension(trimmed).TrimStart('.').ToUpper()
                     });
                 }
 
@@ -3265,7 +3352,10 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("BankProof", bankProof);
                 AddOrUpdateDoc("DrivingLicence", drivingLicence);
                 AddOrUpdateDoc("Other", otherDocs);
-                AddOrUpdateDoc("Photo", photo);
+                if (!string.IsNullOrWhiteSpace(photo) && !photo.Trim().StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddOrUpdateDoc("Photo", photo);
+                }
                 AddOrUpdateDoc("Signature", signature);
 
                 // Dynamic documents from frontend map
@@ -3443,7 +3533,9 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // 5. Documents Upload (15%)
-            var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
+            var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson)
+                .Where(d => d != null && (!string.IsNullOrWhiteSpace(d.type) || !string.IsNullOrWhiteSpace(d.name) || !string.IsNullOrWhiteSpace(d.url)))
+                .ToList();
             if (docs.Count >= 2)
             {
                 score += 15;
@@ -3849,7 +3941,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Email = s.Email,
                 Mobile = s.Mobile,
                 Status = s.Status,
-                HasOfferLetter = string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+                HasOfferLetter = !string.IsNullOrWhiteSpace(s.OfferLetterPath) || string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase),
+                OfferLetterPath = s.OfferLetterPath
             }).ToList();
         }
 

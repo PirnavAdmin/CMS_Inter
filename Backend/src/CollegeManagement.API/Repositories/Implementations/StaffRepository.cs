@@ -1077,6 +1077,24 @@ namespace CollegeManagement.API.Repositories.Implementations
             await _context.SaveChangesAsync();
         }
 
+                public async Task<string?> GetOfferLetterPathAsync(int id)
+        {
+            var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
+            return staff?.OfferLetterPath;
+        }
+
+        public async Task UpdateOfferLetterPathAsync(int id, string offerLetterPath)
+        {
+            var cleanPath = offerLetterPath?.Trim() ?? string.Empty;
+            var staff = await _context.Staffs.FindAsync(id);
+            if (staff != null)
+            {
+                staff.OfferLetterPath = cleanPath;
+                staff.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+        }
+
         public async Task UpdatePhotoPathAsync(int id, string photoPath)
         {
             var cleanPath = photoPath?.Trim() ?? string.Empty;

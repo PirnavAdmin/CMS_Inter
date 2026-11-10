@@ -60,5 +60,6 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? Mobile { get; set; }
         public string? Status { get; set; }
         public bool HasOfferLetter { get; set; }
+        public string? OfferLetterPath { get; set; }
     }
 }

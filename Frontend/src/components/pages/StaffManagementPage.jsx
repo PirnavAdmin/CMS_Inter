@@ -2734,8 +2734,11 @@ function Field({
           }
         }
 
-        // If no department match in both API and static map, return empty array to prevent showing unrelated designations
-        return [];
+        // Fallback: If no direct department match, return all available designations for this staff type from API so dropdown is never locked
+        if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+          return Array.from(new Set(designationOptions.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
+        }
+        return isTeaching ? teachingDesignations : nonTeachingDesignations;
       }
 
       // With no department selected, show every available designation.
@@ -3851,6 +3854,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
   const { selectedCampus } = useCampusContext();
+  const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
   const list = Array.isArray(records) ? records : [];
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");
