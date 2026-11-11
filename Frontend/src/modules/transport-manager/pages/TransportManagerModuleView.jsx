@@ -48,6 +48,7 @@ import {
   transportValue,
 } from "@/modules/admin/AdminTransport/transportContext.js";
 import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
+import AddDriverScreen from "../components/AddDriverScreen.jsx";
 import "@/modules/admin/AdminDashboard/DashboardPage.css";
 import "@/modules/admin/AdminTransport/TransportPage.css";
 import "@/modules/transport-manager/TransportManagerReports.css";
@@ -140,6 +141,30 @@ function getStudentTransportAssignmentId(record = {}) {
   ];
   const id = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
   return id === undefined || id === null || String(id).trim() === "" ? null : id;
+}
+
+function sortRecentlyAddedFirst(list) {
+  if (!Array.isArray(list)) return [];
+  return [...list].reverse().sort((a, b) => {
+    const aCreated = Date.parse(a.createdAt || a.CreatedAt || a.createdOn || a.CreatedOn || a.createdDate || a.CreatedDate || a.addedOn);
+    const bCreated = Date.parse(b.createdAt || b.CreatedAt || b.createdOn || b.CreatedOn || b.createdDate || b.CreatedDate || b.addedOn);
+    if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+      return bCreated - aCreated;
+    }
+    const empA = String(a.employeeId || a.empId || a.routeCode || "").trim();
+    const empB = String(b.employeeId || b.empId || b.routeCode || "").trim();
+    const numA = parseInt(empA.replace(/\D/g, ""), 10);
+    const numB = parseInt(empB.replace(/\D/g, ""), 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return numB - numA;
+    }
+    const idA = Math.max(Number(a.transportDriverId) || 0, Number(a.staffId) || 0, Number(a.driverId) || 0, Number(a.routeId) || 0, Number(a.vehicleId) || 0, Number(a.pickupPointId) || 0, Number(a.id) || 0);
+    const idB = Math.max(Number(b.transportDriverId) || 0, Number(b.staffId) || 0, Number(b.driverId) || 0, Number(b.routeId) || 0, Number(b.vehicleId) || 0, Number(b.pickupPointId) || 0, Number(b.id) || 0);
+    if (idA !== idB && (idA > 0 || idB > 0)) {
+      return idB - idA;
+    }
+    return 0;
+  });
 }
 
 function getColumnValue(row, column) {
@@ -1092,7 +1117,19 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const setFormConfig = (value) => { setFormConfigState(value); if (!value) closeAction(); };
   const setDetailConfig = (value) => { setDetailConfigState(value); if (!value) closeAction(); };
   const setDeleteConfig = (value) => { setDeleteConfigState(value); if (!value) closeAction(); };
-  const setIsAddDriverOpen = (value) => value ? routeAction("add", "drivers") : (setIsAddDriverOpenState(false), closeAction());
+  const setIsAddDriverOpen = (value) => {
+    setIsAddDriverOpenState(Boolean(value));
+    if (value) {
+      routeAction("add", "drivers");
+    } else {
+      closeAction();
+    }
+  };
+  const isDriverAddScreenActive = (
+    activeSection === "setup" &&
+    activeSetupTab === "drivers" &&
+    (isAddDriverOpen || (searchParams.get("action") === "add" && searchParams.get("entity") === "drivers"))
+  );
   const setIsAddAttendantOpen = (value) => value ? routeAction("add", "attendants") : (setIsAddAttendantOpenState(false), closeAction());
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
@@ -1391,7 +1428,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       if (tmContext.routes?.length) setRoutes(tmContext.routes);
       if (tmContext.pickupPoints?.length) setPickupPoints(tmContext.pickupPoints);
       if (tmContext.vehicles?.length) setVehicles(tmContext.vehicles);
-      if (tmContext.drivers?.length) setDrivers(tmContext.drivers);
+      if (tmContext.drivers?.length) setDrivers(sortRecentlyAddedFirst(tmContext.drivers));
       if (tmContext.attendants?.length
         && !(activeSection === "setup" && activeSetupTab === "attendants")) {
         setAttendants(tmContext.attendants);
@@ -1716,7 +1753,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
               status: "Active",
             };
           });
-        setDrivers([...finalDrivers, ...staffDriverRows]);
+        setDrivers(sortRecentlyAddedFirst([...finalDrivers, ...staffDriverRows]));
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
@@ -1972,7 +2009,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       fields: [
         { name: "minDistanceKm", label: "Min Range (KM)", type: "number", min: 0, placeholder: "e.g. 5" },
         { name: "minBaseFare", label: "Non-AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1000" },
-        { name: "ratePerKm", label: "Non-AC Rate/Addl KM", type: "number", min: 0, placeholder: "e.g. 100" },
+        { name: "ratePerKm", label: "Non-AC Rate/Addl KM (\u20b9)", type: "number", min: 0, placeholder: "e.g. 100" },
         { name: "acMinBaseFare", label: "AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1200" },
         { name: "acRatePerKm", label: "AC Rate/Addl KM (\u20b9)", type: "number", min: 0, placeholder: "e.g. 150" },
       ],
@@ -2084,7 +2121,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     routes: {
       title: "Route Master",
       subtitle: "Manage transport route distance, timing and fare rules.",
-      rows: routes,
+      rows: sortRecentlyAddedFirst(routes),
       fields: routeFields,
       addLabel: "Add Route",
       columns: [
@@ -2100,7 +2137,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     pickupPoints: {
       title: "Pickup Point Master",
       subtitle: "Manage route sequence, pickup/drop timings and student stops.",
-      rows: pickupPoints,
+      rows: sortRecentlyAddedFirst(pickupPoints),
       fields: pickupFields,
       addLabel: "Add Pickup Points",
       columns: [
@@ -2117,7 +2154,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     vehicles: {
       title: "Fleet Master",
       subtitle: "Manage fleet inventory, seat capacity and regulatory documents.",
-      rows: vehicles,
+      rows: sortRecentlyAddedFirst(vehicles),
       fields: vehicleFields,
       addLabel: "Add Vehicle",
       columns: [
@@ -2132,9 +2169,9 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     drivers: {
       title: "Driver Master",
       subtitle: driverLoadError || "Manage driver licensing, expirations and duty allocations.",
-      rows: drivers,
+      rows: sortRecentlyAddedFirst(drivers),
       fields: driverFields,
-      addLabel: undefined,
+      addLabel: "Add Driver",
       columns: [
         { key: "employeeId", label: "EMPLOYEE ID", strong: true },
         { key: "driverName", label: "DRIVER" },
@@ -2147,7 +2184,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     attendants: {
       title: "Bus Attendant Master",
       subtitle: "Manage attendant allocation-ready profiles.",
-      rows: attendants,
+      rows: sortRecentlyAddedFirst(attendants),
       fields: attendantFields,
       addLabel: undefined,
       columns: [
@@ -2787,8 +2824,15 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
     setIsAddDriverOpenState(false); setIsAddAttendantOpenState(false);
     const action = searchParams.get("action");
     if (!action) { openedAction.current = actionSignature; return; }
-    if (!recordsReady || recordsReady.scope !== scope || isLoading) return;
+
     const entity = searchParams.get("entity");
+    if (action === "add" && entity === "drivers" && activeSection === "setup" && activeSetupTab === "drivers") {
+      setIsAddDriverOpenState(true);
+      openedAction.current = actionSignature;
+      return;
+    }
+
+    if (!recordsReady || recordsReady.scope !== scope || isLoading) return;
     const config = tableConfigs[entity];
     const activeEntity = activeSection === "setup" ? activeSetupTab : activeSection === "operations" ? activeOperationTab : null;
     const matchingScope = [["actionCampusId", effectiveCampusId], ["actionBoardId", effectiveBoardId], ["actionYearId", effectiveAcademicYearId]].every(([key, value]) => !searchParams.has(key) || searchParams.get(key) === String(value));
@@ -2913,12 +2957,6 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
                 : config.addLabel && config.fields
                   ? () => openForm(key, config.addLabel, config.fields)
                   : undefined
-                    ? () => setIsAddDriverOpen(true)
-                    : key === "attendants"
-                      ? undefined
-                      : config.addLabel && config.fields
-                        ? () => openForm(key, config.addLabel, config.fields)
-                        : undefined
         }
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
@@ -4821,6 +4859,39 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       return renderDashboard();
     }
     if (activeSection === "setup") {
+      if (isDriverAddScreenActive) {
+        return (
+          <AddDriverScreen
+            onCancel={() => {
+              setIsAddDriverOpen(false);
+              navigation.update({
+                action: null,
+                entity: null,
+                id: null,
+                actionCampusId: null,
+                actionBoardId: null,
+                actionYearId: null,
+              });
+            }}
+            onSuccess={async () => {
+              setIsAddDriverOpen(false);
+              navigation.update({
+                tab: "drivers",
+                action: null,
+                entity: null,
+                id: null,
+                actionCampusId: null,
+                actionBoardId: null,
+                actionYearId: null,
+                page: 1,
+              });
+              await fetchTransportData();
+              showToast("Driver profile saved successfully.");
+            }}
+            existingDrivers={drivers}
+          />
+        );
+      }
       return (
         <div className="cms-transport-stack">
           <TransportTabs
@@ -4902,7 +4973,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   return (
     <div className="cms-transport-page tm-transport-page" style={{ padding: "0.25rem 0" }}>
       {/* Module Title Header matching sidebar item (shown for non-dashboard tabs) */}
-      {activeSection !== "dashboard" && (
+      {activeSection !== "dashboard" && !isDriverAddScreenActive && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.45rem", fontWeight: 700, color: "var(--cms-text, #232a1e)" }}>
@@ -4930,7 +5001,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
       {/* Render Active Sub-Tabs & Content */}
       {renderActiveSection()}
 
-      {searchParams.get("action") && (!recordsReady || recordsReady.scope !== scope || isLoading) ? (
+      {searchParams.get("action") && !isDriverAddScreenActive && (!recordsReady || recordsReady.scope !== scope || isLoading) ? (
         <Modal title="Loading transport record" onClose={closeAction}><SkeletonTable columns={3} rows={3} /></Modal>
       ) : null}
       {/* Pickup Points Multi-Stop Modal */}
@@ -4961,8 +5032,8 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
         />
       ) : null}
 
-      {/* Add Driver Modal */}
-      {isAddDriverOpen ? (
+      {/* Add Driver Modal - replaced by AddDriverScreen in setup -> drivers */}
+      {isAddDriverOpen && !isDriverAddScreenActive ? (
         <AddDriverModal
           drivers={drivers}
           isSaving={isFormSubmitting}
