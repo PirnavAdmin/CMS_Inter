@@ -14,6 +14,11 @@ export function usePaymentPolling(order, attempt, onSuccess) {
       setState({ status: "IDLE", error: "" });
       return;
     }
+    if (order.requiresManualUtr) {
+      setState({ status: "MANUAL_UTR", error: "" });
+      setSecondsLeft(0);
+      return;
+    }
     const timeoutMs = Number(order.monitoringTimeoutSeconds || 600) * 1000;
     const deadline = Math.min(Date.now() + timeoutMs, order.expiresAt || Infinity);
     setState({ status: "PENDING", error: "" });

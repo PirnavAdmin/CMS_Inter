@@ -155,11 +155,12 @@ export default function GatewayPaymentPanel({
     }
     primeAudio();
     run(async (signal) => {
+      const effectiveCampusId = account.campusId ?? campusId;
       let settings;
       try {
         if (account.campusId && Number(account.campusId) !== Number(campusId))
           throw new Error("This fee account belongs to another campus. Select its campus before collecting.");
-        settings = await getPaymentGatewayConfigApi(campusId, signal);
+        settings = await getPaymentGatewayConfigApi(effectiveCampusId, signal);
         if (mode === "UPI_QR" && (!settings.enableCounterUpiQr || !settings.payeeVpa || !settings.payeeName))
           throw new Error("Dynamic UPI QR is disabled or incomplete for this campus. Review Payment Settings.");
         if (mode === "RAZORPAY" && (!settings.enableRazorpay || !settings.razorpayKeyId || !settings.hasRazorpayKeySecret || !settings.hasRazorpayWebhookSecret))
@@ -174,10 +175,10 @@ export default function GatewayPaymentPanel({
       if (signal.aborted) return;
       const Checkout = mode === "RAZORPAY" ? await loadRazorpayCheckout() : null;
       if (signal.aborted) return;
-      const data = await feePaymentGatewayApi.createOrder(
-        { ...payload, paymentMethod: mode },
-        signal,
-      );
+      const orderRequest = { ...payload, paymentMethod: mode };
+      if (effectiveCampusId && Number.isSafeInteger(Number(effectiveCampusId)))
+        orderRequest.campusId = Number(effectiveCampusId);
+      const data = await feePaymentGatewayApi.createOrder(orderRequest, signal);
       if (signal.aborted) return;
       if (
         !data.orderId ||
@@ -187,6 +188,14 @@ export default function GatewayPaymentPanel({
       )
         throw new Error(
           "The backend returned incomplete or mismatched order details. Review payment history before retrying.",
+        );
+      if (
+        data.resolvedCampusId != null &&
+        effectiveCampusId != null &&
+        Number(data.resolvedCampusId) !== Number(effectiveCampusId)
+      )
+        throw new Error(
+          "The backend resolved a different campus payment account. Refresh before retrying.",
         );
       if (
         mode === "UPI_QR" &&
@@ -278,10 +287,6 @@ export default function GatewayPaymentPanel({
     let payload;
     try {
       payload = collectionPayload(account, target, selectedIds, amount);
-      if (target !== "full")
-        throw new Error(
-          "The bank-transfer API credits the fee account and has no installment-selection field. Choose Full Remaining Balance; schedule allocation is handled on approval.",
-        );
       if (!/^[A-Za-z0-9]{6,100}$/.test(draft.utrNumber.trim()))
         throw new Error("Enter a valid UTR/reference with 6–100 letters or digits.");
       if (
@@ -299,6 +304,7 @@ export default function GatewayPaymentPanel({
       await feePaymentGatewayApi.submitUtr(
         {
           ...accountPayload,
+          ...(feeInstallmentIds?.length ? { feeInstallmentIds } : {}),
           ...draft,
           utrNumber: draft.utrNumber.trim(),
           bankName: draft.bankName.trim() || null,
@@ -340,6 +346,67 @@ export default function GatewayPaymentPanel({
       onPending?.();
     });
   };
+  const submitInlineDirectUtr = (approveImmediately) => {
+    const cleanUtr = draft.utrNumber.trim();
+    if (!order?.orderId) return;
+    if (!/^[A-Za-z0-9]{6,100}$/.test(cleanUtr)) {
+      setError("Enter a valid 12-digit UPI Ref / UTR with 6–100 letters or digits.");
+      return;
+    }
+    let payload;
+    try {
+      payload = collectionPayload(account, target, selectedIds, amount);
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
+    run(async (signal) => {
+      const submittedRes = await feePaymentGatewayApi.submitUtr(
+        {
+          studentId: payload.studentId,
+          studentFeeId: payload.studentFeeId,
+          feeInstallmentIds: payload.feeInstallmentIds,
+          amount: Number(order.amount),
+          orderId: order.orderId,
+          utrNumber: cleanUtr,
+          bankName: draft.bankName.trim() || null,
+          paymentDate: todayISO(),
+          remarks: draft.remarks.trim() || `Direct UPI QR (${order.orderId})`,
+        },
+        signal,
+      );
+      if (signal.aborted) return;
+      if (!approveImmediately) {
+        setSubmitted(true);
+        setNotice("UTR submitted for queue verification. Fees will be credited after approval.");
+        onPending();
+        return;
+      }
+      const txnId = Number(submittedRes.transactionId);
+      if (!Number.isSafeInteger(txnId) || txnId <= 0) {
+        setSubmitted(true);
+        setNotice("UTR submitted for verification. Approve it in the Pending UTR Queue to credit fees.");
+        onPending();
+        return;
+      }
+      const approved = await feePaymentGatewayApi.approveUtr(
+        { transactionId: txnId, action: "Approve" },
+        signal,
+      );
+      if (signal.aborted || completed.current) return;
+      if (approved.success === true && approved.receiptNumber) {
+        complete({
+          ...approved,
+          amount: approved.amount ?? order.amount,
+          transactionId: cleanUtr,
+        });
+      } else {
+        setSubmitted(true);
+        setNotice("UTR submitted. Refresh Fee Management or check Pending UTR Queue.");
+        onPending();
+      }
+    });
+  };
   const copyUri = async () => {
     try {
       await navigator.clipboard.writeText(order.upiUri);
@@ -370,9 +437,9 @@ export default function GatewayPaymentPanel({
       {mode === "BANK_TRANSFER" ? (
         <>
           <p className="cms-fee-note">
-            Bank transfers remain pending until verified. Choose Full Remaining Balance to pay
-            toward the fee account; you can enter a smaller amount. Schedule allocation is handled
-            by the backend on approval.
+            Bank transfers remain pending until verified. Choose specific fee schedules or Pay Full
+            Remaining Balance (you can enter a smaller amount); schedule allocation is settled on
+            approval.
           </p>
           <div className="cms-form-grid cols-2">
             {[
@@ -488,10 +555,14 @@ export default function GatewayPaymentPanel({
                 )}
               <strong>{formatCurrency(order.amount)}</strong>
               <code>{order.orderId}</code>
-              {submitted ? <strong className="cms-badge cms-badge-info" role="status">Pending Verification</strong> : completed.current ? (
+              {completed.current ? (
                 <span className="cms-badge cms-badge-active">
                   <CheckCircle size={16} /> Payment confirmed
                 </span>
+              ) : polling.status === "MANUAL_UTR" ? (
+                <p role="status">
+                  Direct Bank VPA Mode — Awaiting UTR / UPI Reference Confirmation
+                </p>
               ) : (
                 <p role="status">
                   {polling.status === "PENDING"
@@ -502,13 +573,14 @@ export default function GatewayPaymentPanel({
                   {String(polling.secondsLeft % 60).padStart(2, "0")}
                 </p>
               )}
-              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && !submitted && (
+              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && (
                 <p className="cms-fee-note" role="note">
                   Direct Bank VPA Mode: Razorpay keys are not configured. Auto-settlement webhook is
-                  unavailable. After paying, click Done to submit the transaction reference for authorized verification.
+                  unavailable; switch to Bank Transfer / UTR to enter the transaction reference after
+                  payment.
                 </p>
               )}
-              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && !submitted && polling.status === "PENDING" && (
+              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && polling.status === "PENDING" && (
                 <>
                   <button type="button" className="cms-btn cms-btn-ghost" onClick={copyUri}>
                     <Copy size={14} /> Copy UPI URI
@@ -520,7 +592,7 @@ export default function GatewayPaymentPanel({
                 mobileLink &&
                 !submitted &&
                 !order.monitorOnly &&
-                polling.status === "PENDING" && (
+                ["PENDING", "MANUAL_UTR"].includes(polling.status) && (
                   <div className="cms-fee-mobile-payment-link">
                     <label htmlFor="gateway-mobile-link">Mobile Payment Link</label>
                     <input id="gateway-mobile-link" readOnly value={mobileLink} />

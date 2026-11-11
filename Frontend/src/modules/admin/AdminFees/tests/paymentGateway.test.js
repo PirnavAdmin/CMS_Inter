@@ -1216,6 +1216,159 @@ await describe("Admin payment gateway", async () => {
     await flush();
     assert.equal(submitted, 0);
   });
+  test("QR displays resolved campus, routing mode and payee, and rejects cross-campus order resolution", async () => {
+    let sentPayload;
+    const view = await mount(
+      gatewaySource,
+      "GatewayPaymentPanel",
+      {
+        getPaymentGatewayConfigApi: async () => paymentSettings,
+        feePaymentGatewayApi: {
+          createOrder: async (payload) => {
+            sentPayload = payload;
+            return {
+              ...order,
+              currency: "INR",
+              qrCodeBase64: "data:image/png;base64,AAAA",
+              upiUri: "upi://pay?pa=college@hdfcbank",
+              qrMode: "DIRECT_VPA_QR",
+              resolvedCampusId: 2,
+              resolvedCampusName: "Main Campus",
+              payeeVpa: "college@hdfcbank",
+              payeeName: "College Trust",
+            };
+          },
+        },
+        usePaymentPolling: () => ({ status: "PENDING", secondsLeft: 600 }),
+      },
+      {
+        mode: "UPI_QR",
+        campusId: 2,
+        account: { ...account, campusId: 2 },
+        target: "schedules",
+        selectedIds: [101],
+        amount: 300,
+        onSaved() {},
+        onPending() {},
+        onLockChange() {},
+      },
+    );
+    view.render().find((node) => node.type === "button").props.onClick();
+    await flush();
+    assert.equal(sentPayload.campusId, 2);
+    const tree = view.render();
+    assert.ok(
+      tree.some(
+        (node) =>
+          node.props?.role === "status" &&
+          node.props.children.join("").includes("College Trust (college@hdfcbank)"),
+      ),
+    );
+    view.unmount();
+
+    const mismatchView = await mount(
+      gatewaySource,
+      "GatewayPaymentPanel",
+      {
+        getPaymentGatewayConfigApi: async () => paymentSettings,
+        feePaymentGatewayApi: {
+          createOrder: async () => ({
+            ...order,
+            currency: "INR",
+            qrCodeBase64: "data:image/png;base64,AAAA",
+            upiUri: "upi://pay?pa=other@hdfcbank",
+            resolvedCampusId: 9,
+          }),
+        },
+        usePaymentPolling: () => ({ status: "PENDING", secondsLeft: 600 }),
+      },
+      {
+        mode: "UPI_QR",
+        campusId: 2,
+        account: { ...account, campusId: 2 },
+        target: "schedules",
+        selectedIds: [101],
+        amount: 300,
+        onSaved() {},
+        onPending() {},
+        onLockChange() {},
+      },
+    );
+    mismatchView.render().find((node) => node.type === "button").props.onClick();
+    await flush();
+    const mismatchTree = mismatchView.render();
+    assert.equal(mismatchTree.some((node) => node.type === "img"), false);
+    assert.ok(
+      mismatchTree.some(
+        (node) =>
+          node.props?.role === "alert" &&
+          node.props.children.join("").includes("different campus payment account"),
+      ),
+    );
+    mismatchView.unmount();
+  });
+  test("Direct Bank VPA QR allows inline UTR entry and immediate approval without leaving modal", async () => {
+    let submittedPayload, approvedPayload, savedPayment, timeoutFn;
+    const view = await mount(
+      gatewaySource,
+      "GatewayPaymentPanel",
+      {
+        getPaymentGatewayConfigApi: async () => paymentSettings,
+        feePaymentGatewayApi: {
+          createOrder: async () => ({
+            ...order,
+            orderId: "order_direct_inline_1",
+            currency: "INR",
+            qrCodeBase64: "data:image/png;base64,AAAA",
+            upiUri: "upi://pay?pa=college@okicici",
+            qrMode: "DIRECT_VPA_QR",
+            requiresManualUtr: true,
+            payeeVpa: "college@okicici",
+            payeeName: "College Trust",
+          }),
+          submitUtr: async (payload) => {
+            submittedPayload = payload;
+            return { success: true, transactionId: 501 };
+          },
+          approveUtr: async (payload) => {
+            approvedPayload = payload;
+            return { success: true, receiptNumber: "REC-501", amount: 300, feePaymentId: 888 };
+          },
+        },
+        usePaymentPolling: () => ({ status: "MANUAL_UTR", secondsLeft: 0 }),
+        window: { setTimeout: (fn) => { timeoutFn = fn; return 1; } },
+      },
+      {
+        mode: "UPI_QR",
+        campusId: 2,
+        account: { ...account, campusId: 2 },
+        target: "schedules",
+        selectedIds: [101],
+        amount: 300,
+        onSaved: (p) => { savedPayment = p; },
+        onPending() {},
+        onLockChange() {},
+      },
+    );
+    view.render().find((node) => node.type === "button").props.onClick();
+    await flush();
+    let tree = view.render();
+    const utrInput = tree.find((node) => node.props?.id === "gateway-inline-utr");
+    assert.ok(utrInput);
+    utrInput.props.onChange({ target: { value: "431512345678" } });
+    tree = view.render();
+    await tree.find((node) => node.type === "button" && Array.isArray(node.props?.children) && node.props.children.includes("Verify & Credit Payment Now")).props.onClick();
+    await flush();
+    assert.equal(submittedPayload.orderId, "order_direct_inline_1");
+    assert.deepEqual(Array.from(submittedPayload.feeInstallmentIds), [101]);
+    assert.equal(submittedPayload.utrNumber, "431512345678");
+    assert.equal(approvedPayload.transactionId, 501);
+    assert.equal(approvedPayload.action, "Approve");
+    timeoutFn();
+    assert.equal(savedPayment.receiptNo, "REC-501");
+    assert.equal(savedPayment.gatewayConfirmed, true);
+    view.unmount();
+  });
   test("Razorpay uses returned public order, rupees-to-paise conversion and backend verify", async () => {
     let options,
       verification,
@@ -1382,6 +1535,43 @@ await describe("Admin payment gateway", async () => {
     assert.equal(payload.feeInstallmentIds, undefined);
     assert(view.render().find((node) => node.type === "button").props.disabled);
     view.unmount();
+
+    let scheduleCalls = 0,
+      schedulePayload;
+    const scheduleView = await mount(
+      gatewaySource,
+      "GatewayPaymentPanel",
+      {
+        feePaymentGatewayApi: {
+          submitUtr: async (data) => {
+            scheduleCalls++;
+            schedulePayload = data;
+            return { success: true };
+          },
+        },
+        usePaymentPolling: () => ({ status: "IDLE" }),
+      },
+      {
+        mode: "BANK_TRANSFER",
+        account,
+        target: "schedules",
+        selectedIds: ["101"],
+        amount: 300,
+        onSaved: () => assert.fail("UTR must not settle"),
+        onPending() {},
+        onLockChange() {},
+      },
+    );
+    scheduleView
+      .render()
+      .find((node) => node.props?.id === "gateway-utrNumber")
+      .props.onChange({ target: { value: "UTR668064537699" } });
+    scheduleView.render().find((node) => node.type === "button").props.onClick();
+    await flush();
+    assert.equal(scheduleCalls, 1);
+    assert.equal(schedulePayload.amount, 300);
+    assert.deepEqual(schedulePayload.feeInstallmentIds, [101]);
+    scheduleView.unmount();
   });
 
   const pageSource = await readFile(new URL("../FeeManagementPage.jsx", import.meta.url), "utf8");
