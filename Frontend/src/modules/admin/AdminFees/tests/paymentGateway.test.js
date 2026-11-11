@@ -1413,6 +1413,43 @@ await describe("Admin payment gateway", async () => {
     assert.equal(payload.feeInstallmentIds, undefined);
     assert(view.render().find((node) => node.type === "button").props.disabled);
     view.unmount();
+
+    let scheduleCalls = 0,
+      schedulePayload;
+    const scheduleView = await mount(
+      gatewaySource,
+      "GatewayPaymentPanel",
+      {
+        feePaymentGatewayApi: {
+          submitUtr: async (data) => {
+            scheduleCalls++;
+            schedulePayload = data;
+            return { success: true };
+          },
+        },
+        usePaymentPolling: () => ({ status: "IDLE" }),
+      },
+      {
+        mode: "BANK_TRANSFER",
+        account,
+        target: "schedules",
+        selectedIds: ["101"],
+        amount: 300,
+        onSaved: () => assert.fail("UTR must not settle"),
+        onPending() {},
+        onLockChange() {},
+      },
+    );
+    scheduleView
+      .render()
+      .find((node) => node.props?.id === "gateway-utrNumber")
+      .props.onChange({ target: { value: "UTR668064537699" } });
+    scheduleView.render().find((node) => node.type === "button").props.onClick();
+    await flush();
+    assert.equal(scheduleCalls, 1);
+    assert.equal(schedulePayload.amount, 300);
+    assert.deepEqual(schedulePayload.feeInstallmentIds, [101]);
+    scheduleView.unmount();
   });
 
   const pageSource = await readFile(new URL("../FeeManagementPage.jsx", import.meta.url), "utf8");

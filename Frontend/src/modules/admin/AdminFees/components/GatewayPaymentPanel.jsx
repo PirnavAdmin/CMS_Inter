@@ -261,10 +261,6 @@ export default function GatewayPaymentPanel({
     let payload;
     try {
       payload = collectionPayload(account, target, selectedIds, amount);
-      if (target !== "full")
-        throw new Error(
-          "The bank-transfer API credits the fee account and has no installment-selection field. Choose Full Remaining Balance; schedule allocation is handled on approval.",
-        );
       if (!/^[A-Za-z0-9]{6,100}$/.test(draft.utrNumber.trim()))
         throw new Error("Enter a valid UTR/reference with 6–100 letters or digits.");
       if (
@@ -282,6 +278,7 @@ export default function GatewayPaymentPanel({
       await feePaymentGatewayApi.submitUtr(
         {
           ...accountPayload,
+          ...(feeInstallmentIds?.length ? { feeInstallmentIds } : {}),
           ...draft,
           utrNumber: draft.utrNumber.trim(),
           bankName: draft.bankName.trim() || null,
@@ -386,9 +383,9 @@ export default function GatewayPaymentPanel({
       {mode === "BANK_TRANSFER" ? (
         <>
           <p className="cms-fee-note">
-            Bank transfers remain pending until verified. Choose Full Remaining Balance to pay
-            toward the fee account; you can enter a smaller amount. Schedule allocation is handled
-            by the backend on approval.
+            Bank transfers remain pending until verified. Choose specific fee schedules or Pay Full
+            Remaining Balance (you can enter a smaller amount); schedule allocation is settled on
+            approval.
           </p>
           <div className="cms-form-grid cols-2">
             {[
