@@ -20,6 +20,7 @@ import { useAccountantViewParams, FeeBadge, FeeCard, FeeFilter, FeeLoadState, Fe
 import "@/modules/admin/AdminFees/FeeManagementPage.css";
 import "./AccountantFeeManagement.css";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
+import { PaymentSettingsLink } from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 
 const field = (label, key, type) => ({
   label, num: type === "money", value: (row) => {
@@ -774,7 +775,7 @@ export default function AccountantFeeManagement() {
   const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");
   const contextKey = JSON.stringify(params);
   return <div className="accountant-fee-page cms-fee-page">
-    <header className="cms-page-head"><div className="cms-page-title"><img className="cms-page-title-icon" src={adminIconAssets.feeManagement} alt="" /><div className="cms-page-title-copy"><h1>Fee Management</h1><p>Manage fee structures, scholarships, student balances and collections.</p></div></div><Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments?tab=fees"><History size={15} /> Payment history</Link></header>
+    <header className="cms-page-head"><div className="cms-page-title"><img className="cms-page-title-icon" src={adminIconAssets.feeManagement} alt="" /><div className="cms-page-title-copy"><h1>Fee Management</h1><p>Manage fee structures, scholarships, student balances and collections.</p></div></div><div className="cms-fee-head-actions"><PaymentSettingsLink accountant /><Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments?tab=fees"><History size={15} /> Payment history</Link></div></header>
     <FeeTabs items={[["overview", "Overview"], ["setup", "Fee Setup"], ["ledger", "Student Fee Ledger"], ["collection", "Fee Collection"]]} value={tab} onChange={(value) => change("tab", value)} label="Fee Management sections" />
     {tab === "setup" ? <FeeTabs secondary items={Object.entries(setupViews).map(([key, view]) => [key, view.title])} value={setup} onChange={(value) => change("setup", value)} label="Fee Setup sections" /> : null}
     {permissions.loading ? <FeeNotice>Checking finance permissions...</FeeNotice> : !allowed ? <FeeNotice>This section is unavailable with your current permissions. Please contact your administrator to verify finance view access.</FeeNotice>

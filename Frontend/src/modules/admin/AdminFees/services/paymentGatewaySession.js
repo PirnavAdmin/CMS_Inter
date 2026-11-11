@@ -23,6 +23,99 @@ export function gatewayData(payload) {
 
 export const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id;
 
+// Configuration is always explicitly scoped; never resolve a college/default account locally.
+export function paymentConfigCampusId(value) {
+  const id = Number(value);
+  if (!/^\d+$/.test(String(value ?? "")) || !Number.isSafeInteger(id) || id <= 0)
+    throw new Error("Select a valid campus before loading payment settings.");
+  return id;
+}
+
+export const PAYMENT_CONFIG_DEFAULTS = Object.freeze({
+  bankName: "", accountHolderName: "", accountNumber: "", confirmAccountNumber: "",
+  ifscCode: "", branchName: "", accountType: "Current", enableOfflineUtr: false,
+  payeeVpa: "", payeeName: "", currency: "INR", mcc: "8220", enableCounterUpiQr: false,
+  provider: "Razorpay", isLiveMode: false, razorpayKeyId: "", razorpayKeySecret: "",
+  razorpayWebhookSecret: "", hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false,
+  autoCapture: true, enableRazorpay: false, pollingIntervalMs: 1200,
+  monitoringTimeoutSeconds: 600, baseAppUrl: "", frontendPort: 5173, webhookUrl: "",
+});
+const paymentConfigFields = Object.keys(PAYMENT_CONFIG_DEFAULTS).filter((key) => ![
+  "confirmAccountNumber", "hasRazorpayKeySecret", "hasRazorpayWebhookSecret", "webhookUrl",
+].includes(key));
+
+export function normalizePaymentConfig(payload, campusId) {
+  const data = gatewayData(payload);
+  const id = paymentConfigCampusId(campusId);
+  if (data.campusId == null || Number(data.campusId) !== id)
+    throw new Error("The backend did not return this campus's configuration. No default account was substituted.");
+  for (const key of ["enableOfflineUtr", "enableCounterUpiQr", "enableRazorpay", "isLiveMode", "autoCapture", "hasRazorpayKeySecret", "hasRazorpayWebhookSecret"])
+    if (typeof data[key] !== "boolean") throw new Error("The payment configuration response is incomplete. Contact the backend team.");
+  if (data.accountNumber != null && typeof data.accountNumber !== "string")
+    throw new Error("The backend must return account numbers as strings to preserve leading zeroes.");
+  for (const key of Object.keys(PAYMENT_CONFIG_DEFAULTS).filter((key) => typeof PAYMENT_CONFIG_DEFAULTS[key] === "string" && !["razorpayKeySecret", "razorpayWebhookSecret", "confirmAccountNumber"].includes(key)))
+    if (data[key] != null && typeof data[key] !== "string") throw new Error("The backend returned an invalid payment configuration field.");
+  for (const [key, min, max] of [["pollingIntervalMs", 500, 10000], ["monitoringTimeoutSeconds", 60, 3600], ["frontendPort", 1, 65535]])
+    if (!Number.isInteger(data[key]) || data[key] < min || data[key] > max) throw new Error("The backend returned invalid or missing polling/network settings.");
+  const result = { ...PAYMENT_CONFIG_DEFAULTS, campusId: id };
+  for (const key of Object.keys(PAYMENT_CONFIG_DEFAULTS))
+    if (data[key] != null && !["razorpayKeySecret", "razorpayWebhookSecret", "confirmAccountNumber"].includes(key)) result[key] = data[key];
+  // Secret values from a faulty response are never put into form state.
+  return result;
+}
+
+export const PAYMENT_CONFIG_SECTIONS = Object.freeze({
+  bank: ["bankName", "accountHolderName", "accountNumber", "confirmAccountNumber", "ifscCode", "branchName", "accountType", "enableOfflineUtr"],
+  upi: ["payeeVpa", "payeeName", "currency", "mcc", "enableCounterUpiQr"],
+  razorpay: ["provider", "isLiveMode", "razorpayKeyId", "razorpayKeySecret", "razorpayWebhookSecret", "autoCapture", "enableRazorpay"],
+  advanced: ["pollingIntervalMs", "monitoringTimeoutSeconds", "baseAppUrl", "frontendPort"],
+});
+
+export function paymentConfigErrors(form, section) {
+  if (section && !PAYMENT_CONFIG_SECTIONS[section]) throw new Error("Unknown payment configuration section.");
+  const errors = {};
+  for (const key of ["bankName", "accountHolderName", "accountNumber", "ifscCode"])
+    if (!String(form[key] || "").trim()) errors[key] = "This field is required.";
+  if (form.accountNumber && !/^\d{6,34}$/.test(form.accountNumber)) errors.accountNumber = "Enter 6–34 digits, preserving leading zeroes.";
+  if (form.accountNumber !== form.confirmAccountNumber) errors.confirmAccountNumber = "Account numbers must match. Re-enter the receiving account number.";
+  if (form.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifscCode.toUpperCase())) errors.ifscCode = "Enter a valid 11-character IFSC code.";
+  if (!["Current", "Savings"].includes(form.accountType)) errors.accountType = "Choose Current or Savings.";
+  if ((form.enableCounterUpiQr || form.payeeVpa) && !/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z0-9.-]{2,64}$/.test(form.payeeVpa)) errors.payeeVpa = "Enter a valid UPI ID, such as merchant@bank.";
+  if (form.enableCounterUpiQr && !form.payeeName.trim()) errors.payeeName = "Payee display name is required for QR collection.";
+  if (form.currency !== "INR") errors.currency = "Only INR is supported.";
+  if (form.mcc && !/^\d{4}$/.test(form.mcc)) errors.mcc = "MCC must contain four digits.";
+  if (form.enableRazorpay && !new RegExp(`^rzp_${form.isLiveMode ? "live" : "test"}_[A-Za-z0-9]+$`).test(form.razorpayKeyId)) errors.razorpayKeyId = "Enter a Razorpay key ID matching the selected mode.";
+  for (const [key, flag] of [["razorpayKeySecret", "hasRazorpayKeySecret"], ["razorpayWebhookSecret", "hasRazorpayWebhookSecret"]]) {
+    if ((section ? form.enableRazorpay && !form[flag] : form.enableRazorpay || form[flag]) && !form[key].trim()) errors[key] = form[flag]
+      ? "Saved secret exists. Blank-secret preservation is not verified; provide a replacement before saving."
+      : "A secret is required when Razorpay is enabled.";
+  }
+  for (const [key, min, max] of [["pollingIntervalMs", 500, 10000], ["monitoringTimeoutSeconds", 60, 3600], ["frontendPort", 1, 65535]])
+    if (!Number.isInteger(Number(form[key])) || Number(form[key]) < min || Number(form[key]) > max) errors[key] = `Enter a whole number from ${min} to ${max}.`;
+  if (form.baseAppUrl) {
+    try {
+      const url = new URL(form.baseAppUrl);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error();
+    } catch { errors.baseAppUrl = "Enter an HTTP(S) application URL without credentials, query or fragment."; }
+  }
+  return section ? Object.fromEntries(Object.entries(errors).filter(([key]) => PAYMENT_CONFIG_SECTIONS[section].includes(key))) : errors;
+}
+
+export function paymentConfigPayload(form, campusId, section) {
+  const errors = paymentConfigErrors(form, section);
+  if (Object.keys(errors).length) throw new Error("Correct the payment configuration fields before saving.");
+  const payload = { campusId: paymentConfigCampusId(campusId) };
+  for (const key of paymentConfigFields) {
+    const value = form[key];
+    // Never submit blank secrets with unverified preservation semantics.
+    if (["razorpayKeySecret", "razorpayWebhookSecret"].includes(key) && !value.trim()) continue;
+    payload[key] = typeof value === "string" ? value.trim() : value;
+  }
+  payload.ifscCode = payload.ifscCode.toUpperCase();
+  for (const key of ["pollingIntervalMs", "monitoringTimeoutSeconds", "frontendPort"]) payload[key] = Number(payload[key]);
+  return payload;
+}
+
 // FeePaymentId, receipt IDs, generic row IDs and provider pay_* references are not gateway PKs.
 export function gatewayTransactionIdFor(row = {}) {
   const id =

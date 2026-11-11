@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -15,18 +14,14 @@ using Microsoft.Extensions.Logging;
 namespace CollegeManagement.API.Services.Implementations;
 
 /// <summary>
-/// Atomic settlement engine with dual-level concurrency protection:
-/// Level 1: In-memory ConcurrentDictionary + SemaphoreSlim per OrderId
-/// Level 2: Database transaction with idempotency check on OrderId
-/// 
-/// Settles payments by delegating to the existing IFeeService.CreateFeePaymentAsync,
-/// appends records to Payments_Ledger.csv, renders QuestPDF receipts, and dispatches
-/// MailKit confirmation emails with PDF attachments.
+/// Atomic settlement engine with distributed database transaction & InnoDB row-level locking
+/// (SELECT ... FOR UPDATE on PaymentGatewayTransactions + StudentFees inside sp_FeePayment_Collect).
+/// Delegates balance mutations strictly to sp_FeePayment_Collect to prevent double-deduction,
+/// persists immutable PaymentLedgerEntries in DB, renders QuestPDF receipts, and dispatches
+/// MailKit confirmation emails post-commit.
 /// </summary>
 public class PaymentSettlementService : IPaymentSettlementService
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
-
     private readonly AppDbContext _context;
     private readonly IFeeService _feeService;
     private readonly INotificationService? _notificationService;
@@ -66,27 +61,22 @@ public class PaymentSettlementService : IPaymentSettlementService
         IEnumerable<int>? feeInstallmentIds = null,
         CancellationToken cancellationToken = default)
     {
-        // Level 1: In-memory semaphore lock per order
-        var lockKey = $"settle_order_{orderId}";
-        var semaphore = _locks.GetOrAdd(lockKey, _ => new SemaphoreSlim(1, 1));
+        string? studentEmail = null;
+        string studentDisplayName = $"Student #{studentId}";
+        int resolvedFeePaymentId = 0;
+        string resolvedReceiptNumber = string.Empty;
 
-        if (!await semaphore.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken))
-        {
-            return new SettlementResult
-            {
-                Success = false,
-                ErrorMessage = "Payment settlement is already in progress."
-            };
-        }
-
+        await using var dbTxn = await _context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // Level 2: Database idempotency check
+            // Distributed ACID lock: acquire InnoDB exclusive row lock on the order row
             var existingTxn = await _context.PaymentGatewayTransactions
-                .FirstOrDefaultAsync(t => t.OrderId == orderId, cancellationToken);
+                .FromSqlInterpolated($"SELECT * FROM PaymentGatewayTransactions WHERE OrderId = {orderId} FOR UPDATE")
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (existingTxn == null)
             {
+                await dbTxn.RollbackAsync(cancellationToken);
                 return new SettlementResult
                 {
                     Success = false,
@@ -97,6 +87,7 @@ public class PaymentSettlementService : IPaymentSettlementService
             // Already settled — return idempotent success
             if (existingTxn.Status == "Captured" || existingTxn.Status == "Paid")
             {
+                await dbTxn.RollbackAsync(cancellationToken);
                 _logger.LogInformation(
                     "Idempotent hit: OrderId={OrderId} already settled with Receipt={Receipt}",
                     orderId, existingTxn.ReceiptNumber);
@@ -111,11 +102,21 @@ public class PaymentSettlementService : IPaymentSettlementService
                 };
             }
 
+            if (existingTxn.Status is "Reversed" or "Rejected" or "Failed")
+            {
+                await dbTxn.RollbackAsync(cancellationToken);
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Transaction is in terminal status '{existingTxn.Status}' and cannot be settled."
+                };
+            }
+
             // Resolve target installment IDs (single or multiple)
-            var targetInstallmentIds = new List<int>();
+            var rawInstallmentIds = new List<int>();
             if (feeInstallmentIds != null && feeInstallmentIds.Any())
             {
-                targetInstallmentIds.AddRange(feeInstallmentIds);
+                rawInstallmentIds.AddRange(feeInstallmentIds);
             }
             else if (!string.IsNullOrWhiteSpace(existingTxn.FeeInstallmentIdsJson))
             {
@@ -123,22 +124,46 @@ public class PaymentSettlementService : IPaymentSettlementService
                 {
                     var parsed = System.Text.Json.JsonSerializer.Deserialize<List<int>>(existingTxn.FeeInstallmentIdsJson);
                     if (parsed != null && parsed.Any())
-                        targetInstallmentIds.AddRange(parsed);
+                        rawInstallmentIds.AddRange(parsed);
                 }
-                catch { /* Fallback */ }
+                catch { /* Fallback to single ID */ }
             }
 
-            if (!targetInstallmentIds.Any() && feeInstallmentId.HasValue)
+            if (!rawInstallmentIds.Any() && feeInstallmentId.HasValue)
             {
-                targetInstallmentIds.Add(feeInstallmentId.Value);
+                rawInstallmentIds.Add(feeInstallmentId.Value);
             }
 
-            // Create fee payment via existing IFeeService
+            rawInstallmentIds = rawInstallmentIds.Where(id => id > 0).Distinct().ToList();
+
+            // Pre-SP snapshot (read-only) sorted deterministically so SP waterfall matches audit allocations 1:1
+            var preInstallmentSnapshots = new List<(int FeeInstallmentId, decimal DueBalance)>();
+            var orderedInstallmentIds = new List<int>();
+
+            if (rawInstallmentIds.Any())
+            {
+                var preInstallments = await _context.FeeInstallments
+                    .AsNoTracking()
+                    .Where(i => rawInstallmentIds.Contains(i.FeeInstallmentId))
+                    .OrderBy(i => i.DueDate)
+                    .ThenBy(i => i.InstallmentNumber)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var inst in preInstallments)
+                {
+                    var due = inst.BalanceAmount > 0 ? inst.BalanceAmount : Math.Max(0, inst.Amount - inst.PaidAmount);
+                    preInstallmentSnapshots.Add((inst.FeeInstallmentId, due));
+                    orderedInstallmentIds.Add(inst.FeeInstallmentId);
+                }
+            }
+
+            // Create fee payment via existing IFeeService -> sp_FeePayment_Collect
+            // Note: sp_FeePayment_Collect updates FeePayments, FeeInstallments, StudentFees, Students, and FeeReceipts.
             var feeRequest = new CreateFeePaymentRequest
             {
                 StudentId = studentId,
                 StudentFeeId = studentFeeId,
-                FeeInstallmentIds = targetInstallmentIds,
+                FeeInstallmentIds = orderedInstallmentIds,
                 Amount = amount,
                 Discount = 0,
                 Fine = 0,
@@ -158,7 +183,9 @@ public class PaymentSettlementService : IPaymentSettlementService
 
                 existingTxn.Status = "Failed";
                 existingTxn.FailureReason = "Fee collection service returned no result.";
+                existingTxn.RowVersion = DateTime.UtcNow;
                 await _context.SaveChangesAsync(cancellationToken);
+                await dbTxn.CommitAsync(cancellationToken);
 
                 return new SettlementResult
                 {
@@ -167,60 +194,44 @@ public class PaymentSettlementService : IPaymentSettlementService
                 };
             }
 
+            resolvedFeePaymentId = feeResult.FeePaymentId;
+            resolvedReceiptNumber = feeResult.ReceiptNumber ?? string.Empty;
+
             // Update gateway transaction record
             existingTxn.Status = "Captured";
-            existingTxn.GatewayPaymentId = gatewayPaymentId;
+            existingTxn.GatewayPaymentId = gatewayPaymentId ?? existingTxn.GatewayPaymentId;
             existingTxn.ReceiptNumber = feeResult.ReceiptNumber;
             existingTxn.FeePaymentId = feeResult.FeePaymentId;
             existingTxn.SettledAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            existingTxn.RowVersion = DateTime.UtcNow;
 
-            // Multi-Installment Allocation Mapping (§4.4)
-            if (targetInstallmentIds.Any() && feeResult.FeePaymentId > 0)
+            // Record immutable FeePaymentAllocations strictly as an audit map using pre-SP snapshot.
+            // Do NOT mutate FeeInstallments balances/PaidAmount here because sp_FeePayment_Collect already updated them.
+            if (preInstallmentSnapshots.Any() && feeResult.FeePaymentId > 0)
             {
-                try
+                var unallocated = amount;
+                foreach (var snap in preInstallmentSnapshots)
                 {
-                    var installments = await _context.FeeInstallments
-                        .Where(i => targetInstallmentIds.Contains(i.FeeInstallmentId))
-                        .OrderBy(i => i.DueDate)
-                        .ThenBy(i => i.InstallmentNumber)
-                        .ToListAsync(cancellationToken);
+                    if (unallocated <= 0) break;
+                    if (snap.DueBalance <= 0) continue;
 
-                    var unallocated = amount;
-                    foreach (var inst in installments)
+                    var allocated = Math.Min(unallocated, snap.DueBalance);
+                    _context.FeePaymentAllocations.Add(new FeePaymentAllocation
                     {
-                        if (unallocated <= 0) break;
+                        FeePaymentId = feeResult.FeePaymentId,
+                        FeeInstallmentId = snap.FeeInstallmentId,
+                        AllocatedAmount = allocated,
+                        AllocationDate = DateTime.UtcNow,
+                        CreatedAt = DateTime.UtcNow
+                    });
 
-                        var due = inst.BalanceAmount > 0 ? inst.BalanceAmount : Math.Max(0, inst.Amount - inst.PaidAmount);
-                        if (due <= 0) continue;
-
-                        var allocated = Math.Min(unallocated, due);
-
-                        _context.FeePaymentAllocations.Add(new FeePaymentAllocation
-                        {
-                            FeePaymentId = feeResult.FeePaymentId,
-                            FeeInstallmentId = inst.FeeInstallmentId,
-                            AllocatedAmount = allocated,
-                            AllocationDate = DateTime.UtcNow,
-                            CreatedAt = DateTime.UtcNow
-                        });
-
-                        inst.PaidAmount += allocated;
-                        inst.BalanceAmount = Math.Max(0, inst.BalanceAmount - allocated);
-                        inst.Status = inst.BalanceAmount <= 0 ? "Paid" : "Partial";
-
-                        unallocated -= allocated;
-                    }
-
-                    await _context.SaveChangesAsync(cancellationToken);
-                }
-                catch (Exception allocEx)
-                {
-                    _logger.LogWarning(allocEx, "Granular installment allocation tracking encountered an exception for FeePaymentId={FeePaymentId}", feeResult.FeePaymentId);
+                    unallocated -= allocated;
                 }
             }
 
-            // Fetch student and fee details for ledger and email
+            await _context.SaveChangesAsync(cancellationToken);
+
+            // Fetch student and fee details for immutable DB ledger & post-commit notifications
             var student = await _context.Students
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.StudentId == studentId, cancellationToken);
@@ -231,85 +242,36 @@ public class PaymentSettlementService : IPaymentSettlementService
                 .AsNoTracking()
                 .FirstOrDefaultAsync(sf => sf.StudentFeeId == studentFeeId, cancellationToken);
 
-            // 1. Append to real-time persistent Payments_Ledger.csv (§4.4)
+            studentEmail = student?.Email;
+            if (!string.IsNullOrWhiteSpace(student?.StudentName))
+                studentDisplayName = student.StudentName.Trim();
+
+            // Persist Credit entry into database PaymentLedgerEntries inside the ACID transaction
             await _ledgerService.RecordPaymentAsync(new PaymentLedgerEntry
             {
+                PaymentGatewayTransactionId = existingTxn.Id,
+                FeePaymentId = feeResult.FeePaymentId,
+                StudentId = studentId,
+                CampusId = existingTxn.CampusId ?? student?.CampusId,
+                AcademicYearId = studentFee?.FeeStructure?.AcademicYearId,
+                EntryType = "Credit",
                 PaymentDateUtc = DateTime.UtcNow,
-                StudentName = student?.StudentName ?? $"Student #{studentId}",
+                StudentName = studentDisplayName,
                 AdmissionNo = student?.AdmissionNo ?? "",
                 Course = studentFee?.FeeStructure?.Group?.GroupName ?? "",
                 Amount = amount,
                 PaymentMethod = paymentMode,
                 ReferenceNumber = transactionReference ?? gatewayPaymentId ?? orderId,
-                ReceiptNumber = feeResult.ReceiptNumber ?? "",
+                ReceiptNumber = resolvedReceiptNumber,
                 Status = "Captured",
                 Remarks = $"Gateway Order: {orderId}"
             }, cancellationToken);
 
-            // 2. Generate QuestPDF receipt and send confirmation email (§4.2, §4.3)
-            // Transaction Safety Rule: SMTP delivery failure never rolls back the recorded payment
-            try
-            {
-                var receiptPdf = await _receiptPdfService.GenerateReceiptPdfAsync(feeResult.FeePaymentId);
-                if (receiptPdf.HasValue && !string.IsNullOrWhiteSpace(student?.Email) && _emailService != null)
-                {
-                    var emailBody = $@"
-                        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
-                            <h2 style='color: #1e3a8a;'>Fee Payment Confirmation</h2>
-                            <p>Dear <strong>{student.StudentName}</strong>,</p>
-                            <p>Your fee payment of <strong>INR {amount:N2}</strong> has been received and settled successfully.</p>
-                            <table style='width: 100%; border-collapse: collapse; margin: 16px 0;'>
-                                <tr><td style='padding: 6px; color: #64748b;'>Receipt Number:</td><td style='padding: 6px; font-weight: bold;'>{feeResult.ReceiptNumber}</td></tr>
-                                <tr><td style='padding: 6px; color: #64748b;'>Payment Method:</td><td style='padding: 6px;'>{paymentMode}</td></tr>
-                                <tr><td style='padding: 6px; color: #64748b;'>Transaction Ref:</td><td style='padding: 6px;'>{transactionReference ?? gatewayPaymentId ?? orderId}</td></tr>
-                                <tr><td style='padding: 6px; color: #64748b;'>Date:</td><td style='padding: 6px;'>{DateTime.UtcNow:dd MMM yyyy, hh:mm tt} (UTC)</td></tr>
-                            </table>
-                            <p>Please find attached your official fee receipt for your records.</p>
-                            <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;'/>
-                            <p style='font-size: 12px; color: #94a3b8;'>Pirnav Educational Group &bull; Accounts & Fee Billing Division</p>
-                        </div>";
-
-                    await _emailService.SendEmailWithAttachmentAsync(
-                        student.Email,
-                        $"Fee Payment Receipt - {feeResult.ReceiptNumber}",
-                        emailBody,
-                        receiptPdf.Value.Bytes,
-                        receiptPdf.Value.FileName);
-                }
-            }
-            catch (Exception emailEx)
-            {
-                _logger.LogWarning(emailEx, "Failed to send receipt email for FeePaymentId={FeePaymentId}", feeResult.FeePaymentId);
-            }
-
-            // 3. Send in-app notification to student/parent
-            if (_notificationService != null)
-            {
-                try
-                {
-                    await _notificationService.SendToStudentAsync(
-                        studentId,
-                        "Fee Payment Received",
-                        $"Payment of ₹{amount:N0} received. Receipt #{feeResult.ReceiptNumber}.",
-                        "Fee", feeResult.FeePaymentId, $"/student/fees/receipt/{feeResult.ReceiptNumber}");
-                }
-                catch { /* Non-critical */ }
-            }
-
-            _logger.LogInformation(
-                "Payment settled: OrderId={OrderId}, Amount={Amount}, Receipt={Receipt}",
-                orderId, amount, feeResult.ReceiptNumber);
-
-            return new SettlementResult
-            {
-                Success = true,
-                ReceiptNumber = feeResult.ReceiptNumber,
-                FeePaymentId = feeResult.FeePaymentId,
-                Amount = amount
-            };
+            await dbTxn.CommitAsync(cancellationToken);
         }
         catch (Exception ex)
         {
+            await dbTxn.RollbackAsync(cancellationToken);
             _logger.LogError(ex, "Settlement failed for OrderId={OrderId}", orderId);
             return new SettlementResult
             {
@@ -317,39 +279,122 @@ public class PaymentSettlementService : IPaymentSettlementService
                 ErrorMessage = "An unexpected error occurred during settlement."
             };
         }
-        finally
-        {
-            semaphore.Release();
 
-            // Clean up lock if no longer needed
-            if (_locks.TryGetValue(lockKey, out var existingSemaphore) &&
-                existingSemaphore.CurrentCount == 1)
+        // Post-commit side effects (Transaction Safety Rule: SMTP/notification failure never rolls back captured payment)
+        try
+        {
+            var receiptPdf = await _receiptPdfService.GenerateReceiptPdfAsync(resolvedFeePaymentId);
+            if (receiptPdf.HasValue && !string.IsNullOrWhiteSpace(studentEmail) && _emailService != null)
             {
-                _locks.TryRemove(lockKey, out _);
+                var emailBody = $@"
+                    <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
+                        <h2 style='color: #1e3a8a;'>Fee Payment Confirmation</h2>
+                        <p>Dear <strong>{studentDisplayName}</strong>,</p>
+                        <p>Your fee payment of <strong>INR {amount:N2}</strong> has been received and settled successfully.</p>
+                        <table style='width: 100%; border-collapse: collapse; margin: 16px 0;'>
+                            <tr><td style='padding: 6px; color: #64748b;'>Receipt Number:</td><td style='padding: 6px; font-weight: bold;'>{resolvedReceiptNumber}</td></tr>
+                            <tr><td style='padding: 6px; color: #64748b;'>Payment Method:</td><td style='padding: 6px;'>{paymentMode}</td></tr>
+                            <tr><td style='padding: 6px; color: #64748b;'>Transaction Ref:</td><td style='padding: 6px;'>{transactionReference ?? gatewayPaymentId ?? orderId}</td></tr>
+                            <tr><td style='padding: 6px; color: #64748b;'>Date:</td><td style='padding: 6px;'>{DateTime.UtcNow:dd MMM yyyy, hh:mm tt} (UTC)</td></tr>
+                        </table>
+                        <p>Please find attached your official fee receipt for your records.</p>
+                        <hr style='border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;'/>
+                        <p style='font-size: 12px; color: #94a3b8;'>Pirnav Educational Group &bull; Accounts & Fee Billing Division</p>
+                    </div>";
+
+                await _emailService.SendEmailWithAttachmentAsync(
+                    studentEmail,
+                    $"Fee Payment Receipt - {resolvedReceiptNumber}",
+                    emailBody,
+                    receiptPdf.Value.Bytes,
+                    receiptPdf.Value.FileName);
             }
         }
+        catch (Exception emailEx)
+        {
+            _logger.LogWarning(emailEx, "Failed to send receipt email for FeePaymentId={FeePaymentId}", resolvedFeePaymentId);
+        }
+
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    studentId,
+                    "Fee Payment Received",
+                    $"Payment of ₹{amount:N0} received. Receipt #{resolvedReceiptNumber}.",
+                    "Fee", resolvedFeePaymentId, $"/student/fees/receipt/{resolvedReceiptNumber}");
+            }
+            catch { /* Non-critical notification failure */ }
+        }
+
+        _logger.LogInformation(
+            "Payment settled: OrderId={OrderId}, Amount={Amount}, Receipt={Receipt}",
+            orderId, amount, resolvedReceiptNumber);
+
+        return new SettlementResult
+        {
+            Success = true,
+            ReceiptNumber = resolvedReceiptNumber,
+            FeePaymentId = resolvedFeePaymentId,
+            Amount = amount
+        };
     }
 
     // ========================= UTR SUBMISSION & APPROVAL =========================
 
     public async Task<SettlementResult> SubmitUtrAsync(SubmitUtrRequest request, int? adminUserId)
     {
-        var internalOrderId = $"UTR_{request.UtrNumber.Trim()}_{DateTime.UtcNow.Ticks}";
+        var cleanUtr = request.UtrNumber.Trim();
+
+        var duplicateUtr = await _context.PaymentGatewayTransactions
+            .AsNoTracking()
+            .AnyAsync(t => t.UtrNumber == cleanUtr && t.Status != "Rejected" && t.Status != "Reversed" && t.Status != "Failed");
+
+        if (duplicateUtr)
+        {
+            return new SettlementResult
+            {
+                Success = false,
+                ErrorMessage = "This UTR reference number has already been submitted or settled."
+            };
+        }
+
+        var studentFee = await _context.StudentFees
+            .Include(sf => sf.Student)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(sf => sf.StudentFeeId == request.StudentFeeId && sf.StudentId == request.StudentId);
+
+        if (studentFee == null)
+            return new SettlementResult { Success = false, ErrorMessage = "Student fee account record not found." };
+
+        if (studentFee.BalanceAmount <= 0 || request.Amount > studentFee.BalanceAmount)
+        {
+            return new SettlementResult
+            {
+                Success = false,
+                ErrorMessage = "Payment amount cannot exceed the student's outstanding fee balance."
+            };
+        }
+
+        var internalOrderId = $"UTR_{cleanUtr}_{DateTime.UtcNow.Ticks}";
 
         var transaction = new PaymentGatewayTransaction
         {
             StudentId = request.StudentId,
             StudentFeeId = request.StudentFeeId,
+            CampusId = studentFee.Student?.CampusId,
             OrderId = internalOrderId,
-            UtrNumber = request.UtrNumber.Trim(),
+            UtrNumber = cleanUtr,
             BankName = request.BankName?.Trim(),
             Amount = request.Amount,
             PaymentMethod = "BANK_TRANSFER",
             Status = "PendingVerification",
-            IdempotencyKey = $"utr_{request.UtrNumber.Trim()}",
+            IdempotencyKey = $"utr_{cleanUtr}",
             CollectedByUserId = adminUserId,
             Remarks = request.Remarks,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            RowVersion = DateTime.UtcNow
         };
 
         _context.PaymentGatewayTransactions.Add(transaction);
@@ -378,6 +423,7 @@ public class PaymentSettlementService : IPaymentSettlementService
         {
             txn.Status = "Rejected";
             txn.FailureReason = request.Reason ?? "Rejected by admin.";
+            txn.RowVersion = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
             return new SettlementResult { Success = true, ReceiptNumber = null };
@@ -390,10 +436,10 @@ public class PaymentSettlementService : IPaymentSettlementService
             {
                 parsedInstallments = System.Text.Json.JsonSerializer.Deserialize<List<int>>(txn.FeeInstallmentIdsJson);
             }
-            catch { /* Ignore */ }
+            catch { /* Ignore malformed JSON */ }
         }
 
-        // Approve: Settle via the existing stored procedure flow
+        // Approve: Settle via the transactional stored procedure flow
         return await SettlePaymentAsync(
             txn.OrderId,
             txn.StudentId,
@@ -417,9 +463,17 @@ public class PaymentSettlementService : IPaymentSettlementService
             .Include(t => t.StudentFee)
                 .ThenInclude(sf => sf!.FeeStructure)
                     .ThenInclude(fs => fs!.Group)
-            .OrderByDescending(t => t.CreatedAt);
+            .AsQueryable();
 
-        var results = await query.ToListAsync();
+        if (campusId.HasValue && campusId.Value > 0)
+            query = query.Where(t => (t.CampusId ?? t.Student!.CampusId) == campusId.Value);
+
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+            query = query.Where(t => t.StudentFee != null && t.StudentFee.FeeStructure != null && t.StudentFee.FeeStructure.AcademicYearId == academicYearId.Value);
+
+        var results = await query
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
 
         return results.Select(t => new PendingUtrResponse
         {
@@ -442,32 +496,47 @@ public class PaymentSettlementService : IPaymentSettlementService
 
     public async Task<SettlementResult> ReversePaymentAsync(int transactionId, string reason, int? adminUserId)
     {
-        var txn = await _context.PaymentGatewayTransactions
-            .Include(t => t.Student)
-            .FirstOrDefaultAsync(t => t.Id == transactionId);
+        int studentIdToNotify = 0;
+        int studentFeeIdToNotify = 0;
+        string? receiptNumberForResult = null;
+        decimal reversedAmount = 0m;
 
-        if (txn == null)
-            return new SettlementResult { Success = false, ErrorMessage = "Transaction not found." };
-
-        if (txn.Status != "Captured" && txn.Status != "Paid" && txn.Status != "Approved")
-        {
-            return new SettlementResult
-            {
-                Success = false,
-                ErrorMessage = $"Cannot reverse transaction with status '{txn.Status}'. Only captured payments can be reversed."
-            };
-        }
-
-        using var dbTxn = await _context.Database.BeginTransactionAsync();
+        await using var dbTxn = await _context.Database.BeginTransactionAsync();
         try
         {
+            // Distributed lock on transaction row so two admins cannot double-reverse simultaneously
+            var txn = await _context.PaymentGatewayTransactions
+                .FromSqlInterpolated($"SELECT * FROM PaymentGatewayTransactions WHERE Id = {transactionId} FOR UPDATE")
+                .FirstOrDefaultAsync();
+
+            if (txn == null)
+            {
+                await dbTxn.RollbackAsync();
+                return new SettlementResult { Success = false, ErrorMessage = "Transaction not found." };
+            }
+
+            if (txn.Status != "Captured" && txn.Status != "Paid" && txn.Status != "Approved")
+            {
+                await dbTxn.RollbackAsync();
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Cannot reverse transaction with status '{txn.Status}'. Only captured payments can be reversed."
+                };
+            }
+
+            studentIdToNotify = txn.StudentId;
+            studentFeeIdToNotify = txn.StudentFeeId;
+            receiptNumberForResult = txn.ReceiptNumber;
+            reversedAmount = txn.Amount;
+
             // 1. Mark transaction as Reversed
             txn.Status = "Reversed";
             txn.FailureReason = reason;
             txn.Remarks = $"Reversed by Admin ID {adminUserId ?? 0}: {reason}";
             txn.RowVersion = DateTime.UtcNow;
 
-            // 2. Restore StudentFee balance
+            // 2. Restore StudentFee balance atomically matching sp_FeePayment_Collect formulas
             var studentFee = await _context.StudentFees
                 .Include(sf => sf.FeeStructure)
                     .ThenInclude(fs => fs!.Group)
@@ -475,13 +544,27 @@ public class PaymentSettlementService : IPaymentSettlementService
 
             if (studentFee != null)
             {
-                studentFee.PaidAmount = Math.Max(0, studentFee.PaidAmount - txn.Amount);
-                studentFee.BalanceAmount += txn.Amount;
-                studentFee.Status = studentFee.BalanceAmount > 0 ? "Partial" : "Paid";
+                studentFee.PaidAmount = Math.Max(0m, studentFee.PaidAmount - txn.Amount);
+                studentFee.BalanceAmount = Math.Max(0m, studentFee.PayableAmount - studentFee.PaidAmount);
+                studentFee.Status = studentFee.BalanceAmount <= 0
+                    ? "Paid"
+                    : (studentFee.PaidAmount > 0 ? "PartiallyPaid" : "Pending");
                 studentFee.UpdatedAt = DateTime.UtcNow;
             }
 
-            // 3. Mark existing FeePayment record as Reversed if present
+            // 3. Synchronize Students table aggregate totals (FeeAmount, FeePaid, FeeStatus)
+            var student = await _context.Students
+                .FirstOrDefaultAsync(s => s.StudentId == txn.StudentId);
+
+            if (student != null && studentFee != null)
+            {
+                student.FeeAmount = studentFee.PayableAmount;
+                student.FeePaid = studentFee.PaidAmount;
+                student.FeeStatus = studentFee.Status;
+                student.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // 4. Mark existing FeePayment record as Reversed if present
             if (txn.FeePaymentId.HasValue)
             {
                 var feePayment = await _context.FeePayments
@@ -493,47 +576,58 @@ public class PaymentSettlementService : IPaymentSettlementService
                     feePayment.Remarks = $"REVERSED: {reason} (Admin ID: {adminUserId})";
                 }
 
-                // 4. Reverse granular FeePaymentAllocations if any
+                // 5. Restore installments from FeePaymentAllocations (fallback to FeeInstallmentId)
                 var allocations = await _context.FeePaymentAllocations
                     .Where(a => a.FeePaymentId == txn.FeePaymentId.Value)
                     .ToListAsync();
 
-                foreach (var alloc in allocations)
+                if (allocations.Any())
+                {
+                    foreach (var alloc in allocations)
+                    {
+                        var inst = await _context.FeeInstallments
+                            .FirstOrDefaultAsync(i => i.FeeInstallmentId == alloc.FeeInstallmentId);
+
+                        if (inst != null)
+                        {
+                            inst.PaidAmount = Math.Max(0m, inst.PaidAmount - alloc.AllocatedAmount);
+                            inst.BalanceAmount = Math.Max(0m, inst.Amount - inst.PaidAmount);
+                            inst.Status = inst.BalanceAmount <= 0
+                                ? "Paid"
+                                : (inst.PaidAmount > 0 ? "PartiallyPaid" : "Pending");
+                        }
+                    }
+                }
+                else if (txn.FeeInstallmentId.HasValue)
                 {
                     var inst = await _context.FeeInstallments
-                        .FirstOrDefaultAsync(i => i.FeeInstallmentId == alloc.FeeInstallmentId);
+                        .FirstOrDefaultAsync(i => i.FeeInstallmentId == txn.FeeInstallmentId.Value);
 
                     if (inst != null)
                     {
-                        inst.PaidAmount = Math.Max(0, inst.PaidAmount - alloc.AllocatedAmount);
-                        inst.BalanceAmount += alloc.AllocatedAmount;
-                        inst.Status = inst.BalanceAmount > 0 ? "Pending" : "Paid";
+                        inst.PaidAmount = Math.Max(0m, inst.PaidAmount - txn.Amount);
+                        inst.BalanceAmount = Math.Max(0m, inst.Amount - inst.PaidAmount);
+                        inst.Status = inst.BalanceAmount <= 0
+                            ? "Paid"
+                            : (inst.PaidAmount > 0 ? "PartiallyPaid" : "Pending");
                     }
-                }
-            }
-            else if (txn.FeeInstallmentId.HasValue)
-            {
-                // Fallback for direct single installment link without allocations
-                var inst = await _context.FeeInstallments
-                    .FirstOrDefaultAsync(i => i.FeeInstallmentId == txn.FeeInstallmentId.Value);
-
-                if (inst != null)
-                {
-                    inst.PaidAmount = Math.Max(0, inst.PaidAmount - txn.Amount);
-                    inst.BalanceAmount += txn.Amount;
-                    inst.Status = inst.BalanceAmount > 0 ? "Pending" : "Paid";
                 }
             }
 
             await _context.SaveChangesAsync();
-            await dbTxn.CommitAsync();
 
-            // 5. Append reversal entry to real-time CSV audit ledger (§4.4)
+            // 6. Persist Reversal entry into immutable database audit ledger
             await _ledgerService.RecordPaymentAsync(new PaymentLedgerEntry
             {
+                PaymentGatewayTransactionId = txn.Id,
+                FeePaymentId = txn.FeePaymentId,
+                StudentId = txn.StudentId,
+                CampusId = txn.CampusId ?? student?.CampusId,
+                AcademicYearId = studentFee?.FeeStructure?.AcademicYearId,
+                EntryType = "Reversal",
                 PaymentDateUtc = DateTime.UtcNow,
-                StudentName = txn.Student?.StudentName ?? $"Student #{txn.StudentId}",
-                AdmissionNo = txn.Student?.AdmissionNo ?? "",
+                StudentName = student?.StudentName ?? $"Student #{txn.StudentId}",
+                AdmissionNo = student?.AdmissionNo ?? "",
                 Course = studentFee?.FeeStructure?.Group?.GroupName ?? "",
                 Amount = -txn.Amount,
                 PaymentMethod = txn.PaymentMethod,
@@ -543,32 +637,7 @@ public class PaymentSettlementService : IPaymentSettlementService
                 Remarks = $"REVERSAL: {reason}"
             });
 
-            // 6. In-app notification to student
-            if (_notificationService != null)
-            {
-                try
-                {
-                    await _notificationService.SendToStudentAsync(
-                        txn.StudentId,
-                        "Fee Payment Reversed",
-                        $"Your payment of ₹{txn.Amount:N0} (Receipt #{txn.ReceiptNumber}) has been reversed. Reason: {reason}",
-                        "Fee",
-                        txn.StudentFeeId,
-                        "/student/fees");
-                }
-                catch { /* Non-critical notification failure */ }
-            }
-
-            _logger.LogInformation(
-                "Payment reversed: TransactionId={TransactionId}, OrderId={OrderId}, Amount={Amount}, Reason={Reason}",
-                txn.Id, txn.OrderId, txn.Amount, reason);
-
-            return new SettlementResult
-            {
-                Success = true,
-                ReceiptNumber = txn.ReceiptNumber,
-                Amount = txn.Amount
-            };
+            await dbTxn.CommitAsync();
         }
         catch (Exception ex)
         {
@@ -580,5 +649,32 @@ public class PaymentSettlementService : IPaymentSettlementService
                 ErrorMessage = "Failed to reverse payment transaction. Please contact IT support."
             };
         }
+
+        // Post-commit student notification
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.SendToStudentAsync(
+                    studentIdToNotify,
+                    "Fee Payment Reversed",
+                    $"Your payment of ₹{reversedAmount:N0} (Receipt #{receiptNumberForResult}) has been reversed. Reason: {reason}",
+                    "Fee",
+                    studentFeeIdToNotify,
+                    "/student/fees");
+            }
+            catch { /* Non-critical notification failure */ }
+        }
+
+        _logger.LogInformation(
+            "Payment reversed: TransactionId={TransactionId}, Amount={Amount}, Reason={Reason}",
+            transactionId, reversedAmount, reason);
+
+        return new SettlementResult
+        {
+            Success = true,
+            ReceiptNumber = receiptNumberForResult,
+            Amount = reversedAmount
+        };
     }
 }
