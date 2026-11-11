@@ -3,7 +3,7 @@ import { Modal } from "@/shared/components/Ui.jsx";
 import { useInventory } from "../InventoryDataContext.jsx";
 import InventoryTable from "../components/InventoryTable.jsx";
 export default function InventoryOrdersPage() {
-  const { state, update } = useInventory();
+  const { state, save, cancelOrder } = useInventory();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -17,11 +17,10 @@ export default function InventoryOrdersPage() {
       <InventoryTable
         title="Purchase Orders"
         rows={state.orders}
-        onAdd={() =>
-          setError(
-            "Purchase order creation requires an inventory purchase-order API. No order was saved.",
-          )
-        }
+        onAdd={() => {
+          setError("");
+          setOpen(true);
+        }}
         addLabel="New Order"
         columns={[
           { key: "number", label: "Order Number" },
@@ -37,14 +36,14 @@ export default function InventoryOrdersPage() {
               <button
                 className="cms-btn cms-btn-ghost"
                 disabled={r.status !== "Pending"}
-                onClick={() => {
-                  if (window.confirm("Cancel this order?"))
-                    update((s) => ({
-                      ...s,
-                      orders: s.orders.map((o) =>
-                        o.id === r.id ? { ...o, status: "Cancelled" } : o,
-                      ),
-                    }));
+                onClick={async () => {
+                  if (window.confirm("Cancel this order?")) {
+                    try {
+                      await cancelOrder(r.id);
+                    } catch (err) {
+                      setError(err?.message || "Failed to cancel order.");
+                    }
+                  }
                 }}
               >
                 Cancel
@@ -53,40 +52,28 @@ export default function InventoryOrdersPage() {
           },
         ]}
       />
-      <p className="ip-error" role="status">
-        {error ||
-          "Purchase order list, creation, cancellation, and receipt tracking APIs are not available in the inventory specification."}
-      </p>
+      {error && (
+        <p className="ip-error" role="status">
+          {error}
+        </p>
+      )}
       {open && (
         <Modal title="New Purchase Order" onClose={() => setOpen(false)}>
           <form
             className="ip-form"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               const f = Object.fromEntries(new FormData(e.currentTarget));
-              const item = state.items.find((i) => i.id === f.itemId);
-              const supplier = state.suppliers.find((s) => s.id === f.supplierId);
               try {
-                update((s) => ({
-                  ...s,
-                  nextId: s.nextId + 1,
-                  orders: [
-                    ...s.orders,
-                    {
-                      id: `order-${s.nextId}`,
-                      number: `PO-${s.nextId}`,
-                      itemId: item.id,
-                      item: item.name,
-                      supplierId: supplier.id,
-                      supplier: supplier.name,
-                      quantity: Number(f.quantity),
-                      status: "Pending",
-                    },
-                  ],
-                }));
+                await save("orders", {
+                  itemId: Number(f.itemId),
+                  supplierId: Number(f.supplierId),
+                  quantity: Number(f.quantity),
+                  remarks: f.remarks?.trim() || null,
+                });
                 setOpen(false);
               } catch (failure) {
-                setError(failure.message);
+                setError(failure?.message || "Failed to create purchase order.");
               }
             }}
           >
@@ -119,6 +106,10 @@ export default function InventoryOrdersPage() {
             <label>
               Quantity
               <input name="quantity" type="number" min="1" required />
+            </label>
+            <label>
+              Remarks
+              <input name="remarks" type="text" placeholder="Optional notes" />
             </label>
             {error && <p role="alert">{error}</p>}
             <button className="cms-btn cms-btn-primary">Create Order</button>

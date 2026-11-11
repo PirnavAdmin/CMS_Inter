@@ -430,6 +430,7 @@ namespace CollegeManagement.API.Data
         public DbSet<InventoryItem> InventoryItems { get; set; }
         public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
         public DbSet<InventoryActivity> InventoryActivities { get; set; }
+        public DbSet<InventoryPurchaseOrder> InventoryPurchaseOrders { get; set; }
 
         public DbSet<AcademicCalendarEvent> AcademicCalendarEvents { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
@@ -1636,6 +1637,30 @@ namespace CollegeManagement.API.Data
             #region Inventory
             modelBuilder.Entity<InventorySupplierCategory>()
                 .HasKey(sc => new { sc.SupplierId, sc.CategoryId });
+
+            modelBuilder.Entity<InventoryPurchaseOrder>(entity =>
+            {
+                entity.HasKey(x => x.OrderId);
+                entity.Property(x => x.Quantity).HasColumnType("decimal(12,2)");
+                entity.Property(x => x.UnitPrice).HasColumnType("decimal(12,2)");
+                entity.Property(x => x.TotalAmount).HasColumnType("decimal(14,2)");
+                entity.Property(x => x.OrderNumber).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.OrderNumber).IsUnique();
+                entity.HasIndex(x => x.Status);
+
+                entity.HasOne(x => x.Item)
+                    .WithMany()
+                    .HasForeignKey(x => x.ItemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Supplier)
+                    .WithMany()
+                    .HasForeignKey(x => x.SupplierId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
             #endregion
         }
 

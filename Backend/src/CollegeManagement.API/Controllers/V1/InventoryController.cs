@@ -540,5 +540,119 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
         #endregion
+
+        #region Purchase Orders
+        [HttpGet("orders")]
+        public async Task<IActionResult> GetPurchaseOrders([FromQuery] string? status, [FromQuery] string? search)
+        {
+            try
+            {
+                var orders = await _service.GetPurchaseOrdersAsync(status, search);
+                return Ok(new { success = true, data = orders });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("orders/{id:int}")]
+        public async Task<IActionResult> GetPurchaseOrderById(int id)
+        {
+            try
+            {
+                var po = await _service.GetPurchaseOrderByIdAsync(id);
+                if (po == null)
+                    return NotFound(new { success = false, message = "Purchase order not found." });
+
+                return Ok(new { success = true, data = po });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost("orders")]
+        public async Task<IActionResult> CreatePurchaseOrder([FromBody] CreatePurchaseOrderRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { success = false, message = "Invalid purchase order request.", errors = ModelState });
+
+                int userId = ResolveUserId();
+                string userName = ResolveUserName();
+
+                var po = await _service.CreatePurchaseOrderAsync(request, userId, userName);
+                return CreatedAtAction(nameof(GetPurchaseOrderById), new { id = po.OrderId }, new { success = true, message = "Purchase order created successfully.", data = po });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPatch("orders/{id:int}/cancel")]
+        [HttpPost("orders/{id:int}/cancel")]
+        public async Task<IActionResult> CancelPurchaseOrder(int id, [FromBody] CancelPurchaseOrderRequest? body = null)
+        {
+            try
+            {
+                int userId = ResolveUserId();
+                string userName = ResolveUserName();
+
+                var success = await _service.CancelPurchaseOrderAsync(id, userId, userName, body?.Remarks);
+                if (!success)
+                    return NotFound(new { success = false, message = "Purchase order not found." });
+
+                return Ok(new { success = true, message = "Purchase order cancelled successfully." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPatch("orders/{id:int}/status")]
+        [HttpPut("orders/{id:int}/status")]
+        public async Task<IActionResult> UpdatePurchaseOrderStatus(int id, [FromBody] UpdatePurchaseOrderStatusRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { success = false, message = "Invalid status update payload.", errors = ModelState });
+
+                int userId = ResolveUserId();
+                string userName = ResolveUserName();
+
+                var success = await _service.UpdatePurchaseOrderStatusAsync(id, request.Status, userId, userName, request.Remarks);
+                if (!success)
+                    return NotFound(new { success = false, message = "Purchase order not found." });
+
+                return Ok(new { success = true, message = "Purchase order status updated successfully." });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+        #endregion
     }
 }

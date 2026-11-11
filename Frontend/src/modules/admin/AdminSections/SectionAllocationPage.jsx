@@ -58,6 +58,14 @@ const recentAdmissionsFirst = (rows) => {
 };
 const sectionId = (row) => get(row, "sectionId", "SectionId", "id", "Id");
 const studentId = (row) => get(row, "studentId", "StudentId", "id", "Id");
+const programId = (row) => get(row, "programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id", "groupProgramId", "GroupProgramId")
+  ?? get(get(row, "program", "Program", "programme", "Programme"), "programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id");
+const programName = (row) => {
+  const directName = get(row, "programName", "ProgramName", "programmeName", "ProgrammeName", "program", "Program", "programme", "Programme", "name", "Name", "programCode", "ProgramCode");
+  if (typeof directName === "string" || typeof directName === "number") return directName;
+  const nestedProgram = get(row, "program", "Program", "programme", "Programme");
+  return get(nestedProgram, "programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name", "programCode", "ProgramCode");
+};
 const loadAllocationRecords = async (endpoint, scope, { signal } = {}) => {
   const pageSize = 100;
   const records = [];
@@ -83,6 +91,18 @@ const capacity = (row) => get(row, "maximumStrength", "MaximumStrength", "totalC
 const count = (row) => get(row, "allocatedCount", "AllocatedCount", "alreadyAllocated", "AlreadyAllocated", "currentAllocatedCount", "CurrentAllocatedCount");
 const date = (value) => value ? new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)) : "—";
 const matches = (row, context) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId"].every((key) => { const actual = get(row, key, key[0].toUpperCase() + key.slice(1)); return actual == null || String(actual) === String(context[key]); });
+const matchesSection = (section, context) => {
+  const matchesOtherScope = ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId"].every((key) => {
+    const actual = get(section, key, key[0].toUpperCase() + key.slice(1));
+    return actual == null || String(actual) === String(context[key]);
+  });
+  if (!matchesOtherScope) return false;
+  const sectionProgramId = get(section, "programId", "ProgramId");
+  const sectionGroupProgramId = get(section, "groupProgramId", "GroupProgramId");
+  if (sectionProgramId == null && sectionGroupProgramId == null) return true;
+  return String(sectionProgramId ?? "") === String(context.programId)
+    || String(sectionGroupProgramId ?? "") === String(context.programId);
+};
 const mapStudent = (admission = {}, record = {}) => ({
   id: studentId(record),
   admissionNo: get(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? get(admission, "admissionNo", "AdmissionNo") ?? "—",
@@ -153,7 +173,7 @@ const validateSectionPlans = (rows, eligibleStudents, sections, scope) => {
   rows.forEach((row, index) => {
     const target = targets.get(String(sectionValue(row)));
     if (positiveId(students[index].sectionId)) throw new Error("A previewed student already has a section. Refresh the allocation preview.");
-    if (!target || !matches(target, scope) || !positiveId(target.id)) throw new Error("The proposed section is no longer available for this academic context.");
+    if (!target || !matchesSection(target, scope) || !positiveId(target.id)) throw new Error("The proposed section is no longer available for this academic context.");
     if (target.allocated >= target.maximum) throw new Error("A proposed section has reached its maximum strength. Refresh the allocation preview.");
     target.allocated += 1;
   });
@@ -167,7 +187,7 @@ export default function SectionAllocationPage() {
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsError, setGroupsError] = useState("");
   const [masters, setMasters] = useState({ levels: [], groups: [], programs: [], sections: [] });
-  const [students, setStudents] = useState([]); const [sectionCounts, setSectionCounts] = useState({}); const [sectionStudents, setSectionStudents] = useState([]);
+  const [students, setStudents] = useState([]); const [scopedStudentRecords, setScopedStudentRecords] = useState([]); const [sectionCounts, setSectionCounts] = useState({}); const [sectionStudents, setSectionStudents] = useState([]); const [sectionStudentsFor, setSectionStudentsFor] = useState("");
   const [loading, setLoading] = useState(true); const [studentLoading, setStudentLoading] = useState(false); const [busy, setBusy] = useState(""); const [confirming, setConfirming] = useState("");
   const [preview, setPreview] = useState(null); const [search, setSearch] = useState(""); const [editing, setEditing] = useState(null); const [refresh, setRefresh] = useState(0); const [toast, setToast] = useState({ message: "", type: "success" });
   const [rollPreview, setRollPreview] = useState(null);
@@ -194,10 +214,10 @@ export default function SectionAllocationPage() {
     if (currentScopeRef.current !== expectedScope) throw new Error("The academic selection changed. Review the allocation again.");
   }, []);
   const say = useCallback((reason) => setToast({ message: typeof reason === "string" ? reason : getApiErrorMessage(reason), type: "error" }), []);
-  const update = (key, value) => { setFilters((current) => ({ ...current, [key]: value, ...(key === "academicLevelId" && !value ? { groupId: "", programId: "", sectionId: "" } : {}), ...(key === "groupId" ? { programId: "", sectionId: "" } : {}), ...(key === "programId" ? { sectionId: "" } : {}) })); if (["academicLevelId", "groupId", "programId"].includes(key)) setPreview(null); setStudents([]); setSectionStudents([]); setSearch(""); };
+  const update = (key, value) => { setFilters((current) => ({ ...current, [key]: value, ...(key === "academicLevelId" && !value ? { groupId: "", programId: "", sectionId: "" } : {}), ...(key === "groupId" ? { programId: "", sectionId: "" } : {}), ...(key === "programId" ? { sectionId: "" } : {}) })); if (["academicLevelId", "groupId", "programId"].includes(key)) setPreview(null); setStudents([]); setScopedStudentRecords([]); setSectionStudents([]); setSearch(""); };
 
-  useEffect(() => { setFilters({ academicLevelId: "", groupId: "", programId: "", sectionId: "" }); setPreview(null); setStudents([]); setSectionStudents([]); setMasters({ levels: [], groups: [], programs: [], sections: [] }); if (!selectedBoardId) return undefined; let active = true; setLoading(true); fetchAdminLevels({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId }).then((levels) => active && setMasters({ levels, groups: [], programs: [], sections: [] })).catch(say).finally(() => active && setLoading(false)); return () => { active = false; }; }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, say]);
-  useEffect(() => { setFilters({ academicLevelId: "", groupId: "", programId: "", sectionId: "" }); setPreview(null); setStudents([]); }, [selectedAcademicYearId]);
+  useEffect(() => { setFilters({ academicLevelId: "", groupId: "", programId: "", sectionId: "" }); setPreview(null); setStudents([]); setScopedStudentRecords([]); setSectionStudents([]); setMasters({ levels: [], groups: [], programs: [], sections: [] }); if (!selectedBoardId) return undefined; let active = true; setLoading(true); fetchAdminLevels({ boardId: selectedBoardId, academicYearId: selectedAcademicYearId }).then((levels) => active && setMasters({ levels, groups: [], programs: [], sections: [] })).catch(say).finally(() => active && setLoading(false)); return () => { active = false; }; }, [selectedCampusId, selectedBoardId, selectedAcademicYearId, say]);
+  useEffect(() => { setFilters({ academicLevelId: "", groupId: "", programId: "", sectionId: "" }); setPreview(null); setStudents([]); setScopedStudentRecords([]); }, [selectedAcademicYearId]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -215,21 +235,27 @@ export default function SectionAllocationPage() {
       .finally(() => { if (active) setGroupsLoading(false); });
     return () => { active = false; controller.abort(); };
   }, [filters.academicLevelId, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
-  useEffect(() => { if (!filters.groupId) return undefined; let active = true; apiClient.get(apiEndpoints.groups.programs(filters.groupId)).then((response) => active && setMasters((current) => ({ ...current, programs: list(body(response)), sections: [] }))).catch((error) => { if (active) say(error); }); return () => { active = false; }; }, [filters.groupId, say]);
-  useEffect(() => { if (!readyContext) return undefined; let active = true; apiClient.get(apiEndpoints.sections.list, { params: { ...scopeContext, ProgramId: context.programId, IsActive: true, pageSize: 1000 } }).then((response) => {
+  useEffect(() => { if (!filters.groupId) return undefined; let active = true; setMasters((current) => ({ ...current, programs: [], sections: [] })); apiClient.get(apiEndpoints.groups.programs(filters.groupId)).then((response) => {
+    if (!active) return;
+    if (response.data?.success === false) throw new Error(response.data.message || "Unable to load programs for this group.");
+    const programs = list(body(response)).filter((program) => programId(program) != null && programName(program) != null);
+    setMasters((current) => ({ ...current, programs, sections: [] }));
+    setFilters((current) => current.programId && !programs.some((program) => String(programId(program)) === String(current.programId)) ? { ...current, programId: "", sectionId: "" } : current);
+  }).catch((error) => { if (active) say(error); }); return () => { active = false; }; }, [filters.groupId, say]);
+  useEffect(() => { if (!readyContext) return undefined; let active = true; apiClient.get(apiEndpoints.sections.list, { params: { CampusId: scopeContext.campusId, BoardId: scopeContext.boardId, AcademicYearId: scopeContext.academicYearId, AcademicLevelId: scopeContext.academicLevelId, GroupId: scopeContext.groupId, ProgramId: scopeContext.programId, IsActive: true, pageSize: 1000 } }).then((response) => {
     if (!active || response.data?.success === false) return;
-    const sections = list(body(response)).filter((section) => matches(section, scopeContext));
+    const sections = list(body(response)).filter((section) => matchesSection(section, scopeContext));
     setMasters((current) => ({ ...current, sections }));
     setFilters((current) => current.sectionId && !sections.some((section) => String(sectionId(section)) === String(current.sectionId)) ? { ...current, sectionId: "" } : current);
   }).catch((error) => { if (active) say(error); }); return () => { active = false; }; }, [context.programId, scopeContext, readyContext, refresh, say]);
   const loadStudents = useCallback(async ({ signal } = {}) => {
     const requestId = ++workflowRequestRef.current;
-    if (!readyContext) { setStudents([]); setStudentLoading(false); return; }
+    if (!readyContext) { setStudents([]); setScopedStudentRecords([]); setStudentLoading(false); return; }
     setStudents([]);
     setStudentLoading(true);
     try {
       const workflow = await loadAllocationWorkflow(scopeContext, { signal });
-      if (!signal?.aborted && requestId === workflowRequestRef.current && currentScopeRef.current === scopeToken) setStudents(workflow.students);
+      if (!signal?.aborted && requestId === workflowRequestRef.current && currentScopeRef.current === scopeToken) { setScopedStudentRecords(workflow.records); setStudents(workflow.students); }
     } catch (error) {
       if (!signal?.aborted && requestId === workflowRequestRef.current && currentScopeRef.current === scopeToken) say(error);
     } finally {
@@ -247,21 +273,48 @@ export default function SectionAllocationPage() {
     );
     setSectionCounts(counts);
   }, [masters.sections, readyContext, refresh]);
-  useEffect(() => { setSectionStudents([]); if (!readySection) return undefined; let active = true; apiClient.get(apiEndpoints.students.getBySection(filters.sectionId)).then((response) => active && setSectionStudents(list(body(response)))).catch((error) => { if (active) say(error); }); return () => { active = false; }; }, [filters.sectionId, readySection, refresh, say, scopeToken]);
+  useEffect(() => {
+    setSectionStudents([]);
+    setSectionStudentsFor("");
+    if (!readySection) return undefined;
+    let active = true;
+    apiClient.get(apiEndpoints.students.getBySection(filters.sectionId))
+      .then((response) => {
+        if (!active) return;
+        const responseStudents = list(body(response));
+        setSectionStudents(responseStudents);
+        setSectionStudentsFor(String(filters.sectionId));
+        setSectionCounts((current) => ({ ...current, [String(filters.sectionId)]: responseStudents.length }));
+      })
+      .catch((error) => { if (active) say(error); });
+    return () => { active = false; };
+  }, [filters.sectionId, readySection, refresh, say, scopeToken]);
 
-  const sections = useMemo(() => masters.sections.map((section) => { const id = sectionId(section); const maximum = number(capacity(section)); const allocated = sectionCounts[String(id)] ?? number(count(section)); return { ...section, id, maximum, allocated, available: Math.max(0, maximum - allocated) }; }), [masters.sections, sectionCounts]);
   const eligibleIds = useMemo(() => new Set(students.map((student) => String(student.id))), [students]);
+  const scopedStudentIds = useMemo(() => new Set(scopedStudentRecords.map((record) => String(studentId(record)))), [scopedStudentRecords]);
+  const scopedSectionResponse = useMemo(() => sectionStudentsFor === String(filters.sectionId)
+    ? sectionStudents.filter((record) => matches(record, scopeContext) && scopedStudentIds.has(String(studentId(record))))
+    : null, [filters.sectionId, scopeContext, scopedStudentIds, sectionStudents, sectionStudentsFor]);
+  const sections = useMemo(() => masters.sections.map((section) => {
+    const id = sectionId(section);
+    const maximum = number(capacity(section));
+    const apiAllocated = String(id) === String(filters.sectionId) && scopedSectionResponse
+      ? scopedSectionResponse.length
+      : sectionCounts[String(id)] ?? number(count(section));
+    const allocated = Number(apiAllocated);
+    return { ...section, id, maximum, allocated, available: Math.max(0, maximum - allocated) };
+  }), [filters.sectionId, masters.sections, scopedSectionResponse, sectionCounts]);
   const unallocated = recentAdmissionsFirst(students.filter((student) => !positiveId(student.sectionId))); const selectedSection = sections.find((section) => String(section.id) === String(filters.sectionId));
-  const allocatedRows = useMemo(() => sectionStudents.filter((record) => {
-    const student = students.find((entry) => String(entry.id) === String(studentId(record)));
-    return eligibleIds.has(String(studentId(record))) && matches(record, scopeContext)
-      && positiveId(sectionValue(record)) && positiveId(student?.sectionId)
-      && String(sectionValue(record)) === String(student.sectionId)
-      && String(sectionValue(record)) === String(filters.sectionId);
-  }).map((record) => {
-    const contextStudent = students.find((student) => String(student.id) === String(studentId(record))) ?? {};
-    return { ...mapStudent(contextStudent, record), sectionName: sectionName(record) ?? get(selectedSection, "sectionName", "SectionName") };
-  }), [eligibleIds, filters.sectionId, scopeContext, sectionStudents, selectedSection, students]);
+  const allocatedRows = useMemo(() => (scopedSectionResponse ?? []).map((record) => {
+    const id = studentId(record);
+    const contextStudent = students.find((student) => String(student.id) === String(id))
+      ?? scopedStudentRecords.find((student) => String(studentId(student)) === String(id)) ?? {};
+    return {
+      ...mapStudent(contextStudent, record),
+      canEdit: eligibleIds.has(String(id)),
+      sectionName: sectionName(record) ?? get(selectedSection, "sectionName", "SectionName"),
+    };
+  }), [eligibleIds, scopedSectionResponse, scopedStudentRecords, selectedSection, students]);
   const visibleAllocated = useMemo(() => { const query = search.trim().toLowerCase(); return recentAdmissionsFirst(query ? allocatedRows.filter((student) => `${student.name} ${student.admissionNo} ${student.rollNo}`.toLowerCase().includes(query)) : allocatedRows); }, [allocatedRows, search]);
   const allocatedPageSize = 5;
   const allocatedTotalPages = Math.max(1, Math.ceil(visibleAllocated.length / allocatedPageSize));
@@ -273,9 +326,9 @@ export default function SectionAllocationPage() {
   useEffect(() => { setAllocatedPage(1); setRollPage(1); }, [search, filters.academicLevelId, filters.groupId, filters.programId, filters.sectionId, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   const previewRows = list(preview?.students); const totalAvailable = sections.reduce((sum, section) => sum + section.available, 0); const rollAssigned = allocatedRows.filter((student) => filled(student.rollNo)).length;
   const loadCurrentSections = async () => {
-    const response = await apiClient.get(apiEndpoints.sections.list, { params: { ...scopeContext, ProgramId: scopeContext.programId, IsActive: true, pageSize: 1000 } });
+    const response = await apiClient.get(apiEndpoints.sections.list, { params: { CampusId: scopeContext.campusId, BoardId: scopeContext.boardId, AcademicYearId: scopeContext.academicYearId, AcademicLevelId: scopeContext.academicLevelId, GroupId: scopeContext.groupId, ProgramId: scopeContext.programId, IsActive: true, pageSize: 1000 } });
     assertCurrentScope(scopeToken);
-    const records = list(body(response)).filter((section) => positiveId(sectionId(section)) && matches(section, scopeContext)
+    const records = list(body(response)).filter((section) => positiveId(sectionId(section)) && matchesSection(section, scopeContext)
       && !flagIsFalse(get(section, "isActive", "IsActive")));
     const currentSections = await Promise.all(records.map(async (section) => {
       const id = sectionId(section);
@@ -296,6 +349,7 @@ export default function SectionAllocationPage() {
     try {
       const [workflow, currentSections] = await Promise.all([loadAllocationWorkflow(scopeContext), loadCurrentSections()]);
       assertCurrentScope(scopeToken);
+      setScopedStudentRecords(workflow.records);
       setStudents(workflow.students);
       // The context-only bulk API also allocates hidden, ineligible admissions.
       // Propose only the verified and approved students that this screen can save.
@@ -386,7 +440,8 @@ export default function SectionAllocationPage() {
             : sequence[1] + String(BigInt(sequence[2]) + BigInt(index)).padStart(sequence[2].length, "0");
         });
       }
-      setStudents(workflow.students);
+    setScopedStudentRecords(workflow.records);
+    setStudents(workflow.students);
       setRollPreview({ students: rows, studentsToAllocate: rows.length, totalStudents: eligible.length });
       setConfirming("roll");
     } catch (error) { say(error); }
@@ -439,8 +494,8 @@ export default function SectionAllocationPage() {
     </tbody></table></div>
   </Modal> : null;
 
-  return <DashboardLayout title="Section Allocation" subtitle="Manage student section allocation and roll number assignment." breadcrumb={["People", "Section Allocation"]}><main className="allocation-page"><nav className="allocation-tabs" aria-label="Section allocation views">{[["allocation", "Section Allocation"], ["allocated", "Allocated Students"], ["roll", "Roll Numbers"]].map(([tab, label]) => <button key={tab} type="button" className={activeTab === tab ? "is-active" : ""} onClick={() => navigate(tabPath(tab))}>{label}</button>)}</nav><section className="cms-card allocation-workspace"><div className="cms-card-body"><div className={`allocation-filter-grid ${hasSectionFilter ? "has-section-filter" : ""}`}><div className="cms-field"><span>Academic Year</span><div className="allocation-year-value">{selectedAcademicYear?.name ?? selectedAcademicYear?.label ?? (academicYearsLoading ? "Loading academic year..." : "Select an Academic Year in the header")}</div></div><SelectField label="Academic Level" value={filters.academicLevelId} disabled={!selectedBoardId || !selectedAcademicYearId || loading} onChange={(value) => update("academicLevelId", value)}>{selectOptions(masters.levels, ["academicLevelId", "AcademicLevelId", "levelId", "LevelId"], ["academicLevelName", "AcademicLevelName", "levelName", "LevelName"])}</SelectField><SelectField label="Group" value={filters.groupId} disabled={!filters.academicLevelId || groupsLoading} error={groupsError} placeholder={groupsLoading ? "Loading groups..." : groupsError ? "Groups unavailable" : undefined} onChange={(value) => update("groupId", value)}>{selectOptions(masters.groups, ["groupId", "GroupId"], ["groupName", "GroupName"])}</SelectField><SelectField label="Program" value={filters.programId} disabled={!filters.groupId} onChange={(value) => update("programId", value)}>{selectOptions(masters.programs, ["programId", "ProgramId"], ["programName", "ProgramName"])}</SelectField>{hasSectionFilter ? <SelectField label="Section" value={filters.sectionId} disabled={!filters.programId} onChange={(value) => update("sectionId", value)}>{sections.map((section) => <option key={section.id} value={section.id}>{get(section, "sectionName", "SectionName")} ({section.allocated}/{section.maximum})</option>)}</SelectField> : null}</div></div>
-    {activeTab === "allocation" ? <><CardHead title={`Students to Allocate (${unallocated.length})`} text="Approved and verified students waiting for a section assignment." icon={<Users size={20} />} />{studentLoading ? <SkeletonTable columns={6} rows={6} /> : <StudentTable students={unallocated} pending />} {readyContext ? <div className="allocation-section-capacities"><div className="allocation-section-capacities-head"><div><h3>Available Target Sections</h3><p>Current capacity for sections mapped to this program.</p></div><button className="cms-btn cms-btn-primary" disabled={Boolean(busy) || !unallocated.length || !sections.length} onClick={previewAllocation}>{busy === "section-preview" ? "Preparing..." : "Preview Section Allocation"}</button></div>{sections.length ? <div className="allocation-capacity-grid">{sections.map((section) => <div className="allocation-capacity-item" key={section.id}><strong>{get(section, "sectionName", "SectionName")}</strong><span>{section.allocated} / {section.maximum}</span><small>{section.available} Available</small></div>)}</div> : <div className="cms-empty">No sections are configured for this program.</div>}</div> : null}{readyContext && !studentLoading && !unallocated.length ? <div className="allocation-empty-note">No approved and verified students are waiting for a section in this program.</div> : null}{preview ? <PreviewCard preview={preview} sections={sections} program={get(masters.programs.find((program) => String(get(program, "programId", "ProgramId")) === String(filters.programId)), "programName", "ProgramName")} totalAvailable={totalAvailable} busy={busy} onCancel={() => setPreview(null)} onConfirm={() => setConfirming("section")} /> : null}</> : null}
+  return <DashboardLayout title="Section Allocation" subtitle="Manage student section allocation and roll number assignment." breadcrumb={["People", "Section Allocation"]}><main className="allocation-page"><nav className="allocation-tabs" aria-label="Section allocation views">{[["allocation", "Section Allocation"], ["allocated", "Allocated Students"], ["roll", "Roll Numbers"]].map(([tab, label]) => <button key={tab} type="button" className={activeTab === tab ? "is-active" : ""} onClick={() => navigate(tabPath(tab))}>{label}</button>)}</nav><section className="cms-card allocation-workspace"><div className="cms-card-body"><div className={`allocation-filter-grid ${hasSectionFilter ? "has-section-filter" : ""}`}><div className="cms-field"><span>Academic Year</span><div className="allocation-year-value">{selectedAcademicYear?.name ?? selectedAcademicYear?.label ?? (academicYearsLoading ? "Loading academic year..." : "Select an Academic Year in the header")}</div></div><SelectField label="Academic Level" value={filters.academicLevelId} disabled={!selectedBoardId || !selectedAcademicYearId || loading} onChange={(value) => update("academicLevelId", value)}>{selectOptions(masters.levels, ["academicLevelId", "AcademicLevelId", "levelId", "LevelId"], ["academicLevelName", "AcademicLevelName", "levelName", "LevelName"])}</SelectField><SelectField label="Group" value={filters.groupId} disabled={!filters.academicLevelId || groupsLoading} error={groupsError} placeholder={groupsLoading ? "Loading groups..." : groupsError ? "Groups unavailable" : undefined} onChange={(value) => update("groupId", value)}>{selectOptions(masters.groups, ["groupId", "GroupId"], ["groupName", "GroupName"])}</SelectField><SelectField label="Program" value={filters.programId} disabled={!filters.groupId} onChange={(value) => update("programId", value)}>{selectOptions(masters.programs, ["programId", "ProgramId", "programmeId", "ProgrammeId", "id", "Id", "groupProgramId", "GroupProgramId"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "programme", "Programme", "program", "Program", "name", "Name", "programCode", "ProgramCode"])}</SelectField>{hasSectionFilter ? <SelectField label="Section" value={filters.sectionId} disabled={!filters.programId} onChange={(value) => update("sectionId", value)}>{sections.map((section) => { const scopedCount = String(section.id) === String(filters.sectionId) && scopedSectionResponse ? scopedSectionResponse.length : scopedStudentRecords.filter((student) => String(sectionValue(student)) === String(section.id)).length; return <option key={section.id} value={section.id}>{get(section, "sectionName", "SectionName")} ({scopedCount}/{section.maximum})</option>; })}</SelectField> : null}</div></div>
+    {activeTab === "allocation" ? <><CardHead title={`Students to Allocate (${unallocated.length})`} text="Approved and verified students waiting for a section assignment." icon={<Users size={20} />} />{studentLoading ? <SkeletonTable columns={6} rows={6} /> : <StudentTable students={unallocated} pending />} {readyContext ? <div className="allocation-section-capacities"><div className="allocation-section-capacities-head"><div><h3>Available Target Sections</h3><p>Current capacity for sections mapped to this program.</p></div><button className="cms-btn cms-btn-primary" disabled={Boolean(busy) || !unallocated.length || !sections.length} onClick={previewAllocation}>{busy === "section-preview" ? "Preparing..." : "Preview Section Allocation"}</button></div>{sections.length ? <div className="allocation-capacity-grid">{sections.map((section) => <div className="allocation-capacity-item" key={section.id}><strong>{get(section, "sectionName", "SectionName")}</strong><span>{section.allocated} / {section.maximum}</span><small>{section.available} Available</small></div>)}</div> : <div className="cms-empty">No sections are configured for this program.</div>}</div> : null}{readyContext && !studentLoading && !unallocated.length ? <div className="allocation-empty-note">No approved and verified students are waiting for a section in this program.</div> : null}{preview ? <PreviewCard preview={preview} sections={sections} program={programName(masters.programs.find((program) => String(programId(program)) === String(filters.programId)))} totalAvailable={totalAvailable} busy={busy} onCancel={() => setPreview(null)} onConfirm={() => setConfirming("section")} /> : null}</> : null}
     {activeTab === "allocated" ? <><CardHead title={`Allocated Students (${allocatedRows.length})`} text="Students assigned to the selected section." icon={<Users size={20} />} /><SearchBox value={search} onChange={setSearch} /><StudentTable students={paginatedAllocated} onEdit={(student) => setEditing({ ...student, nextSectionId: student.sectionId })} iconOnlyEdit showAdmissionDate={false} /><footer className="allocation-pagination"><span>Showing {visibleAllocated.length ? (currentAllocatedPage - 1) * allocatedPageSize + 1 : 0}-{Math.min(currentAllocatedPage * allocatedPageSize, visibleAllocated.length)} of {visibleAllocated.length} students</span><div className="allocation-pagination-actions"><button disabled={currentAllocatedPage === 1} onClick={() => setAllocatedPage(currentAllocatedPage - 1)}>Previous</button><span>Page {currentAllocatedPage} of {allocatedTotalPages}</span><button disabled={currentAllocatedPage === allocatedTotalPages} onClick={() => setAllocatedPage(currentAllocatedPage + 1)}>Next</button></div></footer></> : null}
     {activeTab === "roll" ? <><CardHead title="Roll Numbers" text="Review roll numbers for the selected section." icon={<CheckCircle2 size={20} />} />{selectedSection ? <div className="allocation-summary allocation-roll-summary"><Summary label="Section" value={get(selectedSection, "sectionName", "SectionName")} /><Summary label="Total Students" value={allocatedRows.length} /><Summary label="Roll Numbers Assigned" value={rollAssigned} /><Summary label="Pending" value={Math.max(0, allocatedRows.length - rollAssigned)} /></div> : null}<SearchBox value={search} onChange={setSearch} /><StudentTable students={paginatedRollRows} showAdmissionDate={false} showStatus={false} /><footer className="allocation-pagination"><span>Showing {visibleAllocated.length ? (currentRollPage - 1) * allocatedPageSize + 1 : 0}-{Math.min(currentRollPage * allocatedPageSize, visibleAllocated.length)} of {visibleAllocated.length} students</span><div className="allocation-pagination-actions"><button disabled={currentRollPage === 1} onClick={() => setRollPage(currentRollPage - 1)}>Previous</button><span>Page {currentRollPage} of {rollTotalPages}</span><button disabled={currentRollPage === rollTotalPages} onClick={() => setRollPage(currentRollPage + 1)}>Next</button></div></footer><div className="allocation-selection-footer"><span>{Math.max(0, allocatedRows.length - rollAssigned)} roll number{Math.max(0, allocatedRows.length - rollAssigned) === 1 ? "" : "s"} pending</span><button className="cms-btn cms-btn-primary" disabled={!readySection || Boolean(busy) || !allocatedRows.length} onClick={previewRolls}>{busy === "roll-preview" ? "Preparing..." : "Generate Roll Numbers"}</button></div></> : null}
   </section></main>{confirming === "section" ? <ConfirmDialog title={confirming === "section" ? "Confirm Section Allocation" : "Confirm Roll Number Generation"} message={confirming === "section" ? "Confirm the previewed section allocation? This will save the proposed changes." : "Generate roll numbers using the existing allocation rules?"} confirmLabel={confirming === "section" ? "Confirm Section Allocation" : "Generate Roll Numbers"} loading={busy === `${confirming}-confirm`} loadingLabel="Saving..." onCancel={() => !busy && setConfirming("")} onConfirm={confirming === "section" ? confirmSections : confirmRolls} /> : null}{rollPreviewDialog}{editing ? <Modal title="Edit Allocation" onClose={() => !busy && setEditing(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setEditing(null)}>Cancel</button><button className="cms-btn cms-btn-primary" disabled={Boolean(busy) || !editing.nextSectionId} onClick={saveEdit}>{busy === "edit" ? "Saving..." : "Save Allocation"}</button></>}><div className="allocation-student-summary"><strong>{editing.name}</strong><span>Admission No: {editing.admissionNo}</span></div><SelectField label="New Section" value={editing.nextSectionId} onChange={(nextSectionId) => setEditing((current) => ({ ...current, nextSectionId }))}>{sections.map((section) => <option key={section.id} value={section.id} disabled={section.available <= 0 && String(section.id) !== String(editing.sectionId)}>{get(section, "sectionName", "SectionName")}</option>)}</SelectField></Modal> : null}<Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: "", type: "success" })} /></DashboardLayout>;
@@ -450,5 +505,5 @@ function SelectField({ label, value, disabled, onChange, children, placeholder, 
 function Summary({ label, value }) { return <div className="allocation-summary-item"><span>{label}</span><strong>{value ?? "—"}</strong></div>; }
 function CardHead({ title, text, icon }) { return <div className="cms-card-head allocation-card-head"><div><h3>{title}</h3><p>{text}</p></div>{icon}</div>; }
 function SearchBox({ value, onChange }) { return <div className="allocation-table-tools"><Search size={17} /><input value={value} onChange={(event) => onChange(event.target.value)} placeholder="Search by student name, admission no or roll no..." /></div>; }
-function StudentTable({ students, pending = false, onEdit, showAdmissionDate = true, showStatus = true, iconOnlyEdit = false }) { const status = (student) => positiveId(student.sectionId) ? filled(student.rollNo) ? "Roll Allocated" : "Section Allocated" : "Unallocated"; const columns = 2 + (showAdmissionDate ? 1 : 0) + (pending ? 0 : 2) + (showStatus ? 1 : 0) + (onEdit ? 1 : 0); return <div className="cms-table-wrap"><table className="cms-table allocation-students-table"><thead><tr><th>Admission No</th><th>Student Name</th>{showAdmissionDate ? <th>Admission Date</th> : null}{!pending ? <><th>Section</th><th>Roll No</th></> : null}{showStatus ? <th>Allocation Status</th> : null}{onEdit ? <th>Action</th> : null}</tr></thead><tbody>{students.length ? students.map((student) => <tr key={student.id ?? student.admissionNo}><td>{student.admissionNo || "—"}</td><td className="cms-font-semibold">{student.name || "—"}</td>{showAdmissionDate ? <td>{date(student.admissionDate)}</td> : null}{!pending ? <><td>{student.sectionName || "—"}</td><td>{student.rollNo || "—"}</td></> : null}{showStatus ? <td><StatusBadge value={status(student)} /></td> : null}{onEdit ? <td><button className={`cms-btn cms-btn-ghost${iconOnlyEdit ? " allocation-edit-icon-button" : ""}`} title="Edit" aria-label="Edit" onClick={() => onEdit(student)}><Pencil size={16} />{!iconOnlyEdit ? "Edit" : null}</button></td> : null}</tr>) : <tr><td colSpan={columns}><div className="cms-empty">No students found for this allocation status.</div></td></tr>}</tbody></table></div>; }
+function StudentTable({ students, pending = false, onEdit, showAdmissionDate = true, showStatus = true, iconOnlyEdit = false }) { const status = (student) => positiveId(student.sectionId) ? filled(student.rollNo) ? "Roll Allocated" : "Section Allocated" : "Unallocated"; const columns = 2 + (showAdmissionDate ? 1 : 0) + (pending ? 0 : 2) + (showStatus ? 1 : 0) + (onEdit ? 1 : 0); return <div className="cms-table-wrap"><table className="cms-table allocation-students-table"><thead><tr><th>Admission No</th><th>Student Name</th>{showAdmissionDate ? <th>Admission Date</th> : null}{!pending ? <><th>Section</th><th>Roll No</th></> : null}{showStatus ? <th>Allocation Status</th> : null}{onEdit ? <th>Action</th> : null}</tr></thead><tbody>{students.length ? students.map((student) => <tr key={student.id ?? student.admissionNo}><td>{student.admissionNo || "—"}</td><td className="cms-font-semibold">{student.name || "—"}</td>{showAdmissionDate ? <td>{date(student.admissionDate)}</td> : null}{!pending ? <><td>{student.sectionName || "—"}</td><td>{student.rollNo || "—"}</td></> : null}{showStatus ? <td><StatusBadge value={status(student)} /></td> : null}{onEdit ? <td><button className={`cms-btn cms-btn-ghost${iconOnlyEdit ? " allocation-edit-icon-button" : ""}`} title="Edit" aria-label="Edit" disabled={student.canEdit === false} onClick={() => onEdit(student)}><Pencil size={16} />{!iconOnlyEdit ? "Edit" : null}</button></td> : null}</tr>) : <tr><td colSpan={columns}><div className="cms-empty">No students found for this allocation status.</div></td></tr>}</tbody></table></div>; }
 function PreviewCard({ preview, sections, program, totalAvailable, busy, onCancel, onConfirm }) { const rows = list(preview?.students); const capacities = new Map(sections.map((section) => [String(section.id), section])); return <section className="allocation-preview-card"><div className="allocation-preview-head"><div><h3>Preview Section Allocation</h3><p>Review eligible students and available section capacity before confirmation.</p></div><span>Preview Only – Changes are not saved yet</span></div><div className="allocation-summary allocation-preview-summary"><Summary label="Students to Allocate" value={get(preview, "studentsToAllocate", "StudentsToAllocate") ?? rows.length} /><Summary label="Available Sections" value={sections.filter((section) => section.available > 0).length} /><Summary label="Total Capacity" value={get(preview, "totalCapacity", "TotalCapacity") ?? "—"} /><Summary label="Available Capacity" value={totalAvailable} /></div><div className="cms-table-wrap"><table className="cms-table allocation-preview-table"><thead><tr><th>Student Name</th><th>Admission No.</th><th>Program</th><th>Proposed Section</th><th>Section Capacity</th><th>Status</th></tr></thead><tbody>{rows.length ? rows.map((student) => { const section = capacities.get(String(get(student, "sectionId", "SectionId"))); return <tr key={get(student, "studentId", "StudentId")}><td className="cms-font-semibold">{get(student, "studentName", "StudentName") || "—"}</td><td>{get(student, "admissionNo", "AdmissionNo") || "—"}</td><td>{program || "—"}</td><td>{get(student, "sectionName", "SectionName") || "—"}</td><td>{section ? `${section.allocated} / ${section.maximum}` : "—"}</td><td><StatusBadge value="Ready" /></td></tr>; }) : <tr><td colSpan="6"><div className="cms-empty">The preview returned no students to allocate.</div></td></tr>}</tbody></table></div><div className="allocation-preview-footer"><button className="cms-btn cms-btn-ghost" disabled={Boolean(busy)} onClick={onCancel}>Cancel</button><button className="cms-btn cms-btn-primary" disabled={Boolean(busy) || !rows.length} onClick={onConfirm}>Confirm Section Allocation</button></div></section>; }
