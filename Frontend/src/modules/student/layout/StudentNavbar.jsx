@@ -21,7 +21,7 @@ const studentPages = studentMenuGroups.flatMap(([section, links]) => links.map((
 
 export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const navigate = useNavigate();
-  const { profile, photoUrl, loading, error, notifications = [], unreadCount = 0, markAsRead, markAllAsRead } = useStudentProfile() || {};
+  const { profile, photoUrl, loading, error, notifications = [], unreadCount = 0, markAsRead, markAllAsRead, facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
 
@@ -55,7 +55,12 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [activeResult, setActiveResult] = useState(0);
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const suggestions = studentPages.filter((page) => terms.every((term) => `${page.label} ${page.section}`.toLowerCase().includes(term)));
+  const availableStudentPages = studentPages.filter((page) => {
+    if (page.to.endsWith("/transport")) return facilityAccess.type === "transport";
+    if (page.to.endsWith("/hostel")) return facilityAccess.type === "hostel";
+    return true;
+  });
+  const suggestions = availableStudentPages.filter((page) => terms.every((term) => `${page.label} ${page.section}`.toLowerCase().includes(term)));
 
   useEffect(() => {
     if (searchOpen) searchInputRef.current?.focus();

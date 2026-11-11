@@ -29,17 +29,17 @@ function InvoicesHeaderIllustration() {
   return (
     <svg width="150" height="70" viewBox="0 0 150 70" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Background soft glow */}
-      <circle cx="85" cy="35" r="32" fill="#286433" fillOpacity="0.08" />
+      <circle cx="85" cy="35" r="32" fill="var(--cms-primary)" fillOpacity="0.08" />
       {/* Invoice Sheet */}
-      <rect x="75" y="6" width="46" height="56" rx="4" fill="#ffffff" stroke="#c8e6cc" strokeWidth="1.5" />
-      <text x="83" y="18" fill="#1e4529" fontSize="6.5" fontWeight="800" fontFamily="sans-serif">INVOICE</text>
+      <rect x="75" y="6" width="46" height="56" rx="4" fill="var(--cms-surface)" stroke="var(--cms-border)" strokeWidth="1.5" />
+      <text x="83" y="18" fill="var(--cms-primary)" fontSize="6.5" fontWeight="800" fontFamily="sans-serif">INVOICE</text>
       <line x1="83" y1="23" x2="113" y2="23" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       <line x1="83" y1="28" x2="108" y2="28" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       <line x1="83" y1="33" x2="111" y2="33" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       <line x1="83" y1="38" x2="102" y2="38" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
-      <line x1="83" y1="44" x2="113" y2="44" stroke="#c8e6cc" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="83" y1="44" x2="113" y2="44" stroke="var(--cms-primary-border, var(--cms-border))" strokeWidth="1.5" strokeLinecap="round" />
       {/* Rupee Circle Badge */}
-      <circle cx="65" cy="42" r="14" fill="#286433" />
+      <circle cx="65" cy="42" r="14" fill="var(--cms-primary)" />
       <text x="60.5" y="47.5" fill="#ffffff" fontSize="15" fontWeight="bold" fontFamily="sans-serif">₹</text>
       {/* Gold Coins Stack */}
       <g transform="translate(108, 38)">
@@ -57,15 +57,15 @@ function PaymentsHeaderIllustration() {
   return (
     <svg width="150" height="70" viewBox="0 0 150 70" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Background glow */}
-      <circle cx="85" cy="35" r="32" fill="#286433" fillOpacity="0.08" />
+      <circle cx="85" cy="35" r="32" fill="var(--cms-primary)" fillOpacity="0.08" />
       {/* Receipt Card */}
-      <rect x="75" y="8" width="50" height="54" rx="4" fill="#ffffff" stroke="#c8e6cc" strokeWidth="1.5" />
-      <line x1="82" y1="18" x2="118" y2="18" stroke="#1e4529" strokeWidth="2" strokeLinecap="round" />
+      <rect x="75" y="8" width="50" height="54" rx="4" fill="var(--cms-surface)" stroke="var(--cms-border)" strokeWidth="1.5" />
+      <line x1="82" y1="18" x2="118" y2="18" stroke="var(--cms-primary)" strokeWidth="2" strokeLinecap="round" />
       <line x1="82" y1="24" x2="114" y2="24" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       <line x1="82" y1="29" x2="110" y2="29" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       <line x1="82" y1="35" x2="116" y2="35" stroke="#e5e7eb" strokeWidth="1.5" strokeLinecap="round" />
       {/* Success Badge with Check */}
-      <circle cx="65" cy="38" r="14" fill="#286433" />
+      <circle cx="65" cy="38" r="14" fill="var(--cms-primary)" />
       <path d="M59 38 L63 42 L71 33" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
       {/* Gold Coins Stack */}
       <g transform="translate(106, 38)">
@@ -676,7 +676,7 @@ export default function PaymentsInvoicesPage() {
                     return (
                       <tr key={row.id}>
                         <td className="pip-cell-num">{rowNumber}</td>
-                        <td style={{ fontWeight: 700, color: "#111827" }}>{row.txnId}</td>
+                        <td style={{ fontWeight: 700, color: "var(--cms-text)" }}>{row.txnId}</td>
                         <td>
                           <span
                             className="pip-invoice-link"
@@ -774,7 +774,7 @@ export default function PaymentsInvoicesPage() {
           <div className="pip-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="pip-modal-header">
               <div className="pip-modal-title-wrap">
-                <FileText size={18} color="#286433" />
+                <FileText size={18} color="var(--cms-primary)" />
                 <h3 className="pip-modal-title">Tax Invoice — {viewingInvoice.invoiceNo}</h3>
               </div>
               <button
@@ -791,7 +791,7 @@ export default function PaymentsInvoicesPage() {
                 <div className="pip-invoice-top-row">
                   <div>
                     <span className="pip-invoice-id">{viewingInvoice.invoiceNo}</span>
-                    <div style={{ color: "#6b7280", fontSize: "12px", marginTop: "2px" }}>
+                    <div style={{ color: "var(--cms-muted)", fontSize: "12px", marginTop: "2px" }}>
                       Transaction: {viewingInvoice.txnId}
                     </div>
                   </div>
@@ -802,7 +802,7 @@ export default function PaymentsInvoicesPage() {
                   <div>
                     <span className="pip-invoice-label">Billed To</span>
                     <div className="pip-invoice-val">{viewingInvoice.college}</div>
-                    <div style={{ color: "#6b7280", fontSize: "11.5px" }}>{viewingInvoice.email}</div>
+                    <div style={{ color: "var(--cms-muted)", fontSize: "11.5px" }}>{viewingInvoice.email}</div>
                   </div>
                   <div>
                     <span className="pip-invoice-label">Subscription Plan</span>
@@ -866,7 +866,7 @@ export default function PaymentsInvoicesPage() {
           <div className="pip-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="pip-modal-header">
               <div className="pip-modal-title-wrap">
-                <CreditCard size={18} color="#286433" />
+                <CreditCard size={18} color="var(--cms-primary)" />
                 <h3 className="pip-modal-title">Payment Receipt — {viewingPayment.txnId}</h3>
               </div>
               <button
@@ -883,7 +883,7 @@ export default function PaymentsInvoicesPage() {
                 <div className="pip-invoice-top-row">
                   <div>
                     <span className="pip-invoice-id">{viewingPayment.txnId}</span>
-                    <div style={{ color: "#6b7280", fontSize: "12px", marginTop: "2px" }}>
+                    <div style={{ color: "var(--cms-muted)", fontSize: "12px", marginTop: "2px" }}>
                       Invoice Reference: {viewingPayment.invoiceNo}
                     </div>
                   </div>
