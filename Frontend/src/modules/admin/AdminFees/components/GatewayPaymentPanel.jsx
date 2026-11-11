@@ -131,11 +131,12 @@ export default function GatewayPaymentPanel({
     }
     primeAudio();
     run(async (signal) => {
+      const effectiveCampusId = account.campusId ?? campusId;
       let settings;
       try {
         if (account.campusId && Number(account.campusId) !== Number(campusId))
           throw new Error("This fee account belongs to another campus. Select its campus before collecting.");
-        settings = await getPaymentGatewayConfigApi(campusId, signal);
+        settings = await getPaymentGatewayConfigApi(effectiveCampusId, signal);
         if (mode === "UPI_QR" && (!settings.enableCounterUpiQr || !settings.payeeVpa || !settings.payeeName))
           throw new Error("Dynamic UPI QR is disabled or incomplete for this campus. Review Payment Settings.");
         if (mode === "RAZORPAY" && (!settings.enableRazorpay || !settings.razorpayKeyId || !settings.hasRazorpayKeySecret || !settings.hasRazorpayWebhookSecret))
@@ -150,10 +151,10 @@ export default function GatewayPaymentPanel({
       if (signal.aborted) return;
       const Checkout = mode === "RAZORPAY" ? await loadRazorpayCheckout() : null;
       if (signal.aborted) return;
-      const data = await feePaymentGatewayApi.createOrder(
-        { ...payload, paymentMethod: mode },
-        signal,
-      );
+      const orderRequest = { ...payload, paymentMethod: mode };
+      if (effectiveCampusId && Number.isSafeInteger(Number(effectiveCampusId)))
+        orderRequest.campusId = Number(effectiveCampusId);
+      const data = await feePaymentGatewayApi.createOrder(orderRequest, signal);
       if (signal.aborted) return;
       if (
         !data.orderId ||
@@ -163,6 +164,14 @@ export default function GatewayPaymentPanel({
       )
         throw new Error(
           "The backend returned incomplete or mismatched order details. Review payment history before retrying.",
+        );
+      if (
+        data.resolvedCampusId != null &&
+        effectiveCampusId != null &&
+        Number(data.resolvedCampusId) !== Number(effectiveCampusId)
+      )
+        throw new Error(
+          "The backend resolved a different campus payment account. Refresh before retrying.",
         );
       if (
         mode === "UPI_QR" &&
@@ -286,6 +295,67 @@ export default function GatewayPaymentPanel({
       onPending();
     });
   };
+  const submitInlineDirectUtr = (approveImmediately) => {
+    const cleanUtr = draft.utrNumber.trim();
+    if (!order?.orderId) return;
+    if (!/^[A-Za-z0-9]{6,100}$/.test(cleanUtr)) {
+      setError("Enter a valid 12-digit UPI Ref / UTR with 6–100 letters or digits.");
+      return;
+    }
+    let payload;
+    try {
+      payload = collectionPayload(account, target, selectedIds, amount);
+    } catch (failure) {
+      setError(failure.message);
+      return;
+    }
+    run(async (signal) => {
+      const submittedRes = await feePaymentGatewayApi.submitUtr(
+        {
+          studentId: payload.studentId,
+          studentFeeId: payload.studentFeeId,
+          feeInstallmentIds: payload.feeInstallmentIds,
+          amount: Number(order.amount),
+          orderId: order.orderId,
+          utrNumber: cleanUtr,
+          bankName: draft.bankName.trim() || null,
+          paymentDate: todayISO(),
+          remarks: draft.remarks.trim() || `Direct UPI QR (${order.orderId})`,
+        },
+        signal,
+      );
+      if (signal.aborted) return;
+      if (!approveImmediately) {
+        setSubmitted(true);
+        setNotice("UTR submitted for queue verification. Fees will be credited after approval.");
+        onPending();
+        return;
+      }
+      const txnId = Number(submittedRes.transactionId);
+      if (!Number.isSafeInteger(txnId) || txnId <= 0) {
+        setSubmitted(true);
+        setNotice("UTR submitted for verification. Approve it in the Pending UTR Queue to credit fees.");
+        onPending();
+        return;
+      }
+      const approved = await feePaymentGatewayApi.approveUtr(
+        { transactionId: txnId, action: "Approve" },
+        signal,
+      );
+      if (signal.aborted || completed.current) return;
+      if (approved.success === true && approved.receiptNumber) {
+        complete({
+          ...approved,
+          amount: approved.amount ?? order.amount,
+          transactionId: cleanUtr,
+        });
+      } else {
+        setSubmitted(true);
+        setNotice("UTR submitted. Refresh Fee Management or check Pending UTR Queue.");
+        onPending();
+      }
+    });
+  };
   const copyUri = async () => {
     try {
       await navigator.clipboard.writeText(order.upiUri);
@@ -392,10 +462,24 @@ export default function GatewayPaymentPanel({
                 )}
               <strong>{formatCurrency(order.amount)}</strong>
               <code>{order.orderId}</code>
+              {(order.qrMode || order.payeeName || order.payeeVpa || order.resolvedCampusName) && (
+                <p className="cms-fee-note" role="status">
+                  {order.resolvedCampusName ? `${order.resolvedCampusName} · ` : ""}
+                  {order.qrMode === "RAZORPAY_DYNAMIC_QR"
+                    ? `Razorpay Dynamic QR${order.payeeName ? ` — ${order.payeeName}` : ""} (auto-settles to Razorpay merchant account)`
+                    : order.qrMode === "DIRECT_VPA_QR" || order.payeeVpa
+                      ? `Direct UPI QR — Paying ${order.payeeName || "Configured Account"}${order.payeeVpa ? ` (${order.payeeVpa})` : ""}`
+                      : order.payeeName || ""}
+                </p>
+              )}
               {completed.current ? (
                 <span className="cms-badge cms-badge-active">
                   <CheckCircle size={16} /> Payment confirmed
                 </span>
+              ) : polling.status === "MANUAL_UTR" ? (
+                <p role="status">
+                  Direct Bank VPA Mode — Awaiting UTR / UPI Reference Confirmation
+                </p>
               ) : (
                 <p role="status">
                   {polling.status === "PENDING"
@@ -406,14 +490,48 @@ export default function GatewayPaymentPanel({
                   {String(polling.secondsLeft % 60).padStart(2, "0")}
                 </p>
               )}
-              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && (
-                <p className="cms-fee-note" role="note">
-                  Direct Bank VPA Mode: Razorpay keys are not configured. Auto-settlement webhook is
-                  unavailable; switch to Bank Transfer / UTR to enter the transaction reference after
-                  payment.
-                </p>
+              {mode === "UPI_QR" && order.requiresManualUtr && !completed.current && !submitted && (
+                <div className="cms-fee-gateway-utr-inline">
+                  <p className="cms-fee-note" role="note">
+                    Direct Bank VPA Mode: Google Pay / NPCI transfers to your personal UPI ID do
+                    not send automatic webhooks. After paying on phone, enter the 12-digit UPI Ref
+                    / UTR below to credit the fee and generate the receipt.
+                  </p>
+                  <div className="cms-field">
+                    <label htmlFor="gateway-inline-utr">Paid UPI Ref / UTR Number *</label>
+                    <input
+                      id="gateway-inline-utr"
+                      type="text"
+                      maxLength={100}
+                      placeholder="Enter 12-digit Google Pay / UPI Ref No"
+                      disabled={busy || submitted || uncertain}
+                      value={draft.utrNumber}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, utrNumber: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="cms-fee-gateway-actions">
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary"
+                      disabled={busy || submitted || uncertain}
+                      onClick={() => submitInlineDirectUtr(true)}
+                    >
+                      {busy ? "Verifying & Crediting…" : "Verify & Credit Payment Now"}
+                    </button>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={busy || submitted || uncertain}
+                      onClick={() => submitInlineDirectUtr(false)}
+                    >
+                      Submit UTR for Queue Approval
+                    </button>
+                  </div>
+                </div>
               )}
-              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && polling.status === "PENDING" && (
+              {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && ["PENDING", "MANUAL_UTR"].includes(polling.status) && (
                 <>
                   <button type="button" className="cms-btn cms-btn-ghost" onClick={copyUri}>
                     <Copy size={14} /> Copy UPI URI
@@ -424,7 +542,7 @@ export default function GatewayPaymentPanel({
               {mode === "UPI_QR" &&
                 mobileLink &&
                 !order.monitorOnly &&
-                polling.status === "PENDING" && (
+                ["PENDING", "MANUAL_UTR"].includes(polling.status) && (
                   <div className="cms-fee-mobile-payment-link">
                     <label htmlFor="gateway-mobile-link">Mobile Payment Link</label>
                     <input id="gateway-mobile-link" readOnly value={mobileLink} />
