@@ -32,6 +32,8 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import GatewayPaymentPanel from "./components/GatewayPaymentPanel.jsx";
+import { savedAcademicLevelLabel, savedStructureSummary, savedStructureTotal } from "./services/feeStructureSummary.js";
+import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "@/features/fees/feeDetails.js";
 import OfflineUtrQueueTab from "./components/OfflineUtrQueueTab.jsx";
 import PaymentReversalModal from "./components/PaymentReversalModal.jsx";
 import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData } from "./services/paymentGatewaySession.js";
@@ -812,7 +814,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const academicYear = displayNameFor(academicYearName, academicYearId, lookups.years);
     const program = displayNameFor(programName, programId, lookups.programs, programId ? "-" : "Regular");
     const academicLevelId = read(item, "academicLevelId", "AcademicLevelId");
-    const academicLevelName = read(item, "academicLevelName", "AcademicLevelName") || (Number(academicLevelId) === 2 ? "2nd Year" : Number(academicLevelId) === 1 ? "1st Year" : "");
+    const academicLevelName = savedAcademicLevelLabel(academicLevelId, read(item, "academicLevelName", "AcademicLevelName"));
     const yearFeeMode = read(item, "yearFeeMode", "YearFeeMode");
     const incrementType = read(item, "incrementType", "IncrementType");
     const incrementValue = read(item, "incrementValue", "IncrementValue");
@@ -821,7 +823,9 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const key = structureId && !structureId.startsWith("api-")
       ? `struct-${structureId}`
       : [academicYearId || academicYear, groupId || group, programId || program, academicLevelId || ""].join("|");
-    const explicitTotal = optionalNumberValue(item, "totalFee", "TotalFee", "feeTotal", "FeeTotal", "totalAmount", "TotalAmount", "totalActiveFees", "TotalActiveFees", "activeFeeTotal", "ActiveFeeTotal");
+    const explicitTotal = Object.hasOwn(item, "serverTotalFee")
+      ? item.serverTotalFee
+      : optionalNumberValue(item, "totalFee", "TotalFee", "feeTotal", "FeeTotal", "totalAmount", "TotalAmount", "totalActiveFees", "TotalActiveFees", "activeFeeTotal", "ActiveFeeTotal");
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
@@ -844,9 +848,13 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
       program,
       status: textValue(item, "status", "Status") || "Active",
       totalFee: explicitTotal,
+      serverTotalFee: explicitTotal,
       feeItems: [],
     };
-    if (row.totalFee === undefined && explicitTotal !== undefined) row.totalFee = explicitTotal;
+    if (row.serverTotalFee === undefined && explicitTotal !== undefined) {
+      row.serverTotalFee = explicitTotal;
+      row.totalFee = explicitTotal;
+    }
     const nestedItems = getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "feeStructureItems", "FeeStructureItems", "components", "Components", "feeComponents", "FeeComponents"));
     const hasTopLevelFeeItem = isStructureItemPayload(item);
     const sourceItems = nestedItems.length ? nestedItems : hasTopLevelFeeItem ? [item] : [];
@@ -865,7 +873,10 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
         id: structureItemId || feeType.id || textValue(feeItem, "id", "Id") || `type-${index}-${feeIndex}`,
         feeTypeId: feeType.id,
         structureItemId,
-        type: feeType.name === "Fee Type" && masterFeeType?.name ? masterFeeType.name : feeType.name,
+        feeTypeNameMissing: feeType.name === "Fee Type" && !masterFeeType?.name,
+        type: feeType.name === "Fee Type"
+          ? masterFeeType?.name || `Fee type${feeType.id ? ` #${feeType.id}` : ""} (name unavailable)`
+          : feeType.name,
         originalAmount: amount,
         payableAmount: amount,
         selected: isActiveStatus(status),
@@ -881,11 +892,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     return {
       ...row,
       feeItems,
-      totalFee: feeItems.length
-        ? feeItems.filter((feeItem) => feeItem.selected !== false).some((feeItem) => feeItem.originalAmount === undefined)
-          ? undefined
-          : feeItems.filter((feeItem) => feeItem.selected !== false).reduce((sum, feeItem) => sum + feeItem.originalAmount, 0)
-        : row.totalFee,
+      totalFee: savedStructureTotal(row.totalFee, feeItems),
     };
   });
 };
@@ -1155,7 +1162,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const studentRecord = studentsById.get(String(studentId)) || {};
   const admissionRecord = findMatchingAdmission(admissions, item, studentRecord);
   const ledgerAssignmentId = readStudentFeeId(item, studentFee);
-  const detail = feeDetailsByStudentId.get(String(studentId)) || feeDetailsByAccountId.get(String(ledgerAssignmentId)) || {};
+  const rawDetail = feeDetailsByStudentId.get(String(studentId)) || feeDetailsByAccountId.get(String(ledgerAssignmentId));
+  const detail = rawDetail ? normalizeFeeDetails(rawDetail) : {};
   const detailStudentFee = read(detail, "studentFee", "StudentFee", "feeAccount", "FeeAccount", "assignment", "Assignment");
   const group = read(item, "group", "Group");
   const section = read(item, "section", "Section");
@@ -1163,22 +1171,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
   const assignmentId = readStudentFeeId(item, studentFee, detail);
   const feeItems = feeDetailPayloadRows(detail).length ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
-  const normalizedItems = feeItems.map((feeItem, feeIndex) => {
-    const originalAmount = numberValue(feeItem, "originalAmount", "OriginalAmount", "amount", "Amount", "feeAmount", "FeeAmount", "baseAmount", "BaseAmount");
-    const concessionAmount = numberValue(feeItem, "concessionAmount", "ConcessionAmount", "discount", "Discount", "discountAmount", "DiscountAmount", "scholarshipAmount", "ScholarshipAmount");
-    const explicitPayable = optionalNumberValue(feeItem, "payableAmount", "PayableAmount", "payable", "Payable", "netAmount", "NetAmount", "finalAmount", "FinalAmount");
-    return {
-      id: String(read(feeItem, "feeTypeId", "FeeTypeId", "id", "Id") ?? `${index}-${feeIndex}`),
-      type: textValue(feeItem, "feeTypeName", "FeeTypeName", "feeType", "FeeType", "type", "Type", "name", "Name") || `Fee ${feeIndex + 1}`,
-      originalAmount,
-      concessionName: textValue(feeItem, "concessionName", "ConcessionName", "scholarshipName", "ScholarshipName", "schemeName", "SchemeName"),
-      concessionAmount,
-      payableAmount: explicitPayable ?? Math.max(originalAmount - concessionAmount, 0),
-      selected: read(feeItem, "selected", "Selected") !== false,
-      required: Boolean(read(feeItem, "isMandatory", "IsMandatory", "required", "Required")),
-    };
-  });
-  const detailTotal = normalizedItems.reduce((sum, feeItem) => sum + Number(feeItem.payableAmount || feeItem.originalAmount || 0), 0);
+  const normalizedItems = normalizeFeeBreakdown(feeItems);
+  const detailTotal = sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "payableAmount");
   const detailSchedules = feeDetailScheduleRows(detail).length
     ? feeDetailScheduleRows(detail)
     : feeDetailScheduleRows(detailStudentFee);
@@ -1205,23 +1199,21 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const numberOfInstallments = optionalNumberValue(detail, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
     ?? optionalNumberValue(paymentPlanObject, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
     ?? (schedules.length || undefined);
-  const rawTotalPayable = optionalNumberValue(item, "totalPayable", "TotalPayable", "payable", "Payable", "netPayable", "NetPayable", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
-    ?? optionalNumberValue(detail, "totalPayable", "TotalPayable", "payable", "Payable", "originalFee", "OriginalFee", "scheduledFees", "ScheduledFees", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
+  const rawTotalPayable = optionalNumberValue(detail, "totalPayable", "TotalPayable", "payableAmount", "PayableAmount")
+    ?? optionalNumberValue(item, "totalPayable", "TotalPayable", "payable", "Payable", "netPayable", "NetPayable", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
     ?? detailTotal;
-  const totalPaid = optionalNumberValue(item, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
-    ?? optionalNumberValue(detail, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
-    ?? 0;
-  const rawBalance = optionalNumberValue(item, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
-    ?? optionalNumberValue(detail, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
+  const totalPaid = optionalNumberValue(detail, "totalPaid", "TotalPaid", "paidAmount", "PaidAmount")
+    ?? optionalNumberValue(item, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
+    ?? undefined;
+  const rawBalance = optionalNumberValue(detail, "outstandingBalance", "OutstandingBalance", "balanceAmount", "BalanceAmount")
+    ?? optionalNumberValue(item, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
     ?? undefined;
   const nextDueDate = textValue(item, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate")
     || textValue(detail, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate");
   const rawStatus = textValue(item, "feeStatus", "FeeStatus", "status", "Status") || textValue(detail, "feeStatus", "FeeStatus", "status", "Status");
   const backendFeeStatus = Object.hasOwn(item, "backendFeeStatus") ? item.backendFeeStatus : rawStatus;
-  const totalPayable = rawTotalPayable <= 0 && detailTotal > 0 ? detailTotal : rawTotalPayable;
-  const balance = rawBalance !== undefined && !(rawBalance <= 0 && totalPayable > totalPaid && normalizeKey(rawStatus) === "pending")
-    ? rawBalance
-    : Math.max(totalPayable - totalPaid, 0);
+  const totalPayable = rawTotalPayable;
+  const balance = rawBalance ?? (totalPayable === undefined || totalPaid === undefined ? undefined : Math.max(totalPayable - totalPaid, 0));
   const account = {
     id: String(assignmentId ?? read(item, "studentId", "StudentId") ?? read(item, "id", "Id") ?? `fee-account-${index + 1}`),
     assignmentId,
@@ -1273,11 +1265,16 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0] || null;
   return {
     ...derived,
+    feeItems: normalizedItems.filter(feeItem => feeItem.selected),
+    totalOriginal: detail.originalFee ?? sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "originalAmount"),
+    totalConcession: detail.concession ?? sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "concessionAmount"),
+    scheduledFees: detail.scheduledFees,
+    dataWarnings: rawDetail ? feeDetailWarnings(detail, item) : [],
     // Preserve backend balances and worker statuses; the shared helper derives demo schedules.
     installments: account.installments,
-    totalPayable: account.totalPayable ?? derived.totalPayable,
-    totalPaid: account.totalPaid ?? derived.totalPaid,
-    balance: account.balance ?? derived.balance,
+    totalPayable: account.totalPayable,
+    totalPaid: account.totalPaid,
+    balance: account.balance,
     feeStatus: account.feeStatus || derived.feeStatus,
     nextDueDate: account.nextDueDate || nextDue?.dueDate || derived.nextDueDate,
   };
@@ -2289,11 +2286,12 @@ function ReceiptModal({ receipt, onClose }) {
 /* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false, reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const accountPrintRef = useRef(null);
-  const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
-    original: totals.original + Number(item.originalAmount || 0),
-    concession: totals.concession + Number(item.concessionAmount || 0),
-    payable: totals.payable + Number(item.payableAmount || 0),
-  }), { original: 0, concession: 0, payable: 0 });
+  const money = value => value == null ? "Unavailable" : formatCurrency(value);
+  const feeBreakdownTotals = {
+    original: sumFeeValues(account.feeItems, "originalAmount"),
+    concession: sumFeeValues(account.feeItems, "concessionAmount"),
+    payable: sumFeeValues(account.feeItems, "payableAmount"),
+  };
   const receiptFallback = (txn) => ({
     ...txn,
     studentName: account.studentName,
@@ -2341,7 +2339,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
               <Printer size={14} /> Print
             </button>
             {allowCollect ? (
-              <button className="cms-btn cms-btn-primary" onClick={onCollect} disabled={account.balance === 0}>
+              <button className="cms-btn cms-btn-primary" onClick={onCollect} disabled={!(Number(account.balance) > 0)}>
                 <WalletCards size={14} /> Collect Payment
               </button>
             ) : null}
@@ -2350,6 +2348,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
         </div>
 
         <div ref={accountPrintRef} className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
+          {account.dataWarnings?.length ? <div className="cms-alert" role="status">{account.dataWarnings.map(message => <p key={message}>{message}</p>)}</div> : null}
           {backendOverdue(account) ? <div className="cms-fee-overdue-warning" role="status"><AlertCircle size={16} /><span><strong>Payment Overdue:</strong> The backend has marked this fee account or one of its installments overdue. Review the saved schedule and outstanding balance below.</span></div> : null}
           <section className="cms-fee-block">
             <h3>Student Information</h3>
@@ -2368,13 +2367,13 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Fee Summary</h3>
             <div className="cms-fee-kv">
-              <div><span>Original Fee</span><strong>{formatCurrency(account.totalOriginal)}</strong></div>
-              <div><span>Concession</span><strong>{formatCurrency(account.totalConcession)}</strong></div>
-              <div><span>Scheduled Fees</span><strong>{formatCurrency(account.courseFee)}</strong></div>
+              <div><span>Original Fee</span><strong>{money(account.totalOriginal)}</strong></div>
+              <div><span>Concession</span><strong>{money(account.totalConcession)}</strong></div>
+              <div><span>Scheduled Fees</span><strong>{money(account.scheduledFees)}</strong></div>
               {account.totalFine ? <div><span>Fine</span><strong>{formatCurrency(account.totalFine)}</strong></div> : null}
-              <div><span>Total Payable</span><strong>{formatCurrency(account.totalPayable)}</strong></div>
-              <div><span>Total Paid</span><strong>{formatCurrency(account.totalPaid)}</strong></div>
-              <div><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
+              <div><span>Total Payable</span><strong>{money(account.totalPayable)}</strong></div>
+              <div><span>Total Paid</span><strong>{money(account.totalPaid)}</strong></div>
+              <div><span>Outstanding Balance</span><strong>{money(account.balance)}</strong></div>
               <div><span>Payment Plan</span><strong>{account.paymentPlan ? feeScheduleLabel(account.paymentPlan) : "-"}</strong></div>
               <div><span>Fee Status</span><strong><StatusBadge status={account.feeStatus} /></strong></div>
             </div>
@@ -2398,20 +2397,20 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                   {account.feeItems.map((item) => (
                     <tr key={item.id}>
                       <td><strong>{item.type}</strong></td>
-                      <td className="num">{formatCurrency(item.originalAmount)}</td>
+                      <td className="num">{money(item.originalAmount)}</td>
                       <td>{item.concessionName || "-"} {item.concessionValue ? `(${item.concessionType === "Percentage" ? `${item.concessionValue}%` : formatCurrency(item.concessionValue)})` : ""}</td>
-                      <td className="num">{formatCurrency(item.concessionAmount)}</td>
-                      <td className="num"><strong>{formatCurrency(item.payableAmount)}</strong></td>
+                      <td className="num">{money(item.concessionAmount)}</td>
+                      <td className="num"><strong>{money(item.payableAmount)}</strong></td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td><strong>Total Fee</strong></td>
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.original)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.original)}</strong></td>
                     <td />
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.concession)}</strong></td>
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.concession)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
               </table>
@@ -2848,6 +2847,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           if (String(current.groupId) !== String(groupId)) return current;
           const selectedProgram = options.find((item) => item.value === String(current.programId));
           if (selectedProgram) return { ...current, program: selectedProgram.label };
+          if (initial?.id) return current;
           return {
             ...current,
             programId: options[0]?.value || "",
@@ -2863,7 +2863,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         if (programRequestRef.current === requestId) setProgramLoading(false);
       });
     return () => { programRequestRef.current += 1; };
-  }, [values.groupId]);
+  }, [values.groupId, initial?.id]);
 
   const feeItemsForContext = (currentItems = []) => (
     feeItemsWithMasterRows(feeTypes, currentItems)
@@ -2935,7 +2935,6 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       return {
         ...(values.structureName ? { structureName: values.structureName } : {}),
         ...(values.description ? { description: values.description } : {}),
-        ...(programId ? { programId } : {}),
         isActive: values.status !== "Inactive",
       };
     }
@@ -3039,7 +3038,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       <div className="cms-form-grid cols-3">
         <div className="cms-field">
           <label htmlFor="fs-board">Board <span className="req">*</span></label>
-          <select id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)}>
+          <select id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)} disabled={Boolean(initial?.id)}>
             <option value="">{masterErrors.boards ? "Unable to load boards" : masterLoading && !masters.boards.length ? "Loading boards..." : masters.boards.length ? "Select Board" : "No boards available"}</option>
             {masters.boards.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
@@ -3049,7 +3048,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           {!initial ? <>
             <input id="fs-year" readOnly value={values.academicYear || (values.academicYearId ? `Academic Year ${values.academicYearId}` : "")} placeholder="Select Academic Year in the top navbar" />
             {!values.academicYearId ? <span className="cms-error" role="alert">Select an academic year in the top navbar before adding a fee structure.</span> : null}
-          </> : <select id="fs-year" value={values.academicYearId || values.academicYear} onChange={(event) => {
+          </> : <select id="fs-year" disabled={Boolean(initial?.id)} value={values.academicYearId || values.academicYear} onChange={(event) => {
             update("academicYearId", event.target.value);
             update("academicYear", masters.years.find((item) => item.value === event.target.value)?.label || event.target.value);
           }}>
@@ -3059,7 +3058,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         </div>
         <div className="cms-field">
           <label htmlFor="fs-group">Group <span className="req">*</span></label>
-          <select id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={!values.boardId || !values.academicYearId || groupLoading || Boolean(groupError)}>
+          <select id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={Boolean(initial?.id) || !values.boardId || !values.academicYearId || groupLoading || Boolean(groupError)}>
             <option value="">{!values.boardId || !values.academicYearId ? "Select Board/Year first" : groupError ? "Unable to load groups" : groupLoading ? "Loading groups..." : groupOptions.length ? "Select Group" : "No groups available"}</option>
             {groupOptions.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}
           </select>
@@ -3067,13 +3066,15 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         </div>
         <div className="cms-field">
           <label htmlFor="fs-program">Program</label>
-          <select id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={!values.groupId || programLoading || !programOptions.length}>
+          <select id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={Boolean(initial?.id) || !values.groupId || programLoading || !programOptions.length}>
+            {initial?.id && values.programId && !programOptions.some(program => String(program.value) === String(values.programId)) ? <option value={values.programId}>{values.program || "Saved program"}</option> : null}
             <option value="">{!values.groupId ? "Select Group first" : programLoading ? "Loading programs..." : programError ? "Unable to load programs" : programOptions.length ? "Select Program" : "No programs available"}</option>
             {programOptions.map((program) => <option key={program.value} value={program.value}>{program.label}</option>)}
           </select>
           {programError ? <span className="cms-error" role="alert">{programError}</span> : null}
         </div>
       </div>
+      {initial?.id ? <p className="cms-fee-note">Board, academic year, group and program are fixed for saved structures. Edit the fee amounts and rules below.</p> : <p className="cms-fee-note">{yearFeeMode === "different" ? "Different Fees: the second-year total is calculated when saved, including admission-fee exclusions and the requested increment." : "Same Fees: both years use the configured active fees."}</p>}
       <div className="cms-fee-structure-items">
         <div className="cms-fee-structure-items-head">
           <h4>Configured Fee Types</h4>
@@ -3677,19 +3678,30 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
   const [actionTarget, setActionTarget] = useState(null);
-  const [selectedYearFeeMode, setYearFeeMode] = useState(null);
-  const savedYearFeeMode = useMemo(() => {
-    const modes = new Set(structures.map((row) => String(row.yearFeeMode || "").trim().toLowerCase())
-      .filter((mode) => mode === "same" || mode === "different"));
-    // Conflicting per-structure modes do not define a single saved selection.
-    return modes.size === 1 ? [...modes][0] : "";
-  }, [structures]);
-  const yearFeeMode = selectedYearFeeMode ?? savedYearFeeMode;
+  const [yearFeeMode, setYearFeeMode] = useState("");
   const [yearIncrementType, setYearIncrementType] = useState("percentage");
   const [yearIncrementValue, setYearIncrementValue] = useState("");
   const [yearIncrementError, setYearIncrementError] = useState("");
   const [firstYearTotal, setFirstYearTotal] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const summaryScopeKey = JSON.stringify([
+    selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "",
+    masters.selectedBoardId ?? "",
+    masters.selectedAcademicYearId ?? "",
+  ]);
+  const [summarySelection, setSummarySelection] = useState({ id: "", scopeKey: "" });
+  const summaryStructureId = summarySelection.scopeKey === summaryScopeKey ? summarySelection.id : "";
+  const summaryStructure = structures.find(row => String(row.id) === summaryStructureId);
+  const savedSummary = savedStructureSummary(summaryStructure, structures);
+  const summaryMoney = value => value === undefined ? "Unavailable" : formatCurrency(value);
+
+  useEffect(() => {
+    if (summarySelection.scopeKey !== summaryScopeKey
+      || (!loading && !error && summarySelection.id && !summaryStructure)) {
+      setSummarySelection({ id: "", scopeKey: summaryScopeKey });
+    }
+  }, [summaryScopeKey, summarySelection, summaryStructure, loading, error]);
 
   const [loadingEditId, setLoadingEditId] = useState("");
   const [deletingId, setDeletingId] = useState("");
@@ -3703,6 +3715,10 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   }, [page, totalPages]);
 
   const copyStructure = (row) => {
+    if (row.feeItems?.some(item => item.feeTypeNameMissing)) {
+      onToast("This structure has unresolved fee types. Their names and mappings must be corrected before copying.");
+      return;
+    }
     if (!row.feeItems?.length || row.feeItems.some((item) => item.originalAmount === undefined)) {
       onToast("Saved fee details are unavailable. Reload the fee structure before copying.");
       return;
@@ -3789,6 +3805,10 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
       onToast("Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.");
       return;
     }
+    if (yearFeeMode === "different" && (yearIncrementValue === "" || yearPreviewError)) {
+      setYearIncrementError("Enter a valid, non-negative increment value before adding a structure.");
+      return;
+    }
     setFirstYearTotal(0);
     setIsAdding(true);
     setEditing({});
@@ -3797,8 +3817,8 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   return (
     <>
       <section className="cms-fee-year-config cms-fee-year-page" aria-labelledby="fs-year-config-title">
-        <h4 id="fs-year-config-title">Fee Configuration by Year</h4>
-        <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        <h4 id="fs-year-config-title">Year Configuration for New Structures</h4>
+        <p className="cms-fee-year-helper">Choose Same Fees or Different Fees before adding a structure. These settings apply when creating a new structure. Existing saved structures keep their own year configuration.</p>
         <fieldset className="cms-fee-year-options">
           <legend className="cms-sr-only">Year fee configuration</legend>
           {[ ["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"] ].map(([mode, label]) => (
@@ -3831,16 +3851,24 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
             </div>
           </div>
         ) : null}
-        <h4>Fee Summary</h4>
-        <p className="cms-fee-year-helper">{isAdding ? "Current unsaved Add Fee Structure draft." : "No active fee structure draft."}</p>
+        <h4>{isAdding ? "New Structure Fee Preview" : "Saved Fee Summary"}</h4>
+        {!isAdding ? <label className="cms-fee-filter">
+          <span>Saved fee structure</span>
+          <select value={summaryStructure?.id || ""} onChange={event => setSummarySelection({ id: event.target.value, scopeKey: summaryScopeKey })} disabled={loading}>
+            <option value="">Select Fee Structure</option>
+            {structures.map(row => <option key={row.id} value={row.id}>{[row.structureName, row.academicYear, row.group, row.program, row.academicLevelName].filter(Boolean).join(" / ")}</option>)}
+          </select>
+        </label> : null}
+        {!isAdding && !loading && !error && summaryStructure ? <p className="cms-fee-year-helper">Saved configuration: {String(summaryStructure.yearFeeMode).toLowerCase() === "same" ? "Same Fees" : String(summaryStructure.yearFeeMode).toLowerCase() === "different" ? `Different Fees — ${summaryStructure.incrementValue == null ? "increment unavailable" : String(summaryStructure.incrementType).toLowerCase() === "percentage" ? `${summaryStructure.incrementValue}% increment` : `${formatCurrency(summaryStructure.incrementValue)} increment`}` : "Not configured"}. Total for selected record: {summaryMoney(summaryStructure.totalFee)}.</p> : null}
+        <p className="cms-fee-year-helper">{isAdding ? "Current unsaved Add Fee Structure draft." : loading ? "Loading saved fee structures..." : error || (summaryStructure ? "Saved totals for the selected fee structure and its linked academic year level. Unavailable means no saved total was returned." : structures.length ? "Select a saved fee structure to view its year totals." : "No saved fee structures found.")}</p>
         <dl className="cms-fee-year-summary" aria-live="polite">
-          <div><dt>1st-Year Total Fee</dt><dd>{formatCurrency(firstYearTotal)}</dd></div>
-          {yearFeeMode === "different" ? <>
+          <div><dt>1st-Year Total Fee</dt><dd>{isAdding ? formatCurrency(firstYearTotal) : !summaryStructure ? formatCurrency(0) : loading || error ? "Unavailable" : summaryMoney(savedSummary.first)}</dd></div>
+          {isAdding && yearFeeMode === "different" ? <>
             <div><dt>Increment Type</dt><dd>{yearIncrementType === "percentage" ? "Percentage" : "Fixed Amount"}</dd></div>
             <div><dt>Increment Value</dt><dd>{yearPreviewError ? "-" : yearIncrementType === "percentage" ? `${Number(yearIncrementValue || 0)}%` : formatCurrency(yearIncrementValue || 0)}</dd></div>
             <div><dt>2nd-Year Increment</dt><dd>{yearPreviewError ? "-" : formatCurrency(secondYearIncrement)}</dd></div>
           </> : null}
-          <div className="cms-fee-year-total"><dt>2nd-Year Total Fee</dt><dd>{yearFeeMode === "different" && yearPreviewError ? "-" : formatCurrency(secondYearTotal)}</dd></div>
+          <div className="cms-fee-year-total"><dt>2nd-Year Total Fee</dt><dd>{isAdding ? yearFeeMode === "different" ? "Calculated when saved" : formatCurrency(secondYearTotal) : !summaryStructure ? formatCurrency(0) : loading || error ? "Unavailable" : summaryMoney(savedSummary.second)}</dd></div>
         </dl>
       </section>
     <div className="cms-card">
@@ -3903,6 +3931,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
                         </span>
                       ))}
                       {!feeItems.length ? <span>{row.feeDetailsError ? "Fee details unavailable" : "No saved fee types returned"}</span> : null}
+                      {feeItems.some(item => item.feeTypeNameMissing) ? <small className="cms-error">Some saved fee names could not be resolved. Fee mapping needs correction.</small> : null}
                       {row.feeDetailsError ? <small className="cms-error">{row.feeDetailsError}</small> : null}
                     </div>
                   </td>
@@ -4643,6 +4672,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const [dueRows, setDueRows] = useState([]);
   const [, setOverviewError] = useState("");
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [selectedDetailError, setSelectedDetailError] = useState("");
   const [pendingPrintId, setPendingPrintId] = useState(null);
   const [selectedDetailVersion, setSelectedDetailVersion] = useState(0);
   const [paymentHistoryExtras, setPaymentHistoryExtras] = useState([]);
@@ -4683,7 +4713,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const overviewAccounts = ledgerAccounts;
   const selectedAccounts = selectedSource === "collection" ? [...collectionAccounts, ...ledgerAccounts] : [...ledgerAccounts, ...collectionAccounts];
   const selectedBase = selectedId ? selectedAccounts.find((item) => item.id === selectedId) : null;
-  const selectedRaw = selectedDetail || selectedBase;
+  const selectedRaw = selectedDetail && String(selectedDetail.id) === String(selectedBase?.id) ? selectedDetail : null;
   const selected = selectedRaw ? applyFineRulesToAccount(selectedRaw, fineRules) : null;
   const modalOpen = Boolean(collecting || receipt);
   const paymentHistoryRows = useMemo(() => {
@@ -4745,7 +4775,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       const response = await apiClient.get(endpoint, {
         params: cleanParams({
           campusId: selectedCampusValue,
-          academicYearId: source === "ledger" ? selectedAcademicYearId : "",
+          boardId: selectedBoardId,
+          academicYearId: selectedAcademicYearId,
         }),
       });
       if (accountRequestRef.current[source] !== requestId) return;
@@ -4777,6 +4808,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           feeDetailCacheRef.current.set(endpoint, detailRequest);
         }
         const detail = await detailRequest;
+        if (Object.keys(detail).length) assertFeeDetailIdentity(detail, account);
         return { account, detail };
       }));
       if (accountRequestRef.current[source] !== requestId) return;
@@ -4804,7 +4836,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         setAccountLoading((current) => ({ ...current, [source]: false }));
       }
     }
-  }, [loadAccountContext, selectedAcademicYearId, selectedCampusValue]);
+  }, [loadAccountContext, selectedAcademicYearId, selectedBoardId, selectedCampusValue]);
 
   const loadOverviewData = useCallback(async () => {
     const requestId = overviewRequestRef.current + 1;
@@ -5023,14 +5055,25 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   useEffect(() => {
     let ignore = false;
     setSelectedDetail(null);
-    if (!selectedId || !selectedBase?.studentId) return undefined;
+    setSelectedDetailError("");
+    if (!selectedId || !selectedBase) return undefined;
+    if (!selectedBase.studentId) {
+      setSelectedDetailError("The selected fee record has no student ID. Refresh the list and try again.");
+      return undefined;
+    }
     const loadSelectedDetail = async () => {
       const studentDetailResult = await apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(selectedBase.studentId)).then(
         (response) => ({ status: "fulfilled", response }),
         (error) => ({ status: "rejected", error }),
       );
       if (ignore) return;
-      let detail = studentDetailResult.status === "fulfilled" ? getObject(studentDetailResult.response?.data) : {};
+      if (studentDetailResult.status === "rejected") {
+        setSelectedDetailError(getApiErrorMessage(studentDetailResult.error));
+        return;
+      }
+      let detail = getObject(studentDetailResult.response?.data);
+      try { assertFeeDetailIdentity(detail, selectedBase); }
+      catch (failure) { setSelectedDetailError(failure.message); return; }
       const hasPayments = feeDetailPaymentRows(detail).length > 0;
       if (!hasPayments && Number(selectedBase.totalPaid || 0) > 0) {
         const historyResult = await apiClient.get(apiEndpoints.fee.getHistory(selectedBase.studentId)).then(
@@ -5050,10 +5093,6 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           feeDetailsByStudentId: new Map([[String(selectedBase.studentId), detail]]),
         });
         setSelectedDetail(normalized || selectedBase);
-      }
-      const primaryError = studentDetailResult.status === "rejected" ? studentDetailResult.error : null;
-      if (primaryError) {
-        setAccountErrors((current) => ({ ...current, ledger: current.ledger || getApiErrorMessage(primaryError) }));
       }
     };
     loadSelectedDetail();
@@ -5230,6 +5269,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           masterErrors={masterErrors}
         />
       ) : null}
+      {tab === "Student Fee Ledger" && selectedBase && !selected ? <div className="cms-card cms-card-body" role="status">
+        <p>{selectedDetailError || "Loading saved student fee details..."}</p>
+        {selectedDetailError ? <button className="cms-btn cms-btn-ghost" onClick={() => setSelectedDetailVersion(value => value + 1)}>Retry</button> : null}
+        <button className="cms-btn cms-btn-ghost" onClick={() => { navigateFeeAccount(null); setCollecting(false); }}>Back</button>
+      </div> : null}
       {tab === "Student Fee Ledger" && selected && !collecting ? (
         <StudentFeeAccountScreen
           account={{ ...selected, transactions: selected.transactions.map(withConfirmedReversal) }}
@@ -5242,7 +5286,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           reversalBlocked={reversalBlocked}
         />
       ) : null}
-      {tab === "Student Fee Ledger" && (!selected || collecting) ? (
+      {tab === "Student Fee Ledger" && ((!selected && !selectedBase) || collecting) ? (
         <StudentFeeLedgerSection
           ledgerTab={ledgerTab}
           onLedgerTabChange={setLedgerTab}
