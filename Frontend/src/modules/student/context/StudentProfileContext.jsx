@@ -18,6 +18,116 @@ const list = (data) => {
   return [];
 };
 const readVal = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
+const facilityRows = (payload, kind) => {
+  const value = payload?.data?.data ?? payload?.data ?? payload?.Data ?? payload ?? {};
+  if (Array.isArray(value)) return value;
+  const collection = value?.items ?? value?.Items ?? value?.records ?? value?.Records ?? value?.allocations ?? value?.Allocations;
+  if (Array.isArray(collection)) return collection;
+  const record = kind === "transport" ? value?.transport ?? value?.Transport ?? value?.assignment ?? value?.Assignment : null;
+  return record ? [record] : [value];
+};
+const activeFacility = (row) => {
+  const status = readVal(row, "status", "Status", "allocationStatus", "AllocationStatus", "assignmentStatus", "AssignmentStatus", "isActive", "IsActive");
+  const access = readVal(row, "hasTransportAccess", "HasTransportAccess");
+  if (/^(false|0)$/i.test(String(access))) return false;
+  return /^(active|true|1|assigned|approved|allocated|running)$/i.test(String(status ?? "")) || (status == null && /^(true|1)$/i.test(String(access ?? "")));
+};
+const matchesStudent = (row, student, requireId = false) => {
+  const id = readVal(row, "studentId", "StudentId");
+  const admission = readVal(row, "admissionNo", "AdmissionNo");
+  if (id != null && Number(id) > 0) return String(Number(id)) === String(Number(student.studentId));
+  if (admission != null && student.admissionNo) return String(admission).trim().toLowerCase() === String(student.admissionNo).trim().toLowerCase();
+  return !requireId;
+};
+const hasFacility = (row, kind) => activeFacility(row) && Boolean(kind === "hostel"
+  ? readVal(row, "hostelId", "HostelId", "allocationId", "AllocationId", "roomId", "RoomId")
+  : readVal(row, "assignmentId", "AssignmentId", "studentTransportAssignmentId", "StudentTransportAssignmentId", "routeId", "RouteId", "routeName", "RouteName", "vehicleNumber", "VehicleNumber", "busNumber", "BusNumber"));
+const evaluateStudentFacility = (student, transportResult, hostelResult) => {
+  if (!student) return { type: "none", hostelAllocation: null, transportAllocation: null };
+
+  const read = (...keys) => keys.map((key) => student?.[key]).find((value) => value != null && value !== "");
+
+  // 1. Hostel allocation from API
+  let activeHostel = null;
+  if (hostelResult?.status === "fulfilled") {
+    const hostelRows = facilityRows(hostelResult.value, "hostel");
+    activeHostel = hostelRows.find((row) => row && matchesStudent(row, student, true) && hasFacility(row, "hostel")) || null;
+  }
+
+  // 2. Profile hostel indicators (from /api/v1/students/me)
+  const studentType = String(read("studentType", "StudentType", "residentialType", "ResidentialType", "isResidential", "IsResidential") || "").toLowerCase();
+  const isResidential = ["residential", "hostel", "hosteller", "true", "2"].includes(studentType);
+  const hostelBlock = read("hostelBlock", "HostelBlock", "hostelName", "HostelName");
+  const hostelRoom = read("hostelRoom", "HostelRoom", "roomNumber", "RoomNumber", "roomNo", "RoomNo");
+  const hostelBed = read("hostelBed", "HostelBed", "bedNumber", "BedNumber", "bedNo", "BedNo");
+  const hostelId = read("hostelId", "HostelId");
+  const hasProfileHostel = Boolean(hostelId || hostelBlock || hostelRoom || isResidential);
+
+  if (!activeHostel && hasProfileHostel) {
+    activeHostel = {
+      hostelId: hostelId || 1,
+      hostelName: hostelBlock || "Hostel",
+      hostelBlockName: hostelBlock || "Hostel Block",
+      roomNumber: hostelRoom || "Assigned Room",
+      roomTypeName: hostelRoom || "Standard Room",
+      bedNumber: hostelBed || "—",
+      floorLevel: read("floorLevel", "FloorLevel", "floor", "Floor") || "—",
+      joiningDate: read("joiningDate", "JoiningDate", "allocationDate", "AllocationDate", "admissionDate", "AdmissionDate") || "",
+      status: read("status", "Status", "allocationStatus", "AllocationStatus") || "Active",
+    };
+  }
+
+  // 3. Transport allocation from API
+  let activeTransport = null;
+  if (transportResult?.status === "fulfilled") {
+    const transportRows = facilityRows(transportResult.value, "transport");
+    activeTransport = transportRows.find((row) => row && matchesStudent(row, student) && hasFacility(row, "transport")) || null;
+  }
+
+  // 4. Profile transport indicators
+  const transReq = read("transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired");
+  const isTransportRequired = /^(true|1|yes)$/i.test(String(transReq));
+  const routeId = read("routeId", "RouteId", "busRouteId", "BusRouteId");
+  const busRoute = read("busRoute", "BusRoute", "routeName", "RouteName");
+  const pickupPoint = read("pickupPoint", "PickupPoint", "pickupPointName", "PickupPointName");
+  const busType = read("busType", "BusType", "vehicleType", "VehicleType");
+  const hasProfileTransport = Boolean((isTransportRequired && !isResidential) || routeId || busRoute || pickupPoint);
+
+  if (!activeTransport && hasProfileTransport) {
+    activeTransport = {
+      routeId: routeId || "",
+      routeName: busRoute || "Assigned Bus Route",
+      pickupPointName: pickupPoint || "Assigned Stop",
+      busType: busType || "College Bus",
+      status: "Active",
+    };
+  }
+
+  // 5. Exclusivity resolution
+  const isHostel = Boolean(activeHostel);
+  const isTransport = Boolean(activeTransport);
+
+  let type = "none";
+  if (isHostel && !isTransport) {
+    type = "hostel";
+  } else if (isTransport && !isHostel) {
+    type = "transport";
+  } else if (isHostel && isTransport) {
+    if (isResidential && !isTransportRequired) {
+      type = "hostel";
+    } else if (isTransportRequired && !isResidential) {
+      type = "transport";
+    } else {
+      const hostelDate = Date.parse(activeHostel.joiningDate || activeHostel.allocationDate || 0) || 0;
+      const transportDate = Date.parse(activeTransport.startDate || activeTransport.effectiveFrom || 0) || 0;
+      type = transportDate > hostelDate ? "transport" : "hostel";
+    }
+  } else {
+    type = "none";
+  }
+
+  return { type, hostelAllocation: activeHostel, transportAllocation: activeTransport };
+};
 
 export function StudentProfileProvider({ children }) {
   const [profile, setProfile] = useState(null);
@@ -27,6 +137,7 @@ export function StudentProfileProvider({ children }) {
   const [notifications, setNotifications] = useState([]);
   const [readNotifIds, setReadNotifIds] = useState([]);
   const [dismissedNotifIds, setDismissedNotifIds] = useState([]);
+  const [facilityAccess, setFacilityAccess] = useState({ loading: true, type: null });
 
   useEffect(() => {
     const path = profile?.photo;
@@ -60,6 +171,29 @@ export function StudentProfileProvider({ children }) {
   }, []);
 
   useEffect(() => { refreshProfile().catch(() => {}); }, [refreshProfile]);
+
+  useEffect(() => {
+    let active = true;
+    if (!profile?.studentId) {
+      setFacilityAccess({ loading: false, type: "none", hostelAllocation: null, transportAllocation: null });
+      return () => { active = false; };
+    }
+    setFacilityAccess({ loading: true, type: null, hostelAllocation: null, transportAllocation: null });
+    Promise.allSettled([
+      apiClient.get(studentApiEndpoints.transport.studentDetails, { params: { studentId: profile.studentId, academicYear: profile.academicYearName } }),
+      apiClient.get(studentApiEndpoints.hostel.studentAllocations, { params: { studentId: profile.studentId, status: "Active" } }),
+    ]).then(([transportResult, hostelResult]) => {
+      if (!active) return;
+      const evaluation = evaluateStudentFacility(profile, transportResult, hostelResult);
+      setFacilityAccess({
+        loading: false,
+        type: evaluation.type,
+        hostelAllocation: evaluation.hostelAllocation,
+        transportAllocation: evaluation.transportAllocation,
+      });
+    });
+    return () => { active = false; };
+  }, [profile]);
 
   // Load read and dismissed notification IDs from storage when profile loads
   useEffect(() => {
@@ -219,7 +353,7 @@ export function StudentProfileProvider({ children }) {
   const activeAlerts = useMemo(() => enrichedNotifications.filter((n) => !dismissedNotifIds.includes(n.id)), [enrichedNotifications, dismissedNotifIds]);
 
   const value = useMemo(() => ({
-    profile, loading, error, refreshProfile, applyPhotoRemoval,
+    profile, loading, error, refreshProfile, applyPhotoRemoval, facilityAccess,
     photoUrl: photo.path === profile?.photo ? photo.url : "",
     photoError: photo.path === profile?.photo ? photo.error : "",
     photoLoading: photo.path === profile?.photo && photo.loading,
@@ -231,7 +365,7 @@ export function StudentProfileProvider({ children }) {
     dismissNotification,
     refreshNotifications,
   }), [
-    profile, loading, error, refreshProfile, photo, applyPhotoRemoval,
+    profile, loading, error, refreshProfile, photo, applyPhotoRemoval, facilityAccess,
     enrichedNotifications, unreadCount, activeAlerts,
     markAsRead, markAllAsRead, dismissNotification, refreshNotifications,
   ]);

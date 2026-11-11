@@ -9,7 +9,7 @@ import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/u
 import { hasRole, usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { getPaymentGatewayConfigApi, updatePaymentGatewayConfigApi } from "@/api/feePaymentGatewayApi.js";
-import { hasPaymentReversalRole, PAYMENT_CONFIG_DEFAULTS, paymentConfigErrors, paymentConfigPayload } from "../AdminFees/services/paymentGatewaySession.js";
+import { hasPaymentReversalRole, PAYMENT_CONFIG_DEFAULTS, PAYMENT_CONFIG_SECTIONS, paymentConfigErrors, paymentConfigPayload } from "../AdminFees/services/paymentGatewaySession.js";
 import "./PaymentGatewayConfigPage.css";
 
 const tabs = [
@@ -52,6 +52,12 @@ function configFailure(error) {
   return getApiErrorMessage(error);
 }
 
+function maskedBankAccount(value) {
+  const number = String(value || "").trim();
+  if (!number) return "Not supplied";
+  return number.length > 4 && /\d{4}$/.test(number) ? `XXXXXXXX${number.slice(-4)}` : "Account number hidden";
+}
+
 function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
   const retained = drafts?.get(campusId);
   const [tab, setTab] = useState("bank");
@@ -66,6 +72,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
   const [errors, setErrors] = useState({});
   const [confirmation, setConfirmation] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const [bankSelected, setBankSelected] = useState(false);
   const alive = useRef(false);
   const request = useRef(null);
   const guard = useRef(false);
@@ -79,7 +86,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
     alive.current = true;
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true); setReady(false);
+    setLoading(true); setReady(false); setBankSelected(false);
     getPaymentGatewayConfigApi(campusId, controller.signal).then((data) => {
       if (!controller.signal.aborted) {
         // A late response or explicit refresh must not overwrite an entered draft.
@@ -105,30 +112,44 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
     setForm((current) => ({ ...current, [key]: value }));
     setErrors((current) => {
       const conditionalErrors = key === "enableCounterUpiQr"
-        ? paymentConfigErrors({ ...form, enableCounterUpiQr: value }) : null;
+        ? paymentConfigErrors({ ...form, enableCounterUpiQr: value }, tab) : null;
       return { ...current, [key]: "", ...(conditionalErrors ? {
         payeeVpa: current.payeeVpa ? conditionalErrors.payeeVpa || "" : "",
         payeeName: current.payeeName ? conditionalErrors.payeeName || "" : "",
       } : {}) };
     });
   };
-  const validateField = (key) => setErrors((current) => ({ ...current, [key]: paymentConfigErrors(form)[key] || "" }));
+  const validateField = (key) => setErrors((current) => ({ ...current, [key]: paymentConfigErrors(form, tab)[key] || "" }));
   const save = async () => {
-    if (guard.current || !ready || !editable) return;
+    if (guard.current || !ready || !editable || !saved || Number(saved.campusId) !== Number(campusId)) return;
+    const section = tab;
+    const sectionKeys = PAYMENT_CONFIG_SECTIONS[section];
+    const combined = { ...saved, ...Object.fromEntries(sectionKeys.map((key) => [key, form[key]])), campusId };
+    // The current POST replaces bank fields, so a masked GET value cannot be replayed safely.
+    if (combined.accountNumber && !/^\d{6,34}$/.test(combined.accountNumber)) {
+      setMessage({ error: true, text: "The saved account number is masked or incomplete. Re-enter and confirm the full number in College Bank Account before saving, or ask the backend team to support preserving masked bank details." });
+      return;
+    }
     guard.current = true; setSaving(true); setConfirmation(""); setMessage({ error: false, text: "" });
     const controller = new AbortController(); request.current = controller;
     try {
-      const payload = paymentConfigPayload(form, campusId);
-      await updatePaymentGatewayConfigApi(form, controller.signal);
+      const payload = paymentConfigPayload(combined, campusId, section);
+      await updatePaymentGatewayConfigApi(combined, controller.signal, section);
       if (controller.signal.aborted) return;
       const persisted = await getPaymentGatewayConfigApi(campusId, controller.signal);
       if (controller.signal.aborted) return;
       const same = Object.entries(payload).every(([key, value]) => key === "razorpayKeySecret" ? persisted.hasRazorpayKeySecret
         : key === "razorpayWebhookSecret" ? persisted.hasRazorpayWebhookSecret : String(persisted[key] ?? "") === String(value ?? ""));
-      if (!same) throw new Error("The reloaded configuration differs from the submitted settings. Review it before trying again.");
-      dirty.current = false; editedFields.current.clear(); drafts?.delete(campusId); setRevealed({});
-      setForm(persisted); setSaved(persisted); setErrors({});
-      setMessage({ error: false, text: `Payment settings saved and reloaded for ${campusName}.` });
+      const secretsPreserved = ["hasRazorpayKeySecret", "hasRazorpayWebhookSecret"].every((flag) => !saved[flag] || persisted[flag]);
+      if (!same || !secretsPreserved) throw new Error("The reloaded configuration differs from the submitted settings. Review it before trying again.");
+      sectionKeys.forEach((key) => editedFields.current.delete(key));
+      dirty.current = editedFields.current.size > 0;
+      setRevealed({});
+      setForm((current) => ({ ...persisted, ...Object.fromEntries(
+        [...editedFields.current].map((key) => [key, current[key]]),
+      ) }));
+      setSaved(persisted); setErrors({});
+      setMessage({ error: false, text: `${tabs.find(([id]) => id === section)[1]} settings saved successfully.` });
     } catch (error) {
       if (!controller.signal.aborted) {
         let text = configFailure(error);
@@ -146,14 +167,13 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
   const submit = (event) => {
     event.preventDefault();
     if (!ready || !editable || saving || confirmation) return;
-    const invalid = paymentConfigErrors(form); setErrors(invalid);
+    const invalid = paymentConfigErrors(form, tab); setErrors(invalid);
     if (Object.keys(invalid).length) {
-      setTab(Object.keys(fields).find((key) => fields[key].some(([field]) => invalid[field])) || "bank");
       setMessage({ error: true, text: "Correct the highlighted fields before saving." }); return;
     }
-    const accountChanged = saved && ["bankName", "accountHolderName", "accountNumber", "ifscCode", "accountType"].some((key) => form[key].trim() !== saved[key].trim());
-    if (accountChanged || (form.isLiveMode && !saved?.isLiveMode)) {
-      setConfirmation([accountChanged ? `Change the receiving bank account for ${campusName}?` : "", form.isLiveMode && !saved?.isLiveMode ? "Enable Live / Production mode? Subsequent gateway orders may collect real money." : ""].filter(Boolean).join(" "));
+    const accountChanged = tab === "bank" && saved && ["bankName", "accountHolderName", "accountNumber", "ifscCode", "accountType"].some((key) => form[key].trim() !== saved[key].trim());
+    if (accountChanged || (tab === "razorpay" && form.isLiveMode && !saved?.isLiveMode)) {
+      setConfirmation([accountChanged ? `Change the receiving bank account for ${campusName}?` : "", tab === "razorpay" && form.isLiveMode && !saved?.isLiveMode ? "Enable Live / Production mode? Subsequent gateway orders may collect real money." : ""].filter(Boolean).join(" "));
     } else save();
   };
   const copyWebhook = async () => {
@@ -172,10 +192,14 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
     ifscCode: true, accountType: true,
     payeeVpa: form.enableCounterUpiQr, payeeName: form.enableCounterUpiQr,
     razorpayKeyId: form.enableRazorpay,
-    razorpayKeySecret: form.enableRazorpay || form.hasRazorpayKeySecret,
-    razorpayWebhookSecret: form.enableRazorpay || form.hasRazorpayWebhookSecret,
+    razorpayKeySecret: form.enableRazorpay && !form.hasRazorpayKeySecret,
+    razorpayWebhookSecret: form.enableRazorpay && !form.hasRazorpayWebhookSecret,
     pollingIntervalMs: true, monitoringTimeoutSeconds: true, frontendPort: true,
   };
+  // The config API returns one object, not a bank-account list or an active-account ID.
+  // Count only bank data in the successfully loaded campus configuration, never a draft.
+  const bankAvailable = ready && !loading && !accessDenied && Number(saved?.campusId) === Number(campusId);
+  const hasConfiguredBank = bankAvailable && Boolean(saved.bankName || saved.accountNumber || saved.accountHolderName || saved.ifscCode);
   return <section className="cms-payment-config">
     <div className="cms-payment-config-head"><div><h2>{campusName}</h2><p>Receiving accounts and payment processing · Campus {campusId}</p></div>
       <button type="button" className="cms-btn cms-btn-ghost" disabled={loading || saving || Boolean(confirmation)} onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={15} /> Refresh</button></div>
@@ -184,8 +208,32 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
     {loading && <p role="status">Loading this campus's saved payment configuration…</p>}
     {editable && !accessDenied && <p className="cms-payment-config-note">Unsaved drafts stay in memory for each campus while this page is open. Switching campuses retains them; leaving or reloading the page clears them. {(!ready || loading) && "You can enter and review a draft, but Save is unavailable until this campus's configuration loads successfully."}</p>}
     <div className="cms-payment-config-tabs" role="tablist" aria-label="Payment configuration">
-      {tabs.map(([id, label, Icon]) => <button key={id} id={`payment-tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls="payment-settings-panel" className={`cms-btn ${tab === id ? "cms-btn-primary" : "cms-btn-ghost"}`} onClick={() => setTab(id)}><Icon size={15} /> {label}</button>)}
+      {tabs.map(([id, label, Icon]) => <button key={id} id={`payment-tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls="payment-settings-panel" className={`cms-btn ${tab === id ? "cms-btn-primary" : "cms-btn-ghost"}`} disabled={saving || Boolean(confirmation)} onClick={() => { setTab(id); setErrors({}); }}><Icon size={15} /> {label}</button>)}
     </div>
+    {tab === "bank" && <section className="cms-payment-bank-accounts" aria-labelledby="payment-bank-accounts-title">
+      <div className="cms-payment-bank-summary">
+        <div><h3 id="payment-bank-accounts-title">College Bank Accounts</h3><p>Configured account: <strong data-bank-account-count>{bankAvailable ? hasConfiguredBank ? 1 : 0 : "Unavailable"}</strong></p></div>
+        <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">+ Add Bank Account</button>
+      </div>
+      <p id="payment-bank-support" className="cms-payment-config-note">Only one bank account is exposed by the current campus configuration API. A full account list, total saved-account count, and active-account status are not available. Adding another account or activating one requires backend support.</p>
+      {!bankAvailable ? <p>Load this campus's configuration to view its saved bank details.</p>
+        : !hasConfiguredBank ? <p>No bank details are configured for this campus. Use the existing form below to configure its receiving account.</p>
+          : <>
+            <h4>Saved Bank Account</h4>
+            <label className={`cms-payment-bank-card${bankSelected ? " is-selected" : ""}`}>
+              <input type="radio" name="payment-bank-view" checked={bankSelected} onChange={() => setBankSelected(true)} aria-controls="payment-bank-details" />
+              <span><strong>{saved.bankName || "Bank name not supplied"}</strong><span>{saved.accountType || "Account type not supplied"} · {maskedBankAccount(saved.accountNumber)}</span><span>{saved.accountHolderName || "Beneficiary not supplied"}</span><small>Configured · Active status not supplied</small></span>
+            </label>
+            {bankSelected && <div id="payment-bank-details" className="cms-payment-bank-details">
+              <h4>Selected Account Details</h4>
+              <dl>{[["Bank", saved.bankName], ["Beneficiary", saved.accountHolderName], ["Account", maskedBankAccount(saved.accountNumber)], ["IFSC", saved.ifscCode], ["Branch", saved.branchName], ["Account Type", saved.accountType], ["Offline UTR", saved.enableOfflineUtr ? "Enabled" : "Disabled"], ["Active Receiving Account", "Not reported by the backend"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not supplied"}</dd></div>)}</dl>
+              <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">Set as Active Receiving Account</button>
+              <p className="cms-payment-config-note">Selecting this card only shows saved details. It does not change the receiving account or discard your draft.</p>
+            </div>}
+          </>}
+      <p className="cms-payment-config-note">Changing bank details does not change the bank linked to a UPI ID or Razorpay's merchant settlement account. Those must be verified with the bank or payment provider.</p>
+      <h4>{hasConfiguredBank ? "Update Configured Bank Account" : "Bank Account Form"}</h4>
+    </section>}
     <form noValidate onSubmit={submit}>
       <fieldset disabled={saving || !editable || accessDenied || Boolean(confirmation)}>
         <div id="payment-settings-panel" role="tabpanel" aria-labelledby={`payment-tab-${tab}`}>
@@ -208,7 +256,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
       {tab === "razorpay" && <div className="cms-field cms-payment-config-webhook"><label htmlFor="payment-webhook">Backend Webhook URL</label><div><input id="payment-webhook" value={form.webhookUrl} readOnly placeholder="Not supplied by the backend" /><button type="button" className="cms-btn cms-btn-ghost" disabled={!ready || !webhookValid} onClick={copyWebhook}><Copy size={14} /> Copy</button></div><small>{webhookValid ? "Backend-provided HTTPS URL; public reachability and webhook registration require backend verification." : "A public HTTPS backend webhook URL is required. A frontend or LAN address cannot receive production Razorpay webhooks."}</small></div>}
       <p className="cms-payment-config-note">{tab === "bank" ? "One receiving account per campus. Bank details do not change Razorpay's onboarded merchant settlement account. UTR payments require reconciliation."
         : tab === "upi" ? "Displaying or scanning a QR never confirms payment. The backend must verify settlement before updating fees."
-          : tab === "razorpay" ? "Blank-secret preservation is not verified on this backend. Updates involving stored secrets require replacements; entered secrets remain only in the current page's memory until a confirmed save or leaving/reloading this page."
+          : tab === "razorpay" ? "Leave stored secrets blank to preserve them. Enter a replacement only when changing credentials; saved secrets are never displayed."
             : "These settings do not change the Vite proxy, API base URL or workstation network. Mobile checkout and backend LAN resolution must be supported separately."}</p>
       <div className="cms-payment-config-actions"><button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : "Save Settings"}</button></div>
     </form>
@@ -237,5 +285,5 @@ export default function PaymentGatewayConfigPage({ embedded = false }) {
       : !inScope ? <p role="alert">Select a permitted campus in the header. No default receiving account will be loaded. Assigned campus access must be present in your account.</p>
         : <CampusPaymentConfig key={`${campusId}:${canEdit}`} campusId={campusId} campusName={selectedCampus.name || selectedCampus.campusName || `Campus ${campusId}`} editable={canEdit} drafts={drafts.current} />;
   return embedded ? <><h1>Payment Gateway & Bank Accounts</h1>{content}</>
-    : <DashboardLayout title="Payment Gateway & Bank Accounts" subtitle="Configure campus receiving bank accounts and payment processing." breadcrumb={["Settings", "Payment Gateway"]}>{content}</DashboardLayout>;
+    : <DashboardLayout actions={<Link className="cms-btn cms-btn-ghost" to="/dashboard/settings">&larr; Back to Settings</Link>} title="Payment Gateway & Bank Accounts" subtitle="Configure campus receiving bank accounts and payment processing." breadcrumb={["Settings", "Payment Gateway"]}>{content}</DashboardLayout>;
 }

@@ -133,6 +133,30 @@ function getStudentTransportAssignmentId(record = {}) {
   return id === undefined || id === null || String(id).trim() === "" ? null : id;
 }
 
+function sortRecentlyAddedFirst(list) {
+  if (!Array.isArray(list)) return [];
+  return [...list].reverse().sort((a, b) => {
+    const aCreated = Date.parse(a.createdAt || a.CreatedAt || a.createdOn || a.CreatedOn || a.createdDate || a.CreatedDate || a.addedOn);
+    const bCreated = Date.parse(b.createdAt || b.CreatedAt || b.createdOn || b.CreatedOn || b.createdDate || b.CreatedDate || b.addedOn);
+    if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
+      return bCreated - aCreated;
+    }
+    const empA = String(a.employeeId || a.empId || a.routeCode || a.vehicleNumber || "").trim();
+    const empB = String(b.employeeId || b.empId || b.routeCode || b.vehicleNumber || "").trim();
+    const numA = parseInt(empA.replace(/\D/g, ""), 10);
+    const numB = parseInt(empB.replace(/\D/g, ""), 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return numB - numA;
+    }
+    const idA = Math.max(Number(a.transportDriverId) || 0, Number(a.staffId) || 0, Number(a.driverId) || 0, Number(a.routeId) || 0, Number(a.vehicleId) || 0, Number(a.pickupPointId) || 0, Number(a.id) || 0);
+    const idB = Math.max(Number(b.transportDriverId) || 0, Number(b.staffId) || 0, Number(b.driverId) || 0, Number(b.routeId) || 0, Number(b.vehicleId) || 0, Number(b.pickupPointId) || 0, Number(b.id) || 0);
+    if (idA !== idB && (idA > 0 || idB > 0)) {
+      return idB - idA;
+    }
+    return 0;
+  });
+}
+
 function getColumnValue(row, column) {
   let value = typeof column.value === "function" ? column.value(row) : row[column.key];
   if (column.currency) value = formatCurrency(value);
@@ -1204,7 +1228,7 @@ function TransportContextPage({ navigation, onNavigate }) {
               status: "Active",
             };
           });
-        setDrivers([...transportDrivers, ...staffDriverRows]);
+        setDrivers(sortRecentlyAddedFirst([...transportDrivers, ...staffDriverRows]));
       }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
@@ -2358,16 +2382,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     routes: {
       title: "Route Master",
       subtitle: "Manage transport route distance, timing and fare rules.",
-      rows: [...routes].reverse().sort((a, b) => {
-        const aCreated = Date.parse(a.createdAt);
-        const bCreated = Date.parse(b.createdAt);
-        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-          return bCreated - aCreated;
-        }
-        const aId = Number(a.id);
-        const bId = Number(b.id);
-        return Number.isFinite(aId) && Number.isFinite(bId) ? bId - aId : 0;
-      }),
+      rows: sortRecentlyAddedFirst(routes),
       fields: routeFields,
       addLabel: "Add Route",
       columns: [
@@ -2383,16 +2398,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     pickupPoints: {
       title: "Pickup Points",
       subtitle: "Maintain ordered pickup and drop timings route-wise.",
-      rows: [...pickupPoints].reverse().sort((a, b) => {
-        const aCreated = Date.parse(a.createdAt);
-        const bCreated = Date.parse(b.createdAt);
-        if (Number.isFinite(aCreated) && Number.isFinite(bCreated) && aCreated !== bCreated) {
-          return bCreated - aCreated;
-        }
-        const aId = Number(a.id);
-        const bId = Number(b.id);
-        return Number.isFinite(aId) && Number.isFinite(bId) ? bId - aId : 0;
-      }),
+      rows: sortRecentlyAddedFirst(pickupPoints),
       fields: pickupFields,
       addLabel: "Add Pickup",
       columns: [
@@ -2408,7 +2414,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     vehicles: {
       title: "Vehicle Master",
       subtitle: "Track buses, vans, capacities, GPS IDs and document validity.",
-      rows: vehicles,
+      rows: sortRecentlyAddedFirst(vehicles),
       fields: vehicleFields,
       addLabel: "Add Vehicle",
       columns: [
@@ -2424,7 +2430,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     drivers: {
       title: "Driver Master",
       subtitle: driverLoadError || "Drivers for the selected campus. Assign vehicles in Vehicle Assignment.",
-      rows: drivers,
+      rows: sortRecentlyAddedFirst(drivers),
       fields: driverFields,
       addLabel: undefined,
       columns: [
@@ -2439,7 +2445,7 @@ function TransportContextPage({ navigation, onNavigate }) {
     attendants: {
       title: "Bus Attendant Master",
       subtitle: "Manage attendant allocation-ready profiles.",
-      rows: attendants,
+      rows: sortRecentlyAddedFirst(attendants),
       fields: attendantFields,
       columns: [
         { key: "employeeId", label: "Employee ID", strong: true },

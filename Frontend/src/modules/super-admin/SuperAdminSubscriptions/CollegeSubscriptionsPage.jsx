@@ -9,10 +9,8 @@ import {
   AlertTriangle,
   Search,
   RotateCw,
-  Filter,
   List,
   LayoutGrid,
-  ChevronLeft,
   ChevronRight,
   X,
   Plus,
@@ -85,16 +83,11 @@ export default function CollegeSubscriptionsPage() {
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState("");
-  const [planFilter, setPlanFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState("");
   const [presetTab, setPresetTab] = useState("all"); // 'all', 'active', 'expiring', 'expired', 'free'
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState("list"); // 'list' or 'grid'
 
   // Sorting - default newest records at the top
-  const [sortField, setSortField] = useState("id");
-  const [sortOrder, setSortOrder] = useState("desc");
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -199,6 +192,7 @@ export default function CollegeSubscriptionsPage() {
           collegeName: c.name || matchedSub?.collegeName || "—",
           collegeCode: c.code || matchedSub?.collegeCode || "—",
           plan: planName,
+          planHistory: matchedSub?.planHistory || matchedSub?.subscriptionHistory || matchedSub?.history || [],
           activeAccounts: active,
           accountLimit: limit,
           startDate: rawStart ? rawStart.slice(0, 10) : "—",
@@ -239,6 +233,7 @@ export default function CollegeSubscriptionsPage() {
         collegeName: s.collegeName || s.name || "—",
         collegeCode: s.collegeCode || s.code || "—",
         plan: planName,
+        planHistory: s.planHistory || s.subscriptionHistory || s.history || [],
         activeAccounts: active,
         accountLimit: limit,
         startDate: rawStart ? rawStart.slice(0, 10) : "—",
@@ -249,6 +244,23 @@ export default function CollegeSubscriptionsPage() {
       };
     });
   }, [data.subscriptions, data.colleges]);
+
+  const getPlanHistory = (row) => {
+    const directHistory = Array.isArray(row.planHistory) ? row.planHistory : [];
+    const collegeKey = String(row.collegeId ?? "").replace(/^COL-0*/i, "").toLowerCase();
+    const collegeName = String(row.collegeName ?? "").trim().toLowerCase();
+    const auditHistory = (data.activities || []).filter((entry) => {
+      const description = `${entry.module || ""} ${entry.actionType || ""} ${entry.message || ""}`.toLowerCase();
+      if (!/plan|subscription|renew/.test(description)) return false;
+      const entryId = String(entry.collegeId ?? "").replace(/^COL-0*/i, "").toLowerCase();
+      const entryCollege = String(entry.collegeName || entry.college || "").trim().toLowerCase();
+      return (collegeKey && entryId === collegeKey) ||
+        (collegeName && (entryCollege === collegeName || entryCollege.includes(collegeName)));
+    });
+    return [...directHistory, ...auditHistory]
+      .sort((a, b) => new Date(b.at || b.date || b.createdAt || 0) - new Date(a.at || a.date || a.createdAt || 0))
+      .slice(0, 2);
+  };
 
   // KPI Calculations strictly from real DB records
   const totalCollegesCount = allColleges.length;
@@ -269,26 +281,6 @@ export default function CollegeSubscriptionsPage() {
           row.collegeCode?.toLowerCase().includes(query) ||
           row.plan?.toLowerCase().includes(query);
 
-        // Plan Filter
-        const matchesPlan = !planFilter || row.plan.toLowerCase() === planFilter.toLowerCase();
-
-        // Status Filter Dropdown
-        let matchesStatus = true;
-        if (statusFilter) {
-          const sf = statusFilter.toLowerCase();
-          if (sf === "active") {
-            matchesStatus = row.status === "Active" || row.status === "Expiring Soon";
-          } else if (sf === "expiring soon" || sf === "expiring") {
-            matchesStatus = row.status === "Expiring Soon" || (row.daysRemaining != null && row.daysRemaining >= 0 && row.daysRemaining <= 30 && row.plan !== "—");
-          } else if (sf === "expired") {
-            matchesStatus = row.status === "Expired" || (row.daysRemaining != null && row.daysRemaining < 0 && row.plan !== "—");
-          } else if (sf === "free") {
-            matchesStatus = (row.plan || "").toLowerCase() === "free";
-          } else {
-            matchesStatus = (row.status || "").toLowerCase() === sf;
-          }
-        }
-
         // Preset Tab Filter
         let matchesPreset = true;
         if (presetTab === "active") {
@@ -307,24 +299,9 @@ export default function CollegeSubscriptionsPage() {
           matchesExpiry = row.renewalDate?.includes(expiryFilter);
         }
 
-        return matchesQuery && matchesPlan && matchesStatus && matchesPreset && matchesExpiry;
+        return matchesQuery && matchesPreset && matchesExpiry;
       })
-      .sort((a, b) => {
-        let valA = a[sortField] || "";
-        let valB = b[sortField] || "";
-        const numA = Number(String(valA).replace(/\D/g, ""));
-        const numB = Number(String(valB).replace(/\D/g, ""));
-        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
-          return sortOrder === "asc" ? numA - numB : numB - numA;
-        }
-        if (typeof valA === "string") valA = valA.toLowerCase();
-        if (typeof valB === "string") valB = valB.toLowerCase();
-
-        if (valA < valB) return sortOrder === "asc" ? -1 : 1;
-        if (valA > valB) return sortOrder === "asc" ? 1 : -1;
-        return 0;
-      });
-  }, [subscriptions, searchTerm, planFilter, statusFilter, presetTab, expiryFilter, sortField, sortOrder]);
+  }, [subscriptions, searchTerm, presetTab, expiryFilter]);
 
   // Pagination
   const totalRecords = filteredRows.length;
@@ -332,16 +309,6 @@ export default function CollegeSubscriptionsPage() {
   const currentPage = Math.min(page, totalPages);
   const startIndex = (currentPage - 1) * rowsPerPage;
   const paginatedRows = filteredRows.slice(startIndex, startIndex + rowsPerPage);
-
-  // Sorting
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("asc");
-    }
-  };
 
   // Actions
   const handleRefresh = async () => {
@@ -448,20 +415,15 @@ export default function CollegeSubscriptionsPage() {
   };
 
   const activeFiltersCount =
-    (planFilter ? 1 : 0) +
-    (statusFilter ? 1 : 0) +
     (searchTerm ? 1 : 0) +
     (expiryFilter ? 1 : 0) +
     (presetTab !== "all" ? 1 : 0);
 
   const handleResetAllFilters = () => {
     setSearchTerm("");
-    setPlanFilter("");
-    setStatusFilter("");
     setExpiryFilter("");
     setPresetTab("all");
     setPage(1);
-    setIsFilterOpen(false);
     showToast("All filters cleared", "info");
   };
 
@@ -689,47 +651,7 @@ export default function CollegeSubscriptionsPage() {
               )}
             </div>
 
-            {/* Inline Dropdown Filters */}
             <div className="csp-toolbar-filters">
-              {/* Plan Filter */}
-              <div className="csp-filter-field">
-                <span className="csp-filter-label">Plan</span>
-                <select
-                  value={planFilter}
-                  onChange={(e) => {
-                    setPlanFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="csp-filter-select"
-                >
-                  <option value="">All Plans</option>
-                  <option value="Free">Free</option>
-                  <option value="Basic">Basic</option>
-                  <option value="Standard">Standard</option>
-                  <option value="Premium">Premium</option>
-                  <option value="Enterprise">Enterprise</option>
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div className="csp-filter-field">
-                <span className="csp-filter-label">Status</span>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value);
-                    setPage(1);
-                  }}
-                  className="csp-filter-select"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Free">Free</option>
-                  <option value="Expiring Soon">Expiring Soon</option>
-                  <option value="Expired">Expired</option>
-                </select>
-              </div>
-
               {/* Expiry Date Filter */}
               <div className="csp-filter-field">
                 <span className="csp-filter-label">Expiry</span>
@@ -761,18 +683,6 @@ export default function CollegeSubscriptionsPage() {
               <RotateCw size={15} className={isRefreshing ? "spin-animate" : ""} />
             </button>
 
-            {/* Filter Drawer Button */}
-            <button
-              type="button"
-              className={`csp-filter-btn ${activeFiltersCount > 0 ? "has-filter" : ""}`}
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-            >
-              <Filter size={14} />
-              {activeFiltersCount > 0 && (
-                <span className="csp-badge-count">{activeFiltersCount}</span>
-              )}
-            </button>
-
             {/* View Switcher: List vs Grid */}
             <div className="csp-view-switcher">
               <button
@@ -799,22 +709,6 @@ export default function CollegeSubscriptionsPage() {
         {(activeFiltersCount > 0 || searchTerm) && (
           <div className="csp-active-chips-bar">
             <span className="csp-chips-label">Active Filters:</span>
-            {planFilter && (
-              <span className="csp-chip">
-                Plan: <strong>{planFilter}</strong>
-                <button type="button" onClick={() => setPlanFilter("")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
-            {statusFilter && (
-              <span className="csp-chip">
-                Status: <strong>{statusFilter}</strong>
-                <button type="button" onClick={() => setStatusFilter("")}>
-                  <X size={12} />
-                </button>
-              </span>
-            )}
             {searchTerm && (
               <span className="csp-chip">
                 Search: <strong>"{searchTerm}"</strong>
@@ -850,41 +744,13 @@ export default function CollegeSubscriptionsPage() {
               <thead>
                 <tr>
                   <th style={{ width: 44, textAlign: "center" }}>#</th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("collegeName")}>
-                      College <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("plan")}>
-                      Plan <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("activeAccounts")}>
-                      Active Accounts <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("accountLimit")}>
-                      Account Limit <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("startDate")}>
-                      Start Date <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("renewalDate")}>
-                      Renewal Date <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
-                  <th>
-                    <span className="csp-th-content" onClick={() => handleSort("status")}>
-                      Subscription Status <ChevronLeft size={12} style={{ transform: "rotate(-90deg)" }} />
-                    </span>
-                  </th>
+                  <th>College</th>
+                  <th>Plan</th>
+                  <th>Active Accounts</th>
+                  <th>Account Limit</th>
+                  <th>Start Date</th>
+                  <th>Renewal Date</th>
+                  <th>Subscription Status</th>
                   <th style={{ textAlign: "center", width: 140 }}>Actions</th>
                 </tr>
               </thead>
@@ -893,6 +759,7 @@ export default function CollegeSubscriptionsPage() {
                   const planBadge = getPlanBadge(row.plan);
                   const PlanIcon = planBadge.icon;
                   const rowId = row.id || idx;
+                  const planHistory = getPlanHistory(row);
 
                   // Status styling
                   const statusClass =
@@ -923,36 +790,33 @@ export default function CollegeSubscriptionsPage() {
                         </div>
                       </td>
                       <td>
-                        {/* Interactive Plan Pill with Icon and Dropdown Arrow */}
-                        <div className="csp-plan-pill-wrap">
+                        <div className="csp-plan-cell">
                           {row.plan !== "—" ? (
-                            <button
-                              type="button"
+                            <span
                               className={`csp-plan-pill ${planBadge.class}`}
-                              title="Click to change plan"
-                              onClick={() => {
-                                setEditPlanSub(row);
-                                setSelectedNewPlan(row.plan);
-                              }}
+                              title={`Current plan: ${row.plan}`}
                             >
                               <PlanIcon size={13} />
                               <span>{row.plan}</span>
-                              <ChevronLeft size={11} style={{ transform: "rotate(-90deg)", marginLeft: 2 }} />
-                            </button>
+                            </span>
                           ) : (
-                            <button
-                              type="button"
+                            <span
                               className="csp-plan-pill none"
-                              title="Click to assign subscription plan"
-                              onClick={() => {
-                                setAssignCollegeId(row.collegeId);
-                                setSelectedNewPlan("Free");
-                                setAssignModal(true);
-                              }}
                             >
                               <span>—</span>
-                            </button>
+                            </span>
                           )}
+                          <div className="csp-plan-history" aria-label="Plan history">
+                            {planHistory.length ? planHistory.map((entry, historyIndex) => {
+                              const historyDate = entry.at || entry.date || entry.createdAt;
+                              const change = entry.previousPlan && entry.newPlan
+                                ? `${entry.previousPlan} → ${entry.newPlan}`
+                                : entry.plan || entry.actionType || entry.message || "Plan updated";
+                              return <span key={entry.id || entry.auditLogId || `${rowId}-history-${historyIndex}`}>
+                                {change}{historyDate ? ` · ${new Date(historyDate).toLocaleDateString("en-IN")}` : ""}
+                              </span>;
+                            }) : <span>{/^\d{4}-\d{2}-\d{2}$/.test(row.startDate) ? `Started ${row.startDate}` : "No plan history recorded"}</span>}
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -1074,40 +938,6 @@ export default function CollegeSubscriptionsPage() {
                                   <span className="csp-popover-sub">Plan: {row.plan} • {row.status}</span>
                                 </div>
                                 <div className="csp-popover-divider" />
-                                <button
-                                  type="button"
-                                  className="csp-popover-item"
-                                  onClick={() => {
-                                    setDetailSub(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Eye size={14} className="text-blue" />
-                                  <span>View Subscription</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="csp-popover-item"
-                                  onClick={() => {
-                                    setRenewModalSub(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Clock size={14} className="text-amber" />
-                                  <span>Renew Subscription</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="csp-popover-item"
-                                  onClick={() => {
-                                    setEditPlanSub(row);
-                                    setSelectedNewPlan(row.plan);
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Pencil size={14} className="text-green" />
-                                  <span>Upgrade / Change Plan</span>
-                                </button>
                                 <button
                                   type="button"
                                   className="csp-popover-item"

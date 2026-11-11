@@ -32,8 +32,8 @@ export default function StudentPortalRoutes() {
         <Route path="examinations" element={<StudentPermissionRoute moduleKey="examinations" moduleName="Examinations"><StudentExaminations /></StudentPermissionRoute>} />
         <Route path="results" element={<StudentPermissionRoute moduleKey="results" moduleName="Results"><StudentResults /></StudentPermissionRoute>} />
         <Route path="fees" element={<StudentPermissionRoute moduleKey="fee-management" moduleName="Fees"><StudentFees /></StudentPermissionRoute>} />
-        <Route path="transport" element={<StudentPermissionRoute moduleKey="transport" moduleName="Transport"><StudentTransport /></StudentPermissionRoute>} />
-        <Route path="hostel" element={<StudentPermissionRoute moduleKey="hostel-management" moduleName="Hostel"><StudentHostel /></StudentPermissionRoute>} />
+        <Route path="transport" element={<StudentTransport />} />
+        <Route path="hostel" element={<StudentHostel />} />
         <Route path="certificates" element={<StudentPermissionRoute moduleKey="certificates" moduleName="Certificates"><StudentCertificates /></StudentPermissionRoute>} />
         <Route path="holidays" element={<StudentPermissionRoute moduleKey="holiday-management" moduleName="Holidays"><StudentHolidays /></StudentPermissionRoute>} />
         <Route path="settings" element={<StudentSettings />} />

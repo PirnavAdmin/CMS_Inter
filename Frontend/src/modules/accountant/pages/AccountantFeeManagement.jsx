@@ -14,6 +14,7 @@ import { deleteSetupRecord, feeSetupAccess, requireSetupAction, setupId, setupNa
 import { collectStudentPayment, feeCollectionAccess, loadCollectionAccounts, loadCollectionDetails } from "../services/accountantService.js";
 import { feeReceiptAccess, feeReceiptUnavailableReason, loadSavedFeePayment, loadFeeAccountPayments } from "../services/accountantService.js";
 import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
+import { feeDetailWarnings } from "@/features/fees/feeDetails.js";
 import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
 import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
 import { useAccountantViewParams, FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
@@ -473,6 +474,7 @@ export function SavedPaymentReceipt({ payment, autoPrint = false, onClose }) {
 }
 
 function FeeDetails({ row, onClose, collection = false, authorize = () => false, onCollected }) {
+  const detailMoney = value => value == null ? "Unavailable" : feeMoney(value);
   const { params: viewParams, setParam } = useAccountantViewParams();
   const collecting = collection && viewParams.get("action") === "collect";
   const setCollecting = (open) => setParam("action", open ? "collect" : null);
@@ -506,18 +508,19 @@ function FeeDetails({ row, onClose, collection = false, authorize = () => false,
       {notice ? <div className="cms-alert" role="status">{notice}</div> : null}
       {collection && !authorize() ? <FeeNotice>Fee collection requires verified Fee Management create permission. This account is view-only.</FeeNotice> : null}
       <FeeLoadState state={state} />{!state.loading && !state.error && state.data ? <>
+        {feeDetailWarnings(state.data, row).map(message => <FeeNotice key={message}>{message}</FeeNotice>)}
         <section className="cms-fee-block"><h3>Student Information</h3><div className="cms-fee-kv">
           {[["Name", "studentName"], ["Admission Number", "admissionNumber"], ["Roll Number", "rollNumber"], ["Group", "groupName"], ["Section", "sectionName"], ["Academic Level", "academicLevelName"], ["Academic Year", "academicYearName"]].map(([label, key]) => <div key={key}><span>{label}</span><strong>{feeText(state.data, key)}</strong></div>)}
           <div><span>Admission Date</span><strong>{feeDate(readFee(state.data, "admissionDate"))}</strong></div>
         </div></section>
         <section className="cms-fee-block"><h3>Fee Summary</h3><div className="cms-fee-kv">
-          {[["Original Fee", "originalFee"], ["Concession", "concession"], ["Scheduled Fees", "scheduledFees"], ["Total Payable", "totalPayable"], ["Total Paid", "totalPaid"], ["Outstanding Balance", "outstandingBalance"]].map(([label, key]) => <div key={key}><span>{label}</span><strong>{feeMoney(readFee(state.data, key))}</strong></div>)}
+          {[["Original Fee", "originalFee"], ["Concession", "concession"], ["Scheduled Fees", "scheduledFees"], ["Total Payable", "totalPayable"], ["Total Paid", "totalPaid"], ["Outstanding Balance", "outstandingBalance"]].map(([label, key]) => <div key={key}><span>{label}</span><strong>{detailMoney(readFee(state.data, key))}</strong></div>)}
           <div><span>Payment Plan</span><strong>{feeText(state.data, "paymentPlan")}</strong></div><div><span>Fee Status</span><strong><FeeBadge status={readFee(state.data, "feeStatus")} /></strong></div>
         </div></section>
         <section className="cms-fee-block"><h3>Applicable Fee Breakdown</h3><div className="cms-table-wrap"><table className="cms-table cms-fee-breakdown-table">
           <colgroup><col className="cms-fee-breakdown-type-col" /><col className="cms-fee-breakdown-money-col" /><col className="cms-fee-breakdown-concession-col" /><col className="cms-fee-breakdown-money-col" /><col className="cms-fee-breakdown-money-col" /></colgroup>
           <thead><tr><th>Fee Type</th><th className="num">Amount</th><th>Concession / Scheme</th><th className="num">Discount</th><th className="num">Payable</th></tr></thead>
-          <tbody>{rowsOf(readFee(state.data, "breakdown")).length ? rowsOf(readFee(state.data, "breakdown")).map((item, index) => <tr key={index}><td><strong>{feeText(item, "feeType")}</strong></td><td className="num">{feeMoney(readFee(item, "amount"))}</td><td>{feeText(item, "concessionScheme")}</td><td className="num">{feeMoney(readFee(item, "discount"))}</td><td className="num"><strong>{feeMoney(readFee(item, "payable"))}</strong></td></tr>) : <tr><td colSpan={5} className="cms-fee-empty-row">No records available.</td></tr>}</tbody>
+          <tbody>{rowsOf(readFee(state.data, "breakdown")).length ? rowsOf(readFee(state.data, "breakdown")).map(item => <tr key={item.id}><td><strong>{item.type}</strong></td><td className="num">{detailMoney(item.originalAmount)}</td><td>{item.concessionName || "-"}</td><td className="num">{detailMoney(item.concessionAmount)}</td><td className="num"><strong>{detailMoney(item.payableAmount)}</strong></td></tr>) : <tr><td colSpan={5} className="cms-fee-empty-row">No records available.</td></tr>}</tbody>
         </table></div></section>
         <section className="cms-fee-block"><h3>Fee Schedule</h3><FeeTable rows={rowsOf(readFee(state.data, "schedules"))} columns={[field("Fee Schedule", "feeSchedule"), field("Due Date", "dueDate", "date"), field("Amount", "amount", "money"), field("Paid", "paidAmount", "money"), field("Balance", "balanceAmount", "money"), field("Status", "status", "status")]} /></section>
         <section className="cms-fee-block"><h3>Fee Transactions</h3><FeeLoadState state={historyState} /><FeeTable rows={historyState.data || []} loading={historyState.loading} error={historyState.error} columns={[
