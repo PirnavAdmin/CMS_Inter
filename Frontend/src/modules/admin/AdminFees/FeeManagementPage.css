@@ -27,6 +27,9 @@
 }
 .cms-fee-omnichannel-modal .cms-fee-gateway-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
 .cms-fee-omnichannel-modal .cms-fee-gateway { display: grid; gap: 12px; margin-top: 12px; }
+.cms-fee-omnichannel-modal .cms-fee-qr-verification { display: grid; gap: 12px; min-width: 0; }
+.cms-fee-omnichannel-modal .cms-fee-qr-verification h3 { margin: 0; }
+.cms-fee-omnichannel-modal .cms-fee-qr-verification .cms-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-start { display: grid; gap: 10px; justify-items: start; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-start p { color: var(--cms-muted); font-size: 13px; margin: 0; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-order {

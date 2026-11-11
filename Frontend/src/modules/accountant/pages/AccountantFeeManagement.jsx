@@ -15,6 +15,8 @@ import { collectStudentPayment, feeCollectionAccess, loadCollectionAccounts, loa
 import { feeReceiptAccess, feeReceiptUnavailableReason, loadSavedFeePayment, loadFeeAccountPayments } from "../services/accountantService.js";
 import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummary } from "../utils/feeViewData.js";
 import { feeDetailWarnings } from "@/features/fees/feeDetails.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import GatewayPaymentPanel from "@/modules/admin/AdminFees/components/GatewayPaymentPanel.jsx";
 import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
 import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
 import { useAccountantViewParams, FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
@@ -76,6 +78,12 @@ export function AccountantPagination({ page, onPage }) {
 }
 
 function CollectPayment({ account, authorize, onClose, onSaved }) {
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const campusId = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
+  const [mode, setMode] = useState("CASH");
+  const [gatewayLocked, setGatewayLocked] = useState(false);
+  const [gatewayFooter, setGatewayFooter] = useState(null);
+  const [gatewayNotice, setGatewayNotice] = useState("");
   const scheduleData = readFee(account, "schedules");
   const scheduleRows = rowsOf(scheduleData);
   const seenIds = new Set();
@@ -109,10 +117,22 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
     setDraft(current => ({ ...current, target: "full", feeInstallmentIds: [], amount: readFee(account, "outstandingBalance") }));
   };
   const selectedScheduleTotal = scheduleTotal(draft.feeInstallmentIds);
+  const gatewayAccount = useMemo(() => ({
+    studentId: readFee(account, "studentId"), studentFeeId: readFee(account, "studentFeeId"),
+    studentName: readFee(account, "studentName"), admissionNo: readFee(account, "admissionNumber"),
+    campusId: readFee(account, "campusId"), campusName: readFee(account, "campusName"),
+    balance: readFee(account, "outstandingBalance"),
+    installments: rowsOf(readFee(account, "schedules")).map(item => ({
+      feeInstallmentId: readFee(item, "feeInstallmentId"), no: readFee(item, "installmentNumber"),
+      label: readFee(item, "feeSchedule"), amount: readFee(item, "amount"),
+      balance: readFee(item, "balanceAmount"), status: readFee(item, "status"),
+    })),
+  }), [account]);
   const targetLabel = draft.target === "full" ? `Pay Full Remaining Balance - ${feeMoney(readFee(account, "outstandingBalance"))}`
     : draft.feeInstallmentIds.length ? `${draft.feeInstallmentIds.length} schedule${draft.feeInstallmentIds.length === 1 ? "" : "s"} selected - ${feeMoney(selectedScheduleTotal)}` : "Select pending fee schedules";
   const submit = async event => {
     event.preventDefault();
+    if (mode !== "CASH") return;
     if (busy.current || uncertain) return;
     if (draft.target === "schedules" && (invalidSchedules || !draft.feeInstallmentIds.length || !Number.isFinite(selectedScheduleTotal))) { setError(invalidSchedules ? "Fee schedule data is invalid. Reload the account before collecting against schedules." : "Select at least one pending fee schedule."); return; }
     busy.current = true; setSaving(true); setError("");
@@ -125,9 +145,10 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
     } finally { busy.current = false; setSaving(false); }
   };
   const close = () => onClose(uncertain);
-  return <Modal title="Collect Payment" className="accountant-fee-editor is-structure" onClose={saving ? () => { } : close} closeOnOverlay={!saving} footer={<><button type="button" className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>Cancel</button><button type="submit" form="accountant-collect-form" className="cms-btn cms-btn-primary" disabled={saving || uncertain || !authorize()}>{saving ? "Saving..." : "Save Payment"}</button></>}>
+  return <Modal title="Collect Payment" className="accountant-fee-editor is-structure cms-fee-omnichannel-modal" onClose={saving || gatewayFooter?.busy ? () => { } : close} closeOnOverlay={!saving && !gatewayFooter?.busy} footer={<><button type="button" className="cms-btn cms-btn-ghost" disabled={saving || gatewayFooter?.busy} onClick={close}>{mode === "CASH" ? "Cancel" : "Close"}</button>{mode === "UPI_QR" && gatewayFooter?.showDone ? <button type="button" className="cms-btn cms-btn-primary" onClick={gatewayFooter.onDone} disabled={gatewayFooter.disabled}>Done</button> : null}{mode === "CASH" ? <button type="submit" form="accountant-collect-form" className="cms-btn cms-btn-primary" disabled={saving || uncertain || !authorize()}>{saving ? "Saving..." : "Save Payment"}</button> : null}</>}>
     <div className="cms-fee-kv"><div><span>Student</span><strong>{feeText(account, "studentName")}</strong></div><div><span>Admission No</span><strong>{feeText(account, "admissionNumber")}</strong></div><div><span>Outstanding Balance</span><strong>{feeMoney(readFee(account, "outstandingBalance"))}</strong></div></div>
-    <form id="accountant-collect-form" onSubmit={submit}><fieldset className="accountant-fee-form-fields" disabled={saving || uncertain || !authorize()}>
+    <div className="cms-fee-gateway-modes" role="tablist" aria-label="Collection method">{[["CASH", "Cash / Manual"], ["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"]].map(([id, label]) => <button key={id} type="button" role="tab" className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`} aria-selected={mode === id} disabled={saving || uncertain || gatewayLocked || !authorize()} onClick={() => { setMode(id); setError(""); }}>{label}</button>)}</div>
+    <form id="accountant-collect-form" onSubmit={submit}><fieldset className="accountant-fee-form-fields" disabled={saving || uncertain || gatewayLocked || !authorize()}>
       <div className="cms-form-grid cols-3">
         <div className="cms-field full">
           <label id="accountant-pay-towards-label">Pay Towards</label>
@@ -141,14 +162,18 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
             </div>
           </details>
         </div>
-        <div className="cms-field"><label htmlFor="accountant-pay-amount">Amount *</label><input id="accountant-pay-amount" type="number" min="0.01" step="0.01" required value={draft.amount ?? ""} readOnly={draft.target === "full"} onChange={event => update("amount", event.target.value)} /></div>
+        <div className="cms-field"><label htmlFor="accountant-pay-amount">Amount *</label><input id="accountant-pay-amount" type="number" min="0.01" step="0.01" required value={draft.amount ?? ""} readOnly={draft.target === "full" && mode !== "BANK_TRANSFER"} onChange={event => update("amount", event.target.value)} /></div>
+        {mode === "CASH" ? <>
         <div className="cms-field"><label htmlFor="accountant-pay-date">Payment Date *</label><input id="accountant-pay-date" type="date" required value={draft.paymentDate} onChange={event => update("paymentDate", event.target.value)} /></div>
         <div className="cms-field"><label htmlFor="accountant-pay-method">Payment Method *</label><select id="accountant-pay-method" required value={draft.paymentMode} onChange={event => update("paymentMode", event.target.value)}>{PAYMENT_METHODS.map(method => <option key={method}>{method}</option>)}</select></div>
         {[["discount", "Discount"], ["fine", "Fine"]].map(([key, label]) => <div className="cms-field" key={key}><label htmlFor={`accountant-pay-${key}`}>{label}</label><input id={`accountant-pay-${key}`} type="number" min="0" step="0.01" value={draft[key]} onChange={event => update(key, event.target.value)} /></div>)}
         <div className="cms-field"><label htmlFor="accountant-pay-reference">Transaction Reference{draft.paymentMode !== "Cash" ? " *" : ""}</label><input id="accountant-pay-reference" required={draft.paymentMode !== "Cash"} maxLength={100} value={draft.transactionReference} onChange={event => update("transactionReference", event.target.value)} /></div>
         <div className="cms-field full"><label htmlFor="accountant-pay-note">Notes</label><textarea id="accountant-pay-note" maxLength={500} value={draft.note} onChange={event => update("note", event.target.value)} /></div>
-      </div><p>Payment total including fine and discount: {feeMoney(Number(draft.amount) + Number(draft.fine) - Number(draft.discount))}</p>
+        </> : null}
+      </div>{mode === "CASH" ? <p>Payment total including fine and discount: {feeMoney(Number(draft.amount) + Number(draft.fine) - Number(draft.discount))}</p> : null}
     </fieldset></form>
+    {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={gatewayAccount} target={draft.target} selectedIds={draft.feeInstallmentIds} amount={draft.amount} authorize={authorize} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={() => setGatewayNotice("Pending Verification. The request is in the Pending UTR Queue; no fee credit or paid receipt has been created.")} /> : null}
+    {gatewayNotice ? <FeeNotice>{gatewayNotice}</FeeNotice> : null}
     {!authorize() ? <FeeNotice error>Verified Fee Management create permission is required. Close this form and refresh your permissions.</FeeNotice> : null}
     {error ? <FeeNotice error>{error}</FeeNotice> : null}
   </Modal>;

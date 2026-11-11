@@ -842,6 +842,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
       incrementType,
       incrementValue,
       pairedStructureId,
+      secondYearTotalAmount: optionalNumberValue(item, "secondYearTotalAmount", "SecondYearTotalAmount"),
       groupId,
       group,
       programId,
@@ -1170,14 +1171,15 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const program = read(item, "program", "Program");
   const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
   const assignmentId = readStudentFeeId(item, studentFee, detail);
-  const feeItems = feeDetailPayloadRows(detail).length ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
+  const feeItems = rawDetail ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
   const normalizedItems = normalizeFeeBreakdown(feeItems);
   const detailTotal = sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "payableAmount");
   const detailSchedules = feeDetailScheduleRows(detail).length
     ? feeDetailScheduleRows(detail)
     : feeDetailScheduleRows(detailStudentFee);
-  const schedules = detailSchedules.length
-    ? detailSchedules
+  const schedules = rawDetail
+    ? feeDetailScheduleRows(detail)
+    : detailSchedules.length ? detailSchedules
     : getCollection(read(item, "installments", "Installments", "schedules", "Schedules", "feeSchedules", "FeeSchedules"));
   const explicitPaymentPlan = normalizeBackendPaymentPlan(
     read(detail, "paymentPlan", "PaymentPlan"),
@@ -1971,6 +1973,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
   const pending = pendingInstallments(account);
   const [mode, setMode] = useState("UPI_QR");
   const [gatewayLocked, setGatewayLocked] = useState(false);
+  const [gatewayFooter, setGatewayFooter] = useState(null);
   const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id || null;
   const firstPendingId = pending.length ? installmentIdFor(pending[0]) : null;
   const [target, setTarget] = useState(firstPendingId ? "schedules" : "full");
@@ -2095,10 +2098,11 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
     <Modal
       title="Collect Payment"
       className="cms-fee-omnichannel-modal"
-      onClose={saving ? () => {} : onClose}
+      onClose={saving || gatewayFooter?.busy ? () => {} : onClose}
       footer={(
         <>
-          <button className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving}>Close</button>
+          <button className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving || gatewayFooter?.busy}>Close</button>
+          {mode === "UPI_QR" && gatewayFooter?.showDone ? <button type="button" className="cms-btn cms-btn-primary" disabled={gatewayFooter.disabled} onClick={gatewayFooter.onDone}>Done</button> : null}
           {mode === "CASH" ? <button className="cms-btn cms-btn-primary" onClick={save} disabled={saving || cashUncertain}>{saving ? "Saving..." : "Save Payment"}</button> : null}
         </>
       )}
@@ -2180,7 +2184,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
           </> : null}
         </div>
         </fieldset>
-        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onSaved={onSaved} onPending={onPending} /> : null}
+        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
         {cashUncertain ? <p className="cms-error" role="alert">Review payment history before collecting again; this request may already have been recorded.</p> : null}
       </div>
@@ -2403,6 +2407,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       <td className="num"><strong>{money(item.payableAmount)}</strong></td>
                     </tr>
                   ))}
+                  {!account.feeItems.length ? <tr><td colSpan={5} className="cms-fee-empty-row">No saved fee breakdown was returned for this account.</td></tr> : null}
                 </tbody>
                 <tfoot>
                   <tr>
@@ -2417,7 +2422,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             </div>
           </section>
 
-          {account.installments.length ? (
+          {(
             <section className="cms-fee-block">
               <h3>Fee Schedule</h3>
               <div className="cms-table-wrap">
@@ -2436,11 +2441,12 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                         <td><StatusBadge status={item.status} /></td>
                       </tr>
                     ))}
+                    {!account.installments.length ? <tr><td colSpan={6} className="cms-fee-empty-row">No saved fee schedules were returned for this account.</td></tr> : null}
                   </tbody>
                 </table>
               </div>
             </section>
-          ) : null}
+          )}
 
           <section className="cms-fee-block">
             <h3>Payment History</h3>

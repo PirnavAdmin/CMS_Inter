@@ -1,4 +1,46 @@
 // Gateway amounts use rupees; only Razorpay Checkout uses currency subunits.
+export const UTR_SUBMITTED_EVENT = "cms-fee-utr-submitted";
+
+export function isManualQrOrder(order) {
+  return order?.requiresManualUtr === true && typeof order.orderId === "string" && Boolean(order.orderId.trim())
+    && order.currency === "INR" && Number.isFinite(Number(order.amount)) && Number(order.amount) > 0
+    && !order.gatewayQrCodeId && order.isPaid !== true
+    && !["paid", "captured", "settled", "completed", "success"].includes(String(order.status || "").toLowerCase());
+}
+
+export function directQrUtrPayload(order, account, draft, today) {
+  const invalid = (field, message) => { throw Object.assign(new Error(message), { field }); };
+  if (!isManualQrOrder(order)) invalid("order", "This order is not eligible for manual UTR verification.");
+  if (Number(order.studentId) !== Number(account.studentId)
+    || Number(order.studentFeeId) !== Number(account.studentFeeId || account.assignmentId || account.studentFeeAssignmentId)) {
+    invalid("order", "The QR order does not match the selected student fee account.");
+  }
+  const payment = collectionPayload(account, "full", [], order.amount);
+  const amountPaid = Number(draft.amountPaid);
+  if (!Number.isFinite(amountPaid) || Math.abs(amountPaid * 100 - Math.round(amountPaid * 100)) > 0.000001
+    || Math.abs(amountPaid - payment.amount) > 0.005) {
+    invalid("amountPaid", "Amount paid must match the generated QR amount. Contact the finance team if a different amount was transferred.");
+  }
+  const utrNumber = String(draft.utrNumber || "").trim();
+  if (utrNumber.length < 6 || utrNumber.length > 50 || /[\u0000-\u001f\u007f]/.test(utrNumber) || !/[A-Za-z0-9]/.test(utrNumber)) {
+    invalid("utrNumber", "Enter a transaction reference of 6–50 characters containing letters or digits.");
+  }
+  const bankName = String(draft.bankName || "").trim();
+  if (!bankName || bankName.length > 200) invalid("bankName", "Enter the bank or payment app used (up to 200 characters).");
+  const paymentDate = String(draft.paymentDate || "");
+  const parsedDate = new Date(`${paymentDate}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !Number.isFinite(parsedDate.getTime())
+    || parsedDate.toISOString().slice(0, 10) !== paymentDate || paymentDate < "2000-01-01" || paymentDate > today) {
+    invalid("paymentDate", "Enter a valid payment date from 2000 onwards that is not in the future.");
+  }
+  // The existing DTO has no originalOrderId or installment selection field.
+  // Retain the QR reference for reviewers using its supported Remarks field.
+  const remarks = `Direct UPI QR order: ${order.orderId}${draft.remarks?.trim() ? `\n${draft.remarks.trim()}` : ""}`;
+  if (remarks.length > 500) invalid("remarks", "Shorten the remarks so they and the QR order reference fit within 500 characters.");
+  return { studentId: payment.studentId, studentFeeId: payment.studentFeeId, amount: payment.amount,
+    utrNumber, bankName, paymentDate, remarks };
+}
+
 export function gatewayData(payload) {
   let data = payload;
   let acknowledged;
