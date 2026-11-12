@@ -128,6 +128,37 @@ const formatActivityTime = (at) => {
   }
 };
 
+// Build smooth SVG sparkline path strictly from real DB series values
+const buildSparklinePath = (values = [], width = 60, height = 24) => {
+  if (!Array.isArray(values) || values.length < 2) return null;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min;
+  const padX = 2;
+  const padY = 4;
+  const usableW = width - padX * 2;
+  const usableH = height - padY * 2;
+
+  const pts = values.map((v, i) => {
+    const x = padX + (i / (values.length - 1)) * usableW;
+    const y = range === 0 ? height / 2 : height - padY - ((v - min) / range) * usableH;
+    return [Number(x.toFixed(1)), Number(y.toFixed(1))];
+  });
+
+  if (pts.length === 2) {
+    return `M ${pts[0][0]} ${pts[0][1]} L ${pts[1][0]} ${pts[1][1]}`;
+  }
+  let d = `M ${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const xc = ((pts[i][0] + pts[i + 1][0]) / 2).toFixed(1);
+    const yc = ((pts[i][1] + pts[i + 1][1]) / 2).toFixed(1);
+    d += ` Q ${pts[i][0]} ${pts[i][1]}, ${xc} ${yc}`;
+  }
+  const last = pts[pts.length - 1];
+  d += ` T ${last[0]} ${last[1]}`;
+  return d;
+};
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { data, refresh } = useSuperAdmin?.() || { data: {} };
@@ -138,6 +169,7 @@ export default function DashboardPage() {
   const plans = useMemo(() => data?.plans || [], [data?.plans]);
   const payments = useMemo(() => data?.payments || [], [data?.payments]);
   const users = useMemo(() => data?.users || [], [data?.users]);
+  const accountUsage = useMemo(() => data?.accountUsage || [], [data?.accountUsage]);
   const dashboard = data?.dashboard || {};
 
   const [refreshing, setRefreshing] = useState(false);
@@ -247,18 +279,19 @@ export default function DashboardPage() {
     return free ? free.count : (colleges.length > 0 ? colleges.length - paidPlanCount : "—");
   }, [planDistribution, colleges, paidPlanCount]);
 
-  // ── DYNAMIC 6-MONTH COLLEGE REGISTRATION TREND FROM REAL DB ──
+  // ── DYNAMIC COLLEGE REGISTRATION TREND FROM REAL DB (6M OR 1Y) ──
   const registrationChartData = useMemo(() => {
     if (!colleges || colleges.length === 0) {
       return { hasData: false, data: [] };
     }
 
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthCount = regTimeframe === "1year" ? 12 : 6;
     const now = new Date();
-    const last6 = [];
-    for (let i = 5; i >= 0; i--) {
+    const buckets = [];
+    for (let i = monthCount - 1; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      last6.push({
+      buckets.push({
         key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
         month: months[d.getMonth()],
         newCount: 0
@@ -269,19 +302,19 @@ export default function DashboardPage() {
       const dStr = c.registered || c.registeredAt;
       if (dStr && dStr !== "-" && dStr !== "—") {
         const ym = String(dStr).slice(0, 7);
-        const match = last6.find((m) => m.key === ym);
+        const match = buckets.find((m) => m.key === ym);
         if (match) {
           match.newCount++;
-        } else if (last6.length > 0 && ym < last6[0].key) {
-          last6[0].newCount++;
+        } else if (buckets.length > 0 && ym < buckets[0].key) {
+          buckets[0].newCount++;
         }
-      } else {
-        if (last6.length > 0) last6[0].newCount++;
+      } else if (buckets.length > 0) {
+        buckets[0].newCount++;
       }
     });
 
     let runningTotal = 0;
-    const data = last6.map((m) => {
+    const data = buckets.map((m) => {
       runningTotal += m.newCount;
       return {
         month: m.month,
@@ -290,16 +323,143 @@ export default function DashboardPage() {
     });
 
     return { hasData: true, data };
-  }, [colleges]);
+  }, [colleges, regTimeframe]);
 
-  // ── DYNAMIC REVENUE TREND FROM REAL PAYMENTS IN DB ──
-  const revenueChartData = useMemo(() => {
+  // ── DYNAMIC KPI TRENDS & SPARKLINES FROM REAL DB ──
+  const kpiTrends = useMemo(() => {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const now = new Date();
     const last6 = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       last6.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        totalNew: 0,
+        activeNew: 0,
+        paidNew: 0,
+        freeNew: 0
+      });
+    }
+
+    const subByCollege = new Map();
+    subscriptions.forEach((s) => {
+      if (s.collegeId != null) subByCollege.set(String(s.collegeId), s.plan);
+      if (s.id) subByCollege.set(String(s.id), s.plan);
+      if (s.code) subByCollege.set(String(s.code).toLowerCase(), s.plan);
+      if (s.name) subByCollege.set(String(s.name).toLowerCase(), s.plan);
+    });
+
+    colleges.forEach((c) => {
+      const dStr = c.registered || c.registeredAt;
+      const ym = dStr && dStr !== "-" && dStr !== "—" ? String(dStr).slice(0, 7) : "";
+      let bucket = last6.find((m) => m.key === ym);
+      if (!bucket && last6.length > 0 && (!ym || ym < last6[0].key)) {
+        bucket = last6[0];
+      }
+      if (!bucket) return;
+
+      bucket.totalNew++;
+      if ((c.status || "").toLowerCase() === "active") bucket.activeNew++;
+
+      const subPlan =
+        subByCollege.get(String(c.collegeId)) ||
+        subByCollege.get(String(c.id)) ||
+        (c.code ? subByCollege.get(String(c.code).toLowerCase()) : null) ||
+        (c.name ? subByCollege.get(String(c.name).toLowerCase()) : null) ||
+        c.plan ||
+        "Free";
+      if (String(subPlan).trim().toLowerCase() === "free") {
+        bucket.freeNew++;
+      } else {
+        bucket.paidNew++;
+      }
+    });
+
+    let runTotal = 0;
+    let runActive = 0;
+    let runPaid = 0;
+    let runFree = 0;
+    const totalSeries = [];
+    const activeSeries = [];
+    const paidSeries = [];
+    const freeSeries = [];
+    last6.forEach((b) => {
+      runTotal += b.totalNew;
+      runActive += b.activeNew;
+      runPaid += b.paidNew;
+      runFree += b.freeNew;
+      totalSeries.push(runTotal);
+      activeSeries.push(runActive);
+      paidSeries.push(runPaid);
+      freeSeries.push(runFree);
+    });
+
+    const total = colleges.length;
+    const currentNew = last6[last6.length - 1]?.totalNew || 0;
+    const prevTotal = total - currentNew;
+    let totalBadge = null;
+    if (total > 0) {
+      if (currentNew > 0 && prevTotal > 0) {
+        totalBadge = { text: `+${Math.round((currentNew / prevTotal) * 100)}%`, tone: "up", icon: "up" };
+      } else if (currentNew > 0) {
+        totalBadge = { text: `+${currentNew} new`, tone: "up", icon: "up" };
+      } else {
+        totalBadge = { text: "0 new", tone: "neutral", icon: null };
+      }
+    }
+
+    const activeTotal = colleges.filter((c) => (c.status || "").toLowerCase() === "active").length;
+    const activePct = total > 0 ? Math.round((activeTotal / total) * 100) : null;
+    const activeBadge = activePct != null
+      ? { text: `${activePct}% active`, tone: activePct >= 50 ? "up" : "down", icon: activePct >= 50 ? "up" : "down" }
+      : null;
+
+    const totalUsersCount = users.length;
+    const activeUsersCount = users.filter((u) => u.active).length;
+    const activeUserPct = totalUsersCount > 0 ? Math.round((activeUsersCount / totalUsersCount) * 100) : null;
+    const accountsBadge = activeUserPct != null
+      ? { text: `${activeUserPct}% active`, tone: activeUserPct >= 50 ? "up" : "down", icon: activeUserPct >= 50 ? "up" : "down" }
+      : null;
+
+    const accountSeries = accountUsage.length >= 2
+      ? accountUsage.map((a) => Number(a.active ?? a.Active ?? 0))
+      : colleges
+          .slice()
+          .sort((a, b) => String(a.registered || "").localeCompare(String(b.registered || "")))
+          .map((c) => Number(c.activeAccounts) || 0);
+
+    const paidNum = typeof paidPlanCount === "number" ? paidPlanCount : 0;
+    const freeNum = typeof freePlanCount === "number" ? freePlanCount : 0;
+    const paidBadge = total > 0
+      ? { text: `${((paidNum / total) * 100).toFixed(1)}%`, tone: paidNum > 0 ? "up" : "neutral", icon: paidNum > 0 ? "up" : null }
+      : null;
+    const freeBadge = total > 0
+      ? { text: `${((freeNum / total) * 100).toFixed(1)}%`, tone: "neutral", icon: null }
+      : null;
+
+    return {
+      totalBadge,
+      activeBadge,
+      accountsBadge,
+      paidBadge,
+      freeBadge,
+      totalPath: buildSparklinePath(totalSeries),
+      activePath: buildSparklinePath(activeSeries),
+      accountsPath: buildSparklinePath(accountSeries),
+      paidPath: buildSparklinePath(paidSeries),
+      freePath: buildSparklinePath(freeSeries)
+    };
+  }, [colleges, subscriptions, users, accountUsage, paidPlanCount, freePlanCount]);
+
+  // ── DYNAMIC REVENUE TREND FROM REAL PAYMENTS IN DB ──
+  const revenueChartData = useMemo(() => {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const now = new Date();
+    const monthCount = revenuePeriod === "yearly" ? 12 : revenuePeriod === "quarterly" ? 3 : 6;
+    const buckets = [];
+    for (let i = monthCount - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
         key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
         month: months[d.getMonth()],
         total: 0
@@ -310,24 +470,24 @@ export default function DashboardPage() {
       const status = (p.status || "").toLowerCase();
       if (status === "paid" || status === "verified" || status === "completed") {
         const ym = String(p.date || "").slice(0, 7);
-        const match = last6.find((m) => m.key === ym);
+        const match = buckets.find((m) => m.key === ym);
         if (match) {
           match.total += Number(p.amount) || 0;
         }
       }
     });
 
-    const hasAny = last6.some((m) => m.total > 0);
+    const hasAny = buckets.some((m) => m.total > 0);
     return {
       hasData: hasAny,
-      data: last6.map((m) => ({
+      data: buckets.map((m) => ({
         month: m.month,
         amount: m.total / 100000,
         rawAmount: m.total,
         label: m.total > 0 ? `₹${(m.total / 100000).toFixed(1)}L` : "₹0"
       }))
     };
-  }, [payments]);
+  }, [payments, revenuePeriod]);
 
   // ── RECENT 3 REAL REGISTERED COLLEGES ──
   const recentColleges = useMemo(() => {
@@ -458,7 +618,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* ── TOP KPI METRIC CARDS (5 CARDS) ── */}
+      {/* ── TOP KPI METRIC CARDS (5 CARDS - 100% REAL DB) ── */}
       <section className="sad-kpi-grid">
         {/* Card 1: Total Colleges */}
         <Link to="/super-admin/colleges" className="sad-kpi-card" title="View all colleges">
@@ -470,23 +630,22 @@ export default function DashboardPage() {
               <span className="sad-kpi-label">Total Colleges</span>
               <div className="sad-kpi-val-row">
                 <span className="sad-kpi-val">{totalCollegesCount}</span>
-                <span className="sad-kpi-badge up">
-                  <TrendingUp size={10} /> +12%
-                </span>
+                {kpiTrends.totalBadge && (
+                  <span className={`sad-kpi-badge ${kpiTrends.totalBadge.tone}`}>
+                    {kpiTrends.totalBadge.icon === "up" && <TrendingUp size={10} />}
+                    {kpiTrends.totalBadge.text}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="sad-kpi-sparkline">
-            <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
-              <path
-                d="M 2 18 Q 18 10, 32 15 T 58 6"
-                stroke="#7c3aed"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-          </div>
+          {kpiTrends.totalPath && (
+            <div className="sad-kpi-sparkline">
+              <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
+                <path d={kpiTrends.totalPath} stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          )}
         </Link>
 
         {/* Card 2: Active Colleges */}
@@ -499,23 +658,23 @@ export default function DashboardPage() {
               <span className="sad-kpi-label">Active Colleges</span>
               <div className="sad-kpi-val-row">
                 <span className="sad-kpi-val">{activeCollegesCount}</span>
-                <span className="sad-kpi-badge up">
-                  <TrendingUp size={10} /> +9%
-                </span>
+                {kpiTrends.activeBadge && (
+                  <span className={`sad-kpi-badge ${kpiTrends.activeBadge.tone}`}>
+                    {kpiTrends.activeBadge.icon === "up" && <TrendingUp size={10} />}
+                    {kpiTrends.activeBadge.icon === "down" && <TrendingDown size={10} />}
+                    {kpiTrends.activeBadge.text}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="sad-kpi-sparkline">
-            <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
-              <path
-                d="M 2 16 Q 18 18, 32 8 T 58 6"
-                stroke="#16a34a"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-          </div>
+          {kpiTrends.activePath && (
+            <div className="sad-kpi-sparkline">
+              <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
+                <path d={kpiTrends.activePath} stroke="#16a34a" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          )}
         </Link>
 
         {/* Card 3: Active Login Accounts */}
@@ -528,23 +687,23 @@ export default function DashboardPage() {
               <span className="sad-kpi-label">Active Login Accounts</span>
               <div className="sad-kpi-val-row">
                 <span className="sad-kpi-val">{activeAccountsCount}</span>
-                <span className="sad-kpi-badge up">
-                  <TrendingUp size={10} /> +8%
-                </span>
+                {kpiTrends.accountsBadge && (
+                  <span className={`sad-kpi-badge ${kpiTrends.accountsBadge.tone}`}>
+                    {kpiTrends.accountsBadge.icon === "up" && <TrendingUp size={10} />}
+                    {kpiTrends.accountsBadge.icon === "down" && <TrendingDown size={10} />}
+                    {kpiTrends.accountsBadge.text}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="sad-kpi-sparkline">
-            <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
-              <path
-                d="M 2 14 Q 18 6, 32 16 T 58 10"
-                stroke="#ea580c"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-          </div>
+          {kpiTrends.accountsPath && (
+            <div className="sad-kpi-sparkline">
+              <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
+                <path d={kpiTrends.accountsPath} stroke="#ea580c" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          )}
         </Link>
 
         {/* Card 4: Paid Plan Colleges */}
@@ -557,23 +716,22 @@ export default function DashboardPage() {
               <span className="sad-kpi-label">Paid Plan Colleges</span>
               <div className="sad-kpi-val-row">
                 <span className="sad-kpi-val">{paidPlanCount}</span>
-                <span className="sad-kpi-badge up">
-                  <TrendingUp size={10} /> +14%
-                </span>
+                {kpiTrends.paidBadge && (
+                  <span className={`sad-kpi-badge ${kpiTrends.paidBadge.tone}`}>
+                    {kpiTrends.paidBadge.icon === "up" && <TrendingUp size={10} />}
+                    {kpiTrends.paidBadge.text}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="sad-kpi-sparkline">
-            <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
-              <path
-                d="M 2 17 Q 18 19, 32 11 T 58 5"
-                stroke="#0284c7"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-          </div>
+          {kpiTrends.paidPath && (
+            <div className="sad-kpi-sparkline">
+              <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
+                <path d={kpiTrends.paidPath} stroke="#0284c7" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          )}
         </Link>
 
         {/* Card 5: Free Plan Colleges */}
@@ -586,23 +744,21 @@ export default function DashboardPage() {
               <span className="sad-kpi-label">Free Plan Colleges</span>
               <div className="sad-kpi-val-row">
                 <span className="sad-kpi-val">{freePlanCount}</span>
-                <span className="sad-kpi-badge down">
-                  <TrendingDown size={10} /> -10%
-                </span>
+                {kpiTrends.freeBadge && (
+                  <span className={`sad-kpi-badge ${kpiTrends.freeBadge.tone}`}>
+                    {kpiTrends.freeBadge.text}
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div className="sad-kpi-sparkline">
-            <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
-              <path
-                d="M 2 8 Q 18 16, 32 12 T 58 18"
-                stroke="#db2777"
-                strokeWidth="2"
-                strokeLinecap="round"
-                fill="none"
-              />
-            </svg>
-          </div>
+          {kpiTrends.freePath && (
+            <div className="sad-kpi-sparkline">
+              <svg width="100%" height="100%" viewBox="0 0 60 24" fill="none">
+                <path d={kpiTrends.freePath} stroke="#db2777" strokeWidth="2" strokeLinecap="round" fill="none" />
+              </svg>
+            </div>
+          )}
         </Link>
       </section>
 
@@ -643,7 +799,7 @@ export default function DashboardPage() {
                     tickLine={false}
                   />
                   <YAxis
-                    ticks={[0, 4, 8, 12, 16]}
+                    allowDecimals={false}
                     tick={{ fontSize: 10, fill: "#64748b" }}
                     axisLine={false}
                     tickLine={false}
