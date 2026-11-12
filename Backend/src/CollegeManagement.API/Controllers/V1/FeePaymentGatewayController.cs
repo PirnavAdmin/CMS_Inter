@@ -6,11 +6,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Dapper;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -34,6 +36,7 @@ public class FeePaymentGatewayController : ControllerBase
     private readonly IPaymentLedgerService _ledgerService;
     private readonly IFeeReceiptPdfService _receiptPdfService;
     private readonly AppDbContext _dbContext;
+    private readonly ICampusAuthorizationService? _campusAuthService;
     private readonly ILogger<FeePaymentGatewayController> _logger;
 
     public FeePaymentGatewayController(
@@ -42,7 +45,8 @@ public class FeePaymentGatewayController : ControllerBase
         IPaymentLedgerService ledgerService,
         IFeeReceiptPdfService receiptPdfService,
         AppDbContext dbContext,
-        ILogger<FeePaymentGatewayController> logger)
+        ILogger<FeePaymentGatewayController> logger,
+        ICampusAuthorizationService? campusAuthService = null)
     {
         _gatewayService = gatewayService;
         _settlementService = settlementService;
@@ -50,6 +54,7 @@ public class FeePaymentGatewayController : ControllerBase
         _receiptPdfService = receiptPdfService;
         _dbContext = dbContext;
         _logger = logger;
+        _campusAuthService = campusAuthService;
     }
 
     private int? GetCurrentUserId()
@@ -124,6 +129,20 @@ public class FeePaymentGatewayController : ControllerBase
         var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
         if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
             return Forbid();
+
+        if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
+            (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+        {
+            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
+            var targetCampusId = request.CampusId ?? studentCampusId;
+            if (targetCampusId.HasValue)
+            {
+                var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+                    targetCampusId,
+                    requireExplicitCampusId: false);
+                if (!ok) return errorResult!;
+            }
+        }
 
         var result = await _gatewayService.CreateOrderAsync(request, GetCurrentUserId());
         return result.Success ? Ok(result) : BadRequest(result);
@@ -287,7 +306,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     // ========================= OFFLINE UTR SUBMISSION =========================
 
-    /// <summary>Submit an offline bank transfer UTR for admin verification.</summary>
+    /// <summary>Submit an offline bank transfer or direct UPI QR UTR reference for verification.</summary>
     [HttpPost("submit-utr")]
     public async Task<IActionResult> SubmitUtr([FromBody] SubmitUtrRequest request)
     {
@@ -295,13 +314,19 @@ public class FeePaymentGatewayController : ControllerBase
 
         var result = await _settlementService.SubmitUtrAsync(request, GetCurrentUserId());
         return result.Success
-            ? Ok(new { success = true, message = "UTR submitted for verification." })
+            ? Ok(new
+            {
+                success = true,
+                transactionId = result.TransactionId,
+                amount = result.Amount,
+                message = "UTR submitted for verification."
+            })
             : BadRequest(new { success = false, message = result.ErrorMessage });
     }
 
     // ========================= UTR VERIFICATION QUEUE =========================
 
-    /// <summary>List all pending offline UTR submissions for admin review.</summary>
+    /// <summary>List all pending offline bank transfer and direct UPI QR UTR submissions for admin review.</summary>
     [HttpGet("pending-utrs")]
     public async Task<IActionResult> GetPendingUtrs(
         [FromQuery] int? campusId, [FromQuery] int? academicYearId)
@@ -312,13 +337,21 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>Approve or reject a pending UTR submission.</summary>
     [HttpPost("approve-utr")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> ApproveUtr([FromBody] ApproveUtrRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
         var result = await _settlementService.ApproveOrRejectUtrAsync(request, GetCurrentUserId());
         return result.Success
-            ? Ok(new { success = true, receiptNumber = result.ReceiptNumber })
+            ? Ok(new
+            {
+                success = true,
+                transactionId = request.TransactionId,
+                feePaymentId = result.FeePaymentId,
+                receiptNumber = result.ReceiptNumber,
+                amount = result.Amount
+            })
             : BadRequest(new { success = false, message = result.ErrorMessage });
     }
 
@@ -386,30 +419,149 @@ public class FeePaymentGatewayController : ControllerBase
 
     // ========================= ACCOUNT & GATEWAY CONFIGURATION =========================
 
+    private bool IsGlobalAdmin()
+    {
+        return User.IsInRole("Admin") || User.IsInRole("Super Admin") ||
+               User.IsInRole("SuperAdmin") || User.IsInRole("Administrator");
+    }
+
+    private async Task<(bool Ok, int? CampusId, IActionResult? ErrorResult)> ResolveConfigCampusAccessAsync(
+        int? requestedCampusId,
+        bool requireExplicitCampusId)
+    {
+        if (requestedCampusId.HasValue && requestedCampusId.Value <= 0)
+        {
+            return (false, null, BadRequest(new
+            {
+                success = false,
+                message = "A valid positive campusId is required."
+            }));
+        }
+
+        if (IsGlobalAdmin())
+        {
+            if (requireExplicitCampusId && (!requestedCampusId.HasValue || requestedCampusId.Value <= 0))
+            {
+                return (false, null, BadRequest(new
+                {
+                    success = false,
+                    message = "A valid positive campusId is required."
+                }));
+            }
+
+            return (true, requestedCampusId, null);
+        }
+
+        if (_campusAuthService != null)
+        {
+            var access = await _campusAuthService.ResolveCampusAccessAsync(User, requestedCampusId);
+            if (!access.IsAuthorized)
+            {
+                return (false, null, StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = access.ErrorMessage ?? "You are not authorized to access payment settings for this campus."
+                }));
+            }
+
+            if (requireExplicitCampusId && (!requestedCampusId.HasValue || access.EffectiveCampusId != requestedCampusId.Value))
+            {
+                return (false, null, BadRequest(new
+                {
+                    success = false,
+                    message = "A valid positive campusId is required."
+                }));
+            }
+
+            return (true, access.EffectiveCampusId, null);
+        }
+
+        try
+        {
+            var resolved = CampusContextResolver.ResolveAndValidateCampusId(User, requestedCampusId);
+            if (requireExplicitCampusId && (!requestedCampusId.HasValue || resolved != requestedCampusId.Value))
+            {
+                return (false, null, BadRequest(new
+                {
+                    success = false,
+                    message = "A valid positive campusId is required."
+                }));
+            }
+
+            return (true, resolved, null);
+        }
+        catch (ForbiddenException ex)
+        {
+            return (false, null, StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                success = false,
+                message = ex.Message
+            }));
+        }
+    }
+
     /// <summary>
-    /// Gets active payment receiving bank details, UPI VPA, and gateway configuration.
-    /// Secrets are masked for security.
+    /// Gets active payment receiving bank details, UPI VPA, and gateway configuration for the authorized campus.
+    /// Secrets are never returned; only boolean presence flags are exposed.
     /// </summary>
     [HttpGet("config")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> GetConfig([FromQuery] int? campusId)
     {
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+            campusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
         var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
-        var config = await _gatewayService.GetConfigAsync(campusId, apiBaseUrl);
+        var config = await _gatewayService.GetConfigAsync(effectiveCampusId, apiBaseUrl);
         return Ok(config);
     }
 
     /// <summary>
-    /// Updates receiving bank account details, UPI VPA, and Razorpay gateway credentials.
+    /// Updates receiving bank account details, UPI VPA, and Razorpay gateway credentials for an authorized campus.
+    /// Validates active fields and stored secret preservation before any database write occurs.
     /// </summary>
     [HttpPost("config")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> UpdateConfig([FromBody] UpdatePaymentGatewayConfigRequest request)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (request == null)
+            return BadRequest(new { success = false, message = "Request body is required." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(new ValidationProblemDetails(ModelState));
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            request.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
 
         var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
-        var updated = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId(), apiBaseUrl);
-        return Ok(new { success = true, message = "Payment gateway configuration saved successfully.", data = updated });
+        var result = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId(), apiBaseUrl);
+
+        if (!result.Success)
+        {
+            foreach (var kvp in result.Errors)
+            {
+                foreach (var msg in kvp.Value)
+                {
+                    ModelState.AddModelError(kvp.Key, msg);
+                }
+            }
+
+            return BadRequest(new ValidationProblemDetails(ModelState)
+            {
+                Title = "Payment gateway configuration validation failed.",
+                Detail = result.ErrorMessage
+            });
+        }
+
+        return Ok(new
+        {
+            success = true,
+            message = "Payment gateway configuration saved successfully.",
+            data = result.Data
+        });
     }
 }

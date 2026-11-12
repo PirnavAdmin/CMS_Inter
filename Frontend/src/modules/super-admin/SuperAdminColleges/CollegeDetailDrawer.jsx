@@ -11,7 +11,6 @@ import {
   Phone, 
   Globe, 
   Calendar, 
-  ShieldCheck, 
   AlertTriangle,
   KeyRound,
   ExternalLink
@@ -39,7 +38,6 @@ export default function CollegeDetailDrawer({
 
   const tabs = [
     { id: "overview", label: "Overview & Profile", icon: Building2 },
-    { id: "campuses", label: "Campuses Roll-Up", icon: MapPin },
     { id: "modules", label: "Module Entitlements", icon: Layers },
     { id: "subscription", label: "Plan & Quota", icon: CreditCard },
     { id: "admins", label: "Administrators", icon: UserCheck },
@@ -148,27 +146,7 @@ export default function CollegeDetailDrawer({
             </div>
           )}
 
-          {/* TAB 2: CAMPUSES ROLL-UP */}
-          {activeTab === "campuses" && (
-            <div className="sa-drawer-pane">
-              <div className="sa-hierarchy-notice">
-                <ShieldCheck size={18} />
-                <div>
-                  <strong>Architectural Rule: Campus Management belongs to College Admin</strong>
-                  <p>Individual campuses, buildings, classrooms, and timetables are managed directly by the College Admin within their institution portal.</p>
-                </div>
-              </div>
-
-              <div className="sa-campuses-summary-card">
-                <div className="sa-campuses-count-badge">
-                  <span>Registered Campuses</span>
-                  <strong>{college.campuses && college.campuses !== "-" ? college.campuses : "—"}</strong>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: MODULE ENTITLEMENTS */}
+          {/* TAB 2: MODULE ENTITLEMENTS */}
           {activeTab === "modules" && (
             <div className="sa-drawer-pane">
               <div className="sa-pane-intro">
@@ -195,7 +173,7 @@ export default function CollegeDetailDrawer({
             </div>
           )}
 
-          {/* TAB 4: PLAN & QUOTA */}
+          {/* TAB 3: PLAN & QUOTA */}
           {activeTab === "subscription" && (
             <div className="sa-drawer-pane">
               <div className="sa-quota-overview">

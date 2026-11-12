@@ -72,10 +72,17 @@ const normalizeTodayData = (raw) => {
     shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "--",
     shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "--",
     isLate: Boolean(raw.isLate ?? raw.IsLate),
+    isMissedCheckout: Boolean(raw.isMissedCheckout ?? raw.IsMissedCheckout),
+    isMissedCheckoutResolved: Boolean(raw.isMissedCheckoutResolved ?? raw.IsMissedCheckoutResolved),
+    isCheckOutAllowed: raw.isCheckOutAllowed !== undefined || raw.IsCheckOutAllowed !== undefined ? Boolean(raw.isCheckOutAllowed ?? raw.IsCheckOutAllowed) : Boolean((raw.inTime || raw.InTime) && !(raw.outTime || raw.OutTime)),
     todayStatus: raw.todayStatus || raw.TodayStatus || "--",
     canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationId: raw.regularizationId ?? raw.RegularizationId ?? null,
     regularizationState: raw.regularizationState || raw.RegularizationState || null,
+    regularizationType: raw.regularizationType || raw.RegularizationType || null,
+    regularizationReason: raw.regularizationReason || raw.RegularizationReason || null,
+    regularizationAdminRemarks: raw.regularizationAdminRemarks || raw.RegularizationAdminRemarks || null,
     markedByAdmin: Boolean(raw.markedByAdmin ?? raw.MarkedByAdmin),
   };
 };
@@ -240,9 +247,15 @@ export default function AccountantMyAttendance() {
             hours: l.hours || l.Hours,
             device: l.device || l.Device,
             status: l.status || l.Status,
+            isMissedCheckout: Boolean(l.isMissedCheckout ?? l.IsMissedCheckout),
+            isMissedCheckoutResolved: Boolean(l.isMissedCheckoutResolved ?? l.IsMissedCheckoutResolved),
             canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
             isToday: Boolean(l.isToday ?? l.IsToday),
+            regularizationId: l.regularizationId ?? l.RegularizationId ?? null,
             regularizationState: l.regularizationState || l.RegularizationState,
+            regularizationType: l.regularizationType || l.RegularizationType || null,
+            regularizationReason: l.regularizationReason || l.RegularizationReason || null,
+            regularizationAdminRemarks: l.regularizationAdminRemarks || l.RegularizationAdminRemarks || null,
             holidayName: l.holidayName || l.HolidayName || null,
           })),
           metrics: normalizeMetrics(rawMetrics),
@@ -375,11 +388,17 @@ export default function AccountantMyAttendance() {
   // Open Regularization Modal for a specific date
   const openRegularizeModal = (log) => {
     if (!log.canRegularize || !log.rawDate || regLock.current) return;
+    const detectedType = log.isMissedCheckout || log.status === "Missed Checkout"
+      ? "Missed Checkout"
+      : log.status === "Late"
+      ? "Late Attendance"
+      : "Absent";
     setRegForm({
       rawDate: log.rawDate,
       displayDate: log.date || log.Date || log.day || "Selected Date",
-      requestedInTime: toInputTime(log.inTime) || toInputTime(todayData.shiftStartTime),
-      requestedOutTime: toInputTime(log.outTime) || toInputTime(todayData.shiftEndTime),
+      requestType: detectedType,
+      requestedInTime: toInputTime(log.inTime) || "",
+      requestedOutTime: detectedType === "Missed Checkout" ? "" : (toInputTime(log.outTime) || ""),
       reason: "",
     });
     setParam("regularize", String(log.rawDate).slice(0, 10));
@@ -389,18 +408,20 @@ export default function AccountantMyAttendance() {
   const handleSubmitRegularization = async (e) => {
     e.preventDefault();
     if (regLock.current) return;
-    if (!regForm.reason.trim()) {
-      notify("Please provide a reason for attendance regularization.", "error");
+    if (regForm.reason.trim().length < 5) {
+      notify("Please provide a reason of at least 5 characters for regularization.", "error");
       return;
     }
 
     regLock.current = true;
     setRegSubmitting(true);
     try {
+      const reqType = regForm.requestType || (selectedLog?.isMissedCheckout ? "Missed Checkout" : selectedLog?.status === "Late" ? "Late Attendance" : "Absent");
       const payload = {
         attendanceDate: regForm.rawDate,
+        requestType: reqType,
         requestedInTime: regForm.requestedInTime ? `${regForm.requestedInTime}:00` : null,
-        requestedOutTime: regForm.requestedOutTime ? `${regForm.requestedOutTime}:00` : null,
+        requestedOutTime: reqType === "Missed Checkout" ? null : (regForm.requestedOutTime ? `${regForm.requestedOutTime}:00` : null),
         reason: regForm.reason.trim(),
       };
 
@@ -580,9 +601,9 @@ export default function AccountantMyAttendance() {
               <button
                 type="button"
                 className={`acct-att-punch-pill-btn checkout ${
-                  todayData.status === "punched_in" && !todayData.markedByAdmin && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
+                  todayData.status === "punched_in" && !todayData.isMissedCheckout && todayData.isCheckOutAllowed !== false && !todayData.markedByAdmin && !actionLoading && !loadingToday && !todayError ? "active" : "inactive"
                 }`}
-                disabled={todayData.status !== "punched_in" || todayData.markedByAdmin || actionLoading || loadingToday || Boolean(todayError)}
+                disabled={todayData.status !== "punched_in" || Boolean(todayData.isMissedCheckout) || todayData.isCheckOutAllowed === false || todayData.markedByAdmin || actionLoading || loadingToday || Boolean(todayError)}
                 onClick={handlePunchOut}
               >
                 {actionLoading && todayData.status === "punched_in" ? (
@@ -590,7 +611,7 @@ export default function AccountantMyAttendance() {
                 ) : (
                   <LogOut size={15} />
                 )}
-                <span>{todayData.markedByAdmin ? "Check Out (Admin Managed)" : todayData.status === "missed_checkout" ? "Missed Checkout" : todayData.outTime ? "Checked Out" : "Check Out"}</span>
+                <span>{todayData.markedByAdmin ? "Check Out (Admin Managed)" : todayData.outTime ? "Checked Out" : "Check Out"}</span>
               </button>
 
               <div className="acct-att-punch-foot-hint">{todayData.markedByAdmin ? "Attendance recorded by Administration." : "After check-in only"}</div>
@@ -825,6 +846,9 @@ export default function AccountantMyAttendance() {
                               <span className={`acct-att-status-badge ${getStatusBadgeClass(status)}`}>
                                 {status}
                               </span>
+                              {log.isMissedCheckout && !log.isMissedCheckoutResolved && (
+                                <span className="acct-att-holiday-name-subtext" style={{ color: "#c2410c", fontWeight: 600 }}>Missed Checkout</span>
+                              )}
                               {holidayName && (
                                 <span className="acct-att-holiday-name-subtext" title={holidayName}>
                                   {holidayName}
@@ -834,12 +858,17 @@ export default function AccountantMyAttendance() {
                           )}
                         </td>
                         <td style={{ textAlign: "center" }}>
-                          {regState === "pending" ? (
-                            <span className="acct-att-reg-badge pending">Pending</span>
-                          ) : regState === "approved" ? (
-                            <span className="acct-att-reg-badge approved">Approved</span>
-                          ) : regState === "rejected" ? (
-                            <span className="acct-att-reg-badge rejected">Rejected</span>
+                          {regState === "pending" || regState === "approved" || regState === "rejected" ? (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                              <span className={`acct-att-reg-badge ${regState}`} title={log.regularizationReason || ""}>
+                                {regState === "pending" ? "Pending" : regState === "approved" ? "Approved" : "Rejected"}
+                              </span>
+                              {log.regularizationAdminRemarks && (
+                                <span style={{ fontSize: 10.5, color: "#64748b", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={log.regularizationAdminRemarks}>
+                                  {log.regularizationAdminRemarks}
+                                </span>
+                              )}
+                            </div>
                           ) : canReg && log.rawDate ? (
                             <button
                               type="button"
@@ -898,39 +927,47 @@ export default function AccountantMyAttendance() {
 
             <form onSubmit={handleSubmitRegularization}>
               <div className="acct-att-reg-modal-body">
-                <div className="acct-att-reg-form-group">
-                  <label className="acct-att-reg-label">Attendance Date</label>
-                  <input
-                    type="text"
-                    className="acct-att-reg-input"
-                    value={regForm.displayDate}
-                    disabled
-                  />
-                </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div className="acct-att-reg-form-group">
-                    <label className="acct-att-reg-label">Requested In-Time</label>
-                    <input
-                      type="time"
-                      className="acct-att-reg-input"
-                      value={regForm.requestedInTime}
-                      onChange={(e) => setRegForm({ ...regForm, requestedInTime: e.target.value })}
-                      required
-                    />
+                    <label className="acct-att-reg-label">Attendance Date</label>
+                    <input type="text" className="acct-att-reg-input" value={regForm.displayDate} disabled />
                   </div>
-
                   <div className="acct-att-reg-form-group">
-                    <label className="acct-att-reg-label">Requested Out-Time</label>
-                    <input
-                      type="time"
+                    <label className="acct-att-reg-label">Request Type</label>
+                    <select
                       className="acct-att-reg-input"
-                      value={regForm.requestedOutTime}
-                      onChange={(e) => setRegForm({ ...regForm, requestedOutTime: e.target.value })}
-                      required
-                    />
+                      value={regForm.requestType || "Late Attendance"}
+                      onChange={(e) => setRegForm({ ...regForm, requestType: e.target.value })}
+                    >
+                      <option value="Late Attendance">Late Attendance</option>
+                      <option value="Missed Checkout">Missed Checkout</option>
+                      <option value="Absent">Absent / Missing Punch</option>
+                    </select>
                   </div>
                 </div>
+
+                {(regForm.requestType || "Late Attendance") !== "Missed Checkout" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div className="acct-att-reg-form-group">
+                      <label className="acct-att-reg-label">Requested In-Time</label>
+                      <input
+                        type="time"
+                        className="acct-att-reg-input"
+                        value={regForm.requestedInTime}
+                        onChange={(e) => setRegForm({ ...regForm, requestedInTime: e.target.value })}
+                      />
+                    </div>
+                    <div className="acct-att-reg-form-group">
+                      <label className="acct-att-reg-label">Requested Out-Time</label>
+                      <input
+                        type="time"
+                        className="acct-att-reg-input"
+                        value={regForm.requestedOutTime}
+                        onChange={(e) => setRegForm({ ...regForm, requestedOutTime: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="acct-att-reg-form-group">
                   <label className="acct-att-reg-label">Reason / Justification *</label>

@@ -24,7 +24,13 @@ export const notificationApi = {
       };
     } catch (error) {
       console.warn("[notificationApi] Failed to fetch notifications:", error.message);
-      return { success: false, items: [], total: 0, unreadCount: 0 };
+      return {
+        success: false,
+        items: [],
+        total: 0,
+        unreadCount: 0,
+        error: error?.response?.data?.message || error?.message || "Failed to load notifications.",
+      };
     }
   },
 

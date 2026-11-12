@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -13,9 +13,20 @@ namespace CollegeManagement.API.Models
 
         public int? StaffId { get; set; }
         public int? FacultyId { get; set; }
+        public int? StaffAttendanceId { get; set; }
 
         [Required]
         public DateTime AttendanceDate { get; set; }
+
+        [Required]
+        [MaxLength(50)]
+        public string RequestType { get; set; } = "Late Attendance";
+
+        [MaxLength(50)]
+        public string? OriginalAttendanceStatus { get; set; }
+        public byte? OriginalStatusCode { get; set; }
+        public TimeSpan? OriginalInTime { get; set; }
+        public TimeSpan? OriginalOutTime { get; set; }
 
         public TimeSpan? RequestedInTime { get; set; }
         public TimeSpan? RequestedOutTime { get; set; }
@@ -32,6 +43,10 @@ namespace CollegeManagement.API.Models
         public string? AdminRemarks { get; set; }
 
         public int? ReviewedByUserId { get; set; }
+
+        [MaxLength(150)]
+        public string? ReviewedByAdminName { get; set; }
+
         public DateTime? ReviewedAt { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -44,6 +59,9 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(FacultyId))]
         public virtual CollegeManagement.API.Models.Faculty.Faculty? Faculty { get; set; }
+
+        [ForeignKey(nameof(StaffAttendanceId))]
+        public virtual StaffAttendance? StaffAttendance { get; set; }
 
         #endregion
     }

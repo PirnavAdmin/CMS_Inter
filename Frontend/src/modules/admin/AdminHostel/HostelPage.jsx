@@ -411,6 +411,9 @@ export default function HostelPage() {
   const isAdminHostelRoute = Boolean(adminView);
   const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
   const isWarden = isWardenRole(user?.role, user) || isWardenRoute;
+  // Warden scope is always resolved from the logged-in account, never from a
+  // display name or a user-selectable hostel value.
+  const wardenStaffId = user?.staffId ?? user?.StaffId ?? user?.staff?.staffId ?? "";
   const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
   const canAccessAdminEndpoints = isAdmin && !isWarden;
 
@@ -825,6 +828,13 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
+      if (isWarden && !wardenStaffId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setDashboardData(null);
+        setApiError("Your warden account is not linked to a Staff ID. Please contact Admin.");
+        return;
+      }
       const shouldFetchStaff = canAccessAdminEndpoints;
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
@@ -834,33 +844,62 @@ export default function HostelPage() {
         hostelApi.getRoomTypes().catch(() => null),
         hostelApi.getRooms().catch(() => null),
         hostelApi.getBeds().catch(() => null),
-        hostelApi.getWardens().catch(() => null),
+        hostelApi.getWardens(isWarden ? { staffId: wardenStaffId, status: "Active" } : undefined).catch(() => null),
         hostelApi.getStudentAllocations().catch(() => null),
         hostelApi.getOutpassLeave().catch(() => null),
         hostelApi.getTransferVacate().catch(() => null),
-        hostelApi.getHostelDashboard().catch(() => null),
-        apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => null),
-        apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)),
+        isWarden ? Promise.resolve(null) : hostelApi.getHostelDashboard().catch(() => null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
+          : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAdmissions ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
         hostelApi.getAttendance().catch(() => null),
       ]);
 
+      const rawWardenAssignments = wardensRes.status === "fulfilled" ? extractCollection(wardensRes.value?.data) : [];
+      const activeAssignments = isWarden
+        ? rawWardenAssignments.filter((assignment) =>
+          String(assignment?.staffId ?? assignment?.StaffId ?? "") === String(wardenStaffId) &&
+          !/inactive|revoked|deleted/i.test(String(assignment?.status ?? assignment?.Status ?? "Active"))
+        )
+        : rawWardenAssignments;
+
+      if (isWarden && activeAssignments.length === 0) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setDashboardData(null);
+        setApiError("No active hostel block is assigned to your account. Please contact Admin.");
+        return;
+      }
+
+      const assignedBlockIds = new Set(activeAssignments.map((assignment) => assignment?.hostelId ?? assignment?.HostelId ?? assignment?.blockId ?? assignment?.BlockId).filter((id) => id !== undefined && id !== null && id !== "").map(String));
+      const assignedBlockNames = new Set(activeAssignments.flatMap((assignment) => [assignment?.hostelName, assignment?.HostelName, assignment?.blockName, assignment?.BlockName, assignment?.assignedHostels]).filter(Boolean).flatMap((name) => String(name).split(",")).map((name) => name.trim().toLowerCase()).filter(Boolean));
+      const isAssignedBlockRecord = (record) => {
+        if (!isWarden) return true;
+        const id = record?.hostelId ?? record?.HostelId ?? record?.blockId ?? record?.BlockId ?? record?.fromHostelId;
+        if (id !== undefined && id !== null && id !== "" && assignedBlockIds.has(String(id))) return true;
+        const names = [record?.hostelName, record?.HostelName, record?.blockName, record?.BlockName, record?.block, record?.hostelCode, record?.blockCode]
+          .filter(Boolean).map((name) => String(name).trim().toLowerCase());
+        return names.some((name) => assignedBlockNames.has(name));
+      };
+
       let uniqueBlocks = [];
       if (blocksRes.status === "fulfilled") {
-        const rawBlocks = extractCollection(blocksRes.value?.data);
+        const rawBlocks = extractCollection(blocksRes.value?.data).filter(isAssignedBlockRecord);
         const mappedBlocks = Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : [];
         uniqueBlocks = Array.from(new Map(mappedBlocks.map((b) => [String(b.id || b.code), b])).values());
       }
 
       // Discover and preserve all hostel blocks present in rooms and allocations
-      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data) : [];
-      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data) : [];
+      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data).filter(isAssignedBlockRecord) : [];
+      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data).filter(isAssignedBlockRecord) : [];
       const seenBlockKeys = new Set(uniqueBlocks.map((b) => (b.name || b.code || "").toLowerCase()));
 
       if (Array.isArray(rawRoomsList)) {
@@ -928,26 +967,27 @@ export default function HostelPage() {
         setCategories(uniqueCats);
       }
       if (roomsRes.status === "fulfilled") {
-        const rawRooms = extractCollection(roomsRes.value?.data);
+        const rawRooms = rawRoomsList;
         const mappedRooms = Array.isArray(rawRooms) ? rawRooms.map((r) => mapRoom(r, uniqueBlocks, uniqueCats)) : [];
         const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.roomNo}`), r])).values());
         setRooms(uniqueRooms);
       }
       if (bedsRes.status === "fulfilled") {
-        const rawBeds = extractCollection(bedsRes.value?.data);
+        const assignedRoomIds = new Set(rawRoomsList.map((room) => room?.roomId ?? room?.RoomId ?? room?.id).filter(Boolean).map(String));
+        const rawBeds = extractCollection(bedsRes.value?.data).filter((bed) => isAssignedBlockRecord(bed) || assignedRoomIds.has(String(bed?.roomId ?? bed?.RoomId ?? "")));
         const mappedBeds = Array.isArray(rawBeds) ? rawBeds.map(mapBed) : [];
         const uniqueBeds = Array.from(new Map(mappedBeds.map((bd) => [String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd])).values());
         setBeds(uniqueBeds);
       }
       if (wardensRes.status === "fulfilled") {
-        const rawWardens = extractCollection(wardensRes.value?.data);
+        const rawWardens = activeAssignments;
         const mappedWardens = Array.isArray(rawWardens) ? rawWardens.map((w) => mapWarden(w, uniqueBlocks)) : [];
         const uniqueWardens = Array.from(new Map(mappedWardens.map((w) => [String(w.id || `${w.hostelId}-${w.staffId}`), w])).values());
         setWardens(uniqueWardens);
       }
       let derivedStudents = [];
       if (allocsRes.status === "fulfilled") {
-        const rawAllocs = extractCollection(allocsRes.value?.data);
+        const rawAllocs = rawAllocsList;
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map((a) => mapAllocation(a, uniqueBlocks)) : [];
         const uniqueAllocs = Array.from(new Map(mapped.map((a) => [String(a.id || `${a.studentId}-${a.bedId}`), a])).values());
         setAllocations(uniqueAllocs);
@@ -992,19 +1032,25 @@ export default function HostelPage() {
         }));
       }
       if (outpassRes.status === "fulfilled") {
-        const rawOutpass = extractCollection(outpassRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawOutpass = extractCollection(outpassRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedOutpass = Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : [];
         const uniqueOutpass = Array.from(new Map(mappedOutpass.map((o) => [String(o.id), o])).values());
         setOutpasses(uniqueOutpass);
       }
       if (transferRes.status === "fulfilled") {
-        const rawTransfer = extractCollection(transferRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawTransfer = extractCollection(transferRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedTransfer = Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : [];
         const uniqueTransfer = Array.from(new Map(mappedTransfer.map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-      if (dashRes.status === "fulfilled") {
+      if (!isWarden && dashRes.status === "fulfilled") {
         setDashboardData(dashRes.value?.data?.data ?? dashRes.value?.data ?? null);
+      } else if (isWarden) {
+        // The generic dashboard endpoint is campus-wide. Warden totals below
+        // are calculated exclusively from the assignment-filtered collections.
+        setDashboardData(null);
       }
       let loadedStaff = [];
       if (hostelStaffRes?.status === "fulfilled" && hostelStaffRes.value?.data) {
@@ -1089,7 +1135,8 @@ export default function HostelPage() {
       }
       if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
       if (attRes?.status === "fulfilled" && attRes.value?.data) {
-        const rawAtt = extractCollection(attRes.value.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawAtt = extractCollection(attRes.value.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedAtt = Array.isArray(rawAtt) ? rawAtt.map(mapAttendanceRecord).filter(Boolean) : [];
         setAttendanceRecords(mappedAtt);
       }
@@ -1098,7 +1145,7 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
+  }, [canAccessAdminEndpoints, isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord, wardenStaffId]);
 
   const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
@@ -9152,13 +9199,12 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   return (
     <DashboardLayout
-      title={isWardenRoute ? "Hostel Warden Portal" : "Hostel Management"}
+      title={isWardenRoute ? undefined : "Hostel Management"}
       subtitle={
-        isWardenRoute
-          ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
-          : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+        isWardenRoute ? undefined : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
       }
       breadcrumb={isWardenRoute ? undefined : ["Hostel Management"]}
+      hidePageHeader={isWardenRoute}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -9679,7 +9725,7 @@ function StudentAttendanceModal({
         <div className="cms-student-att-filter-row">
           {activeMode === "daily" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Date:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Date:</label>
               <input
                 type="date"
                 value={selectedDate}
@@ -9699,7 +9745,7 @@ function StudentAttendanceModal({
               {/* Quick Roll Call Marker for this student on selectedDate if it's attendanceDate */}
               {selectedDate === attendanceDate && (
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-muted)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>
                     Mark for Today ({attendanceShift}):
                   </span>
                   <div className="cms-att-status-group" style={{ transform: "scale(0.9)", transformOrigin: "right center" }}>
@@ -9739,7 +9785,7 @@ function StudentAttendanceModal({
 
           {activeMode === "monthly" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Month:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Month:</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -9757,7 +9803,7 @@ function StudentAttendanceModal({
 
           {activeMode === "custom" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Date Range:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Date Range:</label>
               <input
                 type="date"
                 value={rangeStart}
@@ -13202,7 +13248,7 @@ function RoomModal({
                 }}
               >
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Floor Rooms Breakdown</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Floor Rooms Breakdown</span>
                   <strong style={{ fontSize: 12.5, color: "var(--cms-text)" }}>
                     <span style={{ color: "#2563eb" }}>❄️ {summaryStats.acRooms} AC</span>
                     {" / "}
@@ -13210,13 +13256,13 @@ function RoomModal({
                   </strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Total Bed Capacity</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Total Bed Capacity</span>
                   <strong style={{ fontSize: 13, color: "var(--cms-text)" }}>
                     {summaryStats.totalBeds} Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""}
                   </strong>
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--cms-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block", marginBottom: 3 }}>
                     Monthly Tariff
                   </label>
                   <input

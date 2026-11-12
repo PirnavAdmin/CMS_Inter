@@ -37,7 +37,8 @@ public class PaymentGatewayService : IPaymentGatewayService
         int MonitoringTimeoutSeconds,
         int PollingIntervalMs,
         bool EnableCounterUpiQr,
-        bool EnableRazorpay);
+        bool EnableRazorpay,
+        bool EnableOfflineUtr);
 
     public PaymentGatewayService(
         AppDbContext context,
@@ -104,13 +105,56 @@ public class PaymentGatewayService : IPaymentGatewayService
 
             var amountToPay = request.Amount;
             var campusId = studentFee.Student?.CampusId;
+            if (!campusId.HasValue || campusId.Value <= 0)
+            {
+                return new CreateGatewayOrderResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Student campus is not assigned. Cannot determine receiving payment account."
+                };
+            }
+
+            if (request.CampusId.HasValue && request.CampusId.Value > 0 && request.CampusId.Value != campusId.Value)
+            {
+                return new CreateGatewayOrderResponse
+                {
+                    Success = false,
+                    ErrorMessage = $"Campus mismatch: student belongs to Campus #{campusId.Value}, not selected Campus #{request.CampusId.Value}."
+                };
+            }
+
+            var resolvedCampusName = await _context.Campuses
+                .AsNoTracking()
+                .Where(c => c.CampusId == campusId.Value)
+                .Select(c => c.CampusName)
+                .FirstOrDefaultAsync();
+
             var cfg = await ResolveEffectiveConfigAsync(campusId);
+
+            if (request.PaymentMethod == "RAZORPAY" && !cfg.EnableRazorpay)
+            {
+                return new CreateGatewayOrderResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Razorpay Gateway is disabled for this campus. Enable it in Payment Gateway Settings."
+                };
+            }
+
+            if (request.PaymentMethod == "UPI_QR" && !cfg.EnableCounterUpiQr)
+            {
+                return new CreateGatewayOrderResponse
+                {
+                    Success = false,
+                    ErrorMessage = "Dynamic UPI QR is disabled for this campus. Enable it in Payment Gateway Settings."
+                };
+            }
 
             // Compute SHA-256 payload fingerprint
             var payloadFingerprint = $"{request.StudentId}|{request.StudentFeeId}|{amountToPay:F2}|{cfg.Currency}|{request.PaymentMethod}";
             var payloadHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadFingerprint))).ToLowerInvariant();
 
             var hasRazorpayKeys = IsConfiguredSecret(cfg.KeyId) && IsConfiguredSecret(cfg.KeySecret);
+            var useRazorpayProvider = cfg.EnableRazorpay && hasRazorpayKeys;
 
             string orderId;
             string? gatewayQrCodeId = null;
@@ -118,10 +162,13 @@ public class PaymentGatewayService : IPaymentGatewayService
             string? upiUri = null;
             string? qrCodeBase64 = null;
             bool requiresManualUtr = false;
+            string? qrMode = null;
+            string? resolvedPayeeVpa = null;
+            string? resolvedPayeeName = null;
             var expiresAtUtc = DateTime.UtcNow.AddSeconds(cfg.MonitoringTimeoutSeconds > 0 ? cfg.MonitoringTimeoutSeconds : 600);
 
             // 2. Online Razorpay Integration (Order + Dynamic Single-Use UPI QR when UPI_QR requested)
-            if (hasRazorpayKeys)
+            if (useRazorpayProvider)
             {
                 var razorpayClient = new Razorpay.Api.RazorpayClient(cfg.KeyId, cfg.KeySecret);
                 var amountPaise = (int)Math.Round(amountToPay * 100m, MidpointRounding.AwayFromZero);
@@ -140,11 +187,17 @@ public class PaymentGatewayService : IPaymentGatewayService
 
                 if (request.PaymentMethod == "UPI_QR")
                 {
+                    qrMode = "RAZORPAY_DYNAMIC_QR";
+                    resolvedPayeeVpa = null;
+                    resolvedPayeeName = string.IsNullOrWhiteSpace(cfg.PayeeName)
+                        ? "Razorpay Merchant Account"
+                        : $"{cfg.PayeeName} (Razorpay Merchant)";
+
                     var closeByUnix = new DateTimeOffset(expiresAtUtc).ToUnixTimeSeconds();
                     var qrOptions = new Dictionary<string, object>
                     {
                         { "type", "upi_qr" },
-                        { "name", cfg.PayeeName },
+                        { "name", string.IsNullOrWhiteSpace(cfg.PayeeName) ? "College Fee Counter" : cfg.PayeeName },
                         { "usage", "single_use" },
                         { "fixed_amount", true },
                         { "payment_amount", amountPaise },
@@ -183,6 +236,11 @@ public class PaymentGatewayService : IPaymentGatewayService
                         };
                     }
                 }
+                else
+                {
+                    qrMode = "RAZORPAY_CHECKOUT";
+                    resolvedPayeeName = "Razorpay Merchant Account";
+                }
             }
             else
             {
@@ -191,7 +249,7 @@ public class PaymentGatewayService : IPaymentGatewayService
                     return new CreateGatewayOrderResponse
                     {
                         Success = false,
-                        ErrorMessage = "Razorpay API keys are not configured on the server. Please configure keys in Payment Gateway Settings."
+                        ErrorMessage = "Razorpay API keys are not configured for this campus. Please configure keys in Payment Gateway Settings."
                     };
                 }
 
@@ -199,15 +257,18 @@ public class PaymentGatewayService : IPaymentGatewayService
                 orderId = $"order_direct_{DateTime.UtcNow.Ticks}";
                 if (request.PaymentMethod == "UPI_QR")
                 {
-                    if (!IsConfiguredSecret(cfg.PayeeVpa))
+                    if (!IsConfiguredSecret(cfg.PayeeVpa) || string.IsNullOrWhiteSpace(cfg.PayeeName))
                     {
                         return new CreateGatewayOrderResponse
                         {
                             Success = false,
-                            ErrorMessage = "Neither Razorpay credentials nor a merchant UPI VPA is configured."
+                            ErrorMessage = "Neither Razorpay credentials nor a valid merchant UPI VPA / Payee Name is configured for this campus."
                         };
                     }
 
+                    qrMode = "DIRECT_VPA_QR";
+                    resolvedPayeeVpa = cfg.PayeeVpa;
+                    resolvedPayeeName = cfg.PayeeName;
                     upiUri = BuildNpciUpiUri(amountToPay, orderId, cfg.PayeeVpa, cfg.PayeeName, cfg.Currency);
                     qrCodeBase64 = GenerateQrCodeBase64(upiUri);
                     requiresManualUtr = true;
@@ -260,8 +321,13 @@ public class PaymentGatewayService : IPaymentGatewayService
                 GatewayQrImageUrl = gatewayQrImageUrl,
                 ExpiresAt = expiresAtUtc,
                 RequiresManualUtr = requiresManualUtr,
+                QrMode = qrMode,
+                ResolvedCampusId = campusId,
+                ResolvedCampusName = resolvedCampusName ?? $"Campus {campusId}",
+                PayeeVpa = resolvedPayeeVpa,
+                PayeeName = resolvedPayeeName,
                 PaymentLink = paymentLink,
-                KeyId = hasRazorpayKeys ? cfg.KeyId : null
+                KeyId = useRazorpayProvider ? cfg.KeyId : null
             };
         }
         catch (Exception ex)
@@ -444,6 +510,15 @@ public class PaymentGatewayService : IPaymentGatewayService
             .FirstOrDefaultAsync();
     }
 
+    public async Task<int?> GetStudentCampusIdAsync(int studentId)
+    {
+        return await _context.Students
+            .AsNoTracking()
+            .Where(s => s.StudentId == studentId)
+            .Select(s => s.CampusId)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<int?> GetStudentIdForTransactionAsync(string orderId)
     {
         return await _context.PaymentGatewayTransactions
@@ -466,11 +541,18 @@ public class PaymentGatewayService : IPaymentGatewayService
 
     public async Task<PaymentGatewayConfigDto> GetConfigAsync(int? campusId, string? apiBaseUrl = null)
     {
-        var config = await _context.PaymentGatewayConfigs
-            .AsNoTracking()
-            .Where(c => c.CampusId == campusId || c.CampusId == null)
-            .OrderByDescending(c => c.CampusId.HasValue)
-            .FirstOrDefaultAsync();
+        var query = _context.PaymentGatewayConfigs.AsNoTracking();
+        var config = campusId.HasValue
+            ? await query
+                .Where(c => c.CampusId == campusId.Value)
+                .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+                .ThenByDescending(c => c.Id)
+                .FirstOrDefaultAsync()
+            : await query
+                .Where(c => c.CampusId == null)
+                .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+                .ThenByDescending(c => c.Id)
+                .FirstOrDefaultAsync();
 
         var resolvedApiUrl = !string.IsNullOrWhiteSpace(apiBaseUrl)
             ? apiBaseUrl.TrimEnd('/')
@@ -479,21 +561,39 @@ public class PaymentGatewayService : IPaymentGatewayService
 
         if (config == null)
         {
+            var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
+            var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
+            var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : 5173;
+
             return new PaymentGatewayConfigDto
             {
+                Id = 0,
                 CampusId = campusId,
-                PayeeVpa = _settings.UpiConfig.PayeeVpa,
-                PayeeName = _settings.UpiConfig.PayeeName,
-                Currency = _settings.UpiConfig.Currency,
-                Provider = _settings.Provider,
-                RazorpayKeyId = IsConfiguredSecret(_settings.Razorpay.KeyId) ? _settings.Razorpay.KeyId : string.Empty,
-                HasRazorpayKeySecret = IsConfiguredSecret(_settings.Razorpay.KeySecret),
-                HasRazorpayWebhookSecret = IsConfiguredSecret(_settings.Razorpay.WebhookSecret),
-                PollingIntervalMs = _settings.Polling.IntervalMs,
-                MonitoringTimeoutSeconds = _settings.Polling.TimeoutSeconds,
-                BaseAppUrl = _settings.BaseAppUrl,
-                FrontendPort = _settings.FrontendPort,
-                WebhookUrl = webhookUrl
+                BankName = string.Empty,
+                AccountHolderName = string.Empty,
+                AccountNumber = string.Empty,
+                IfscCode = string.Empty,
+                BranchName = string.Empty,
+                AccountType = "Current",
+                PayeeVpa = string.Empty,
+                PayeeName = string.Empty,
+                Currency = "INR",
+                Mcc = "8220",
+                EnableCounterUpiQr = false,
+                Provider = string.IsNullOrWhiteSpace(_settings.Provider) ? "Razorpay" : _settings.Provider.Trim(),
+                IsLiveMode = false,
+                RazorpayKeyId = string.Empty,
+                HasRazorpayKeySecret = false,
+                HasRazorpayWebhookSecret = false,
+                AutoCapture = true,
+                EnableRazorpay = false,
+                EnableOfflineUtr = false,
+                PollingIntervalMs = defaultInterval,
+                MonitoringTimeoutSeconds = defaultTimeout,
+                BaseAppUrl = _settings.BaseAppUrl ?? string.Empty,
+                FrontendPort = defaultPort,
+                WebhookUrl = webhookUrl,
+                UpdatedAt = null
             };
         }
 
@@ -501,20 +601,20 @@ public class PaymentGatewayService : IPaymentGatewayService
         {
             Id = config.Id,
             CampusId = config.CampusId,
-            BankName = config.BankName,
-            AccountHolderName = config.AccountHolderName,
-            AccountNumber = config.AccountNumber,
-            IfscCode = config.IfscCode,
-            BranchName = config.BranchName,
-            AccountType = config.AccountType ?? "Current",
-            PayeeVpa = config.PayeeVpa,
-            PayeeName = config.PayeeName,
-            Currency = config.Currency,
-            Mcc = config.Mcc,
+            BankName = config.BankName ?? string.Empty,
+            AccountHolderName = config.AccountHolderName ?? string.Empty,
+            AccountNumber = config.AccountNumber ?? string.Empty,
+            IfscCode = config.IfscCode ?? string.Empty,
+            BranchName = config.BranchName ?? string.Empty,
+            AccountType = string.IsNullOrWhiteSpace(config.AccountType) ? "Current" : config.AccountType,
+            PayeeVpa = config.PayeeVpa ?? string.Empty,
+            PayeeName = config.PayeeName ?? string.Empty,
+            Currency = string.IsNullOrWhiteSpace(config.Currency) ? "INR" : config.Currency,
+            Mcc = config.Mcc ?? string.Empty,
             EnableCounterUpiQr = config.EnableCounterUpiQr,
-            Provider = config.Provider,
+            Provider = string.IsNullOrWhiteSpace(config.Provider) ? "Razorpay" : config.Provider,
             IsLiveMode = config.IsLiveMode,
-            RazorpayKeyId = config.RazorpayKeyId,
+            RazorpayKeyId = config.RazorpayKeyId ?? string.Empty,
             HasRazorpayKeySecret = IsConfiguredSecret(config.RazorpayKeySecret),
             HasRazorpayWebhookSecret = IsConfiguredSecret(config.RazorpayWebhookSecret),
             AutoCapture = config.AutoCapture,
@@ -522,17 +622,60 @@ public class PaymentGatewayService : IPaymentGatewayService
             EnableOfflineUtr = config.EnableOfflineUtr,
             PollingIntervalMs = config.PollingIntervalMs,
             MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
-            BaseAppUrl = config.BaseAppUrl,
+            BaseAppUrl = config.BaseAppUrl ?? string.Empty,
             FrontendPort = config.FrontendPort,
             WebhookUrl = webhookUrl,
             UpdatedAt = config.UpdatedAt
         };
     }
 
-    public async Task<PaymentGatewayConfigDto> UpdateConfigAsync(UpdatePaymentGatewayConfigRequest request, int? userId, string? apiBaseUrl = null)
+    public async Task<UpdateGatewayConfigResult> UpdateConfigAsync(UpdatePaymentGatewayConfigRequest request, int? userId, string? apiBaseUrl = null)
     {
         var config = await _context.PaymentGatewayConfigs
-            .FirstOrDefaultAsync(c => c.CampusId == request.CampusId);
+            .Where(c => c.CampusId == request.CampusId)
+            .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        // DB-aware validation BEFORE mutating or adding any entity so validation errors cause zero partial DB updates.
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (request.EnableRazorpay)
+        {
+            var hasValidKeySecret = !string.IsNullOrWhiteSpace(request.RazorpayKeySecret)
+                ? IsConfiguredSecret(request.RazorpayKeySecret)
+                : IsConfiguredSecret(config?.RazorpayKeySecret);
+
+            if (!hasValidKeySecret)
+            {
+                errors[nameof(request.RazorpayKeySecret)] = new[]
+                {
+                    "Razorpay Key Secret is required when Razorpay Gateway is enabled and no valid secret is stored."
+                };
+            }
+
+            var hasValidWebhookSecret = !string.IsNullOrWhiteSpace(request.RazorpayWebhookSecret)
+                ? IsConfiguredSecret(request.RazorpayWebhookSecret)
+                : IsConfiguredSecret(config?.RazorpayWebhookSecret);
+
+            if (!hasValidWebhookSecret)
+            {
+                errors[nameof(request.RazorpayWebhookSecret)] = new[]
+                {
+                    "Razorpay Webhook Secret is required when Razorpay Gateway is enabled and no valid secret is stored."
+                };
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            return new UpdateGatewayConfigResult
+            {
+                Success = false,
+                Errors = errors,
+                ErrorMessage = string.Join(" ", errors.Values.SelectMany(v => v))
+            };
+        }
 
         if (config == null)
         {
@@ -544,22 +687,25 @@ public class PaymentGatewayService : IPaymentGatewayService
             _context.PaymentGatewayConfigs.Add(config);
         }
 
-        config.BankName = request.BankName?.Trim();
-        config.AccountHolderName = request.AccountHolderName?.Trim();
-        config.AccountNumber = request.AccountNumber?.Trim();
-        config.IfscCode = request.IfscCode?.Trim()?.ToUpperInvariant();
-        config.BranchName = request.BranchName?.Trim();
-        config.AccountType = request.AccountType?.Trim() ?? "Current";
+        config.BankName = (request.BankName ?? string.Empty).Trim();
+        config.AccountHolderName = (request.AccountHolderName ?? string.Empty).Trim();
+        config.AccountNumber = (request.AccountNumber ?? string.Empty).Trim();
+        config.IfscCode = (request.IfscCode ?? string.Empty).Trim().ToUpperInvariant();
+        config.BranchName = (request.BranchName ?? string.Empty).Trim();
+        config.AccountType = string.Equals(request.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase)
+            ? "Savings"
+            : "Current";
 
-        config.PayeeVpa = request.PayeeVpa.Trim();
-        config.PayeeName = request.PayeeName.Trim();
-        config.Currency = string.IsNullOrWhiteSpace(request.Currency) ? "INR" : request.Currency.Trim();
-        config.Mcc = request.Mcc?.Trim() ?? "8220";
+        // Preserve empty strings when UPI QR is disabled (never insert a default VPA/name behind the user's back)
+        config.PayeeVpa = (request.PayeeVpa ?? string.Empty).Trim();
+        config.PayeeName = (request.PayeeName ?? string.Empty).Trim();
+        config.Currency = string.IsNullOrWhiteSpace(request.Currency) ? "INR" : request.Currency.Trim().ToUpperInvariant();
+        config.Mcc = (request.Mcc ?? string.Empty).Trim();
         config.EnableCounterUpiQr = request.EnableCounterUpiQr;
 
         config.Provider = request.Provider.Trim();
         config.IsLiveMode = request.IsLiveMode;
-        config.RazorpayKeyId = request.RazorpayKeyId?.Trim();
+        config.RazorpayKeyId = (request.RazorpayKeyId ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(request.RazorpayKeySecret))
             config.RazorpayKeySecret = request.RazorpayKeySecret.Trim();
         if (!string.IsNullOrWhiteSpace(request.RazorpayWebhookSecret))
@@ -568,47 +714,71 @@ public class PaymentGatewayService : IPaymentGatewayService
         config.EnableRazorpay = request.EnableRazorpay;
         config.EnableOfflineUtr = request.EnableOfflineUtr;
 
-        config.PollingIntervalMs = request.PollingIntervalMs > 0 ? request.PollingIntervalMs : 1200;
-        config.MonitoringTimeoutSeconds = request.MonitoringTimeoutSeconds > 0 ? request.MonitoringTimeoutSeconds : 600;
-        config.BaseAppUrl = request.BaseAppUrl?.Trim();
-        config.FrontendPort = request.FrontendPort > 0 ? request.FrontendPort : 5173;
+        config.PollingIntervalMs = request.PollingIntervalMs;
+        config.MonitoringTimeoutSeconds = request.MonitoringTimeoutSeconds;
+        config.BaseAppUrl = (request.BaseAppUrl ?? string.Empty).Trim();
+        config.FrontendPort = request.FrontendPort;
 
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedByUserId = userId;
 
         await _context.SaveChangesAsync();
 
-        return await GetConfigAsync(request.CampusId, apiBaseUrl);
+        var reloaded = await GetConfigAsync(request.CampusId, apiBaseUrl);
+        return new UpdateGatewayConfigResult
+        {
+            Success = true,
+            Data = reloaded
+        };
     }
 
     // ========================= PRIVATE HELPERS =========================
 
     private async Task<EffectiveGatewayConfig> ResolveEffectiveConfigAsync(int? campusId)
     {
-        var config = await _context.PaymentGatewayConfigs
-            .AsNoTracking()
-            .Where(c => c.CampusId == campusId || c.CampusId == null)
-            .OrderByDescending(c => c.CampusId.HasValue)
-            .FirstOrDefaultAsync();
+        var query = _context.PaymentGatewayConfigs.AsNoTracking();
+        var config = campusId.HasValue
+            ? await query
+                .Where(c => c.CampusId == campusId.Value)
+                .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+                .ThenByDescending(c => c.Id)
+                .FirstOrDefaultAsync()
+            : await query
+                .Where(c => c.CampusId == null)
+                .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+                .ThenByDescending(c => c.Id)
+                .FirstOrDefaultAsync();
 
-        var vpa = !string.IsNullOrWhiteSpace(config?.PayeeVpa) ? config.PayeeVpa : _settings.UpiConfig.PayeeVpa;
-        var name = !string.IsNullOrWhiteSpace(config?.PayeeName) ? config.PayeeName : _settings.UpiConfig.PayeeName;
-        var currency = !string.IsNullOrWhiteSpace(config?.Currency) ? config.Currency : _settings.UpiConfig.Currency;
-        var keyId = !string.IsNullOrWhiteSpace(config?.RazorpayKeyId) ? config.RazorpayKeyId : _settings.Razorpay.KeyId;
-        var keySecret = !string.IsNullOrWhiteSpace(config?.RazorpayKeySecret) ? config.RazorpayKeySecret : _settings.Razorpay.KeySecret;
-        var webhookSecret = !string.IsNullOrWhiteSpace(config?.RazorpayWebhookSecret) ? config.RazorpayWebhookSecret : _settings.Razorpay.WebhookSecret;
+        if (config != null)
+        {
+            return new EffectiveGatewayConfig(
+                PayeeVpa: config.PayeeVpa ?? string.Empty,
+                PayeeName: config.PayeeName ?? string.Empty,
+                Currency: string.IsNullOrWhiteSpace(config.Currency) ? "INR" : config.Currency,
+                KeyId: config.RazorpayKeyId,
+                KeySecret: config.RazorpayKeySecret,
+                WebhookSecret: config.RazorpayWebhookSecret,
+                MonitoringTimeoutSeconds: config.MonitoringTimeoutSeconds > 0 ? config.MonitoringTimeoutSeconds : _settings.Polling.TimeoutSeconds,
+                PollingIntervalMs: config.PollingIntervalMs > 0 ? config.PollingIntervalMs : _settings.Polling.IntervalMs,
+                EnableCounterUpiQr: config.EnableCounterUpiQr,
+                EnableRazorpay: config.EnableRazorpay,
+                EnableOfflineUtr: config.EnableOfflineUtr);
+        }
+
+        var hasAppSettingsRazorpay = IsConfiguredSecret(_settings.Razorpay.KeyId) && IsConfiguredSecret(_settings.Razorpay.KeySecret);
 
         return new EffectiveGatewayConfig(
-            PayeeVpa: vpa,
-            PayeeName: name,
-            Currency: currency,
-            KeyId: keyId,
-            KeySecret: keySecret,
-            WebhookSecret: webhookSecret,
-            MonitoringTimeoutSeconds: config?.MonitoringTimeoutSeconds > 0 ? config.MonitoringTimeoutSeconds : _settings.Polling.TimeoutSeconds,
-            PollingIntervalMs: config?.PollingIntervalMs > 0 ? config.PollingIntervalMs : _settings.Polling.IntervalMs,
-            EnableCounterUpiQr: config?.EnableCounterUpiQr ?? true,
-            EnableRazorpay: config?.EnableRazorpay ?? true);
+            PayeeVpa: string.Empty,
+            PayeeName: string.Empty,
+            Currency: string.IsNullOrWhiteSpace(_settings.UpiConfig.Currency) ? "INR" : _settings.UpiConfig.Currency,
+            KeyId: hasAppSettingsRazorpay ? _settings.Razorpay.KeyId : null,
+            KeySecret: hasAppSettingsRazorpay ? _settings.Razorpay.KeySecret : null,
+            WebhookSecret: IsConfiguredSecret(_settings.Razorpay.WebhookSecret) ? _settings.Razorpay.WebhookSecret : null,
+            MonitoringTimeoutSeconds: _settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600,
+            PollingIntervalMs: _settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200,
+            EnableCounterUpiQr: false,
+            EnableRazorpay: hasAppSettingsRazorpay,
+            EnableOfflineUtr: false);
     }
 
     private static bool IsConfiguredSecret(string? value)
@@ -709,11 +879,12 @@ public class PaymentGatewayService : IPaymentGatewayService
 
     private string BuildNpciUpiUri(decimal amount, string transactionRef, string vpa, string name, string currency)
     {
+        var encodedVpa = Uri.EscapeDataString(vpa.Trim()).Replace("%40", "@");
         var sb = new StringBuilder("upi://pay?");
-        sb.Append($"pa={Uri.EscapeDataString(vpa)}");
-        sb.Append($"&pn={Uri.EscapeDataString(name)}");
+        sb.Append($"pa={encodedVpa}");
+        sb.Append($"&pn={Uri.EscapeDataString(name.Trim())}");
         sb.Append($"&am={amount:F2}");
-        sb.Append($"&cu={currency}");
+        sb.Append($"&cu={Uri.EscapeDataString(currency.Trim().ToUpperInvariant())}");
         sb.Append($"&tr={Uri.EscapeDataString(transactionRef)}");
         sb.Append($"&tn={Uri.EscapeDataString($"Fee Payment - {transactionRef}")}");
         return sb.ToString();

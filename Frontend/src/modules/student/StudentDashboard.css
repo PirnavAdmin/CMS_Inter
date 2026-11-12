@@ -227,7 +227,7 @@
 }
 
 .sp-shell {
-  --sp-sidebar-width: 218px;
+  --sp-sidebar-width: var(--sp-sidebar-expanded-width, 218px);
   --sp-primary: var(--cms-primary);
   --sp-primary-dark: var(--cms-primary-dark);
   --sp-primary-hover: var(--cms-primary-hover, var(--cms-primary-dark));
@@ -280,6 +280,40 @@
   overflow: hidden;
   border-right: 1px solid var(--sp-border);
   background: var(--sp-sidebar);
+}
+
+.sp-sidebar-resize-handle {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  width: 7px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sp-sidebar-resize-handle::after {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  bottom: 0;
+  width: 1px;
+  background: var(--sp-primary);
+  content: "";
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.sp-sidebar-resize-handle:hover::after,
+.sp-shell.is-resizing-sidebar .sp-sidebar-resize-handle::after {
+  opacity: .72;
+}
+
+.sp-shell.is-resizing-sidebar,
+.sp-shell.is-resizing-sidebar * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .sp-brand {
@@ -2156,6 +2190,14 @@
 }
 
 @media(max-width:900px) {
+  .sp-shell {
+    --sp-sidebar-width: 218px;
+  }
+
+  .sp-sidebar-resize-handle {
+    display: none;
+  }
+
   .sp-sidebar {
     position: fixed;
     left: calc(-1 * var(--sp-sidebar-width));

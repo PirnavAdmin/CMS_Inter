@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { can } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
 
 const PermissionContext = createContext({
   permissions: [],
+  isLoadingPermissions: false,
   canAccess: () => false,
   canView: () => false,
   includes: () => false,
@@ -37,15 +38,50 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
     const u = getAuthUser();
     return u?.permissions || u?.rolePermissions || [];
   });
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(() => {
+    if (permissionsProp !== undefined) return false;
+    const u = getAuthUser();
+    const cached = u?.permissions || u?.rolePermissions;
+    return Boolean(u) && (!Array.isArray(cached) || cached.length === 0);
+  });
+  const retryTimerRef = useRef(null);
+  const retryAttemptRef = useRef(0);
+  const hasApiSyncRef = useRef(false);
 
   useEffect(() => {
+    if (permissionsProp !== undefined) {
+      setIsLoadingPermissions(false);
+      return undefined;
+    }
+
     let isMounted = true;
+    const RETRY_DELAYS = [1500, 3500, 7000];
 
     const syncPermissions = async () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+
+      const freshAuth = getAuthUser();
+      if (isMounted && freshAuth) {
+        setUser(freshAuth);
+      }
+      if (!freshAuth) {
+        if (isMounted) setIsLoadingPermissions(false);
+        return;
+      }
+
       try {
         const res = await getCurrentUserPermissions();
-        if (isMounted && res?.data && Array.isArray(res.data)) {
+        if (!isMounted) return;
+
+        const source = res?.meta?.source || "api";
+        if (source === "api" && Array.isArray(res?.data)) {
+          hasApiSyncRef.current = true;
+          retryAttemptRef.current = 0;
           setLivePermissions(res.data);
+          setIsLoadingPermissions(false);
           const currentUser = getAuthUser();
           if (currentUser) {
             const updated = { ...currentUser, permissions: res.data };
@@ -58,23 +94,69 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
               // ignore
             }
           }
+          return;
+        }
+
+        if (source === "cache" && Array.isArray(res?.data) && res.data.length > 0) {
+          setLivePermissions((prev) => (Array.isArray(prev) && prev.length > 0 ? prev : res.data));
+        }
+
+        // Retry transient permission fetch errors without wiping existing permissions
+        const attempt = retryAttemptRef.current;
+        if (attempt < RETRY_DELAYS.length) {
+          retryAttemptRef.current = attempt + 1;
+          retryTimerRef.current = setTimeout(() => {
+            if (isMounted) syncPermissions();
+          }, RETRY_DELAYS[attempt]);
+        } else {
+          setIsLoadingPermissions(false);
         }
       } catch (err) {
         console.warn("Could not load faculty live permissions:", err);
+        if (!isMounted) return;
+        const attempt = retryAttemptRef.current;
+        if (attempt < RETRY_DELAYS.length) {
+          retryAttemptRef.current = attempt + 1;
+          retryTimerRef.current = setTimeout(() => {
+            if (isMounted) syncPermissions();
+          }, RETRY_DELAYS[attempt]);
+        } else {
+          setIsLoadingPermissions(false);
+        }
       }
     };
 
     syncPermissions();
 
-    const handleUpdate = () => syncPermissions();
+    const handleUpdate = () => {
+      retryAttemptRef.current = 0;
+      syncPermissions();
+    };
+    const handleReconnect = () => {
+      if (!hasApiSyncRef.current) {
+        retryAttemptRef.current = 0;
+        syncPermissions();
+      }
+    };
+
     window.addEventListener("roles-updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
+    window.addEventListener("cms-staff-updated", handleReconnect);
+    window.addEventListener("online", handleReconnect);
+    window.addEventListener("focus", handleReconnect);
     return () => {
       isMounted = false;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       window.removeEventListener("roles-updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("cms-staff-updated", handleReconnect);
+      window.removeEventListener("online", handleReconnect);
+      window.removeEventListener("focus", handleReconnect);
     };
-  }, []);
+  }, [permissionsProp]);
 
   const permissions = useMemo(() => {
     if (permissionsProp !== undefined) return permissionsProp;
@@ -108,11 +190,12 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
 
     return {
       permissions,
+      isLoadingPermissions,
       canAccess,
       canView,
       includes,
     };
-  }, [permissions, user]);
+  }, [permissions, user, isLoadingPermissions]);
 
   return <PermissionContext.Provider value={value}>{children}</PermissionContext.Provider>;
 }

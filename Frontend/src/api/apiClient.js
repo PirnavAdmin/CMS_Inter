@@ -35,6 +35,11 @@ export const getApiLoadingSnapshot = () => activeApiRequests > 0;
 const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
+// Creation has no backend idempotency contract; never replay this write automatically.
+const isAdmissionCreateRequest = (config) =>
+  String(config?.method || "get").toLowerCase() === "post"
+  && /(?:^|\/)api\/v1\/student-admissions\/?(?:\?|$)/i.test(String(config?.url || ""));
+
 const isAuthBypassRequest = (config) => {
   if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
@@ -188,7 +193,7 @@ apiClient.interceptors.request.use(
     const isHostelRequest = /\/api\/v1\/hostel/i.test(config.url || "");
 
     if (
-      !config.requireRealBackend && !isHostelRequest &&
+      !config.requireRealBackend && !isHostelRequest && !/\/api\/v1\/fees(?:\/|\?|$)/i.test(config.url || "") &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
       !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
@@ -273,11 +278,11 @@ apiClient.interceptors.response.use(
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or forced mock mode
     // When real backend is offline, do NOT return mock data - let the request fail cleanly
     if (
-      !originalRequest?.requireRealBackend && !isHostelRequest &&
+      !originalRequest?.requireRealBackend && !isHostelRequest && !/\/api\/v1\/fees(?:\/|\?|$)/i.test(originalRequest?.url || "") &&
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|lop-configuration|notifications|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;
@@ -295,7 +300,7 @@ apiClient.interceptors.response.use(
     // This ensures smooth navigation between modules without flashing 502 errors that would otherwise succeed on refresh.
     const maxProxyRetries = 2;
     const currentProxyRetries = originalRequest?._proxyRetryCount || 0;
-    if ((isProxyUnreachable || isNetworkError) && originalRequest && !originalRequest.skipNetworkRetry && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
+    if ((isProxyUnreachable || isNetworkError) && originalRequest && !isAdmissionCreateRequest(originalRequest) && !originalRequest.skipNetworkRetry && !isNgrokOffline && currentProxyRetries < maxProxyRetries) {
       originalRequest._proxyRetryCount = currentProxyRetries + 1;
       const delay = currentProxyRetries === 0 ? 300 : 700;
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -361,7 +366,7 @@ apiClient.interceptors.response.use(
     }
 
     // Handle 401 Unauthorized with automatic token refresh
-    if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
+    if (error.response?.status === 401 && originalRequest && !isAdmissionCreateRequest(originalRequest) && !isAuthBypassRequest(originalRequest)) {
       const currentToken = getStoredAccessToken();
       const isMockToken = Boolean(
         currentToken &&

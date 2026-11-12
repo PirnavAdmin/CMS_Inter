@@ -543,11 +543,22 @@ export async function removeRoleFromUser(userId, roleCode) {
 export async function getCurrentUserPermissions() {
   try {
     const response = await apiClient.get(apiEndpoints.roles.myPermissions);
-    const permissions = response?.data?.permissions || response?.data?.data || response?.data;
+    const permissions =
+      response?.data?.permissions ??
+      response?.data?.Permissions ??
+      response?.data?.data ??
+      response?.data?.Data ??
+      response?.data;
     if (Array.isArray(permissions)) {
       // Valid API response (whether permissions exist or are legitimately empty for this user)
       return apiResult(transformBackendPermissionsToMatrix(permissions), "api");
     }
+    const authUser = getAuthUser();
+    const existingPerms = authUser?.permissions || authUser?.rolePermissions;
+    if (Array.isArray(existingPerms) && existingPerms.length > 0) {
+      return apiResult(existingPerms, "cache");
+    }
+    return apiResult([], "error");
   } catch (err) {
     console.warn("Live getCurrentUserPermissions failed:", err?.message);
     // On network failure only, preserve the existing authenticated user's session cache if available
@@ -558,8 +569,6 @@ export async function getCurrentUserPermissions() {
     }
     return apiResult([], "error");
   }
-
-  return apiResult([], "api");
 }
 
 export async function cloneRole(sourceRoleId, { newName, description = "" }) {

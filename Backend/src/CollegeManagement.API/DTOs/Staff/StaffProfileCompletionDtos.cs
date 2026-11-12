@@ -124,6 +124,7 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? PhotoPath { get; set; }
         public string? OfferLetterPath { get; set; }
         public string? OfferLetterUrl => OfferLetterPath;
+        public bool OfferLetterDispatchedNow { get; set; } = false;
         public string? PhotoUrl { get; set; }
         public string? ProfilePhoto => !string.IsNullOrWhiteSpace(PhotoUrl) ? PhotoUrl : PhotoPath;
         public string? Photo
@@ -286,7 +287,7 @@ namespace CollegeManagement.API.DTOs.Staff
 
     public class UpdateStaffProfileSectionDto
     {
-        public string SectionName { get; set; } = string.Empty; // "Personal", "Address", "Education", "Experience", "Documents", "Bank", "Emergency", "Employment", "RoleSpecific"
+        public string? SectionName { get; set; } = string.Empty; // "Personal", "Address", "Education", "Experience", "Documents", "Bank", "Emergency", "Employment", "RoleSpecific"
         
         public UpdateStaffPersonalDetailsDto? Personal { get; set; }
         public UpdateStaffAddressDto? Address { get; set; }

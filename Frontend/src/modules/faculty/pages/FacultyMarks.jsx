@@ -73,6 +73,99 @@ const isObjectiveExam = (exam) => {
   return false;
 };
 
+// Helper to strictly determine if an examination matches the selected academic group
+const isExamMatchingGroup = (exam, targetGroupId, targetGroupName, allGroups = []) => {
+  if (!exam || !targetGroupId) return false;
+
+  const cleanTargetId = String(targetGroupId).trim();
+  const cleanTargetName = String(targetGroupName || "").trim().toLowerCase();
+
+  // All other group names in the college (e.g. ["bipc", "mec", "cec", "hec"])
+  const otherGroupNames = (allGroups || [])
+    .filter((g) => {
+      const gid = String(g.id || g.groupId || "").trim();
+      return gid && gid !== cleanTargetId;
+    })
+    .map((g) => String(g.name || g.groupName || "").trim().toLowerCase())
+    .filter((name) => name.length >= 2);
+
+  // 1. Check positive numeric groupId / GroupId
+  const rawGid = exam.groupId ?? exam.GroupId;
+  const numGid = rawGid != null && rawGid !== "" ? Number(rawGid) : null;
+  const hasValidNumGid = numGid !== null && !isNaN(numGid) && numGid > 0;
+
+  // 2. Check groupIds array
+  const rawGids = exam.groupIds ?? exam.GroupIds;
+  const hasGidsArray = Array.isArray(rawGids) && rawGids.length > 0;
+  const gidsSet = hasGidsArray ? new Set(rawGids.map((id) => String(id).trim())) : null;
+
+  // 3. Check groupName / GroupName
+  const examGName = String(exam.groupName ?? exam.GroupName ?? exam.group?.name ?? exam.group?.groupName ?? "").trim().toLowerCase();
+
+  // 4. Check groupSubjectSelections (Objective examinations)
+  const gSubjectSelections = exam.groupSubjectSelections;
+  const hasGSubjSelections = gSubjectSelections && typeof gSubjectSelections === "object" && Object.keys(gSubjectSelections).length > 0;
+  const gSubjKeys = hasGSubjSelections ? Object.keys(gSubjectSelections).map((k) => String(k).trim()) : [];
+
+  // Exclude explicit mismatches first:
+  // A) Exam specifies a different valid groupId, and groupIds does not include targetGroupId
+  if (hasValidNumGid && String(numGid) !== cleanTargetId) {
+    if (!hasGidsArray || !gidsSet.has(cleanTargetId)) {
+      return false;
+    }
+  }
+
+  // B) Exam has groupIds array and targetGroupId is NOT in it
+  if (hasGidsArray && !gidsSet.has(cleanTargetId)) {
+    return false;
+  }
+
+  // C) Exam has groupSubjectSelections and targetGroupId is NOT among the group keys
+  if (hasGSubjSelections && !gSubjKeys.includes(cleanTargetId)) {
+    return false;
+  }
+
+  // D) Exam has explicit groupName of another known group
+  if (examGName) {
+    if (cleanTargetName && (examGName === cleanTargetName || examGName.includes(cleanTargetName))) {
+      return true;
+    }
+    if (otherGroupNames.some((other) => examGName === other || (other.length >= 3 && examGName.includes(other)))) {
+      return false;
+    }
+  }
+
+  // E) Exam title or code specifically mentions another group as a whole word
+  const examTitleAndCode = `${exam.examName || ""} ${exam.examinationName || ""} ${exam.name || ""} ${exam.examCode || ""} ${exam.code || ""}`.toLowerCase();
+  const mentionsOtherGroup = otherGroupNames.some(
+    (other) => other && other.length >= 3 && new RegExp(`\\b${other}\\b`, "i").test(examTitleAndCode)
+  );
+  if (mentionsOtherGroup) {
+    const mentionsTargetGroup = cleanTargetName && cleanTargetName.length >= 2 && new RegExp(`\\b${cleanTargetName}\\b`, "i").test(examTitleAndCode);
+    if (!mentionsTargetGroup) {
+      return false;
+    }
+  }
+
+  // Positive matches:
+  if (hasValidNumGid && String(numGid) === cleanTargetId) return true;
+  if (hasGidsArray && gidsSet.has(cleanTargetId)) return true;
+  if (hasGSubjSelections && gSubjKeys.includes(cleanTargetId)) return true;
+  if (cleanTargetName && examGName && (examGName === cleanTargetName || examGName.includes(cleanTargetName))) return true;
+  if (cleanTargetName && cleanTargetName.length >= 2 && new RegExp(`\\b${cleanTargetName}\\b`, "i").test(examTitleAndCode)) return true;
+
+  // Schedules check
+  const schedules = exam.schedules || exam.examinationSchedules || [];
+  if (Array.isArray(schedules) && schedules.length > 0) {
+    const schedGids = schedules.map((s) => s.groupId != null ? String(s.groupId).trim() : "").filter(Boolean);
+    if (schedGids.length > 0) {
+      return schedGids.includes(cleanTargetId);
+    }
+  }
+
+  return false;
+};
+
 const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) => {
   const sectionId = filters.section;
   if (!sectionId) return [];
@@ -640,6 +733,24 @@ export default function FacultyMarks() {
     });
   }, [timetableSlots, selectedLevel, selectedGroup, selectedProgram, sectionsList]);
 
+  /* duplicate context helpers start
+  const selectedGroupName = useMemo(() => {
+    const found = timetableGroups.find((g) => String(g.id) === String(selectedGroup));
+    return found?.name || "";
+  }, [timetableGroups, selectedGroup]);
+
+  const selectedProgramName = useMemo(() => {
+    const found = timetablePrograms.find((p) => String(p.id) === String(selectedProgram));
+    return found?.name || "";
+  }, [timetablePrograms, selectedProgram]);
+
+  const selectedSectionCleanName = useMemo(() => {
+    const found = timetableSections.find((s) => String(s.id) === String(selectedSection));
+    return found?.name || "";
+  }, [timetableSections, selectedSection]);
+
+  duplicate context helpers end */
+
   // Fetch Completed Examinations matching Academic Context (Strictly completed only)
   useEffect(() => {
     let isMounted = true;
@@ -649,8 +760,15 @@ export default function FacultyMarks() {
     const cleanYear = extractId(selectedYear);
     const params = {
       campusId: effectiveCampusId,
-      ...(cleanBoard ? { boardId: Number(cleanBoard) } : {}),
-      ...(cleanYear ? { academicYearId: Number(cleanYear) } : {}),
+      CampusId: effectiveCampusId,
+      ...(cleanBoard ? { boardId: Number(cleanBoard), BoardId: Number(cleanBoard) } : {}),
+      ...(cleanYear ? { academicYearId: Number(cleanYear), AcademicYearId: Number(cleanYear) } : {}),
+      ...(selectedLevel ? { academicLevelId: Number(selectedLevel), AcademicLevelId: Number(selectedLevel) } : {}),
+      ...(selectedGroup ? { groupId: Number(selectedGroup), GroupId: Number(selectedGroup) } : {}),
+      ...(selectedProgram ? { programId: Number(selectedProgram), ProgramId: Number(selectedProgram) } : {}),
+      status: "COMPLETED",
+
+
     };
 
     apiClient.get("/api/v1/examinations", { params })
@@ -676,10 +794,17 @@ export default function FacultyMarks() {
                 (Array.isArray(e.academicLevelIds) && e.academicLevelIds.map(String).includes(String(selectedLevel)));
               if (!matchesLevel) return false;
             }
+            if (selectedProgram) {
+              const matchesProgram = !e.programId || String(e.programId) === String(selectedProgram) ||
+                (Array.isArray(e.programIds) && e.programIds.map(String).includes(String(selectedProgram)));
+              if (!matchesProgram) return false;
+            }
             if (selectedGroup) {
-              const matchesGroup = !e.groupId || String(e.groupId) === String(selectedGroup) ||
-                (Array.isArray(e.groupIds) && e.groupIds.map(String).includes(String(selectedGroup)));
-              if (!matchesGroup) return false;
+              const curGName = timetableGroups.find((g) => String(g.id) === String(selectedGroup))?.name || ""; if (!isExamMatchingGroup(e, selectedGroup, curGName, timetableGroups)) { return false;
+            }
+
+
+
             }
 
             return true;
@@ -690,18 +815,25 @@ export default function FacultyMarks() {
       .catch((err) => console.warn("Error fetching examinations:", err));
 
     return () => { isMounted = false; };
-  }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, context?.profile?.campusId, academicCtx.selectedCampus]);
+  }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram, timetableGroups, context?.profile?.campusId, academicCtx.selectedCampus]);
+
+  // Group-Filtered examinations list ensuring the dropdown strictly shows only group examinations
+  const filteredExaminationsList = useMemo(() => {
+    if (!selectedGroup) return examinationsList;
+    const gName = timetableGroups.find((g) => String(g.id) === String(selectedGroup))?.name || ""; return examinationsList.filter((ex) => isExamMatchingGroup(ex, selectedGroup, gName, timetableGroups));
+  }, [examinationsList, selectedGroup, timetableGroups]);
 
   // Keep selectedExam synchronized if the filtered completed exam list changes
   useEffect(() => {
-    if (selectedExam && examinationsList.length > 0) {
-      const exists = examinationsList.some((e) => String(e.examinationId || e.id || e.examId) === String(selectedExam));
+    if (selectedExam) {
+      const exists = filteredExaminationsList.some((e) => String(e.examinationId || e.id || e.examId) === String(selectedExam));
       if (!exists) {
         setSelectedExam("");
         setCurrentStudents([]);
+        setSubjectInclusionError(null);
       }
     }
-  }, [examinationsList, selectedExam]);
+  }, [filteredExaminationsList, selectedExam]);
 
   // Authoritative Faculty-Allocated Subjects matching Section & Academic Context (NO unrestricted fallbacks)
   const filteredSubjects = useMemo(() => {
@@ -759,8 +891,8 @@ export default function FacultyMarks() {
   }, [timetableSections, selectedSection]);
 
   const selectedExamInfo = useMemo(() => {
-    return examinationsList.find((e) => String(e.examinationId || e.id) === String(selectedExam)) || null;
-  }, [examinationsList, selectedExam]);
+    return filteredExaminationsList.find((e) => String(e.examinationId || e.id) === String(selectedExam)) || null;
+  }, [filteredExaminationsList, selectedExam]);
 
   const selectedExamName = selectedExamInfo
     ? `${selectedExamInfo.examName || selectedExamInfo.name || "Exam"} (${selectedExamInfo.examCode || selectedExamInfo.code || selectedExamInfo.examinationId || "EXAM"})`
@@ -863,6 +995,7 @@ export default function FacultyMarks() {
       if (!inclusionCheck.isValid) {
         setSubjectInclusionError(inclusionCheck.error);
         setCurrentStudents([]);
+        setSubjectInclusionError(null);
         setEvaluationStatus("NOT STARTED");
         setCurrentRejectionRemarks("");
         setLoadingStudents(false);
@@ -2038,7 +2171,7 @@ export default function FacultyMarks() {
                   placeholder="Select Academic Level"
                   options={[{ id: "", name: "Select Academic Level" }, ...timetableLevels]}
                   onChange={(e) => {
-                    setSelectedLevel(e.target.value);
+                    setSelectedLevel(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedGroup("");
                     setSelectedProgram("");
                     setSelectedSection("");
@@ -2055,7 +2188,7 @@ export default function FacultyMarks() {
                   placeholder="Select Group"
                   options={[{ id: "", name: "Select Group" }, ...timetableGroups]}
                   onChange={(e) => {
-                    setSelectedGroup(e.target.value);
+                    setSelectedGroup(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedProgram("");
                     setSelectedSection("");
                     setContextApplied(false);
@@ -2071,7 +2204,7 @@ export default function FacultyMarks() {
                   placeholder="Select Program"
                   options={[{ id: "", name: "Select Program" }, ...timetablePrograms]}
                   onChange={(e) => {
-                    setSelectedProgram(e.target.value);
+                    setSelectedProgram(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedSection("");
                     setContextApplied(false);
                   }}
@@ -2086,7 +2219,7 @@ export default function FacultyMarks() {
                   placeholder="Select Section"
                   options={[{ id: "", name: "Select Section" }, ...timetableSections]}
                   onChange={(e) => {
-                    setSelectedSection(e.target.value);
+                    setSelectedSection(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setContextApplied(false);
                   }}
                 />
@@ -2116,7 +2249,7 @@ export default function FacultyMarks() {
                       placeholder="Select Examination"
                       options={[
                         { id: "", name: "Select Examination" },
-                        ...examinationsList.map((ex) => ({
+                        ...filteredExaminationsList.map((ex) => ({
                           id: ex.examinationId || ex.id || ex.examId,
                           name: `${ex.examName || ex.name} (${ex.examCode || ex.code || ex.examinationId || "EXAM"})`,
                         })),
@@ -2132,6 +2265,7 @@ export default function FacultyMarks() {
                           handleExamOrSubjectChange(newExam, autoSubj);
                         } else if (!newExam) {
                           setCurrentStudents([]);
+        setSubjectInclusionError(null);
                         }
                       }}
                     />

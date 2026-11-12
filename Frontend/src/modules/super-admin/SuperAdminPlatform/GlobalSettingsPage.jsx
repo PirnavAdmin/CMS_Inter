@@ -31,6 +31,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import settingsIllustration from "@/assets/settings-3d/campus-configuration.png";
 import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
@@ -220,7 +221,7 @@ export default function GlobalSettingsPage() {
       <div className="gsp-header-card">
         <div className="gsp-header-left">
           <div className="gsp-header-icon">
-            <Settings size={22} />
+            <ThreeDIcon name="general-settings" size={34} />
           </div>
           <div className="gsp-header-text">
             <h1 className="gsp-page-title">Global Platform Settings</h1>

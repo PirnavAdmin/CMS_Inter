@@ -4159,309 +4159,22 @@ BEGIN
 END //
 DELIMITER ;
 
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_Admissions` //
-CREATE PROCEDURE `sp_Report_Admissions`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            sa.`AdmissionId`, 
-                            COALESCE(sa.`AdmissionNo`, CONCAT('ADM-', LPAD(sa.`AdmissionId`, 4, '0'))) AS `AdmissionNo`, 
-                            CONCAT(COALESCE(sa.`FirstName`, ''), ' ', COALESCE(sa.`LastName`, '')) AS `StudentName`, 
-                            sa.`FirstName`, 
-                            sa.`LastName`, 
-                            sa.`BoardId`, 
-                            COALESCE(b.`BoardName`, 'Board') AS `BoardName`, 
-                            COALESCE(b.`BoardName`, 'Board') AS `Board`, 
-                            sa.`AcademicYearId`, 
-                            COALESCE(ay.`AcademicYearName`, 'Academic Year') AS `AcademicYear`, 
-                            sa.`AcademicLevelId`, 
-                            'Intermediate' AS `AcademicLevel`, 
-                            sa.`GroupId`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `Group`, 
-                            s.`SectionId`, 
-                            COALESCE(sec.`SectionName`, 'Section') AS `SectionName`, 
-                            COALESCE(sec.`SectionName`, 'Section') AS `Section`, 
-                            sa.`AdmissionDate`, 
-                            COALESCE(sa.`Status`, IF(sa.`IsApproved` = 1, 'Approved', 'Pending')) AS `Status`, 
-                            sa.`IsApproved`, 
-                            sa.`IsRejected`, 
-                            sa.`IsVerified`, 
-                            sa.`Gender`, 
-                            sa.`FatherName`, 
-                            sa.`FatherMobile`, 
-                            COALESCE(s.`RollNo`, sa.`AdmissionNo`) AS `RollNo`, 
-                            sa.`AdmissionType`, 
-                            sa.`Medium`, 
-                            COALESCE(ay.`AcademicYearName`, 'Academic Year') AS `Period`, 
-                            1 AS `Admissions`, 
-                            IF(sa.`IsApproved` = 1, 1, 0) AS `Approved`, 
-                            IF(sa.`IsRejected` = 1, 1, 0) AS `Rejected` 
-                        FROM `StudentAdmissions` sa 
-                        LEFT JOIN `Boards` b ON b.`BoardId` = sa.`BoardId` 
-                        LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = sa.`AcademicYearId` 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = sa.`GroupId` 
-                        LEFT JOIN `Students` s ON (s.`AdmissionId` = sa.`AdmissionId` OR s.`AdmissionNo` = sa.`AdmissionNo`) 
-                        LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
-                        WHERE sa.`IsActive` = 1 AND sa.`IsRejected` = 0 AND sa.`Status` != 'Rejected'
-                          AND (p_BoardId IS NULL OR sa.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                          AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate) 
-                        ORDER BY sa.`AdmissionDate` DESC;
-                    END //
-DELIMITER ;
+-- =========================================================================
+-- =========================================================================
+-- =========================================================================
+-- =========================================================================
+-- MODULE 05: REPORTS & ANALYTICS — COMPLETE PRODUCTION STORED PROCEDURES
+-- Synchronized cleanly with live MySQL schema, DTOs, and ReportService
+-- =========================================================================
 
 DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_Attendance` //
-CREATE PROCEDURE `sp_Report_Attendance`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            DATE_FORMAT(a.`AttendanceDate`, '%Y-%m-%d') AS `Period`, 
-                            a.`AttendanceDate`, 
-                            COUNT(*) AS `TotalStudents`, 
-                            SUM(a.`Status` = 1) AS `Present`, 
-                            SUM(a.`Status` = 0) AS `Absent`, 
-                            SUM(a.`Status` = 2) AS `Late`, 
-                            SUM(a.`Status` = 3) AS `Leave`, 
-                            ROUND(SUM(a.`Status` = 1) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `AttendancePercentage`, 
-                            COALESCE(MAX(g.`GroupName`), 'Group') AS `GroupName`, 
-                            COALESCE(MAX(sec.`SectionName`), 'Section') AS `SectionName` 
-                        FROM `Attendances` a 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = a.`GroupId` 
-                        LEFT JOIN `Sections` sec ON sec.`SectionId` = a.`SectionId` 
-                        WHERE a.`IsActive` = 1 
-                          AND (p_BoardId IS NULL OR a.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR a.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR a.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR a.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR a.`SectionId` = p_SectionId) 
-                          AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate) 
-                        GROUP BY DATE(a.`AttendanceDate`) 
-                        ORDER BY a.`AttendanceDate` DESC;
-                    END //
-DELIMITER ;
 
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_AuditLogs` //
-CREATE PROCEDURE `sp_Report_AuditLogs`(
-    IN p_UserId INT,
-    IN p_Module VARCHAR(100),
-    IN p_FromDate DATETIME,
-    IN p_ToDate DATETIME,
-    IN p_PageNumber INT,
-    IN p_PageSize INT
-,
-    IN p_CampusId INT)
-BEGIN
-    DECLARE v_Offset INT;
-    DECLARE v_Limit INT;
-
-    SET v_Limit = COALESCE(p_PageSize, 50);
-    SET v_Offset = (COALESCE(p_PageNumber, 1) - 1) * v_Limit;
-
-    SELECT 
-        al.`Id`,
-        al.`UserId`,
-        al.`Action`,
-        al.`Module`,
-        al.`Details`,
-        al.`IpAddress`,
-        al.`CreatedAt`
-    FROM `AuditLogs` al
-    WHERE (p_UserId IS NULL OR al.`UserId` = p_UserId)
-      AND (p_Module IS NULL OR al.`Module` = p_Module)
-      AND (p_FromDate IS NULL OR al.`CreatedAt` >= p_FromDate)
-      AND (p_ToDate IS NULL OR al.`CreatedAt` <= p_ToDate)
-    ORDER BY al.`CreatedAt` DESC
-    LIMIT v_Limit OFFSET v_Offset;
-END //
-DELIMITER ;
-
-DELIMITER //
+-- -------------------------------------------------------------------------
+-- 1. Dashboard Overview KPIs & Institutional Compliance Summary
+-- -------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_Report_Dashboard` //
 CREATE PROCEDURE `sp_Report_Dashboard`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        -- 1.1 Overview 10 Metrics Summary Card
-                        SELECT
-                            (SELECT COUNT(*) FROM `StudentAdmissions` sa 
-                             WHERE sa.`IsActive` = 1 AND sa.`IsRejected` = 0 AND sa.`Status` != 'Rejected'
-                               AND (p_BoardId IS NULL OR sa.`BoardId` = p_BoardId) 
-                               AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
-                               AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId)
-                               AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId) 
-                               AND (p_SectionId IS NULL OR EXISTS (SELECT 1 FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.`AdmissionId` = sa.`AdmissionId` OR s.`AdmissionNo` = sa.`AdmissionNo`) AND s.`SectionId` = p_SectionId))
-                               AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate) 
-                               AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate)
-                            ) AS `Admissions`,
-
-                            ROUND(
-                                COALESCE(
-                                    (SELECT SUM(a.`Status` = 1) * 100.0 / NULLIF(COUNT(*), 0)
-                                     FROM `Attendances` a 
-                                     WHERE a.`IsActive` = 1 
-                                       AND (p_BoardId IS NULL OR a.`BoardId` = p_BoardId) 
-                                       AND (p_AcademicYearId IS NULL OR a.`AcademicYearId` = p_AcademicYearId) 
-                                       AND (p_AcademicLevelId IS NULL OR a.`AcademicLevelId` = p_AcademicLevelId) 
-                                       AND (p_GroupId IS NULL OR a.`GroupId` = p_GroupId) 
-                                       AND (p_SectionId IS NULL OR a.`SectionId` = p_SectionId) 
-                                       AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate) 
-                                       AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)), 
-                                    0.0
-                                ), 2
-                            ) AS `Attendance`,
-
-                            COALESCE(
-                                (SELECT SUM(fp.`Amount`) 
-                                 FROM `FeePayments` fp 
-                                 LEFT JOIN `Students` s ON s.`StudentId` = fp.`StudentId` 
-                                 WHERE fp.`Status` NOT IN ('Cancelled', 'Failed')
-                                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-                                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-                                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
-                                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-                                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                                   AND (p_FromDate IS NULL OR fp.`PaymentDate` >= p_FromDate) 
-                                   AND (p_ToDate IS NULL OR fp.`PaymentDate` <= p_ToDate)), 
-                                0.0
-                            ) AS `FeeCollection`,
-
-                            COALESCE(
-                                (SELECT SUM(sf.`BalanceAmount`) 
-                                 FROM `StudentFees` sf 
-                                 LEFT JOIN `Students` s ON s.`StudentId` = sf.`StudentId` 
-                                 WHERE sf.`BalanceAmount` > 0 AND sf.`Status` != 'Cancelled'
-                                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-                                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-                                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
-                                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-                                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)), 
-                                0.0
-                            ) AS `DueFees`,
-
-                            (SELECT COUNT(*) 
-                             FROM `Examinations` e 
-                             WHERE e.`IsActive` = 1 
-                               AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId) 
-                               AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId) 
-                               AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId)
-                               AND (p_GroupId IS NULL OR e.`GroupId` = p_GroupId) 
-                               AND (p_FromDate IS NULL OR e.`StartDate` >= p_FromDate) 
-                               AND (p_ToDate IS NULL OR e.`EndDate` <= p_ToDate)
-                            ) AS `Examinations`,
-
-                            (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) 
-                             FROM `Results` r 
-                             LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                             WHERE r.`IsPublished` = 1 
-                               AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                               AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                               AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                               AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                               AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate) 
-                               AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
-                            ) AS `ResultsPublished`,
-
-                            COALESCE(
-                                (SELECT ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 1) 
-                                 FROM `Timetables` tt 
-                                 JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId`
-                                 WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0
-                                   AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId) 
-                                   AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId) 
-                                   AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId)
-                                   AND (p_GroupId IS NULL OR tt.`GroupId` = p_GroupId) 
-                                   AND (p_SectionId IS NULL OR tt.`SectionId` = p_SectionId)), 
-                                0.0
-                            ) AS `FacultyWorkload`,
-
-                            (SELECT COUNT(*) 
-                             FROM `Students` s 
-                             WHERE s.`IsActive` = 1 
-                               AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-                               AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-                               AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
-                               AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-                               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
-                            ) AS `StudentStrength`,
-
-                            ROUND(
-                                CASE 
-                                    WHEN (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                                          WHERE r.`IsPublished` = 1 
-                                            AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                                            AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                                            AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                                            AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                                            AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)) = 0 
-                                    THEN 0 
-                                    ELSE (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                                          WHERE r.`IsPublished` = 1 AND r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED') 
-                                            AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                                            AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                                            AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                                            AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                                            AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)) * 100.0 / 
-                                         (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                                          WHERE r.`IsPublished` = 1 
-                                            AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                                            AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                                            AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                                            AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                                            AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)) 
-                                END, 2
-                            ) AS `PassPercentage`,
-
-                            LEAST(
-                                (SELECT COUNT(DISTINCT r.`StudentId`) 
-                                 FROM `Results` r 
-                                 LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                                 WHERE r.`IsPublished` = 1 AND r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED')
-                                   AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                                   AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                                   AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                                   AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
-                                ), 10
-                            ) AS `ToppersIdentified`;
-                    END //
-DELIMITER ;
-
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_DueFees` //
-CREATE PROCEDURE `sp_Report_DueFees`(
+    IN p_CampusId INT,
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
     IN p_AcademicLevelId INT,
@@ -4469,396 +4182,1471 @@ CREATE PROCEDURE `sp_Report_DueFees`(
     IN p_SectionId INT,
     IN p_FromDate DATETIME,
     IN p_ToDate DATETIME
-,
-    IN p_CampusId INT)
+)
+BEGIN
+    SELECT
+        -- 1. Total Valid Active Admissions (excludes Rejected, matches sp_Report_Admissions 1:1)
+        (SELECT COUNT(*)
+         FROM `StudentAdmissions` sa
+         WHERE sa.`IsActive` = 1
+           AND sa.`IsRejected` = 0
+           AND COALESCE(sa.`Status`, '') != 'Rejected'
+           AND (p_CampusId IS NULL OR sa.`CampusId` = p_CampusId)
+           AND (p_BoardId IS NULL OR sa.`BoardId` = p_BoardId)
+           AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId)
+           AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId)
+           AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId)
+           AND (p_SectionId IS NULL OR EXISTS (
+               SELECT 1 FROM `Students` s
+               WHERE s.`IsActive` = 1
+                 AND (s.`AdmissionId` = sa.`AdmissionId` OR s.`AdmissionNo` = sa.`AdmissionNo`)
+                 AND s.`SectionId` = p_SectionId
+           ))
+           AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate)
+           AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate)
+        ) AS `Admissions`,
+
+        -- 2. Average Student Attendance % (Status 1=Present, 3=Late counted as attended per AttendanceStatus enum)
+        ROUND(
+            COALESCE(
+                (SELECT SUM(a.`Status` IN (1, 3)) * 100.0 / NULLIF(COUNT(*), 0)
+                 FROM `Attendances` a
+                 JOIN `Students` s ON s.`StudentId` = a.`StudentId` AND s.`IsActive` = 1
+                 WHERE a.`IsActive` = 1
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR COALESCE(a.`BoardId`, s.`BoardId`) = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR COALESCE(a.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR COALESCE(a.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR COALESCE(a.`GroupId`, s.`GroupId`) = p_GroupId)
+                   AND (p_SectionId IS NULL OR COALESCE(a.`SectionId`, s.`SectionId`) = p_SectionId)
+                   AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate)
+                   AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)),
+                0.0
+            ), 2
+        ) AS `Attendance`,
+
+        -- 2B. Average Staff Attendance % (Status 0,1=Present, 3=Late counted as attended)
+        ROUND(
+            COALESCE(
+                (SELECT SUM(fa.`Status` IN (0, 1, 3)) * 100.0 / NULLIF(COUNT(*), 0)
+                 FROM `StaffAttendances` fa
+                 JOIN `StaffAttendanceSessions` sas ON sas.`StaffSessionId` = fa.`StaffSessionId` AND sas.`IsActive` = 1
+                 JOIN `Staff` st ON st.`Id` = fa.`FacultyId` AND st.`IsDeleted` = 0
+                 WHERE fa.`IsActive` = 1
+                   AND (p_CampusId IS NULL OR p_CampusId <= 0 OR st.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR p_BoardId <= 0 OR st.`BoardId` = p_BoardId OR ((st.`BoardId` IS NULL OR st.`BoardId` = 0) AND EXISTS (SELECT 1 FROM `Boards` b WHERE b.`BoardId` = p_BoardId AND b.`IsActive` = 1)))
+                   AND (p_FromDate IS NULL OR DATE(sas.`AttendanceDate`) >= DATE(p_FromDate))
+                   AND (p_ToDate IS NULL OR DATE(sas.`AttendanceDate`) <= DATE(p_ToDate))),
+                0.0
+            ), 2
+        ) AS `StaffAttendance`,
+
+        -- 3. Total Fee Collection (excludes Cancelled/Failed, matches sp_Report_FeeCollection 1:1)
+        COALESCE(
+            (SELECT SUM(COALESCE(fp.`Amount`, 0))
+             FROM `FeePayments` fp
+             JOIN `Students` s ON s.`StudentId` = fp.`StudentId` AND s.`IsActive` = 1
+             WHERE COALESCE(fp.`Status`, '') NOT IN ('Cancelled', 'Failed')
+               AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+               AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+               AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+               AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+               AND (p_FromDate IS NULL OR fp.`PaymentDate` >= p_FromDate)
+               AND (p_ToDate IS NULL OR fp.`PaymentDate` <= p_ToDate)),
+            0.0
+        ) AS `FeeCollection`,
+
+        -- 4. Outstanding Due Fees (active student accounts, matches sp_Report_DueFees 1:1)
+        COALESCE(
+            (SELECT SUM(sf.`BalanceAmount`)
+             FROM `StudentFees` sf
+             JOIN `Students` s ON s.`StudentId` = sf.`StudentId` AND s.`IsActive` = 1
+             WHERE sf.`BalanceAmount` > 0
+               AND COALESCE(sf.`Status`, '') != 'Cancelled'
+               AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+               AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+               AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+               AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)),
+            0.0
+        ) AS `DueFees`,
+
+        -- 5. Active Examinations Conducted / Scheduled / Ongoing (excludes Cancelled/Draft, matches sp_Report_Examinations 1:1)
+        (SELECT COUNT(*)
+         FROM `Examinations` e
+         WHERE e.`IsActive` = 1
+           AND UPPER(COALESCE(e.`Status`, '')) NOT IN ('CANCELLED', 'DRAFT')
+           AND (p_CampusId IS NULL OR e.`CampusId` = p_CampusId)
+           AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId)
+           AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId)
+           AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId)
+           AND (p_GroupId IS NULL OR e.`GroupId` = p_GroupId)
+           AND (p_SectionId IS NULL OR EXISTS (
+               SELECT 1 FROM `Students` s
+               WHERE s.`IsActive` = 1
+                 AND s.`SectionId` = p_SectionId
+                 AND (e.`CampusId` IS NULL OR s.`CampusId` = e.`CampusId`)
+                 AND (e.`BoardId` IS NULL OR s.`BoardId` = e.`BoardId`)
+                 AND (e.`AcademicYearId` IS NULL OR s.`AcademicYearId` = e.`AcademicYearId`)
+                 AND (e.`AcademicLevelId` IS NULL OR s.`AcademicLevelId` = e.`AcademicLevelId`)
+                 AND (e.`GroupId` IS NULL OR s.`GroupId` = e.`GroupId`)
+           ))
+           AND (p_FromDate IS NULL OR e.`EndDate` >= p_FromDate)
+           AND (p_ToDate IS NULL OR e.`StartDate` <= p_ToDate)
+        ) AS `Examinations`,
+
+        -- 6. Results Published (strictly IsPublished = 1 for active students, matches sp_Report_Results 1:1)
+        (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`))
+         FROM `Results` r
+         JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+         WHERE r.`IsPublished` = 1
+           AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+           AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId)
+           AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId)
+           AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId)
+           AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId)
+           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+           AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+           AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        ) AS `ResultsPublished`,
+
+        -- 7. Total Faculty Weekly Workload Hours (published teaching periods for non-deleted staff, matches sp_Report_FacultyWorkload 1:1)
+        COALESCE(
+            (SELECT ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 1)
+             FROM `Timetables` tt
+             JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId`
+             JOIN `Staff` st ON st.`Id` = COALESCE(NULLIF(tt.`StaffId`, 0), tt.`FacultyId`) AND st.`IsDeleted` = 0
+             WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0
+               AND (p_CampusId IS NULL OR tt.`CampusId` = p_CampusId)
+               AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId)
+               AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId)
+               AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR tt.`GroupId` = p_GroupId)
+               AND (p_SectionId IS NULL OR tt.`SectionId` = p_SectionId)),
+            0.0
+        ) AS `FacultyWorkload`,
+
+        -- 8. Total Active Student Strength (matches sp_Report_StudentStrength 1:1)
+        (SELECT COUNT(*)
+         FROM `Students` s
+         WHERE s.`IsActive` = 1
+           AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+           AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+           AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+           AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+           AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+        ) AS `StudentStrength`,
+
+        -- 9. Overall Pass Percentage (student passes exam ONLY when ALL subjects passed, matches sp_Report_PassPercentage 1:1)
+        COALESCE(
+            (SELECT ROUND(SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2)
+             FROM (
+                 SELECT r.`ExamId`, r.`StudentId`,
+                        SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+                 FROM `Results` r
+                 JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+                 WHERE r.`IsPublished` = 1
+                   AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+                   AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                   AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+                   AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+                 GROUP BY r.`ExamId`, r.`StudentId`
+             ) se),
+            0.0
+        ) AS `PassPercentage`,
+
+        -- 10. Toppers Identified (top 10 all-pass published students ranked by Percentage DESC, TotalMarks DESC, matches sp_Report_Toppers 1:1)
+        COALESCE(
+            (SELECT COUNT(*)
+             FROM (
+                 SELECT t.`StudentId`,
+                        DENSE_RANK() OVER (ORDER BY t.`Percentage` DESC, t.`TotalMarks` DESC) AS `Rank`
+                 FROM (
+                     SELECT r.`StudentId`,
+                            SUM(r.`TotalMarks`) AS `TotalMarks`,
+                            ROUND(SUM(r.`TotalMarks`) * 100.0 / NULLIF(SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)), 0), 2) AS `Percentage`,
+                            SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+                     FROM `Results` r
+                     JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+                     LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+                     LEFT JOIN (
+                         SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+                         FROM `ExamSchedules`
+                         WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+                         GROUP BY `ExamId`, `SubjectId`
+                     ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+                     WHERE r.`IsPublished` = 1
+                       AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+                       AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId)
+                       AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId)
+                       AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId)
+                       AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId)
+                       AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                       AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+                       AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+                     GROUP BY r.`StudentId`
+                     HAVING `FailedSubjects` = 0
+                 ) t
+             ) rnk
+             WHERE rnk.`Rank` <= 10),
+            0
+        ) AS `ToppersIdentified`,
+
+        -- 11. Live Attendance Compliance Breakdown from Attendances (NOT stale Students.AttendancePercentage!)
+        COALESCE(
+            (SELECT SUM(CASE WHEN st.`Pct` >= 75.0 THEN 1 ELSE 0 END)
+             FROM (
+                 SELECT s.`StudentId`,
+                        COALESCE(SUM(CASE WHEN a.`Status` IN (1, 3) THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(a.`AttendanceId`), 0), 0.0) AS `Pct`
+                 FROM `Students` s
+                 LEFT JOIN `Attendances` a ON a.`StudentId` = s.`StudentId`
+                     AND a.`IsActive` = 1
+                     AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate)
+                     AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)
+                 WHERE s.`IsActive` = 1
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                 GROUP BY s.`StudentId`
+             ) st), 0
+        ) AS `AttendanceEligibleCount`,
+
+        COALESCE(
+            (SELECT SUM(CASE WHEN st.`Pct` >= 65.0 AND st.`Pct` < 75.0 THEN 1 ELSE 0 END)
+             FROM (
+                 SELECT s.`StudentId`,
+                        COALESCE(SUM(CASE WHEN a.`Status` IN (1, 3) THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(a.`AttendanceId`), 0), 0.0) AS `Pct`
+                 FROM `Students` s
+                 LEFT JOIN `Attendances` a ON a.`StudentId` = s.`StudentId`
+                     AND a.`IsActive` = 1
+                     AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate)
+                     AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)
+                 WHERE s.`IsActive` = 1
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                 GROUP BY s.`StudentId`
+             ) st), 0
+        ) AS `AttendanceCondonationCount`,
+
+        COALESCE(
+            (SELECT SUM(CASE WHEN st.`Pct` < 65.0 THEN 1 ELSE 0 END)
+             FROM (
+                 SELECT s.`StudentId`,
+                        COALESCE(SUM(CASE WHEN a.`Status` IN (1, 3) THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(a.`AttendanceId`), 0), 0.0) AS `Pct`
+                 FROM `Students` s
+                 LEFT JOIN `Attendances` a ON a.`StudentId` = s.`StudentId`
+                     AND a.`IsActive` = 1
+                     AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate)
+                     AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)
+                 WHERE s.`IsActive` = 1
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                 GROUP BY s.`StudentId`
+             ) st), 0
+        ) AS `AttendanceDetainedCount`,
+
+        -- 12. Fee Account Compliance (mutually exclusive per active student, respecting all 6 hierarchy filters)
+        COALESCE(
+            (SELECT COUNT(*)
+             FROM (
+                 SELECT s.`StudentId`, SUM(sf.`BalanceAmount`) AS `TotalDue`
+                 FROM `StudentFees` sf
+                 JOIN `Students` s ON s.`StudentId` = sf.`StudentId` AND s.`IsActive` = 1
+                 WHERE COALESCE(sf.`Status`, '') != 'Cancelled'
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                 GROUP BY s.`StudentId`
+                 HAVING `TotalDue` > 0
+             ) d), 0
+        ) AS `StudentsWithDuesCount`,
+
+        COALESCE(
+            (SELECT COUNT(*)
+             FROM (
+                 SELECT s.`StudentId`, SUM(sf.`BalanceAmount`) AS `TotalDue`
+                 FROM `StudentFees` sf
+                 JOIN `Students` s ON s.`StudentId` = sf.`StudentId` AND s.`IsActive` = 1
+                 WHERE COALESCE(sf.`Status`, '') != 'Cancelled'
+                   AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+                   AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+                   AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+                   AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+                   AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+                   AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+                 GROUP BY s.`StudentId`
+                 HAVING `TotalDue` <= 0
+             ) c), 0
+        ) AS `StudentsClearedCount`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 2. Admissions Detailed Report
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Admissions` //
+CREATE PROCEDURE `sp_Report_Admissions`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
 BEGIN
     SELECT 
+        sa.`AdmissionId`, 
+        COALESCE(sa.`AdmissionNo`, CONCAT('ADM-', LPAD(sa.`AdmissionId`, 4, '0'))) AS `AdmissionNo`, 
+        TRIM(CONCAT(COALESCE(sa.`FirstName`, ''), ' ', COALESCE(sa.`LastName`, ''))) AS `StudentName`, 
+        sa.`FirstName`, 
+        sa.`LastName`, 
+        sa.`BoardId`, 
+        COALESCE(b.`BoardName`, '—') AS `BoardName`, 
+        COALESCE(b.`BoardName`, '—') AS `Board`, 
+        sa.`AcademicYearId`, 
+        COALESCE(ay.`AcademicYearName`, '—') AS `AcademicYear`, 
+        sa.`AcademicLevelId`, 
+        COALESCE(al.`LevelName`, '—') AS `AcademicLevel`, 
+        sa.`GroupId`, 
+        COALESCE(g.`GroupName`, '—') AS `GroupName`, 
+        COALESCE(g.`GroupName`, '—') AS `Group`, 
+        s.`SectionId`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `Section`, 
+        sa.`AdmissionDate`, 
+        COALESCE(NULLIF(TRIM(sa.`Status`), ''), IF(sa.`IsApproved` = 1, 'Approved', 'Pending')) AS `Status`, 
+        sa.`IsApproved`, 
+        sa.`IsRejected`, 
+        sa.`IsVerified`, 
+        sa.`Gender`, 
+        sa.`FatherName`, 
+        sa.`FatherMobile`, 
+        COALESCE(s.`RollNo`, sa.`AdmissionNo`) AS `RollNo`, 
+        sa.`AdmissionType`, 
+        sa.`Medium`, 
+        COALESCE(ay.`AcademicYearName`, '—') AS `Period`, 
+        1 AS `Admissions`, 
+        IF(sa.`IsApproved` = 1 OR LOWER(COALESCE(sa.`Status`, '')) = 'approved', 1, 0) AS `Approved`, 
+        IF(sa.`IsRejected` = 1 OR LOWER(COALESCE(sa.`Status`, '')) = 'rejected', 1, 0) AS `Rejected`,
+        IF(sa.`IsApproved` = 0 AND sa.`IsRejected` = 0 AND LOWER(COALESCE(sa.`Status`, '')) NOT IN ('approved', 'rejected'), 1, 0) AS `Pending`
+    FROM `StudentAdmissions` sa 
+    LEFT JOIN `Boards` b ON b.`BoardId` = sa.`BoardId` 
+    LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = sa.`AcademicYearId` 
+    LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = sa.`AcademicLevelId`
+    LEFT JOIN `Groups` g ON g.`GroupId` = sa.`GroupId` 
+    LEFT JOIN `Students` s ON s.`AdmissionId` = sa.`AdmissionId` AND s.`IsActive` = 1
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
+    WHERE sa.`IsActive` = 1
+      AND sa.`IsRejected` = 0
+      AND COALESCE(sa.`Status`, '') != 'Rejected'
+      AND (p_CampusId IS NULL OR sa.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR sa.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+      AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate) 
+      AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate) 
+    ORDER BY sa.`AdmissionDate` DESC, sa.`AdmissionId` DESC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 3. Student Attendance Detailed Report (Aligned with AttendanceStatus enum:
+--    1 = Present, 2 = Absent, 3 = Late, 4 = HalfDay, 6 = Leave)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Attendance` //
+CREATE PROCEDURE `sp_Report_Attendance`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        DATE_FORMAT(a.`AttendanceDate`, '%Y-%m-%d') AS `Period`, 
+        DATE(a.`AttendanceDate`) AS `AttendanceDate`, 
+        COALESCE(g.`GroupName`, 'Unassigned') AS `GroupName`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`,
+        COALESCE(NULLIF(GROUP_CONCAT(DISTINCT sub.`SubjectName` ORDER BY sub.`SubjectName` SEPARATOR ', '), ''), 'All Subjects') AS `SubjectName`,
+        COUNT(*) AS `TotalStudents`, 
+        SUM(a.`Status` = 1) AS `Present`, 
+        SUM(a.`Status` = 2) AS `Absent`, 
+        SUM(a.`Status` = 3) AS `Late`, 
+        SUM(a.`Status` IN (4, 6)) AS `Leave`, 
+        ROUND(SUM(a.`Status` IN (1, 3)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `AttendancePercentage`, 
+        IF(ROUND(SUM(a.`Status` IN (1, 3)) * 100.0 / NULLIF(COUNT(*), 0), 2) >= 75.0, 'Eligible',
+           IF(ROUND(SUM(a.`Status` IN (1, 3)) * 100.0 / NULLIF(COUNT(*), 0), 2) >= 65.0, 'Condonation', 'Detained')) AS `StatusCategory`
+    FROM `Attendances` a 
+    JOIN `Students` s ON s.`StudentId` = a.`StudentId` AND s.`IsActive` = 1
+    LEFT JOIN `Groups` g ON g.`GroupId` = COALESCE(a.`GroupId`, s.`GroupId`) 
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = COALESCE(a.`SectionId`, s.`SectionId`)
+    LEFT JOIN `Subjects` sub ON sub.`SubjectId` = a.`SubjectId`
+    WHERE a.`IsActive` = 1 
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR COALESCE(a.`BoardId`, s.`BoardId`) = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR COALESCE(a.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR COALESCE(a.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR COALESCE(a.`GroupId`, s.`GroupId`) = p_GroupId) 
+      AND (p_SectionId IS NULL OR COALESCE(a.`SectionId`, s.`SectionId`) = p_SectionId) 
+      AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate) 
+      AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate) 
+    GROUP BY DATE(a.`AttendanceDate`), DATE_FORMAT(a.`AttendanceDate`, '%Y-%m-%d'), COALESCE(g.`GroupName`, 'Unassigned'), COALESCE(sec.`SectionName`, 'Unassigned')
+    ORDER BY DATE(a.`AttendanceDate`) DESC, `GroupName`, `SectionName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 4. Faculty / Staff Attendance Report
+--    (Status: 0/1 = Present on time, 2 = Absent, 3 = Late, 4/6 = Leave)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_FacultyAttendance` //
+CREATE PROCEDURE `sp_Report_FacultyAttendance`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        fa.`FacultyId`, 
+        TRIM(CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, ''))) AS `FacultyName`, 
+        COALESCE(d.`DepartmentName`, 'General') AS `DepartmentName`, 
+        COALESCE(st.`Designation`, 'Staff') AS `Designation`, 
+        COUNT(*) AS `TotalDays`, 
+        SUM(fa.`Status` IN (0, 1)) AS `Present`, 
+        SUM(fa.`Status` = 2) AS `Absent`, 
+        SUM(fa.`Status` = 3) AS `Late`, 
+        SUM(fa.`Status` IN (4, 6)) AS `Leave`, 
+        ROUND(SUM(fa.`Status` IN (0, 1, 3)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `AttendancePercentage` 
+    FROM `StaffAttendances` fa 
+    JOIN `StaffAttendanceSessions` sas ON sas.`StaffSessionId` = fa.`StaffSessionId` AND sas.`IsActive` = 1
+    JOIN `Staff` st ON st.`Id` = fa.`FacultyId` AND st.`IsDeleted` = 0
+    LEFT JOIN `Departments` d ON d.`DepartmentId` = st.`DepartmentId` 
+    WHERE fa.`IsActive` = 1
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR st.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR p_BoardId <= 0 OR st.`BoardId` = p_BoardId OR ((st.`BoardId` IS NULL OR st.`BoardId` = 0) AND EXISTS (SELECT 1 FROM `Boards` b WHERE b.`BoardId` = p_BoardId AND b.`IsActive` = 1)))
+      AND (p_FromDate IS NULL OR DATE(sas.`AttendanceDate`) >= DATE(p_FromDate)) 
+      AND (p_ToDate IS NULL OR DATE(sas.`AttendanceDate`) <= DATE(p_ToDate)) 
+    GROUP BY fa.`FacultyId`, st.`FirstName`, st.`LastName`, d.`DepartmentName`, st.`Designation` 
+    ORDER BY `AttendancePercentage` DESC, `FacultyName` ASC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 5. Fee Collection Detailed Report (with real Discount & Fine amounts)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_FeeCollection` //
+CREATE PROCEDURE `sp_Report_FeeCollection`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        fp.`FeePaymentId` AS `PaymentId`, 
+        COALESCE(NULLIF(TRIM(fp.`ReceiptNumber`), ''), NULLIF(TRIM(fp.`TransactionReference`), ''), CONCAT('RCP-', LPAD(fp.`FeePaymentId`, 5, '0'))) AS `ReceiptNo`, 
+        fp.`StudentId`, 
+        COALESCE(s.`StudentName`, CONCAT('Student #', fp.`StudentId`)) AS `StudentName`, 
+        COALESCE(s.`AdmissionNo`, '—') AS `AdmissionNo`, 
+        COALESCE(s.`RollNo`, '—') AS `RollNo`, 
+        COALESCE(g.`GroupName`, '—') AS `GroupName`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`, 
+        COALESCE(fp.`Amount`, 0.0) AS `PaidAmount`, 
+        COALESCE(fp.`Amount`, 0.0) AS `Collected`, 
+        COALESCE(fp.`DiscountAmount`, 0.0) AS `Discount`, 
+        COALESCE(fp.`FineAmount`, 0.0) AS `Fine`, 
+        fp.`PaymentDate`, 
+        COALESCE(fp.`PaymentMode`, 'Online') AS `PaymentMode`, 
+        COALESCE(fp.`Status`, 'Paid') AS `Status`, 
+        fp.`Remarks`, 
+        DATE_FORMAT(fp.`PaymentDate`, '%Y-%m') AS `Period`, 
+        1 AS `Transactions` 
+    FROM `FeePayments` fp 
+    JOIN `Students` s ON s.`StudentId` = fp.`StudentId` AND s.`IsActive` = 1
+    LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId` 
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
+    WHERE COALESCE(fp.`Status`, '') NOT IN ('Cancelled', 'Failed') 
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+      AND (p_FromDate IS NULL OR fp.`PaymentDate` >= p_FromDate) 
+      AND (p_ToDate IS NULL OR fp.`PaymentDate` <= p_ToDate) 
+    ORDER BY fp.`PaymentDate` DESC, fp.`FeePaymentId` DESC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 6. Outstanding Due Fees Report (+ Compatibility Aliases)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_DueFees` //
+CREATE PROCEDURE `sp_Report_DueFees`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        sf.`StudentFeeId`,
         s.`StudentId`,
         COALESCE(s.`AdmissionNo`, CONCAT('ADM-', LPAD(s.`StudentId`, 4, '0'))) AS `AdmissionNo`,
-        COALESCE(s.`RollNo`, CONCAT('ROL-', LPAD(s.`StudentId`, 3, '0'))) AS `RollNo`,
+        COALESCE(s.`RollNo`, '—') AS `RollNo`,
         s.`StudentName`,
         s.`GroupId`,
-        COALESCE(g.`GroupName`, 'MPC') AS `GroupName`,
+        COALESCE(g.`GroupName`, '—') AS `GroupName`,
         s.`SectionId`,
-        COALESCE(sec.`SectionName`, 'REG-1') AS `SectionName`,
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`,
         s.`BoardId`,
-        COALESCE(b.`BoardName`, 'State Board') AS `BoardName`,
-        s.`FeeAmount` AS `TotalAmount`,
-        s.`FeePaid` AS `PaidAmount`,
-        (s.`FeeAmount` - s.`FeePaid`) AS `DueAmount`,
-        COALESCE(s.`FeeStatus`, 'Due') AS `FeeStatus`,
+        COALESCE(b.`BoardName`, '—') AS `BoardName`,
+        COALESCE(NULLIF(TRIM(fs.`StructureName`), ''), CONCAT(COALESCE(NULLIF(TRIM(g.`GroupName`), ''), 'Standard'), ' Fee Structure')) AS `FeeStructureName`,
+        sf.`TotalAmount`,
+        sf.`PaidAmount`,
+        sf.`BalanceAmount` AS `DueAmount`,
+        COALESCE(sf.`Status`, 'Pending') AS `FeeStatus`,
         s.`MobileNumber`,
-        s.`FatherName`
-    FROM `Students` s
+        s.`FatherName`,
+        COALESCE(sf.`PaymentPlan`, 'Full Payment') AS `PaymentPlan`,
+        COALESCE(sf.`ConcessionAmount`, 0.0) AS `ConcessionAmount`,
+        COALESCE(sf.`PayableAmount`, sf.`TotalAmount`) AS `PayableAmount`,
+        sf.`AssignedAt` AS `AssignedDate`
+    FROM `StudentFees` sf
+    JOIN `Students` s ON s.`StudentId` = sf.`StudentId` AND s.`IsActive` = 1
+    LEFT JOIN `FeeStructures` fs ON fs.`FeeStructureId` = sf.`FeeStructureId`
     LEFT JOIN `Groups` g ON s.`GroupId` = g.`GroupId`
     LEFT JOIN `Sections` sec ON s.`SectionId` = sec.`SectionId`
     LEFT JOIN `Boards` b ON s.`BoardId` = b.`BoardId`
-    WHERE s.`IsActive` = 1 AND (s.`FeeAmount` - s.`FeePaid`) > 0
+    WHERE sf.`BalanceAmount` > 0
+      AND COALESCE(sf.`Status`, '') != 'Cancelled'
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
       AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
       AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
       AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
-    ORDER BY `DueAmount` DESC;
+    ORDER BY sf.`BalanceAmount` DESC, s.`StudentName` ASC;
 END //
-DELIMITER ;
 
-DELIMITER //
+DROP PROCEDURE IF EXISTS `sp_Report_OutstandingFees` //
+CREATE PROCEDURE `sp_Report_OutstandingFees`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    CALL sp_Report_DueFees(p_CampusId, p_BoardId, p_AcademicYearId, p_AcademicLevelId, p_GroupId, p_SectionId, p_FromDate, p_ToDate);
+END //
+
+DROP PROCEDURE IF EXISTS `sp_Report_FeeOutstanding` //
+CREATE PROCEDURE `sp_Report_FeeOutstanding`(
+    IN p_CampusId INT,
+    IN p_AcademicYearId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT
+)
+BEGIN
+    CALL sp_Report_DueFees(p_CampusId, NULL, p_AcademicYearId, NULL, p_GroupId, p_SectionId, NULL, NULL);
+END //
+
+-- -------------------------------------------------------------------------
+-- 7. Examinations Conducted Report (Live calculated dependencies — zero hardcoding)
+-- -------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_Report_Examinations` //
 CREATE PROCEDURE `sp_Report_Examinations`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
 BEGIN
-                        SELECT 
-                            e.`ExamId` AS `ExaminationId`, 
-                            e.`ExamCode`, 
-                            e.`ExamName`, 
-                            COALESCE(b.`BoardName`, 'Board') AS `BoardName`, 
-                            COALESCE(ay.`AcademicYearName`, 'Academic Year') AS `AcademicYear`, 
-                            'Intermediate' AS `AcademicLevel`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            'General' AS `ProgramName`, 
-                            COALESCE(e.`ExamPattern`, 'Theory') AS `ExamType`, 
-                            DATE_FORMAT(e.`StartDate`, '%Y-%m-%d') AS `StartDate`, 
-                            DATE_FORMAT(e.`EndDate`, '%Y-%m-%d') AS `EndDate`, 
-                            e.`Status`, 
-                            5 AS `TotalEligibleSubjects`, 
-                            5 AS `ScheduledSubjectsCount`, 
-                            60 AS `TotalEligibleStudents`, 
-                            60 AS `HallTicketsGeneratedCount`, 
-                            0 AS `ResultCount`, 
-                            0 AS `PublishedCount`, 
-                            0.0 AS `PassPercentage` 
-                        FROM `Examinations` e 
-                        LEFT JOIN `Boards` b ON b.`BoardId` = e.`BoardId` 
-                        LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = e.`AcademicYearId` 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = e.`GroupId` 
-                        WHERE e.`IsActive` = 1 
-                          AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR e.`GroupId` = p_GroupId) 
-                          AND (p_FromDate IS NULL OR e.`StartDate` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR e.`EndDate` <= p_ToDate) 
-                        ORDER BY e.`StartDate` DESC;
-                    END //
-DELIMITER ;
+    SELECT 
+        e.`ExamId` AS `ExaminationId`, 
+        e.`ExamCode`, 
+        e.`ExamName`, 
+        COALESCE(b.`BoardName`, '—') AS `BoardName`, 
+        COALESCE(ay.`AcademicYearName`, '—') AS `AcademicYear`, 
+        COALESCE(al.`LevelName`, '—') AS `AcademicLevel`, 
+        COALESCE(g.`GroupName`, 'All Groups') AS `GroupName`, 
+        COALESCE(pr.`ProgramName`, 'General') AS `ProgramName`, 
+        COALESCE(e.`ExamPattern`, 'Theory') AS `ExamType`, 
+        DATE_FORMAT(e.`StartDate`, '%Y-%m-%d') AS `StartDate`, 
+        DATE_FORMAT(e.`EndDate`, '%Y-%m-%d') AS `EndDate`, 
+        e.`Status`, 
+        COALESCE(
+            NULLIF((SELECT COUNT(DISTINCT es.`SubjectId`) FROM `ExaminationSubjects` es WHERE es.`ExamId` = e.`ExamId`), 0),
+            (SELECT COUNT(DISTINCT sc.`SubjectId`) FROM `ExamSchedules` sc WHERE sc.`ExamId` = e.`ExamId` AND sc.`IsActive` = 1 AND sc.`SubjectId` IS NOT NULL),
+            0
+        ) AS `TotalEligibleSubjects`, 
+        (SELECT COUNT(DISTINCT sc.`SubjectId`) FROM `ExamSchedules` sc WHERE sc.`ExamId` = e.`ExamId` AND sc.`IsActive` = 1 AND sc.`SubjectId` IS NOT NULL) AS `ScheduledSubjectsCount`, 
+        (SELECT COUNT(*)
+         FROM `Students` st
+         WHERE st.`IsActive` = 1
+           AND (e.`CampusId` IS NULL OR st.`CampusId` = e.`CampusId`)
+           AND (e.`BoardId` IS NULL OR st.`BoardId` = e.`BoardId`)
+           AND (e.`AcademicYearId` IS NULL OR st.`AcademicYearId` = e.`AcademicYearId`)
+           AND (e.`AcademicLevelId` IS NULL OR st.`AcademicLevelId` = e.`AcademicLevelId`)
+           AND (e.`GroupId` IS NULL OR st.`GroupId` = e.`GroupId`)
+           AND (p_SectionId IS NULL OR st.`SectionId` = p_SectionId)
+        ) AS `TotalEligibleStudents`, 
+        (SELECT COUNT(*)
+         FROM `HallTickets` ht
+         JOIN `Students` st ON st.`StudentId` = ht.`StudentId` AND st.`IsActive` = 1
+         WHERE ht.`ExamId` = e.`ExamId`
+           AND (p_SectionId IS NULL OR st.`SectionId` = p_SectionId)
+        ) AS `HallTicketsGeneratedCount`, 
+        (SELECT COUNT(DISTINCT r.`StudentId`)
+         FROM `Results` r
+         JOIN `Students` st ON st.`StudentId` = r.`StudentId` AND st.`IsActive` = 1
+         WHERE r.`ExamId` = e.`ExamId`
+           AND (p_SectionId IS NULL OR st.`SectionId` = p_SectionId)
+        ) AS `ResultCount`, 
+        (SELECT COUNT(DISTINCT r.`StudentId`)
+         FROM `Results` r
+         JOIN `Students` st ON st.`StudentId` = r.`StudentId` AND st.`IsActive` = 1
+         WHERE r.`ExamId` = e.`ExamId`
+           AND r.`IsPublished` = 1
+           AND (p_SectionId IS NULL OR st.`SectionId` = p_SectionId)
+        ) AS `PublishedCount`, 
+        COALESCE(
+            (SELECT ROUND(SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2)
+             FROM (
+                 SELECT r.`StudentId`,
+                        SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+                 FROM `Results` r
+                 JOIN `Students` st ON st.`StudentId` = r.`StudentId` AND st.`IsActive` = 1
+                 WHERE r.`ExamId` = e.`ExamId`
+                   AND r.`IsPublished` = 1
+                   AND (p_SectionId IS NULL OR st.`SectionId` = p_SectionId)
+                 GROUP BY r.`StudentId`
+             ) se),
+            0.0
+        ) AS `PassPercentage`
+    FROM `Examinations` e 
+    LEFT JOIN `Boards` b ON b.`BoardId` = e.`BoardId` 
+    LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = e.`AcademicYearId` 
+    LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = e.`AcademicLevelId`
+    LEFT JOIN `Groups` g ON g.`GroupId` = e.`GroupId`
+    LEFT JOIN `Programs` pr ON pr.`ProgramId` = e.`ProgramId`
+    WHERE e.`IsActive` = 1
+      AND UPPER(COALESCE(e.`Status`, '')) NOT IN ('CANCELLED', 'DRAFT')
+      AND (p_CampusId IS NULL OR e.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR e.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR EXISTS (
+          SELECT 1 FROM `Students` st
+          WHERE st.`IsActive` = 1
+            AND st.`SectionId` = p_SectionId
+            AND (e.`CampusId` IS NULL OR st.`CampusId` = e.`CampusId`)
+            AND (e.`BoardId` IS NULL OR st.`BoardId` = e.`BoardId`)
+            AND (e.`AcademicYearId` IS NULL OR st.`AcademicYearId` = e.`AcademicYearId`)
+            AND (e.`AcademicLevelId` IS NULL OR st.`AcademicLevelId` = e.`AcademicLevelId`)
+            AND (e.`GroupId` IS NULL OR st.`GroupId` = e.`GroupId`)
+      ))
+      AND (p_FromDate IS NULL OR e.`EndDate` >= p_FromDate) 
+      AND (p_ToDate IS NULL OR e.`StartDate` <= p_ToDate) 
+    ORDER BY e.`StartDate` DESC, e.`ExamId` DESC;
+END //
 
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_FacultyAttendance` //
-CREATE PROCEDURE `sp_Report_FacultyAttendance`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            fa.`FacultyId`, 
-                            CONCAT(COALESCE(st.`FirstName`,''), ' ', COALESCE(st.`LastName`,'')) AS `FacultyName`, 
-                            COALESCE(st.`Department`, 'Academics') AS `DepartmentName`, 
-                            COALESCE(st.`Designation`, 'Lecturer') AS `Designation`, 
-                            COUNT(*) AS `TotalDays`, 
-                            SUM(fa.`Status` = 1) AS `Present`, 
-                            SUM(fa.`Status` = 0) AS `Absent`, 
-                            SUM(fa.`Status` = 2) AS `Late`, 
-                            SUM(fa.`Status` = 3) AS `Leave`, 
-                            ROUND(SUM(fa.`Status` = 1) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `AttendancePercentage` 
-                        FROM `StaffAttendances` fa 
-                        JOIN `Staff` st ON st.`Id` = fa.`FacultyId` 
-                        WHERE fa.`IsActive` = 1 
-                          AND (p_FromDate IS NULL OR fa.`CreatedAt` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR fa.`CreatedAt` <= p_ToDate) 
-                        GROUP BY fa.`FacultyId`, st.`FirstName`, st.`LastName`, st.`Department`, st.`Designation` 
-                        ORDER BY `AttendancePercentage` DESC;
-                    END //
-DELIMITER ;
-
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_FacultyWorkload` //
-CREATE PROCEDURE `sp_Report_FacultyWorkload`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            st.`Id` AS `FacultyId`, 
-                            COALESCE(st.`EmployeeId`, CONCAT('EMP-', st.`Id`)) AS `FacultyEmployeeId`, 
-                            CONCAT(COALESCE(st.`FirstName`,''), ' ', COALESCE(st.`LastName`,'')) AS `FacultyName`, 
-                            COALESCE(st.`Department`, 'Academics') AS `DepartmentName`, 
-                            COALESCE(st.`Designation`, 'Lecturer') AS `Designation`, 
-                            COUNT(tt.`Id`) AS `PeriodCount`, 
-                            ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 1) AS `HoursPerWeek`, 
-                            GROUP_CONCAT(DISTINCT sub.`SubjectName` SEPARATOR ', ') AS `SubjectNames` 
-                        FROM `Timetables` tt 
-                        JOIN `Staff` st ON st.`Id` = tt.`StaffId` 
-                        JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId` 
-                        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = tt.`SubjectId` 
-                        WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0 
-                          AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR tt.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR tt.`SectionId` = p_SectionId) 
-                        GROUP BY st.`Id`, st.`EmployeeId`, st.`FirstName`, st.`LastName`, st.`Department`, st.`Designation` 
-                        ORDER BY `HoursPerWeek` DESC;
-                    END //
-DELIMITER ;
-
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_FeeCollection` //
-CREATE PROCEDURE `sp_Report_FeeCollection`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            fp.`FeePaymentId` AS `PaymentId`, 
-                            COALESCE(fp.`ReceiptNumber`, fp.`TransactionReference`, CONCAT('RCP-', LPAD(fp.`FeePaymentId`, 5, '0'))) AS `ReceiptNo`, 
-                            fp.`StudentId`, 
-                            COALESCE(s.`StudentName`, CONCAT('Student #', fp.`StudentId`)) AS `StudentName`, 
-                            COALESCE(s.`AdmissionNo`, '—') AS `AdmissionNo`, 
-                            COALESCE(s.`RollNo`, '—') AS `RollNo`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            COALESCE(sec.`SectionName`, 'Section') AS `SectionName`, 
-                            fp.`Amount` AS `PaidAmount`, 
-                            fp.`Amount` AS `Collected`, 
-                            0.0 AS `Discount`, 
-                            0.0 AS `Fine`, 
-                            fp.`PaymentDate`, 
-                            fp.`PaymentMode`, 
-                            fp.`Status`, 
-                            fp.`Remarks`, 
-                            DATE_FORMAT(fp.`PaymentDate`, '%Y-%m') AS `Period`, 
-                            1 AS `Transactions` 
-                        FROM `FeePayments` fp 
-                        JOIN `Students` s ON s.`StudentId` = fp.`StudentId` 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId` 
-                        LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
-                        WHERE fp.`Status` NOT IN ('Cancelled', 'Failed') 
-                          AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                          AND (p_FromDate IS NULL OR fp.`PaymentDate` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR fp.`PaymentDate` <= p_ToDate) 
-                        ORDER BY fp.`PaymentDate` DESC;
-                    END //
-DELIMITER ;
-
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_PassPercentage` //
-CREATE PROCEDURE `sp_Report_PassPercentage`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
-BEGIN
-                        SELECT 
-                            r.`ExamId`, 
-                            COALESCE(e.`ExamName`, 'Examination') AS `ExamName`, 
-                            COALESCE(ay.`AcademicYearName`, 'Academic Year') AS `AcademicYear`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            'All Sections' AS `SectionName`, 
-                            COUNT(DISTINCT r.`StudentId`) AS `TotalAppeared`, 
-                            COUNT(DISTINCT CASE WHEN r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED') THEN r.`StudentId` END) AS `Passed`, 
-                            COUNT(DISTINCT CASE WHEN r.`ResultStatus` NOT IN ('Pass', 'Passed', 'PROMOTED') THEN r.`StudentId` END) AS `Failed`, 
-                            ROUND(COUNT(DISTINCT CASE WHEN r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED') THEN r.`StudentId` END) * 100.0 / NULLIF(COUNT(DISTINCT r.`StudentId`), 0), 2) AS `PassPercentage` 
-                        FROM `Results` r 
-                        LEFT JOIN `Examinations` e ON e.`ExamId` = r.`ExamId` 
-                        LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = r.`AcademicYearId` 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = r.`GroupId` 
-                        LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                        WHERE r.`IsPublished` = 1 
-                          AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                        GROUP BY r.`ExamId`, e.`ExamName`, ay.`AcademicYearName`, g.`GroupName` 
-                        ORDER BY e.`ExamName`;
-                    END //
-DELIMITER ;
-
-DELIMITER //
+-- -------------------------------------------------------------------------
+-- 8. Results Published Detailed Report (Strictly IsPublished = 1 & Real MaxMarks)
+-- -------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_Report_Results` //
 CREATE PROCEDURE `sp_Report_Results`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
 BEGIN
-                        SELECT 
-                            r.`ResultId`, 
-                            r.`StudentId`, 
-                            COALESCE(s.`StudentName`, CONCAT('Student #', r.`StudentId`)) AS `StudentName`, 
-                            COALESCE(s.`RollNo`, '—') AS `RollNo`, 
-                            r.`ExamId`, 
-                            COALESCE(e.`ExamName`, 'Examination') AS `ExamName`, 
-                            r.`SubjectId`, 
-                            COALESCE(sub.`SubjectName`, 'Subject') AS `SubjectName`, 
-                            r.`TotalMarks`, 
-                            r.`TotalMarks` AS `MarksObtained`, 
-                            r.`InternalMarks`, 
-                            r.`ExternalMarks`, 
-                            COALESCE(r.`Grade`, 'A') AS `Grade`, 
-                            r.`ResultStatus`, 
-                            r.`PublishedDate`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            COALESCE(sec.`SectionName`, 'Section') AS `SectionName`, 
-                            1 AS `TotalResults`, 
-                            IF(r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED'), 1, 0) AS `Passed`, 
-                            IF(r.`ResultStatus` NOT IN ('Pass', 'Passed', 'PROMOTED'), 1, 0) AS `Failed`, 
-                            r.`TotalMarks` AS `AveragePercentage` 
-                        FROM `Results` r 
-                        LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                        LEFT JOIN `Examinations` e ON e.`ExamId` = r.`ExamId` 
-                        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId` 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = r.`GroupId` 
-                        LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
-                        WHERE r.`IsPublished` = 1 
-                          AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate) 
-                          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate) 
-                        ORDER BY r.`TotalMarks` DESC;
-                    END //
-DELIMITER ;
+    SELECT 
+        r.`ResultId`, 
+        r.`StudentId`, 
+        COALESCE(s.`StudentName`, CONCAT('Student #', r.`StudentId`)) AS `StudentName`, 
+        COALESCE(s.`RollNo`, '—') AS `RollNo`, 
+        r.`ExamId`, 
+        COALESCE(e.`ExamName`, 'Examination') AS `ExamName`, 
+        r.`SubjectId`, 
+        COALESCE(sub.`SubjectName`, 'Subject') AS `SubjectName`, 
+        r.`TotalMarks`, 
+        r.`TotalMarks` AS `MarksObtained`,
+        COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0) AS `MaxMarks`,
+        r.`InternalMarks`, 
+        r.`ExternalMarks`, 
+        COALESCE(NULLIF(TRIM(r.`Grade`), ''),
+            CASE
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 90 THEN 'A+'
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 80 THEN 'A'
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 70 THEN 'B+'
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 60 THEN 'B'
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 50 THEN 'C'
+                WHEN (r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0)) >= 35 THEN 'D'
+                ELSE 'F'
+            END
+        ) AS `Grade`, 
+        r.`ResultStatus`, 
+        r.`PublishedDate`, 
+        COALESCE(g.`GroupName`, '—') AS `GroupName`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`, 
+        1 AS `TotalResults`, 
+        IF(UPPER(COALESCE(r.`ResultStatus`, '')) IN ('PASS', 'PASSED', 'PROMOTED'), 1, 0) AS `Passed`, 
+        IF(UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED'), 1, 0) AS `Failed`, 
+        ROUND(r.`TotalMarks` * 100.0 / NULLIF(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0), 0), 2) AS `AveragePercentage` 
+    FROM `Results` r 
+    JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+    LEFT JOIN `Examinations` e ON e.`ExamId` = r.`ExamId` 
+    LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+    LEFT JOIN (
+        SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+        FROM `ExamSchedules`
+        WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+        GROUP BY `ExamId`, `SubjectId`
+    ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+    LEFT JOIN `Groups` g ON g.`GroupId` = COALESCE(r.`GroupId`, s.`GroupId`) 
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
+    WHERE r.`IsPublished` = 1
+      AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+      AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+      AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate) 
+      AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate) 
+    ORDER BY r.`PublishedDate` DESC, r.`TotalMarks` DESC;
+END //
 
-DELIMITER //
-DROP PROCEDURE IF EXISTS `sp_Report_StudentStrength` //
-CREATE PROCEDURE `sp_Report_StudentStrength`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
+-- -------------------------------------------------------------------------
+-- 9. Pass Percentage Report (Per-Student All-Subjects Pass Aggregation)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_PassPercentage` //
+CREATE PROCEDURE `sp_Report_PassPercentage`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
 BEGIN
-                        SELECT 
-                            COALESCE(s.`GroupId`, 0) AS `GroupId`, 
-                            COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                            COALESCE(s.`SectionId`, 0) AS `SectionId`, 
-                            COALESCE(sec.`SectionName`, 'Section') AS `SectionName`, 
-                            COALESCE(b.`BoardName`, 'Board') AS `BoardName`, 
-                            SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) = 'male' THEN 1 ELSE 0 END) AS `MaleStudents`, 
-                            SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) = 'female' THEN 1 ELSE 0 END) AS `FemaleStudents`, 
-                            SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) NOT IN ('male', 'female') THEN 1 ELSE 0 END) AS `OtherStudents`, 
-                            COUNT(*) AS `TotalStudents` 
-                        FROM `Students` s 
-                        LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId` 
-                        LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
-                        LEFT JOIN `Boards` b ON b.`BoardId` = s.`BoardId` 
-                        WHERE s.`IsActive` = 1 
-                          AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-                          AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-                          AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId) 
-                          AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-                          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                        GROUP BY s.`GroupId`, g.`GroupName`, s.`SectionId`, sec.`SectionName`, b.`BoardName` 
-                        ORDER BY g.`GroupName`, sec.`SectionName`;
-                    END //
-DELIMITER ;
+    SELECT 
+        se.`ExamId`, 
+        COALESCE(e.`ExamName`, 'Examination') AS `ExamName`, 
+        COALESCE(ay.`AcademicYearName`, '—') AS `AcademicYear`, 
+        COALESCE(g.`GroupName`, 'All Groups') AS `GroupName`, 
+        COALESCE(secFilt.`SectionName`, 'All Sections') AS `SectionName`, 
+        COUNT(*) AS `TotalAppeared`, 
+        SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) AS `Passed`, 
+        SUM(CASE WHEN se.`FailedSubjects` > 0 THEN 1 ELSE 0 END) AS `Failed`, 
+        ROUND(SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `PassPercentage` 
+    FROM (
+        SELECT 
+            r.`ExamId`,
+            r.`StudentId`,
+            COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) AS `AcademicYearId`,
+            COALESCE(r.`GroupId`, s.`GroupId`) AS `GroupId`,
+            SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+        FROM `Results` r
+        JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+        WHERE r.`IsPublished` = 1
+          AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+          AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId) 
+          AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId) 
+          AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId) 
+          AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId) 
+          AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        GROUP BY r.`ExamId`, r.`StudentId`, COALESCE(r.`AcademicYearId`, s.`AcademicYearId`), COALESCE(r.`GroupId`, s.`GroupId`)
+    ) se
+    LEFT JOIN `Examinations` e ON e.`ExamId` = se.`ExamId` 
+    LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = se.`AcademicYearId` 
+    LEFT JOIN `Groups` g ON g.`GroupId` = se.`GroupId`
+    LEFT JOIN `Sections` secFilt ON p_SectionId IS NOT NULL AND secFilt.`SectionId` = p_SectionId
+    GROUP BY se.`ExamId`, e.`ExamName`, ay.`AcademicYearName`, g.`GroupName`, secFilt.`SectionName`
+    ORDER BY `PassPercentage` DESC, e.`ExamName`;
+END //
 
-DELIMITER //
+-- -------------------------------------------------------------------------
+-- 10. Toppers Leaderboard Report (Published, Zero Failures, Percentage Ranked)
+-- -------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_Report_Toppers` //
 CREATE PROCEDURE `sp_Report_Toppers`(
-                        IN p_BoardId INT,
-                        IN p_AcademicYearId INT,
-                        IN p_AcademicLevelId INT,
-                        IN p_GroupId INT,
-                        IN p_SectionId INT,
-                        IN p_FromDate DATETIME,
-                        IN p_ToDate DATETIME
-                    ,
-    IN p_CampusId INT)
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
 BEGIN
-                        SELECT 
-                            rnk.`Rank`, 
-                            rnk.`StudentId`, 
-                            rnk.`StudentName`, 
-                            rnk.`RollNo`, 
-                            rnk.`AdmissionNo`, 
-                            rnk.`GroupId`, 
-                            rnk.`GroupName`, 
-                            rnk.`SectionId`, 
-                            rnk.`SectionName`, 
-                            rnk.`TotalMarks`, 
-                            rnk.`MaxMarks`, 
-                            rnk.`Percentage`, 
-                            rnk.`Subjects`, 
-                            rnk.`PassedSubjects`, 
-                            rnk.`FailedSubjects` 
-                        FROM (
-                            SELECT 
-                                r.`StudentId`, 
-                                COALESCE(s.`StudentName`, CONCAT('Student #', r.`StudentId`)) AS `StudentName`, 
-                                COALESCE(s.`RollNo`, '—') AS `RollNo`, 
-                                COALESCE(s.`AdmissionNo`, '—') AS `AdmissionNo`, 
-                                r.`GroupId`, 
-                                COALESCE(g.`GroupName`, 'Group') AS `GroupName`, 
-                                COALESCE(s.`SectionId`, 0) AS `SectionId`, 
-                                COALESCE(sec.`SectionName`, 'Section') AS `SectionName`, 
-                                SUM(r.`TotalMarks`) AS `TotalMarks`, 
-                                COUNT(r.`ResultId`) * 100.0 AS `MaxMarks`, 
-                                ROUND(AVG(r.`TotalMarks`), 2) AS `Percentage`, 
-                                COUNT(r.`ResultId`) AS `Subjects`, 
-                                SUM(CASE WHEN r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED') THEN 1 ELSE 0 END) AS `PassedSubjects`, 
-                                SUM(CASE WHEN r.`ResultStatus` NOT IN ('Pass', 'Passed', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`, 
-                                DENSE_RANK() OVER(ORDER BY SUM(r.`TotalMarks`) DESC) AS `Rank` 
-                            FROM `Results` r 
-                            LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                            LEFT JOIN `Groups` g ON g.`GroupId` = r.`GroupId` 
-                            LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
-                            WHERE r.`IsPublished` = 1 
-                              AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-                              AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-                              AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-                              AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-                              AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-                            GROUP BY r.`StudentId`, s.`StudentName`, s.`RollNo`, s.`AdmissionNo`, r.`GroupId`, g.`GroupName`, s.`SectionId`, sec.`SectionName` 
-                        ) rnk 
-                        WHERE rnk.`Rank` <= 10 
-                        ORDER BY rnk.`Rank`;
-                    END //
+    SELECT 
+        rnk.`Rank`, 
+        rnk.`StudentId`, 
+        rnk.`StudentName`, 
+        rnk.`RollNo`, 
+        rnk.`AdmissionNo`, 
+        rnk.`GroupId`, 
+        rnk.`GroupName`, 
+        rnk.`SectionId`, 
+        rnk.`SectionName`, 
+        rnk.`TotalMarks`, 
+        rnk.`MaxMarks`, 
+        rnk.`Percentage`, 
+        rnk.`Subjects`, 
+        rnk.`PassedSubjects`, 
+        rnk.`FailedSubjects` 
+    FROM (
+        SELECT 
+            agg.`StudentId`,
+            agg.`StudentName`,
+            agg.`RollNo`,
+            agg.`AdmissionNo`,
+            agg.`GroupId`,
+            agg.`GroupName`,
+            agg.`SectionId`,
+            agg.`SectionName`,
+            agg.`TotalMarks`,
+            agg.`MaxMarks`,
+            agg.`Percentage`,
+            agg.`Subjects`,
+            agg.`PassedSubjects`,
+            agg.`FailedSubjects`,
+            DENSE_RANK() OVER (ORDER BY agg.`Percentage` DESC, agg.`TotalMarks` DESC) AS `Rank`
+        FROM (
+            SELECT 
+                r.`StudentId`, 
+                COALESCE(s.`StudentName`, CONCAT('Student #', r.`StudentId`)) AS `StudentName`, 
+                COALESCE(s.`RollNo`, '—') AS `RollNo`, 
+                COALESCE(s.`AdmissionNo`, '—') AS `AdmissionNo`, 
+                COALESCE(s.`GroupId`, r.`GroupId`, 0) AS `GroupId`, 
+                COALESCE(g.`GroupName`, '—') AS `GroupName`, 
+                COALESCE(s.`SectionId`, 0) AS `SectionId`, 
+                COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`, 
+                SUM(r.`TotalMarks`) AS `TotalMarks`, 
+                SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)) AS `MaxMarks`, 
+                ROUND(SUM(r.`TotalMarks`) * 100.0 / NULLIF(SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)), 0), 2) AS `Percentage`, 
+                COUNT(r.`ResultId`) AS `Subjects`, 
+                SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `PassedSubjects`, 
+                SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+            FROM `Results` r 
+            JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+            LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+            LEFT JOIN (
+                SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+                FROM `ExamSchedules`
+                WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+                GROUP BY `ExamId`, `SubjectId`
+            ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+            LEFT JOIN `Groups` g ON g.`GroupId` = COALESCE(s.`GroupId`, r.`GroupId`) 
+            LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
+            WHERE r.`IsPublished` = 1
+              AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+              AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId) 
+              AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId) 
+              AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId) 
+              AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId) 
+              AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+              AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+              AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+            GROUP BY r.`StudentId`, s.`StudentName`, s.`RollNo`, s.`AdmissionNo`, COALESCE(s.`GroupId`, r.`GroupId`, 0), g.`GroupName`, s.`SectionId`, sec.`SectionName`
+            HAVING `FailedSubjects` = 0
+        ) agg
+    ) rnk 
+    WHERE rnk.`Rank` <= 10 
+    ORDER BY rnk.`Rank`, rnk.`TotalMarks` DESC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 11. Faculty Workload Report
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_FacultyWorkload` //
+CREATE PROCEDURE `sp_Report_FacultyWorkload`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        st.`Id` AS `FacultyId`, 
+        COALESCE(NULLIF(TRIM(st.`EmployeeId`), ''), CONCAT('EMP-', st.`Id`)) AS `FacultyEmployeeId`, 
+        TRIM(CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, ''))) AS `FacultyName`, 
+        COALESCE(d.`DepartmentName`, 'Academics') AS `DepartmentName`, 
+        COALESCE(st.`Designation`, 'Lecturer') AS `Designation`, 
+        COUNT(tt.`Id`) AS `PeriodCount`, 
+        ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 2) AS `HoursPerWeek`, 
+        COALESCE(GROUP_CONCAT(DISTINCT sub.`SubjectName` ORDER BY sub.`SubjectName` SEPARATOR ', '), '—') AS `SubjectNames` 
+    FROM `Timetables` tt 
+    JOIN `Staff` st ON st.`Id` = COALESCE(NULLIF(tt.`StaffId`, 0), tt.`FacultyId`) AND st.`IsDeleted` = 0
+    LEFT JOIN `Departments` d ON d.`DepartmentId` = st.`DepartmentId` 
+    JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId` 
+    LEFT JOIN `Subjects` sub ON sub.`SubjectId` = tt.`SubjectId` 
+    WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0 
+      AND (p_CampusId IS NULL OR tt.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR tt.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR tt.`SectionId` = p_SectionId) 
+    GROUP BY st.`Id`, st.`EmployeeId`, st.`FirstName`, st.`LastName`, d.`DepartmentName`, st.`Designation` 
+    ORDER BY `HoursPerWeek` DESC, `FacultyName` ASC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 12. Student Strength Report
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_StudentStrength` //
+CREATE PROCEDURE `sp_Report_StudentStrength`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        COALESCE(s.`GroupId`, 0) AS `GroupId`, 
+        COALESCE(g.`GroupName`, 'Unassigned') AS `GroupName`, 
+        COALESCE(s.`SectionId`, 0) AS `SectionId`, 
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`, 
+        COALESCE(b.`BoardName`, '—') AS `BoardName`, 
+        SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) = 'male' THEN 1 ELSE 0 END) AS `MaleStudents`, 
+        SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) = 'female' THEN 1 ELSE 0 END) AS `FemaleStudents`, 
+        SUM(CASE WHEN LOWER(COALESCE(s.`Gender`, '')) NOT IN ('male', 'female') THEN 1 ELSE 0 END) AS `OtherStudents`, 
+        COUNT(*) AS `TotalStudents`,
+        CASE WHEN s.`SectionId` IS NULL THEN 0 ELSE COALESCE(sec.`MaximumStrength`, 60) END AS `MaximumStrength`,
+        CASE WHEN s.`SectionId` IS NULL OR COALESCE(sec.`MaximumStrength`, 0) = 0 THEN 0.0
+             ELSE ROUND(COUNT(*) * 100.0 / sec.`MaximumStrength`, 1)
+        END AS `UtilizationPercentage`
+    FROM `Students` s 
+    LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId` 
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId` 
+    LEFT JOIN `Boards` b ON b.`BoardId` = s.`BoardId` 
+    WHERE s.`IsActive` = 1 
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+    GROUP BY s.`GroupId`, g.`GroupName`, s.`SectionId`, sec.`SectionName`, b.`BoardName`, sec.`MaximumStrength`
+    ORDER BY `GroupName`, `SectionName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 13. Student Performance Report (Live Attendance % + Published Percentage + Grade)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_StudentPerformance` //
+CREATE PROCEDURE `sp_Report_StudentPerformance`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        s.`StudentId`,
+        COALESCE(s.`AdmissionNo`, '—') AS `AdmissionNo`,
+        COALESCE(s.`RollNo`, '—') AS `RollNo`,
+        s.`StudentName`,
+        COALESCE(g.`GroupName`, '—') AS `GroupName`,
+        COALESCE(sec.`SectionName`, 'Unassigned') AS `SectionName`,
+        COALESCE(res.`AveragePercentage`, 0.0) AS `AveragePercentage`,
+        COALESCE(res.`PassedSubjects`, 0) AS `PassedSubjects`,
+        COALESCE(res.`FailedSubjects`, 0) AS `FailedSubjects`,
+        COALESCE(att.`AttendancePercentage`, 0.0) AS `AttendancePercentage`,
+        CASE
+            WHEN res.`SubjectCount` IS NULL OR res.`SubjectCount` = 0 THEN 'N/A'
+            WHEN res.`FailedSubjects` > 0 THEN 'F'
+            WHEN res.`AveragePercentage` >= 90 THEN 'A+'
+            WHEN res.`AveragePercentage` >= 80 THEN 'A'
+            WHEN res.`AveragePercentage` >= 70 THEN 'B+'
+            WHEN res.`AveragePercentage` >= 60 THEN 'B'
+            WHEN res.`AveragePercentage` >= 50 THEN 'C'
+            WHEN res.`AveragePercentage` >= 35 THEN 'D'
+            ELSE 'F'
+        END AS `Grade`
+    FROM `Students` s 
+    LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId`
+    LEFT JOIN `Sections` sec ON sec.`SectionId` = s.`SectionId`
+    LEFT JOIN (
+        SELECT 
+            r.`StudentId`,
+            COUNT(*) AS `SubjectCount`,
+            ROUND(SUM(r.`TotalMarks`) * 100.0 / NULLIF(SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)), 0), 2) AS `AveragePercentage`,
+            SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `PassedSubjects`,
+            SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+        FROM `Results` r
+        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+        LEFT JOIN (
+            SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+            FROM `ExamSchedules`
+            WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+            GROUP BY `ExamId`, `SubjectId`
+        ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+        WHERE r.`IsPublished` = 1
+          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        GROUP BY r.`StudentId`
+    ) res ON res.`StudentId` = s.`StudentId`
+    LEFT JOIN (
+        SELECT 
+            a.`StudentId`,
+            ROUND(SUM(CASE WHEN a.`Status` IN (1, 3) THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `AttendancePercentage`
+        FROM `Attendances` a
+        WHERE a.`IsActive` = 1
+          AND (p_FromDate IS NULL OR a.`AttendanceDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR a.`AttendanceDate` <= p_ToDate)
+        GROUP BY a.`StudentId`
+    ) att ON att.`StudentId` = s.`StudentId`
+    WHERE s.`IsActive` = 1 
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+    ORDER BY `AveragePercentage` DESC, `AttendancePercentage` DESC, s.`StudentName` ASC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 14. Subject-Wise Performance Report (Strictly IsPublished = 1 + Date filter)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Subjects` //
+CREATE PROCEDURE `sp_Report_Subjects`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        r.`SubjectId`,
+        COALESCE(su.`SubjectName`, 'Subject') AS `SubjectName`,
+        COUNT(*) AS `Students`,
+        ROUND(AVG(r.`TotalMarks`), 2) AS `AverageMarks`,
+        ROUND(SUM(UPPER(COALESCE(r.`ResultStatus`, '')) IN ('PASS', 'PASSED', 'PROMOTED')) * 100.0 / NULLIF(COUNT(*), 0), 2) AS `PassPercentage`
+    FROM `Results` r 
+    JOIN `Students` s ON s.`StudentId` = r.`StudentId` AND s.`IsActive` = 1
+    LEFT JOIN `Subjects` su ON su.`SubjectId` = r.`SubjectId` 
+    WHERE r.`IsPublished` = 1
+      AND (p_CampusId IS NULL OR COALESCE(r.`CampusId`, s.`CampusId`) = p_CampusId)
+      AND (p_BoardId IS NULL OR COALESCE(r.`BoardId`, s.`BoardId`) = p_BoardId) 
+      AND (p_AcademicYearId IS NULL OR COALESCE(r.`AcademicYearId`, s.`AcademicYearId`) = p_AcademicYearId) 
+      AND (p_AcademicLevelId IS NULL OR COALESCE(r.`AcademicLevelId`, s.`AcademicLevelId`) = p_AcademicLevelId) 
+      AND (p_GroupId IS NULL OR COALESCE(r.`GroupId`, s.`GroupId`) = p_GroupId) 
+      AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+      AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+      AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+    GROUP BY r.`SubjectId`, su.`SubjectName` 
+    ORDER BY su.`SubjectName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 15. Group-Wise Analysis Report (Fixed LEFT JOIN scoping & PassPercentage)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Groups` //
+CREATE PROCEDURE `sp_Report_Groups`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        g.`GroupId`,
+        g.`GroupName`,
+        COUNT(DISTINCT s.`StudentId`) AS `StudentCount`,
+        ROUND(COALESCE(SUM(res.`TotalMarks`) * 100.0 / NULLIF(SUM(res.`MaxMarks`), 0), 0.0), 2) AS `AveragePercentage`,
+        ROUND(COALESCE(SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(DISTINCT CONCAT(se.`StudentId`, '_', se.`ExamId`)), 0), 0.0), 2) AS `PassPercentage`
+    FROM `Groups` g
+    LEFT JOIN `Students` s ON s.`GroupId` = g.`GroupId`
+        AND s.`IsActive` = 1
+        AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+        AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+    LEFT JOIN (
+        SELECT r.`StudentId`, r.`ExamId`,
+               SUM(r.`TotalMarks`) AS `TotalMarks`,
+               SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)) AS `MaxMarks`,
+               SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+        FROM `Results` r
+        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+        LEFT JOIN (
+            SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+            FROM `ExamSchedules` WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+            GROUP BY `ExamId`, `SubjectId`
+        ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+        WHERE r.`IsPublished` = 1
+          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        GROUP BY r.`StudentId`, r.`ExamId`
+    ) se ON se.`StudentId` = s.`StudentId`
+    LEFT JOIN (
+        SELECT r.`StudentId`, r.`ExamId`,
+               SUM(r.`TotalMarks`) AS `TotalMarks`,
+               SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)) AS `MaxMarks`
+        FROM `Results` r
+        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+        LEFT JOIN (
+            SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+            FROM `ExamSchedules` WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+            GROUP BY `ExamId`, `SubjectId`
+        ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+        WHERE r.`IsPublished` = 1
+          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        GROUP BY r.`StudentId`, r.`ExamId`
+    ) res ON res.`StudentId` = s.`StudentId` AND res.`ExamId` = se.`ExamId`
+    WHERE g.`IsActive` = 1
+      AND (p_BoardId IS NULL OR g.`BoardId` = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR g.`AcademicYearId` = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR g.`AcademicLevelId` = p_AcademicLevelId)
+      AND (p_GroupId IS NULL OR g.`GroupId` = p_GroupId)
+    GROUP BY g.`GroupId`, g.`GroupName`
+    ORDER BY g.`GroupName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 16. Section-Wise Analysis Report (Accurate Student-Exam PassPercentage & %)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Sections` //
+CREATE PROCEDURE `sp_Report_Sections`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        sec.`SectionId`,
+        sec.`SectionName`,
+        COALESCE(g.`GroupName`, '') AS `GroupName`,
+        COUNT(DISTINCT s.`StudentId`) AS `StudentCount`,
+        ROUND(COALESCE(SUM(se.`TotalMarks`) * 100.0 / NULLIF(SUM(se.`MaxMarks`), 0), 0.0), 2) AS `AveragePercentage`,
+        ROUND(COALESCE(SUM(CASE WHEN se.`FailedSubjects` = 0 THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(se.`ExamId`), 0), 0.0), 2) AS `PassPercentage`
+    FROM `Sections` sec
+    LEFT JOIN `Groups` g ON g.`GroupId` = sec.`GroupId`
+    LEFT JOIN `Students` s ON s.`SectionId` = sec.`SectionId` AND s.`IsActive` = 1
+    LEFT JOIN (
+        SELECT r.`StudentId`, r.`ExamId`,
+               SUM(r.`TotalMarks`) AS `TotalMarks`,
+               SUM(COALESCE(sc.`MaxMarks`, sub.`TotalMarks`, 100.0)) AS `MaxMarks`,
+               SUM(CASE WHEN UPPER(COALESCE(r.`ResultStatus`, '')) NOT IN ('PASS', 'PASSED', 'PROMOTED') THEN 1 ELSE 0 END) AS `FailedSubjects`
+        FROM `Results` r
+        LEFT JOIN `Subjects` sub ON sub.`SubjectId` = r.`SubjectId`
+        LEFT JOIN (
+            SELECT `ExamId`, `SubjectId`, MAX(`MaxMarks`) AS `MaxMarks`
+            FROM `ExamSchedules` WHERE `IsActive` = 1 AND `SubjectId` IS NOT NULL
+            GROUP BY `ExamId`, `SubjectId`
+        ) sc ON sc.`ExamId` = r.`ExamId` AND sc.`SubjectId` = r.`SubjectId`
+        WHERE r.`IsPublished` = 1
+          AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate)
+          AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
+        GROUP BY r.`StudentId`, r.`ExamId`
+    ) se ON se.`StudentId` = s.`StudentId`
+    WHERE sec.`IsActive` = 1
+      AND (p_CampusId IS NULL OR sec.`CampusId` = p_CampusId)
+      AND (p_BoardId IS NULL OR sec.`BoardId` = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR sec.`AcademicYearId` = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR sec.`AcademicLevelId` = p_AcademicLevelId)
+      AND (p_GroupId IS NULL OR sec.`GroupId` = p_GroupId)
+      AND (p_SectionId IS NULL OR sec.`SectionId` = p_SectionId)
+    GROUP BY sec.`SectionId`, sec.`SectionName`, g.`GroupName`
+    ORDER BY sec.`SectionName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 17. Security Audit Logs Report (With Campus Scoping)
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_AuditLogs` //
+CREATE PROCEDURE `sp_Report_AuditLogs`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_SectionId INT,
+    IN p_FromDate DATETIME,
+    IN p_ToDate DATETIME
+)
+BEGIN
+    SELECT 
+        al.`AuditLogId`,
+        al.`EventId`,
+        al.`CorrelationId`,
+        al.`RequestId`,
+        COALESCE(al.`UserName`, 'System') AS `Actor`,
+        COALESCE(al.`ActorRole`, 'Admin') AS `Role`,
+        al.`Action`,
+        al.`Module`,
+        COALESCE(al.`EntityName`, 'General') AS `Target`,
+        al.`Severity`,
+        al.`Status`,
+        al.`IpAddress` AS `Ip`,
+        al.`RemoteIpAddress`,
+        al.`ForwardedClientIp`,
+        al.`IpSource`,
+        al.`IpConfidence`,
+        COALESCE(al.`UserAgent`, 'Web') AS `Device`,
+        al.`DeviceId`,
+        al.`SessionId`,
+        al.`RequestMethod`,
+        al.`RouteTemplate`,
+        al.`HttpStatusCode`,
+        al.`DurationMs`,
+        COALESCE(al.`Description`, '') AS `Details`,
+        al.`CreatedAt`
+    FROM `AuditLogs` al
+    LEFT JOIN `Users` u ON u.`UserId` = al.`UserId`
+    LEFT JOIN `Staff` st ON st.`Id` = COALESCE(al.`StaffId`, u.`StaffId`)
+    LEFT JOIN `Students` stu ON stu.`StudentId` = u.`StudentId`
+    LEFT JOIN `Campuses` cmp ON p_CampusId IS NOT NULL AND cmp.`CampusId` = p_CampusId
+    WHERE (p_FromDate IS NULL OR al.`CreatedAt` >= p_FromDate)
+      AND (p_ToDate IS NULL OR al.`CreatedAt` <= p_ToDate)
+      AND (p_CampusId IS NULL
+           OR COALESCE(st.`CampusId`, stu.`CampusId`) = p_CampusId
+           OR (al.`CollegeId` IS NOT NULL AND cmp.`CollegeId` IS NOT NULL AND al.`CollegeId` = cmp.`CollegeId`))
+    ORDER BY al.`CreatedAt` DESC
+    LIMIT 500;
+END //
+
+-- -------------------------------------------------------------------------
+-- 18. Filter SP: sp_Report_Filter_Boards
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Filter_Boards` //
+CREATE PROCEDURE `sp_Report_Filter_Boards`(
+    IN p_CampusId INT
+)
+BEGIN
+    IF p_CampusId IS NOT NULL AND p_CampusId > 0 THEN
+        SELECT 
+            b.`BoardId` AS `Id`,
+            b.`BoardId`,
+            b.`BoardName` AS `Name`,
+            b.`BoardName`,
+            b.`BoardCode` AS `Code`
+        FROM `Boards` b
+        JOIN `CampusBoards` cb ON cb.`BoardId` = b.`BoardId` AND cb.`CampusId` = p_CampusId AND cb.`IsActive` = 1
+        WHERE b.`IsActive` = 1
+        ORDER BY b.`BoardName`;
+    ELSE
+        SELECT 
+            b.`BoardId` AS `Id`,
+            b.`BoardId`,
+            b.`BoardName` AS `Name`,
+            b.`BoardName`,
+            b.`BoardCode` AS `Code`
+        FROM `Boards` b
+        WHERE b.`IsActive` = 1
+        ORDER BY b.`BoardName`;
+    END IF;
+END //
+
+-- -------------------------------------------------------------------------
+-- 19. Filter SP: sp_Report_Filter_AcademicYears
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Filter_AcademicYears` //
+CREATE PROCEDURE `sp_Report_Filter_AcademicYears`(
+    IN p_BoardId INT
+)
+BEGIN
+    SELECT 
+        ay.`AcademicYearId` AS `Id`,
+        ay.`AcademicYearId`,
+        ay.`AcademicYearName` AS `Name`,
+        ay.`AcademicYearName`,
+        ay.`BoardId`,
+        ay.`StartDate`,
+        ay.`EndDate`
+    FROM `AcademicYears` ay
+    WHERE ay.`IsActive` = 1
+      AND (p_BoardId IS NULL OR ay.`BoardId` = p_BoardId)
+    ORDER BY ay.`StartDate` DESC;
+END //
+
+-- -------------------------------------------------------------------------
+-- 20. Filter SP: sp_Report_Filter_AcademicLevels
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Filter_AcademicLevels` //
+CREATE PROCEDURE `sp_Report_Filter_AcademicLevels`(
+    IN p_BoardId INT
+)
+BEGIN
+    IF p_BoardId IS NOT NULL AND p_BoardId > 0 THEN
+        SELECT 
+            al.`AcademicLevelId` AS `Id`,
+            al.`AcademicLevelId`,
+            al.`LevelName` AS `Name`,
+            al.`LevelName`,
+            al.`LevelCode` AS `Code`
+        FROM `AcademicLevels` al
+        JOIN `BoardAcademicLevels` bal ON bal.`AcademicLevelId` = al.`AcademicLevelId` AND bal.`BoardId` = p_BoardId AND bal.`IsActive` = 1
+        WHERE al.`IsActive` = 1
+        ORDER BY al.`DisplayOrder`, al.`LevelName`;
+    ELSE
+        SELECT 
+            al.`AcademicLevelId` AS `Id`,
+            al.`AcademicLevelId`,
+            al.`LevelName` AS `Name`,
+            al.`LevelName`,
+            al.`LevelCode` AS `Code`
+        FROM `AcademicLevels` al
+        WHERE al.`IsActive` = 1
+        ORDER BY al.`DisplayOrder`, al.`LevelName`;
+    END IF;
+END //
+
+-- -------------------------------------------------------------------------
+-- 21. Filter SP: sp_Report_Filter_Groups
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Filter_Groups` //
+CREATE PROCEDURE `sp_Report_Filter_Groups`(
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT
+)
+BEGIN
+    SELECT 
+        g.`GroupId` AS `Id`,
+        g.`GroupId`,
+        g.`GroupName` AS `Name`,
+        g.`GroupName`,
+        g.`GroupCode` AS `Code`,
+        g.`GroupCode`,
+        g.`AcademicYearId`,
+        g.`AcademicLevelId`,
+        g.`BoardId`,
+        COALESCE(al.`LevelName`, '') AS `AcademicLevel`,
+        COALESCE(b.`BoardName`, '') AS `Board`
+    FROM `Groups` g
+    LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = g.`AcademicLevelId`
+    LEFT JOIN `Boards` b ON b.`BoardId` = g.`BoardId`
+    WHERE g.`IsActive` = 1
+      AND (p_BoardId IS NULL OR g.`BoardId` = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR g.`AcademicYearId` = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR g.`AcademicLevelId` = p_AcademicLevelId)
+    ORDER BY g.`GroupName`;
+END //
+
+-- -------------------------------------------------------------------------
+-- 22. Filter SP: sp_Report_Filter_Sections
+-- -------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS `sp_Report_Filter_Sections` //
+CREATE PROCEDURE `sp_Report_Filter_Sections`(
+    IN p_CampusId INT,
+    IN p_GroupId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT
+)
+BEGIN
+    SELECT 
+        s.`SectionId` AS `Id`,
+        s.`SectionId`,
+        s.`SectionName` AS `Name`,
+        s.`SectionName`,
+        s.`GroupId`,
+        COALESCE(g.`GroupName`, '') AS `GroupName`,
+        s.`BoardId`,
+        COALESCE(b.`BoardName`, '') AS `Board`,
+        s.`AcademicYearId`,
+        s.`AcademicLevelId`,
+        COALESCE(al.`LevelName`, '') AS `AcademicLevel`,
+        s.`MaximumStrength`
+    FROM `Sections` s
+    LEFT JOIN `Groups` g ON g.`GroupId` = s.`GroupId`
+    LEFT JOIN `Boards` b ON b.`BoardId` = s.`BoardId`
+    LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = s.`AcademicLevelId`
+    WHERE s.`IsActive` = 1
+      AND (p_CampusId IS NULL OR s.`CampusId` = p_CampusId)
+      AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId)
+      AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+    ORDER BY s.`SectionName`;
+END //
+
 DELIMITER ;
 
 DELIMITER //
@@ -5924,91 +6712,246 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 10. sp_GetStaffRegularizations
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffRegularizations$$
-CREATE PROCEDURE sp_GetStaffRegularizations(
-    IN p_Status VARCHAR(50),
+DROP PROCEDURE IF EXISTS `sp_GetStaffRegularizations`$$
+CREATE PROCEDURE `sp_GetStaffRegularizations`(
+    IN p_Status VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_DepartmentId INT,
-    IN p_CampusId INT
+    IN p_CampusId INT,
+    IN p_RequestType VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Search VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 
         r.RegularizationId,
         r.FacultyId,
-        r.StaffId,
+        COALESCE(r.StaffId, r.FacultyId) AS StaffId,
+        r.StaffAttendanceId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) AS EmployeeId,
+        s.DepartmentId,
         COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         r.AttendanceDate,
-        r.RequestedInTime,
-        r.RequestedOutTime,
+        COALESCE(r.RequestType, 'Late Attendance') AS RequestType,
+        r.OriginalAttendanceStatus,
+        r.OriginalStatusCode,
+        TIME_FORMAT(r.OriginalInTime, '%H:%i:%s') AS OriginalInTime,
+        TIME_FORMAT(r.OriginalOutTime, '%H:%i:%s') AS OriginalOutTime,
+        TIME_FORMAT(r.RequestedInTime, '%H:%i:%s') AS RequestedInTime,
+        TIME_FORMAT(r.RequestedOutTime, '%H:%i:%s') AS RequestedOutTime,
         r.Reason,
         r.Status,
         r.AdminRemarks,
+        r.ReviewedByUserId,
+        COALESCE(r.ReviewedByAdminName, rev.FullName) AS ReviewedByAdminName,
         r.ReviewedAt,
-        r.CreatedAt
+        r.CreatedAt,
+        r.UpdatedAt
     FROM `StaffAttendanceRegularizations` r
-    LEFT JOIN `Staffs` s ON COALESCE(r.StaffId, r.FacultyId) = s.Id
+    LEFT JOIN `Staff` s ON COALESCE(r.StaffId, r.FacultyId) = s.Id
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
+    LEFT JOIN `Users` rev ON r.ReviewedByUserId = rev.UserId
     WHERE (p_Status IS NULL OR p_Status = '' OR LOWER(r.Status) = LOWER(p_Status))
       AND (p_DepartmentId IS NULL OR p_DepartmentId <= 0 OR s.DepartmentId = p_DepartmentId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
-    ORDER BY r.CreatedAt DESC;
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId OR s.CampusId IS NULL)
+      AND (p_RequestType IS NULL OR p_RequestType = '' OR LOWER(COALESCE(r.RequestType, 'Late Attendance')) = LOWER(p_RequestType))
+      AND (
+          p_Search IS NULL OR TRIM(p_Search) = ''
+          OR CAST(r.RegularizationId AS CHAR) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR TRIM(CONCAT(COALESCE(s.FirstName, ''), ' ', COALESCE(s.LastName, ''))) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(d.DepartmentName, 'General') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.RequestType, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.Reason, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.AdminRemarks, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+      )
+    ORDER BY r.CreatedAt DESC, r.RegularizationId DESC;
 END$$
 
 
 -- -------------------------------------------------------------------------------------
 -- 11. sp_ReviewStaffRegularization
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_ReviewStaffRegularization$$
-CREATE PROCEDURE sp_ReviewStaffRegularization(
+DROP PROCEDURE IF EXISTS `sp_ReviewStaffRegularization`$$
+CREATE PROCEDURE `sp_ReviewStaffRegularization`(
     IN p_RegularizationId INT,
-    IN p_Status VARCHAR(50),      -- 'Approved' or 'Rejected'
+    IN p_Status VARCHAR(50),
     IN p_AdminRemarks VARCHAR(500),
     IN p_ReviewerUserId INT
 )
 BEGIN
     DECLARE v_FacultyId INT DEFAULT 0;
-    DECLARE v_AttDate DATETIME;
-    DECLARE v_ReqIn TIME;
-    DECLARE v_ReqOut TIME;
+    DECLARE v_AttId INT DEFAULT NULL;
+    DECLARE v_AttDate DATE;
+    DECLARE v_ReqType VARCHAR(50) DEFAULT 'Late Attendance';
+    DECLARE v_CurrentStatus VARCHAR(50) DEFAULT NULL;
+    DECLARE v_ReqIn TIME DEFAULT NULL;
+    DECLARE v_ReqOut TIME DEFAULT NULL;
     DECLARE v_Reason VARCHAR(500);
+    DECLARE v_ReviewerName VARCHAR(150) DEFAULT NULL;
+    DECLARE v_StaffType TINYINT DEFAULT 1;
+    DECLARE v_DeptId INT DEFAULT NULL;
+    DECLARE v_CampusId INT DEFAULT 1;
+    DECLARE v_SessionId INT DEFAULT 0;
+    DECLARE v_OldStatus TINYINT DEFAULT NULL;
+
+    START TRANSACTION;
 
     SELECT 
         COALESCE(StaffId, FacultyId, 0),
-        AttendanceDate,
+        StaffAttendanceId,
+        DATE(AttendanceDate),
+        COALESCE(RequestType, 'Late Attendance'),
+        Status,
         RequestedInTime,
         RequestedOutTime,
         Reason
-    INTO v_FacultyId, v_AttDate, v_ReqIn, v_ReqOut, v_Reason
+    INTO v_FacultyId, v_AttId, v_AttDate, v_ReqType, v_CurrentStatus, v_ReqIn, v_ReqOut, v_Reason
     FROM `StaffAttendanceRegularizations`
-    WHERE RegularizationId = p_RegularizationId;
+    WHERE RegularizationId = p_RegularizationId
+    FOR UPDATE;
 
     IF v_FacultyId <= 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Regularization record not found.';
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Regularization request not found.';
+    END IF;
+
+    IF LOWER(COALESCE(v_CurrentStatus, '')) != 'pending' THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This regularization request has already been processed.';
+    END IF;
+
+    IF p_ReviewerUserId IS NOT NULL AND p_ReviewerUserId > 0 THEN
+        SELECT FullName INTO v_ReviewerName FROM `Users` WHERE UserId = p_ReviewerUserId LIMIT 1;
+    END IF;
+
+    SELECT 
+        IF(LOWER(COALESCE(StaffType, 'Teaching')) LIKE '%non%', 2, 1),
+        DepartmentId,
+        COALESCE(CampusId, 1)
+    INTO v_StaffType, v_DeptId, v_CampusId
+    FROM `Staff`
+    WHERE Id = v_FacultyId
+    LIMIT 1;
+
+    -- Locate original attendance record if not already linked
+    IF v_AttId IS NULL THEN
+        SELECT sa.StaffAttendanceId, sa.StaffSessionId, sa.Status
+        INTO v_AttId, v_SessionId, v_OldStatus
+        FROM `StaffAttendances` sa
+        INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+        WHERE sa.FacultyId = v_FacultyId
+          AND DATE(sas.AttendanceDate) = v_AttDate
+          AND sa.IsActive = 1
+          AND sas.IsActive = 1
+        ORDER BY sa.StaffAttendanceId DESC
+        LIMIT 1;
+    ELSE
+        SELECT sa.StaffSessionId, sa.Status
+        INTO v_SessionId, v_OldStatus
+        FROM `StaffAttendances` sa
+        WHERE sa.StaffAttendanceId = v_AttId AND sa.IsActive = 1
+        LIMIT 1;
     END IF;
 
     UPDATE `StaffAttendanceRegularizations`
     SET Status = p_Status,
+        StaffAttendanceId = COALESCE(StaffAttendanceId, v_AttId),
         AdminRemarks = p_AdminRemarks,
         ReviewedByUserId = p_ReviewerUserId,
+        ReviewedByAdminName = v_ReviewerName,
         ReviewedAt = UTC_TIMESTAMP(),
         UpdatedAt = UTC_TIMESTAMP()
     WHERE RegularizationId = p_RegularizationId;
 
-    -- If approved, update underlying staff attendance record
     IF LOWER(p_Status) = 'approved' THEN
-        CALL sp_UpdateStaffAttendanceSingle(
-            v_FacultyId,
-            v_AttDate,
-            1, -- default teaching or staff type
-            1, -- Present (status = 1)
-            COALESCE(v_ReqIn, '09:00:00'),
-            COALESCE(v_ReqOut, '16:30:00'),
-            CONCAT('Regularized: ', COALESCE(v_Reason, 'Approved')),
-            NULL, NULL, p_ReviewerUserId
+        IF (LOWER(v_ReqType) LIKE '%missed%' OR LOWER(v_ReqType) LIKE '%late%') AND (v_AttId IS NULL OR v_AttId <= 0) THEN
+            ROLLBACK;
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Original attendance record does not exist for this date.';
+        END IF;
+
+        IF LOWER(v_ReqType) LIKE '%missed%' THEN
+            -- Missed Checkout approved: resolve missed checkout WITHOUT generating any fake OutTime
+            UPDATE `StaffAttendances`
+            SET IsMissedCheckoutResolved = 1,
+                Status = IF(Status IN (2), 1, Status),
+                Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Missed Checkout Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                UpdatedByUserId = p_ReviewerUserId,
+                UpdatedByRole = 'Regularization',
+                UpdatedAt = UTC_TIMESTAMP()
+            WHERE StaffAttendanceId = v_AttId;
+        ELSEIF LOWER(v_ReqType) LIKE '%late%' THEN
+            -- Late Attendance approved: change Late -> Present preserving actual punch times
+            UPDATE `StaffAttendances`
+            SET Status = 1,
+                Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Late Attendance Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                UpdatedByUserId = p_ReviewerUserId,
+                UpdatedByRole = 'Regularization',
+                UpdatedAt = UTC_TIMESTAMP()
+            WHERE StaffAttendanceId = v_AttId;
+        ELSE
+            -- Absent / Missing Punch regularization on that specific AttendanceDate
+            IF v_AttId IS NOT NULL AND v_AttId > 0 THEN
+                UPDATE `StaffAttendances`
+                SET Status = 1,
+                    InTime = COALESCE(InTime, v_ReqIn),
+                    OutTime = COALESCE(OutTime, v_ReqOut),
+                    Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                    UpdatedByUserId = p_ReviewerUserId,
+                    UpdatedByRole = 'Regularization',
+                    UpdatedAt = UTC_TIMESTAMP()
+                WHERE StaffAttendanceId = v_AttId;
+            ELSE
+                SELECT StaffSessionId INTO v_SessionId
+                FROM `StaffAttendanceSessions`
+                WHERE DATE(AttendanceDate) = v_AttDate AND StaffType = v_StaffType AND IsActive = 1
+                LIMIT 1;
+                IF v_SessionId IS NULL OR v_SessionId <= 0 THEN
+                    INSERT INTO `StaffAttendanceSessions`
+                    (AttendanceDate, CampusId, DepartmentId, StaffType, TotalStaffCount, PresentCount, AbsentCount, LateCount, LeaveCount, IsLocked, Remarks, IsActive, CreatedByUserId, CreatedAt)
+                    VALUES (v_AttDate, v_CampusId, v_DeptId, v_StaffType, 1, 1, 0, 0, 0, 0, 'Created via regularization approval', 1, p_ReviewerUserId, UTC_TIMESTAMP());
+                    SET v_SessionId = LAST_INSERT_ID();
+                END IF;
+                INSERT INTO `StaffAttendances`
+                (StaffSessionId, FacultyId, Status, InTime, OutTime, VerificationMethod, DeviceId, Remarks, IsActive, CreatedByUserId, UpdatedByUserId, UpdatedByRole, CreatedAt)
+                VALUES (v_SessionId, v_FacultyId, 1, v_ReqIn, v_ReqOut, 1, 'Regularization', CONCAT('Regularized: ', COALESCE(p_AdminRemarks, v_Reason)), 1, p_ReviewerUserId, p_ReviewerUserId, 'Regularization', UTC_TIMESTAMP());
+                SET v_AttId = LAST_INSERT_ID();
+            END IF;
+        END IF;
+
+        IF v_SessionId IS NOT NULL AND v_SessionId > 0 THEN
+            UPDATE `StaffAttendanceSessions`
+            SET PresentCount = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 1),
+                AbsentCount  = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 2),
+                LateCount    = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 3),
+                LeaveCount   = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status IN (4, 6)),
+                UpdatedAt    = UTC_TIMESTAMP()
+            WHERE StaffSessionId = v_SessionId;
+        END IF;
+
+        INSERT INTO `AttendanceAuditHistory` (
+            EntityType, EntityId, FacultyId, StudentId, AttendanceDate,
+            Session, OldStatus, NewStatus, Action, ModifiedByUserId,
+            ModifiedByUserName, CreatedAt, Description
+        ) VALUES (
+            'Staff', COALESCE(v_AttId, p_RegularizationId), v_FacultyId, NULL, v_AttDate,
+            0, v_OldStatus, 1, 'RegularizationApproved',
+            p_ReviewerUserId, v_ReviewerName, UTC_TIMESTAMP(),
+            CONCAT(v_ReqType, ' Approved: ', COALESCE(p_AdminRemarks, v_Reason))
+        );
+    ELSE
+        INSERT INTO `AttendanceAuditHistory` (
+            EntityType, EntityId, FacultyId, StudentId, AttendanceDate,
+            Session, OldStatus, NewStatus, Action, ModifiedByUserId,
+            ModifiedByUserName, CreatedAt, Description
+        ) VALUES (
+            'Staff', COALESCE(v_AttId, p_RegularizationId), v_FacultyId, NULL, v_AttDate,
+            0, v_OldStatus, v_OldStatus, 'RegularizationRejected',
+            p_ReviewerUserId, v_ReviewerName, UTC_TIMESTAMP(),
+            CONCAT(v_ReqType, ' Rejected: ', COALESCE(p_AdminRemarks, 'No remarks'))
         );
     END IF;
 
+    COMMIT;
     SELECT 1 AS Success;
 END$$
 
@@ -6016,8 +6959,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 12. sp_ResolveStaffByUserId
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_ResolveStaffByUserId$$
-CREATE PROCEDURE sp_ResolveStaffByUserId(
+DROP PROCEDURE IF EXISTS `sp_ResolveStaffByUserId`$$
+CREATE PROCEDURE `sp_ResolveStaffByUserId`(
     IN p_UserId INT
 )
 BEGIN
@@ -6027,8 +6970,8 @@ BEGIN
         s.DepartmentId,
         s.StaffType
     FROM `Users` u
-    LEFT JOIN `Staffs` s ON (u.StaffId IS NOT NULL AND u.StaffId = s.Id)
-                        OR (u.Email IS NOT NULL AND u.Email = s.Email AND s.IsDeleted = 0)
+    LEFT JOIN `Staff` s ON (u.StaffId IS NOT NULL AND u.StaffId = s.Id)
+                       OR (u.Email IS NOT NULL AND u.Email = s.Email AND s.IsDeleted = 0)
     WHERE u.UserId = p_UserId
     LIMIT 1;
 END$$
@@ -7425,17 +8368,18 @@ DELIMITER ;
 -- MODULE 10: STUDENT ADMISSION STORED PROCEDURES
 -- Canonical Stored Procedures for CMS_Inter Student Admission Module
 -- Architecture: 100% Stored Procedures, 0% Inline SQL, Dapper Compliant
+-- Verified against live CollegeManagement MySQL schema
 -- =============================================================================
 
 -- Ensure support table for Admission Optional Fee Selections exists
 CREATE TABLE IF NOT EXISTS `AdmissionFeeSelections` (
-    `Id` INT NOT NULL AUTO_INCREMENT,
+    `AdmissionFeeSelectionId` INT NOT NULL AUTO_INCREMENT,
     `AdmissionId` INT NOT NULL,
     `FeeStructureComponentId` INT NOT NULL,
     `IsSelected` TINYINT(1) NOT NULL DEFAULT 1,
     `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `UpdatedAt` DATETIME(6) NULL,
-    PRIMARY KEY (`Id`),
+    PRIMARY KEY (`AdmissionFeeSelectionId`),
     KEY `IX_AdmissionFeeSelections_AdmissionId` (`AdmissionId`),
     KEY `IX_AdmissionFeeSelections_ComponentId` (`FeeStructureComponentId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -7517,9 +8461,9 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
-        sa.SectionId,
+        stu.SectionId,
         sec.SectionName,
-        sa.RollNo,
+        stu.RollNo,
         sa.StudentType,
         sa.TransportRequired,
         sa.BusType,
@@ -7552,7 +8496,17 @@ BEGIN
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
-    LEFT JOIN `Sections` sec ON sa.SectionId = sec.SectionId
+    LEFT JOIN (
+        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        FROM `Students` s1
+        INNER JOIN (
+            SELECT AdmissionId, MAX(StudentId) AS MaxStudentId
+            FROM `Students`
+            WHERE IsActive = 1
+            GROUP BY AdmissionId
+        ) latest ON latest.MaxStudentId = s1.StudentId
+    ) stu ON stu.AdmissionId = sa.AdmissionId
+    LEFT JOIN `Sections` sec ON stu.SectionId = sec.SectionId
     LEFT JOIN `FeeStructures` fs ON sa.FeeStructureId = fs.FeeStructureId
     LEFT JOIN `hostel_blocks` hb ON sa.HostelId = hb.HostelId
     LEFT JOIN `room_masters` rm ON sa.RoomId = rm.RoomId
@@ -7639,9 +8593,9 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
-        sa.SectionId,
+        stu.SectionId,
         sec.SectionName,
-        sa.RollNo,
+        stu.RollNo,
         sa.StudentType,
         sa.TransportRequired,
         sa.BusType,
@@ -7674,7 +8628,14 @@ BEGIN
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
-    LEFT JOIN `Sections` sec ON sa.SectionId = sec.SectionId
+    LEFT JOIN (
+        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        FROM `Students` s1
+        WHERE s1.AdmissionId = p_AdmissionId AND s1.IsActive = 1
+        ORDER BY s1.StudentId DESC
+        LIMIT 1
+    ) stu ON stu.AdmissionId = sa.AdmissionId
+    LEFT JOIN `Sections` sec ON stu.SectionId = sec.SectionId
     LEFT JOIN `FeeStructures` fs ON sa.FeeStructureId = fs.FeeStructureId
     LEFT JOIN `hostel_blocks` hb ON sa.HostelId = hb.HostelId
     LEFT JOIN `room_masters` rm ON sa.RoomId = rm.RoomId
@@ -7689,6 +8650,22 @@ BEGIN
     SELECT FeeStructureComponentId 
     FROM `AdmissionFeeSelections` 
     WHERE `AdmissionId` = p_AdmissionId AND `IsSelected` = 1;
+END //
+
+-- =============================================================================
+-- 2B. GET STUDENT DOMAIN RECORD BY ADMISSION ID
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_GetStudentByAdmissionId`//
+CREATE PROCEDURE `sp_GetStudentByAdmissionId`
+(
+    IN p_AdmissionId INT
+)
+BEGIN
+    SELECT s.*
+    FROM `Students` s
+    WHERE s.AdmissionId = p_AdmissionId
+    ORDER BY s.StudentId DESC
+    LIMIT 1;
 END //
 
 -- =============================================================================
@@ -7800,7 +8777,7 @@ BEGIN
     END IF;
 
     SET v_InitialStatus = 'Pending';
-    SET v_AdmissionNo = TRIM(p_AdmissionNo);
+    SET v_AdmissionNo = NULLIF(TRIM(p_AdmissionNo), '');
 
     INSERT INTO `StudentAdmissions`
     (
@@ -7820,7 +8797,7 @@ BEGIN
     )
     VALUES
     (
-        p_AdmissionDate, v_AdmissionNo, p_AdmissionType, p_AdmissionQuota, p_CampusId, p_SourceCampusId, p_IsReferral, p_AdmittedById,
+        p_AdmissionDate, v_AdmissionNo, p_AdmissionType, p_AdmissionQuota, p_CampusId, p_SourceCampusId, COALESCE(p_IsReferral, 0), p_AdmittedById,
         p_BoardId, p_AcademicYearId, p_AcademicLevelId, p_GroupId, p_ProgramId, p_FirstName, p_LastName,
         p_Gender, p_DateOfBirth, p_BloodGroup, p_StudentEmail, p_StudentMobileNumber,
         p_StudentPhoto, p_AadhaarNumber, p_Nationality, p_Religion, p_Category,
@@ -7838,7 +8815,7 @@ BEGIN
     SET v_AdmissionId = LAST_INSERT_ID();
 
     -- Fallback default admission number if non-referral and empty
-    IF (v_AdmissionNo IS NULL OR v_AdmissionNo = '') AND (p_IsReferral = 0 OR p_IsReferral IS NULL) THEN
+    IF v_AdmissionNo IS NULL AND (p_IsReferral = 0 OR p_IsReferral IS NULL) THEN
         SET v_AdmissionNo = CONCAT('ADM-', LPAD(v_AdmissionId, 4, '0'));
         UPDATE `StudentAdmissions` SET `AdmissionNo` = v_AdmissionNo WHERE `AdmissionId` = v_AdmissionId;
     END IF;
@@ -8115,13 +9092,15 @@ BEGIN
     SET `IsVerified` = 1,
         `Status` = 'Verified',
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1
+      AND `IsRejected` = 0;
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
 
 -- =============================================================================
--- 6. APPROVE STUDENT ADMISSION & DOMAIN STUDENT UPSERT
+-- 6. APPROVE STUDENT ADMISSION & DOMAIN STUDENT / FEE / ALLOCATION UPSERT
 -- =============================================================================
 DROP PROCEDURE IF EXISTS `sp_ApproveStudentAdmission`//
 CREATE PROCEDURE `sp_ApproveStudentAdmission`
@@ -8129,83 +9108,383 @@ CREATE PROCEDURE `sp_ApproveStudentAdmission`
     IN p_AdmissionId INT,
     IN p_PasswordHash VARCHAR(500)
 )
-BEGIN
-    DECLARE v_StudentId INT DEFAULT NULL;
+proc_label: BEGIN
+    DECLARE v_AdmissionExists INT DEFAULT 0;
+    DECLARE v_FeeStructureId INT;
+    DECLARE v_PaymentPlan VARCHAR(50);
+    DECLARE v_HallTicketNumber VARCHAR(50);
+    DECLARE v_StudentType VARCHAR(30);
+    DECLARE v_TransportRequired TINYINT(1);
+    DECLARE v_BusType VARCHAR(20);
+    DECLARE v_BusRoute VARCHAR(100);
+    DECLARE v_PickupPoint VARCHAR(100);
+    DECLARE v_HostelBlock VARCHAR(50);
+    DECLARE v_HostelRoom VARCHAR(50);
+    DECLARE v_HostelBed VARCHAR(50);
+    DECLARE v_HostelId INT;
+    DECLARE v_RoomId INT;
+    DECLARE v_BedId INT;
+    DECLARE v_RouteId INT;
+    DECLARE v_PickupPointId INT;
+    DECLARE v_CampusId INT;
 
-    IF NOT EXISTS (
-        SELECT 1 FROM `StudentAdmissions`
-        WHERE `AdmissionId` = p_AdmissionId AND `IsActive` = 1 AND `IsRejected` = 0
-    ) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admission record not found or rejected';
+    DECLARE v_StudentId INT;
+    DECLARE v_StudentFeeId INT;
+    DECLARE v_FeePaymentPlanId INT;
+    DECLARE v_TotalAmount DECIMAL(18,2) DEFAULT 0.00;
+    DECLARE v_InstallmentAmount DECIMAL(18,2) DEFAULT 0.00;
+    DECLARE v_LastInstallmentAmount DECIMAL(18,2) DEFAULT 0.00;
+
+    SELECT 
+        COUNT(1), 
+        MAX(FeeStructureId), 
+        MAX(PaymentPlan), 
+        MAX(HallTicketNumber),
+        MAX(StudentType),
+        MAX(TransportRequired),
+        MAX(BusType),
+        MAX(BusRoute),
+        MAX(PickupPoint),
+        MAX(HostelBlock),
+        MAX(HostelRoom),
+        MAX(HostelBed),
+        MAX(HostelId),
+        MAX(RoomId),
+        MAX(BedId),
+        MAX(RouteId),
+        MAX(PickupPointId),
+        MAX(CampusId)
+    INTO 
+        v_AdmissionExists, 
+        v_FeeStructureId, 
+        v_PaymentPlan, 
+        v_HallTicketNumber,
+        v_StudentType,
+        v_TransportRequired,
+        v_BusType,
+        v_BusRoute,
+        v_PickupPoint,
+        v_HostelBlock,
+        v_HostelRoom,
+        v_HostelBed,
+        v_HostelId,
+        v_RoomId,
+        v_BedId,
+        v_RouteId,
+        v_PickupPointId,
+        v_CampusId
+    FROM `StudentAdmissions`
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1;
+
+    IF v_AdmissionExists = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admission record not found or inactive.';
     END IF;
 
-    -- Check if student domain record already exists
+    IF v_FeeStructureId IS NULL OR NOT EXISTS (SELECT 1 FROM `FeeStructures` WHERE `FeeStructureId` = v_FeeStructureId AND `IsActive` = 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A valid and active Fee Structure must be selected prior to admission approval.';
+    END IF;
+
+    IF v_PaymentPlan IS NULL OR TRIM(v_PaymentPlan) = '' THEN
+        SET v_PaymentPlan = 'Schedule Payment';
+    END IF;
+
     SELECT `StudentId` INTO v_StudentId
     FROM `Students`
     WHERE `AdmissionId` = p_AdmissionId
-    ORDER BY `StudentId` DESC
     LIMIT 1;
 
     IF v_StudentId IS NULL THEN
         INSERT INTO `Students`
         (
-            AdmissionId, BoardId, SectionId,
-            AdmissionNo, RollNo, StudentName, Photo,
-            Gender, DateOfBirth, BloodGroup, Email, MobileNumber, AadhaarNumber, Address,
-            City, District, State, Pincode,
-            Board, AcademicYearId, AcademicLevel, GroupId, Section, AdmissionDate,
-            AdmissionType, Medium, PreviousSchool, PreviousBoard, PreviousPercentage, PreviousYearOfPassing,
-            SecondLanguage, StudentType, TransportRequired, BusType, RouteId, BusRoute,
-            PickupPointId, PickupPoint, HostelId, HostelBlock, RoomId, HostelRoom, BedId, HostelBed,
-            HallTicketNumber, PreviousHallTicketNumber, Category, ScholarshipStatus,
-            FatherName, FatherOccupation, FatherMobile,
-            MotherName, MotherOccupation, MotherMobile,
-            GuardianName, GuardianMobile, ParentGuardianEmail, AnnualIncome,
-            CampusId, FeeStructureId, PaymentPlan,
-            FeeAmount, FeePaid, ScholarshipAmount, FeeStatus,
-            AttendancePercentage, PerformanceGrade, CGPA, `Rank`, Remarks,
-            PasswordHash, IsFirstLogin, IsActive, CreatedAt
+            AdmissionId,
+            AdmissionNo,
+            RollNo,
+            AdmissionDate,
+            AdmissionType,
+            AdmissionQuota,
+            Medium,
+            SecondLanguage,
+            StudentName,
+            Photo,
+            Gender,
+            DateOfBirth,
+            BloodGroup,
+            Email,
+            MobileNumber,
+            AadhaarNumber,
+            Nationality,
+            Religion,
+            Category,
+            Address,
+            City,
+            District,
+            State,
+            Pincode,
+            BoardId,
+            AcademicYearId,
+            AcademicLevelId,
+            GroupId,
+            ProgramId,
+            FeeStructureId,
+            PaymentPlan,
+            SectionId,
+            PreviousSchool,
+            PreviousBoard,
+            PreviousYearOfPassing,
+            PreviousPercentage,
+            PreviousHallTicketNumber,
+            ScholarshipStatus,
+            FatherName,
+            FatherOccupation,
+            FatherMobile,
+            FatherEmail,
+            MotherName,
+            MotherOccupation,
+            MotherMobile,
+            MotherEmail,
+            GuardianName,
+            GuardianMobile,
+            ParentGuardianEmail,
+            AnnualIncome,
+            Remarks,
+            PasswordHash,
+            IsFirstLogin,
+            Status,
+            IsActive,
+            CreatedAt,
+            AdmittedById,
+            StudentType,
+            TransportRequired,
+            BusType,
+            RouteId,
+            BusRoute,
+            PickupPointId,
+            PickupPoint,
+            HostelId,
+            HostelBlock,
+            RoomId,
+            HostelRoom,
+            BedId,
+            HostelBed,
+            HallTicketNumber,
+            CampusId
         )
         SELECT
-            sa.AdmissionId, sa.BoardId, sa.SectionId,
+            sa.AdmissionId,
             sa.AdmissionNo,
-            COALESCE(sa.RollNo, CONCAT('R', LPAD(sa.AdmissionId, 5, '0'))),
-            CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            NULL,
+            sa.AdmissionDate,
+            sa.AdmissionType,
+            sa.AdmissionQuota,
+            sa.Medium,
+            sa.SecondLanguage,
+            CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             sa.StudentPhoto,
-            sa.Gender, DATE(sa.DateOfBirth), sa.BloodGroup,
-            COALESCE(NULLIF(sa.StudentEmail, ''), NULLIF(sa.ParentGuardianEmail, ''), CONCAT(sa.AdmissionNo, '@student.local')),
-            sa.StudentMobileNumber, sa.AadhaarNumber,
-            CONCAT_WS(', ', NULLIF(sa.HouseDoorNumber, ''), NULLIF(sa.StreetVillage, '')),
-            sa.City, sa.District, sa.State, sa.Pincode,
-            COALESCE(b.BoardName, ''), sa.AcademicYearId, COALESCE(al.LevelName, ''), sa.GroupId, COALESCE(sec.SectionName, ''), DATE(sa.AdmissionDate),
-            sa.AdmissionType, sa.Medium, sa.PreviousSchool, sa.PreviousBoard, sa.PreviousPercentage, sa.PreviousYearOfPassing,
-            sa.SecondLanguage, sa.StudentType, sa.TransportRequired, sa.BusType, sa.RouteId, sa.BusRoute,
-            sa.PickupPointId, sa.PickupPoint, sa.HostelId, sa.HostelBlock, sa.RoomId, sa.HostelRoom, sa.BedId, sa.HostelBed,
-            sa.HallTicketNumber, sa.HallTicketNumber, sa.Category, sa.ScholarshipStatus,
-            sa.FatherName, sa.FatherOccupation, sa.FatherMobile,
-            sa.MotherName, sa.MotherOccupation, sa.MotherMobile,
-            sa.GuardianName, sa.GuardianMobile, sa.ParentGuardianEmail, sa.AnnualIncome,
-            sa.CampusId, sa.FeeStructureId, sa.PaymentPlan,
-            0, 0, 0, 'Pending',
-            0, NULL, NULL, NULL, sa.Remarks,
-            COALESCE(p_PasswordHash, ''), 1, 1, CURRENT_TIMESTAMP(6)
+            sa.Gender,
+            sa.DateOfBirth,
+            sa.BloodGroup,
+            sa.StudentEmail,
+            sa.StudentMobileNumber,
+            CASE
+                WHEN sa.AadhaarNumber IS NULL OR TRIM(sa.AadhaarNumber) = '' OR LOWER(TRIM(sa.AadhaarNumber)) = 'string'
+                THEN NULL
+                ELSE TRIM(sa.AadhaarNumber)
+            END,
+            sa.Nationality,
+            sa.Religion,
+            sa.Category,
+            CONCAT_WS(', ', NULLIF(TRIM(sa.HouseDoorNumber), ''), NULLIF(TRIM(sa.StreetVillage), ''), NULLIF(TRIM(sa.City), ''), NULLIF(TRIM(sa.District), ''), NULLIF(TRIM(sa.State), ''), NULLIF(TRIM(sa.Pincode), '')),
+            sa.City,
+            sa.District,
+            sa.State,
+            sa.Pincode,
+            sa.BoardId,
+            sa.AcademicYearId,
+            sa.AcademicLevelId,
+            sa.GroupId,
+            sa.ProgramId,
+            sa.FeeStructureId,
+            v_PaymentPlan,
+            NULL,
+            sa.PreviousSchool,
+            sa.PreviousBoard,
+            sa.PreviousYearOfPassing,
+            sa.PreviousPercentage,
+            sa.HallTicketNumber,
+            sa.ScholarshipStatus,
+            sa.FatherName,
+            sa.FatherOccupation,
+            sa.FatherMobile,
+            sa.FatherEmail,
+            sa.MotherName,
+            sa.MotherOccupation,
+            sa.MotherMobile,
+            sa.MotherEmail,
+            sa.GuardianName,
+            sa.GuardianMobile,
+            sa.ParentGuardianEmail,
+            sa.AnnualIncome,
+            sa.Remarks,
+            COALESCE(NULLIF(p_PasswordHash, ''), ''),
+            1,
+            'Active',
+            1,
+            CURRENT_TIMESTAMP(6),
+            sa.AdmittedById,
+            sa.StudentType,
+            sa.TransportRequired,
+            sa.BusType,
+            sa.RouteId,
+            sa.BusRoute,
+            sa.PickupPointId,
+            sa.PickupPoint,
+            sa.HostelId,
+            sa.HostelBlock,
+            sa.RoomId,
+            sa.HostelRoom,
+            sa.BedId,
+            sa.HostelBed,
+            sa.HallTicketNumber,
+            sa.CampusId
         FROM `StudentAdmissions` sa
-        LEFT JOIN `Boards` b ON b.BoardId = sa.BoardId
-        LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = sa.AcademicLevelId
-        LEFT JOIN `Sections` sec ON sec.SectionId = sa.SectionId
         WHERE sa.AdmissionId = p_AdmissionId;
 
         SET v_StudentId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `Students` sa_target
+        JOIN `StudentAdmissions` sa_src ON sa_src.AdmissionId = p_AdmissionId
+        SET
+            sa_target.FeeStructureId = v_FeeStructureId,
+            sa_target.PaymentPlan = v_PaymentPlan,
+            sa_target.PreviousHallTicketNumber = COALESCE(v_HallTicketNumber, sa_target.PreviousHallTicketNumber),
+            sa_target.StudentType = COALESCE(sa_src.StudentType, sa_target.StudentType),
+            sa_target.TransportRequired = COALESCE(sa_src.TransportRequired, sa_target.TransportRequired),
+            sa_target.BusType = COALESCE(sa_src.BusType, sa_target.BusType),
+            sa_target.RouteId = COALESCE(sa_src.RouteId, sa_target.RouteId),
+            sa_target.BusRoute = COALESCE(sa_src.BusRoute, sa_target.BusRoute),
+            sa_target.PickupPointId = COALESCE(sa_src.PickupPointId, sa_target.PickupPointId),
+            sa_target.PickupPoint = COALESCE(sa_src.PickupPoint, sa_target.PickupPoint),
+            sa_target.HostelId = COALESCE(sa_src.HostelId, sa_target.HostelId),
+            sa_target.HostelBlock = COALESCE(sa_src.HostelBlock, sa_target.HostelBlock),
+            sa_target.RoomId = COALESCE(sa_src.RoomId, sa_target.RoomId),
+            sa_target.HostelRoom = COALESCE(sa_src.HostelRoom, sa_target.HostelRoom),
+            sa_target.BedId = COALESCE(sa_src.BedId, sa_target.BedId),
+            sa_target.HostelBed = COALESCE(sa_src.HostelBed, sa_target.HostelBed),
+            sa_target.HallTicketNumber = COALESCE(sa_src.HallTicketNumber, sa_target.HallTicketNumber),
+            sa_target.PasswordHash = CASE WHEN p_PasswordHash IS NOT NULL AND TRIM(p_PasswordHash) <> '' THEN p_PasswordHash ELSE sa_target.PasswordHash END,
+            sa_target.UpdatedAt = CURRENT_TIMESTAMP(6)
+        WHERE sa_target.StudentId = v_StudentId;
     END IF;
 
     UPDATE `StudentAdmissions`
-    SET `IsApproved` = 1,
-        `IsRejected` = 0,
-        `Status` = 'Approved',
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    SET
+        IsApproved = 1,
+        IsVerified = 1,
+        Status = 'Approved',
+        IsRejected = 0,
+        UpdatedAt = CURRENT_TIMESTAMP(6)
+    WHERE AdmissionId = p_AdmissionId;
 
-    SELECT 1 AS Success;
+    -- HOSTEL ALLOCATION ON APPROVAL
+    IF v_BedId IS NOT NULL AND v_HostelId IS NOT NULL AND v_RoomId IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM `hostel_student_allocations` WHERE `StudentId` = v_StudentId AND `Status` = 'Active') THEN
+            INSERT INTO `hostel_student_allocations` (StudentId, HostelId, RoomId, BedId, JoiningDate, Status, CreatedAt)
+            VALUES (v_StudentId, v_HostelId, v_RoomId, v_BedId, CURRENT_DATE, 'Active', CURRENT_TIMESTAMP);
+            UPDATE `hostel_beds` SET `BedStatus` = 'Occupied' WHERE `BedId` = v_BedId;
+        END IF;
+    END IF;
+
+    -- TRANSPORT ALLOCATION ON APPROVAL
+    IF v_TransportRequired = 1 AND v_RouteId IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM `StudentTransportAssignments` WHERE `StudentId` = v_StudentId AND `IsActive` = 1) THEN
+            INSERT INTO `StudentTransportAssignments` (StudentId, RouteId, PickupPointId, TransportType, StartDate, IsActive, CreatedAt)
+            VALUES (v_StudentId, v_RouteId, v_PickupPointId, 'TwoWay', CURRENT_DATE, 1, CURRENT_TIMESTAMP(6));
+        END IF;
+    END IF;
+
+    -- FEE SETUP & PAYMENT PLAN ON APPROVAL
+    SELECT COALESCE(SUM(fsc.Amount), 0.00)
+    INTO v_TotalAmount
+    FROM `FeeStructureComponents` fsc
+    WHERE fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsActive = 1
+      AND (fsc.IsMandatory = 1 OR EXISTS (
+          SELECT 1 FROM `AdmissionFeeSelections` afs
+          WHERE afs.AdmissionId = p_AdmissionId
+            AND afs.FeeStructureComponentId = fsc.FeeStructureComponentId
+            AND afs.IsSelected = 1
+      ));
+
+    SELECT `StudentFeeId` INTO v_StudentFeeId
+    FROM `StudentFees`
+    WHERE `StudentId` = v_StudentId AND `FeeStructureId` = v_FeeStructureId
+    LIMIT 1;
+
+    IF v_StudentFeeId IS NULL THEN
+        INSERT INTO `StudentFees` (StudentId, FeeStructureId, PaymentPlan, TotalAmount, ConcessionAmount, PayableAmount, PaidAmount, BalanceAmount, Status)
+        VALUES (v_StudentId, v_FeeStructureId, v_PaymentPlan, v_TotalAmount, 0.00, v_TotalAmount, 0.00, v_TotalAmount, 'Pending');
+        SET v_StudentFeeId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `StudentFees` SET `PaymentPlan` = v_PaymentPlan, `UpdatedAt` = CURRENT_TIMESTAMP(6) WHERE `StudentFeeId` = v_StudentFeeId;
+    END IF;
+
+    INSERT INTO `StudentFeeComponents` (StudentFeeId, FeeStructureComponentId, Amount, ConcessionAmount, PayableAmount, PaidAmount, BalanceAmount, DueDate, Status)
+    SELECT v_StudentFeeId, fsc.FeeStructureComponentId, fsc.Amount, 0.00, fsc.Amount, 0.00, fsc.Amount, fsc.DueDate, 'Pending'
+    FROM `FeeStructureComponents` fsc
+    WHERE fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsActive = 1
+      AND (fsc.IsMandatory = 1 OR EXISTS (
+          SELECT 1 FROM `AdmissionFeeSelections` afs
+          WHERE afs.AdmissionId = p_AdmissionId AND afs.FeeStructureComponentId = fsc.FeeStructureComponentId AND afs.IsSelected = 1
+      ))
+      AND NOT EXISTS (
+          SELECT 1 FROM `StudentFeeComponents` sfc
+          WHERE sfc.StudentFeeId = v_StudentFeeId AND sfc.FeeStructureComponentId = fsc.FeeStructureComponentId
+      );
+
+    SELECT `FeePaymentPlanId` INTO v_FeePaymentPlanId
+    FROM `FeePaymentPlans`
+    WHERE `StudentFeeId` = v_StudentFeeId AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_FeePaymentPlanId IS NULL THEN
+        IF v_PaymentPlan = 'Schedule Payment' THEN
+            INSERT INTO `FeePaymentPlans` (StudentFeeId, PlanName, TotalAmount, NumberOfInstallments, IsActive)
+            VALUES (v_StudentFeeId, 'Schedule Payment', v_TotalAmount, 4, 1);
+        ELSE
+            INSERT INTO `FeePaymentPlans` (StudentFeeId, PlanName, TotalAmount, NumberOfInstallments, IsActive)
+            VALUES (v_StudentFeeId, 'Full Payment', v_TotalAmount, 1, 1);
+        END IF;
+        SET v_FeePaymentPlanId = LAST_INSERT_ID();
+    END IF;
+
+    IF v_PaymentPlan = 'Schedule Payment' THEN
+        SET v_InstallmentAmount = ROUND(v_TotalAmount / 4, 2);
+        SET v_LastInstallmentAmount = v_TotalAmount - (v_InstallmentAmount * 3);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 1, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 1);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 2, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 2 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 2);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 3, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 3 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 3);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 4, v_LastInstallmentAmount, 0.00, v_LastInstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 4 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 4);
+    ELSE
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 1, v_TotalAmount, 0.00, v_TotalAmount, CURRENT_TIMESTAMP, 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 1);
+    END IF;
+
+    SELECT 1 AS Result;
 END //
 
 -- =============================================================================
@@ -8215,7 +9494,7 @@ DROP PROCEDURE IF EXISTS `sp_RejectStudentAdmission`//
 CREATE PROCEDURE `sp_RejectStudentAdmission`
 (
     IN p_AdmissionId INT,
-    IN p_RejectionReason VARCHAR(500),
+    IN p_RejectionReason VARCHAR(1000),
     IN p_Remarks VARCHAR(1000)
 )
 BEGIN
@@ -8226,7 +9505,8 @@ BEGIN
         `RejectionReason` = p_RejectionReason,
         `Remarks` = p_Remarks,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1;
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -8361,15 +9641,11 @@ CREATE PROCEDURE `sp_AllocateStudentAdmissionSection`
     IN p_SectionId INT
 )
 BEGIN
-    UPDATE `StudentAdmissions`
-    SET `SectionId` = p_SectionId,
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
-
     UPDATE `Students`
     SET `SectionId` = p_SectionId,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND (`IsActive` = 1 OR `IsActive` IS NULL);
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -8382,17 +9658,12 @@ CREATE PROCEDURE `sp_AllocateStudentAdmissionRollNumber`
     IN p_RollNo VARCHAR(30)
 )
 BEGIN
-    UPDATE `StudentAdmissions`
-    SET `RollNo` = p_RollNo,
-        `SectionId` = p_SectionId,
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
-
     UPDATE `Students`
     SET `RollNo` = p_RollNo,
         `SectionId` = p_SectionId,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND (`IsActive` = 1 OR `IsActive` IS NULL);
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -8407,7 +9678,28 @@ CREATE PROCEDURE `sp_SaveAdmissionFeeSelections`
     IN p_SelectedComponentIds JSON
 )
 BEGIN
-    DELETE FROM `AdmissionFeeSelections` WHERE `AdmissionId` = p_AdmissionId;
+    DECLARE v_FeeStructureId INT DEFAULT NULL;
+    DECLARE v_SelectedCount INT DEFAULT 0;
+
+    SELECT `FeeStructureId`
+    INTO v_FeeStructureId
+    FROM `StudentAdmissions`
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_FeeStructureId IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Admission not found or fee structure not assigned';
+    END IF;
+
+    DELETE afs
+    FROM `AdmissionFeeSelections` afs
+    INNER JOIN `FeeStructureComponents` fsc
+        ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
+    WHERE afs.AdmissionId = p_AdmissionId
+      AND fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsMandatory = 0;
 
     IF p_SelectedComponentIds IS NOT NULL AND JSON_LENGTH(p_SelectedComponentIds) > 0 THEN
         INSERT INTO `AdmissionFeeSelections` (AdmissionId, FeeStructureComponentId, IsSelected, CreatedAt)
@@ -8419,12 +9711,24 @@ BEGIN
         FROM JSON_TABLE(
             p_SelectedComponentIds,
             '$[*]' COLUMNS (ComponentId INT PATH '$')
-        ) jt;
+        ) jt
+        INNER JOIN `FeeStructureComponents` fsc
+            ON fsc.FeeStructureComponentId = jt.ComponentId
+        WHERE fsc.FeeStructureId = v_FeeStructureId
+          AND fsc.IsActive = 1
+          AND fsc.IsMandatory = 0;
     END IF;
 
-    SELECT COUNT(*) AS SelectedOptionalFees
-    FROM `AdmissionFeeSelections`
-    WHERE `AdmissionId` = p_AdmissionId AND `IsSelected` = 1;
+    SELECT COUNT(*)
+    INTO v_SelectedCount
+    FROM `AdmissionFeeSelections` afs
+    INNER JOIN `FeeStructureComponents` fsc
+        ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
+    WHERE afs.AdmissionId = p_AdmissionId
+      AND fsc.FeeStructureId = v_FeeStructureId
+      AND afs.IsSelected = 1;
+
+    SELECT v_SelectedCount AS SelectedOptionalFees;
 END //
 
 -- =============================================================================
@@ -8447,14 +9751,11 @@ BEGIN
     IF v_StudentId IS NOT NULL THEN
         UPDATE `Students` s
         JOIN `StudentAdmissions` sa ON s.AdmissionId = sa.AdmissionId
-        LEFT JOIN `Boards` b ON b.BoardId = sa.BoardId
-        LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = sa.AcademicLevelId
-        LEFT JOIN `Sections` sec ON sec.SectionId = sa.SectionId
         SET
-            s.StudentName = CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            s.StudentName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             s.Photo = COALESCE(sa.StudentPhoto, s.Photo),
             s.Gender = COALESCE(sa.Gender, s.Gender),
-            s.DateOfBirth = COALESCE(DATE(sa.DateOfBirth), s.DateOfBirth),
+            s.DateOfBirth = COALESCE(sa.DateOfBirth, s.DateOfBirth),
             s.BloodGroup = COALESCE(sa.BloodGroup, s.BloodGroup),
             s.Email = COALESCE(sa.StudentEmail, s.Email),
             s.MobileNumber = COALESCE(sa.StudentMobileNumber, s.MobileNumber),
@@ -8462,21 +9763,16 @@ BEGIN
             s.Nationality = COALESCE(sa.Nationality, s.Nationality),
             s.Religion = COALESCE(sa.Religion, s.Religion),
             s.Category = COALESCE(sa.Category, s.Category),
-            s.Address = CONCAT_WS(', ', NULLIF(sa.HouseDoorNumber, ''), NULLIF(sa.StreetVillage, '')),
+            s.Address = CONCAT_WS(', ', NULLIF(TRIM(sa.HouseDoorNumber), ''), NULLIF(TRIM(sa.StreetVillage), ''), NULLIF(TRIM(sa.City), ''), NULLIF(TRIM(sa.District), ''), NULLIF(TRIM(sa.State), ''), NULLIF(TRIM(sa.Pincode), '')),
             s.City = COALESCE(sa.City, s.City),
             s.District = COALESCE(sa.District, s.District),
             s.State = COALESCE(sa.State, s.State),
             s.Pincode = COALESCE(sa.Pincode, s.Pincode),
             s.BoardId = COALESCE(sa.BoardId, s.BoardId),
-            s.Board = COALESCE(b.BoardName, s.Board),
             s.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId),
             s.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId),
-            s.AcademicLevel = COALESCE(al.LevelName, s.AcademicLevel),
             s.GroupId = COALESCE(sa.GroupId, s.GroupId),
             s.ProgramId = COALESCE(sa.ProgramId, s.ProgramId),
-            s.SectionId = COALESCE(sa.SectionId, s.SectionId),
-            s.Section = COALESCE(sec.SectionName, s.Section),
-            s.RollNo = COALESCE(sa.RollNo, s.RollNo),
             s.Medium = COALESCE(sa.Medium, s.Medium),
             s.SecondLanguage = COALESCE(sa.SecondLanguage, s.SecondLanguage),
             s.PreviousSchool = COALESCE(sa.PreviousSchool, s.PreviousSchool),
@@ -8488,9 +9784,11 @@ BEGIN
             s.FatherName = COALESCE(sa.FatherName, s.FatherName),
             s.FatherOccupation = COALESCE(sa.FatherOccupation, s.FatherOccupation),
             s.FatherMobile = COALESCE(sa.FatherMobile, s.FatherMobile),
+            s.FatherEmail = COALESCE(sa.FatherEmail, s.FatherEmail),
             s.MotherName = COALESCE(sa.MotherName, s.MotherName),
             s.MotherOccupation = COALESCE(sa.MotherOccupation, s.MotherOccupation),
             s.MotherMobile = COALESCE(sa.MotherMobile, s.MotherMobile),
+            s.MotherEmail = COALESCE(sa.MotherEmail, s.MotherEmail),
             s.GuardianName = COALESCE(sa.GuardianName, s.GuardianName),
             s.GuardianMobile = COALESCE(sa.GuardianMobile, s.GuardianMobile),
             s.ParentGuardianEmail = COALESCE(sa.ParentGuardianEmail, s.ParentGuardianEmail),
@@ -8519,7 +9817,7 @@ BEGIN
         UPDATE `Users` u
         JOIN `StudentAdmissions` sa ON sa.AdmissionId = p_AdmissionId
         SET 
-            u.FullName = CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            u.FullName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             u.Email = COALESCE(NULLIF(sa.StudentEmail, ''), u.Email),
             u.PhoneNumber = COALESCE(NULLIF(sa.StudentMobileNumber, ''), u.PhoneNumber),
             u.UpdatedAt = CURRENT_TIMESTAMP(6)

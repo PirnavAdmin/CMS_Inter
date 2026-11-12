@@ -16,5 +16,6 @@ namespace CollegeManagement.API.Repositories.Interfaces.LopConfiguration
         Task<bool> UpdateStaffRecordAsync(int id, decimal days, string basis, int periodDays, decimal deduction, decimal salaryAfterLop, string reason, int? updatedByUserId = null, CancellationToken ct = default);
         Task<bool> DeleteStaffRecordAsync(int id, int? deletedByUserId = null, CancellationToken ct = default);
         Task<IEnumerable<LopStaffDropdownDto>> GetStaffListForLopAsync(CancellationToken ct = default);
+        Task<Dictionary<int, (int LateCount, int MissedCheckoutCount, int AbsentCount)>> GetMonthlyAttendanceCountsAsync(string targetMonth, string shiftStart, int graceMinutes, CancellationToken ct = default);
     }
 }

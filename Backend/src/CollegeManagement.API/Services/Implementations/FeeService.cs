@@ -23,6 +23,8 @@ public class FeeService : IFeeService
     private static string Text(string? value, string name) { if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{name} is required."); return value.Trim(); }
     private static void DiscountType(string? type) { var v = Text(type, "DiscountType"); if (!v.Equals("Percentage", StringComparison.OrdinalIgnoreCase) && !v.Equals("Fixed", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("DiscountType must be Percentage or Fixed."); }
     private static void Category(string? category) { var v = Text(category, "Category"); var allowed = new[] { "Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous" }; if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Category must be Admission, Academic, Examination, Transport, Hostel, Activities, Activity, Facility, Other or Miscellaneous."); }
+    private static string? NormalizeYearFeeMode(string? mode) { if (string.IsNullOrWhiteSpace(mode)) return null; var v = mode.Trim().ToLowerInvariant(); if (v != "same" && v != "different") throw new ArgumentException("YearFeeMode must be 'same' or 'different'."); return v; }
+    private static string? NormalizeIncrementType(string? type) { if (string.IsNullOrWhiteSpace(type)) return null; var v = type.Trim().ToLowerInvariant(); if (v != "percentage" && v != "fixed") throw new ArgumentException("IncrementType must be 'percentage' or 'fixed'."); return v; }
 
     public Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest r) { Text(r.FeeTypeName, "FeeTypeName"); Category(r.Category); return _repo.CreateFeeTypeAsync(r); }
     public Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null) => _repo.GetFeeTypesAsync(campusId, boardId, academicYearId);
@@ -33,14 +35,40 @@ public class FeeService : IFeeService
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest r)
     {
         Id(r.BoardId, "BoardId"); Id(r.AcademicYearId, "AcademicYearId"); Id(r.GroupId, "GroupId");
+        if (r.AcademicLevelId.HasValue) Id(r.AcademicLevelId.Value, "AcademicLevelId");
+        if (r.ProgramId.HasValue) Id(r.ProgramId.Value, "ProgramId");
+        var mode = NormalizeYearFeeMode(r.YearFeeMode);
+        var incType = NormalizeIncrementType(r.IncrementType);
+        if (r.IncrementValue.HasValue && r.IncrementValue.Value < 0) throw new ArgumentException("IncrementValue cannot be negative.");
+        if (mode == "different")
+        {
+            if (incType == null) throw new ArgumentException("IncrementType is required for Different Fees mode.");
+            if (!r.IncrementValue.HasValue) throw new ArgumentException("IncrementValue is required for Different Fees mode.");
+            r.IncrementType = incType;
+        }
+        else if (mode == null && (incType != null || r.IncrementValue.HasValue))
+        {
+            throw new ArgumentException("YearFeeMode is required when increment settings are provided.");
+        }
+        r.YearFeeMode = mode;
         if (r.Items == null || r.Items.Count == 0) throw new ArgumentException("At least one fee type is required.");
         if (r.Items.Any(x => x.Amount <= 0)) throw new ArgumentException("All fee amounts must be greater than zero.");
         foreach (var item in r.Items) { Id(item.FeeTypeId, "FeeTypeId"); item.Rule = Text(item.Rule, "Rule"); if (!item.Rule.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) && !item.Rule.Equals("Optional", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Rule must be Mandatory or Optional."); }
+        if (r.Items.Select(x => x.FeeTypeId).Distinct().Count() != r.Items.Count) throw new ArgumentException("Duplicate fee types are not allowed in a single fee structure.");
         return await _repo.CreateFeeStructureAsync(r);
     }
     public Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null) => _repo.GetFeeStructuresAsync(campusId);
     public Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int id) { Id(id, "FeeStructureId"); return _repo.GetFeeStructureByIdAsync(id); }
-    public Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest r) { Id(id, "FeeStructureId"); return _repo.UpdateFeeStructureAsync(id, r); }
+    public Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest r)
+    {
+        Id(id, "FeeStructureId");
+        if (r.ProgramId.HasValue) Id(r.ProgramId.Value, "ProgramId");
+        if (r.AcademicLevelId.HasValue) Id(r.AcademicLevelId.Value, "AcademicLevelId");
+        r.YearFeeMode = NormalizeYearFeeMode(r.YearFeeMode);
+        r.IncrementType = NormalizeIncrementType(r.IncrementType);
+        if (r.IncrementValue.HasValue && r.IncrementValue.Value < 0) throw new ArgumentException("IncrementValue cannot be negative.");
+        return _repo.UpdateFeeStructureAsync(id, r);
+    }
     public Task<bool> DeleteFeeStructureAsync(int id) { Id(id, "FeeStructureId"); return _repo.DeleteFeeStructureAsync(id); }
     public Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int id, CreateFeeStructureItemRequest r) { Id(id, "FeeStructureId"); Id(r.FeeTypeId, "FeeTypeId"); if (r.Amount <= 0) throw new ArgumentException("Amount must be greater than zero."); r.Rule = Text(r.Rule, "Rule"); return _repo.AddFeeStructureItemAsync(id, r); }
     public Task<IEnumerable<FeeStructureItemResponse>> GetFeeStructureItemsAsync(int id) { Id(id, "FeeStructureId"); return _repo.GetFeeStructureItemsAsync(id); }

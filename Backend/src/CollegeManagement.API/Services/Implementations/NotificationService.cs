@@ -453,23 +453,25 @@ namespace CollegeManagement.API.Services.Implementations
 
             int count = await _notificationRepo.CreateBatchNotificationsAsync(notifications);
 
-            var payload = new
+            foreach (var notif in notifications)
             {
-                title,
-                message,
-                type,
-                referenceId,
-                actionUrl,
-                isRead = false,
-                createdAt = now
-            };
+                var payload = new
+                {
+                    notificationId = notif.NotificationId,
+                    userId = notif.UserId,
+                    title = notif.Title,
+                    message = notif.Message,
+                    type = notif.Type,
+                    referenceId = notif.ReferenceId,
+                    actionUrl = notif.ActionUrl,
+                    isRead = false,
+                    createdAt = notif.CreatedAt
+                };
 
-            foreach (var uid in distinctIds)
-            {
                 try
                 {
-                    await _hubContext.Clients.Group($"User_{uid}").SendAsync("ReceiveNotification", payload);
-                    await _hubContext.Clients.Group($"User_{uid}").SendAsync("NotificationReceived", new { type, title });
+                    await _hubContext.Clients.Group($"User_{notif.UserId}").SendAsync("ReceiveNotification", payload);
+                    await _hubContext.Clients.Group($"User_{notif.UserId}").SendAsync("NotificationReceived", payload);
                 }
                 catch { }
             }
@@ -477,60 +479,69 @@ namespace CollegeManagement.API.Services.Implementations
             return count;
         }
 
+        private async Task<List<int>> ResolveRoleUserIdsAsync(IEnumerable<string> roles, int? campusId)
+        {
+            var roleList = (roles ?? Enumerable.Empty<string>())
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Select(r => r.Trim().ToLowerInvariant())
+                .Distinct()
+                .ToList();
+
+            if (!roleList.Any()) return new List<int>();
+
+            bool wantsAdmin = roleList.Any(r => r.Contains("admin"));
+            var nonAdminRoles = roleList.Where(r => !r.Contains("admin")).ToList();
+
+            var activeUsers = await _context.Users.AsNoTracking()
+                .Where(u => u.IsActive)
+                .Select(u => new
+                {
+                    u.UserId,
+                    RoleName = u.Role != null ? u.Role.RoleName : string.Empty,
+                    HasAdminId = u.AdminId.HasValue,
+                    StaffCampusId = u.Staff != null ? u.Staff.CampusId : null,
+                    StudentCampusId = u.Student != null ? u.Student.CampusId : null
+                })
+                .ToListAsync();
+
+            return activeUsers
+                .Where(u =>
+                {
+                    var rLower = (u.RoleName ?? string.Empty).Trim().ToLowerInvariant();
+                    bool roleMatched =
+                        (wantsAdmin && (u.HasAdminId || rLower.Contains("admin"))) ||
+                        (!string.IsNullOrEmpty(rLower) && nonAdminRoles.Any(rl => rLower == rl || rLower.Contains(rl) || rl.Contains(rLower)));
+
+                    if (!roleMatched) return false;
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        bool campusMatched =
+                            u.StaffCampusId == campusId.Value ||
+                            u.StudentCampusId == campusId.Value ||
+                            u.HasAdminId ||
+                            rLower.Contains("admin") ||
+                            rLower == "principal";
+                        if (!campusMatched) return false;
+                    }
+                    return true;
+                })
+                .Select(u => u.UserId)
+                .Distinct()
+                .ToList();
+        }
+
         public async Task<int> SendToRoleAsync(
             string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
         {
             try
             {
-                var roleLower = role.Trim().ToLower();
-                var query = _context.Users.AsNoTracking()
-                    .Include(u => u.Role)
-                    .Include(u => u.Staff)
-                    .Include(u => u.Student)
-                    .Where(u => u.IsActive);
-
-                if (roleLower.Contains("admin"))
-                {
-                    query = query.Where(u => u.AdminId.HasValue || (u.Role != null && u.Role.RoleName.ToLower().Contains("admin")));
-                }
-                else
-                {
-                    query = query.Where(u => u.Role != null && (
-                        u.Role.RoleName.ToLower() == roleLower ||
-                        u.Role.RoleName.ToLower().Contains(roleLower) ||
-                        roleLower.Contains(u.Role.RoleName.ToLower())
-                    ));
-                }
-
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    query = query.Where(u =>
-                        (u.Staff != null && u.Staff.CampusId == campusId.Value) ||
-                        (u.Student != null && u.Student.CampusId == campusId.Value) ||
-                        u.AdminId.HasValue);
-                }
-
-                var userIds = await query.Select(u => u.UserId).ToListAsync();
+                var userIds = await ResolveRoleUserIdsAsync(new[] { role }, campusId);
                 if (userIds.Any())
                 {
-                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                    return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
                 }
-
-                var payload = new
-                {
-                    title,
-                    message,
-                    type,
-                    referenceId,
-                    actionUrl,
-                    isRead = false,
-                    createdAt = DateTime.UtcNow
-                };
-
-                await _hubContext.Clients.Group($"Role_{roleLower}").SendAsync("ReceiveNotification", payload);
-                await _hubContext.Clients.Group($"Role_{roleLower}").SendAsync("NotificationReceived", new { type, title });
-
-                return userIds.Count;
+                return 0;
             }
             catch (Exception ex)
             {
@@ -625,12 +636,17 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<int> SendToRolesAsync(
             IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
         {
-            int total = 0;
-            foreach (var role in roles)
+            try
             {
-                total += await SendToRoleAsync(role, campusId, title, message, type, referenceId, actionUrl);
+                var distinctUserIds = await ResolveRoleUserIdsAsync(roles, campusId);
+                if (!distinctUserIds.Any()) return 0;
+                return await SendToUsersAsync(distinctUserIds, title, message, type, referenceId, actionUrl);
             }
-            return total;
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "SendToRolesAsync failed");
+                return 0;
+            }
         }
 
         public async Task<int> SendToStaffAsync(
@@ -645,7 +661,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 if (userIds.Any())
                 {
-                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                    return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
                 }
 
                 try
@@ -661,7 +677,7 @@ namespace CollegeManagement.API.Services.Implementations
                         createdAt = DateTime.UtcNow
                     };
                     await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("ReceiveNotification", payload);
-                    await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("NotificationReceived", new { type, title });
+                    await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("NotificationReceived", payload);
                 }
                 catch { }
 

@@ -622,7 +622,7 @@ END //
 -- =========================================================================
 
 DROP PROCEDURE IF EXISTS `sp_LopPolicy_Get` //
-CREATE PROCEDURE `sp_LopPolicy_Get`()
+CREATE PROCEDURE \`sp_LopPolicy_Get\`()
 BEGIN
     SELECT 
         PolicyId,
@@ -634,14 +634,18 @@ BEGIN
         LateLoginsPerPenalty,
         PenaltyDays,
         Basis,
-        EffectiveFrom
+        EffectiveFrom,
+        MissedCheckoutLopEnabled,
+        AllowedMissedCheckouts,
+        MissedCheckoutsPerPenalty,
+        MissedCheckoutPenaltyDays
     FROM LopPolicies 
     ORDER BY PolicyId DESC 
     LIMIT 1;
 END //
 
 DROP PROCEDURE IF EXISTS `sp_LopPolicy_Save` //
-CREATE PROCEDURE `sp_LopPolicy_Save`(
+CREATE PROCEDURE \`sp_LopPolicy_Save\`(
     IN p_IsEnabled TINYINT,
     IN p_ShiftStart VARCHAR(10),
     IN p_GraceMinutes INT,
@@ -650,7 +654,11 @@ CREATE PROCEDURE `sp_LopPolicy_Save`(
     IN p_PenaltyDays DECIMAL(5,2),
     IN p_Basis VARCHAR(50),
     IN p_EffectiveFrom VARCHAR(50),
-    IN p_UpdatedByUserId INT
+    IN p_UpdatedByUserId INT,
+    IN p_MissedCheckoutLopEnabled TINYINT,
+    IN p_AllowedMissedCheckouts INT,
+    IN p_MissedCheckoutsPerPenalty INT,
+    IN p_MissedCheckoutPenaltyDays DECIMAL(5,2)
 )
 BEGIN
     DECLARE v_PolicyId INT DEFAULT NULL;
@@ -667,14 +675,20 @@ BEGIN
             PenaltyDays = p_PenaltyDays,
             Basis = p_Basis,
             EffectiveFrom = p_EffectiveFrom,
+            MissedCheckoutLopEnabled = COALESCE(p_MissedCheckoutLopEnabled, 1),
+            AllowedMissedCheckouts = COALESCE(p_AllowedMissedCheckouts, 0),
+            MissedCheckoutsPerPenalty = GREATEST(1, COALESCE(p_MissedCheckoutsPerPenalty, 1)),
+            MissedCheckoutPenaltyDays = COALESCE(p_MissedCheckoutPenaltyDays, 0.5),
             UpdatedByUserId = p_UpdatedByUserId,
             UpdatedAt = UTC_TIMESTAMP()
         WHERE PolicyId = v_PolicyId;
     ELSE
         INSERT INTO LopPolicies 
-        (IsEnabled, AppliesTo, ShiftStart, GraceMinutes, AllowedLateLogins, LateLoginsPerPenalty, PenaltyDays, Basis, EffectiveFrom, UpdatedByUserId, UpdatedAt)
+        (IsEnabled, AppliesTo, ShiftStart, GraceMinutes, AllowedLateLogins, LateLoginsPerPenalty, PenaltyDays, Basis, EffectiveFrom,
+         MissedCheckoutLopEnabled, AllowedMissedCheckouts, MissedCheckoutsPerPenalty, MissedCheckoutPenaltyDays, UpdatedByUserId, UpdatedAt)
         VALUES 
-        (p_IsEnabled, 'All college staff — all departments', p_ShiftStart, p_GraceMinutes, p_AllowedLateLogins, p_LateLoginsPerPenalty, p_PenaltyDays, p_Basis, p_EffectiveFrom, p_UpdatedByUserId, UTC_TIMESTAMP());
+        (p_IsEnabled, 'All college staff — all departments', p_ShiftStart, p_GraceMinutes, p_AllowedLateLogins, p_LateLoginsPerPenalty, p_PenaltyDays, p_Basis, p_EffectiveFrom,
+         COALESCE(p_MissedCheckoutLopEnabled, 1), COALESCE(p_AllowedMissedCheckouts, 0), GREATEST(1, COALESCE(p_MissedCheckoutsPerPenalty, 1)), COALESCE(p_MissedCheckoutPenaltyDays, 0.5), p_UpdatedByUserId, UTC_TIMESTAMP());
     END IF;
 
     SELECT 
@@ -687,7 +701,11 @@ BEGIN
         LateLoginsPerPenalty,
         PenaltyDays,
         Basis,
-        EffectiveFrom
+        EffectiveFrom,
+        MissedCheckoutLopEnabled,
+        AllowedMissedCheckouts,
+        MissedCheckoutsPerPenalty,
+        MissedCheckoutPenaltyDays
     FROM LopPolicies 
     ORDER BY PolicyId DESC 
     LIMIT 1;
@@ -695,8 +713,8 @@ END //
 
 DROP PROCEDURE IF EXISTS `sp_LopStaffRecords_GetAll` //
 CREATE PROCEDURE `sp_LopStaffRecords_GetAll`(
-    IN p_Month VARCHAR(20),
-    IN p_SearchTerm VARCHAR(100)
+    IN p_Month VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_SearchTerm VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 
@@ -752,7 +770,7 @@ END //
 
 DROP PROCEDURE IF EXISTS `sp_LopStaffRecords_GetKpis` //
 CREATE PROCEDURE `sp_LopStaffRecords_GetKpis`(
-    IN p_Month VARCHAR(20)
+    IN p_Month VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 
@@ -767,17 +785,17 @@ END //
 DROP PROCEDURE IF EXISTS `sp_LopStaffRecord_Save` //
 CREATE PROCEDURE `sp_LopStaffRecord_Save`(
     IN p_StaffId INT,
-    IN p_EmployeeId VARCHAR(50),
-    IN p_StaffName VARCHAR(100),
-    IN p_Department VARCHAR(100),
-    IN p_Month VARCHAR(20),
+    IN p_EmployeeId VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_StaffName VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Department VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Month VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_MonthlySalary DECIMAL(10,2),
     IN p_LopDays DECIMAL(5,2),
-    IN p_Basis VARCHAR(50),
+    IN p_Basis VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_PeriodDays INT,
     IN p_Deduction DECIMAL(10,2),
     IN p_SalaryAfterLop DECIMAL(10,2),
-    IN p_Reason VARCHAR(500),
+    IN p_Reason VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_CreatedByUserId INT
 )
 BEGIN
@@ -793,11 +811,11 @@ DROP PROCEDURE IF EXISTS `sp_LopStaffRecord_Update` //
 CREATE PROCEDURE `sp_LopStaffRecord_Update`(
     IN p_Id INT,
     IN p_LopDays DECIMAL(5,2),
-    IN p_Basis VARCHAR(50),
+    IN p_Basis VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_PeriodDays INT,
     IN p_Deduction DECIMAL(10,2),
     IN p_SalaryAfterLop DECIMAL(10,2),
-    IN p_Reason VARCHAR(500),
+    IN p_Reason VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_UpdatedByUserId INT
 )
 BEGIN
@@ -830,22 +848,30 @@ BEGIN
 END //
 
 DROP PROCEDURE IF EXISTS `sp_LopStaffList_Get` //
-CREATE PROCEDURE `sp_LopStaffList_Get`()
+CREATE PROCEDURE \`sp_LopStaffList_Get\`()
 BEGIN
     SELECT 
         CAST(s.Id AS CHAR) AS StaffId,
         s.EmployeeId,
-        CONCAT(s.FirstName, ' ', COALESCE(s.LastName, '')) AS Name,
-        COALESCE(d.DepartmentName, s.Department, 'General') AS Department,
-        COALESCE(sa.GrossSalary, sa.BasicPay, 30000.00) AS Salary
-    FROM Staff s
-    LEFT JOIN Departments d ON s.DepartmentId = d.Id
+        TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS Name,
+        COALESCE(d.DepartmentName, 'General') AS Department,
+        COALESCE(
+            NULLIF(pst.BasicPay + pst.HRA + pst.DA + pst.ConveyanceAllowance + pst.MedicalAllowance + pst.OtherAllowance, 0),
+            30000.00
+        ) AS Salary
+    FROM \`Staff\` s
+    LEFT JOIN \`Departments\` d ON s.DepartmentId = d.DepartmentId
     LEFT JOIN (
-        SELECT StaffId, GrossSalary, BasicPay 
-        FROM PayrollSalaryAssignments 
-        WHERE Status = 'Active' 
-        ORDER BY Id DESC
-    ) sa ON sa.StaffId = s.Id
+        SELECT pss1.StaffId, pss1.SalaryStructureId
+        FROM \`payroll_staff_salaries\` pss1
+        INNER JOIN (
+            SELECT StaffId, MAX(Id) AS MaxId
+            FROM \`payroll_staff_salaries\`
+            WHERE Status = 'Active'
+            GROUP BY StaffId
+        ) latest ON latest.MaxId = pss1.Id
+    ) pss ON pss.StaffId = s.Id
+    LEFT JOIN \`payroll_salary_structures\` pst ON pst.Id = pss.SalaryStructureId
     WHERE s.IsDeleted = 0 AND (s.Status = 'Active' OR s.Status IS NULL)
     ORDER BY s.FirstName, s.LastName;
 END //

@@ -34,6 +34,7 @@ import {
   Users
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeSubscriptionsPage.css";
@@ -455,7 +456,7 @@ export default function CollegeSubscriptionsPage() {
       <header className="csp-header">
         <div className="csp-header-left">
           <div className="csp-header-icon">
-            <CreditCard size={24} />
+            <ThreeDIcon name="fees" size={36} />
           </div>
           <div>
             <h1 className="csp-title">College Subscriptions</h1>
@@ -985,10 +986,10 @@ export default function CollegeSubscriptionsPage() {
                 {!paginatedRows.length && (
                   <tr>
                     <td colSpan={9} style={{ textAlign: "center", padding: "40px 20px" }}>
-                      <p style={{ margin: 0, fontWeight: 700, color: "#64748b" }}>
+                      <p style={{ margin: 0, fontWeight: 700, color: "var(--cms-muted)" }}>
                         No college subscriptions found.
                       </p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>
+                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--cms-muted)" }}>
                         Try clearing search or filters to see all subscriptions.
                       </p>
                     </td>
@@ -1008,14 +1009,14 @@ export default function CollegeSubscriptionsPage() {
                 <article
                   key={row.id}
                   style={{
-                    background: "#ffffff",
-                    border: "1px solid #e2e8f0",
+                    background: "var(--cms-surface)",
+                    border: "1px solid var(--cms-border)",
                     borderRadius: 14,
                     padding: 16,
                     display: "flex",
                     flexDirection: "column",
                     gap: 12,
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                    boxShadow: "var(--cms-shadow)",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1024,8 +1025,8 @@ export default function CollegeSubscriptionsPage() {
                         <Building2 size={16} />
                       </div>
                       <div>
-                        <strong style={{ fontSize: 13.5, color: "#1e293b" }}>{row.collegeName}</strong>
-                        <div style={{ fontSize: 11, color: "#64748b" }}>{row.collegeCode}</div>
+                        <strong style={{ fontSize: 13.5, color: "var(--cms-text)" }}>{row.collegeName}</strong>
+                        <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>{row.collegeCode}</div>
                       </div>
                     </div>
                     <span className={`csp-plan-pill ${planBadge.class}`}>
@@ -1034,7 +1035,7 @@ export default function CollegeSubscriptionsPage() {
                   </div>
 
                   {/* Capacity Progress */}
-                  <div style={{ background: "#f8fafc", padding: 10, borderRadius: 10 }}>
+                  <div style={{ background: "var(--cms-subtle)", padding: 10, borderRadius: 10 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
                       <span>Account Usage</span>
                       <span>{row.activeAccounts} / {row.accountLimit} ({percentage}%)</span>
@@ -1047,14 +1048,14 @@ export default function CollegeSubscriptionsPage() {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--cms-muted)" }}>
                     <span>Renewal: <strong>{row.renewalDate}</strong></span>
                     <span className={`csp-status-pill ${row.status === "Active" ? "is-active" : row.status === "Free" ? "is-free" : row.status === "Expiring Soon" ? "is-expiring" : "is-expired"}`}>
                       {row.status}
                     </span>
                   </div>
 
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: 6, borderTop: "1px solid #f1f5f9" }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, paddingTop: 6, borderTop: "1px solid var(--cms-border)" }}>
                     <button
                       type="button"
                       className="csp-action-btn view"
@@ -1193,10 +1194,10 @@ export default function CollegeSubscriptionsPage() {
                   <Building2 size={22} />
                 </div>
                 <div>
-                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#1e293b" }}>
+                  <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "var(--cms-text)" }}>
                     {detailSub.collegeName}
                   </h2>
-                  <span style={{ fontSize: 12, color: "#64748b" }}>
+                  <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>
                     Code: {detailSub.collegeCode} • {detailSub.plan} Plan
                   </span>
                 </div>
@@ -1238,7 +1239,7 @@ export default function CollegeSubscriptionsPage() {
               {drawerTab === "overview" && (
                 <>
                   <div className="csp-drawer-card">
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>
                       Subscription Plan
                     </span>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -1260,23 +1261,23 @@ export default function CollegeSubscriptionsPage() {
                   </div>
 
                   <div className="csp-drawer-card">
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>
                       Billing &amp; Validity
                     </span>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                       <div>
-                        <span style={{ fontSize: 11, color: "#64748b" }}>Start Date</span>
-                        <div style={{ fontWeight: 700, color: "#1e293b", marginTop: 2 }}>{detailSub.startDate}</div>
+                        <span style={{ fontSize: 11, color: "var(--cms-muted)" }}>Start Date</span>
+                        <div style={{ fontWeight: 700, color: "var(--cms-text)", marginTop: 2 }}>{detailSub.startDate}</div>
                       </div>
                       <div>
-                        <span style={{ fontSize: 11, color: "#64748b" }}>Renewal Date</span>
-                        <div style={{ fontWeight: 700, color: "#1e293b", marginTop: 2 }}>{detailSub.renewalDate}</div>
+                        <span style={{ fontSize: 11, color: "var(--cms-muted)" }}>Renewal Date</span>
+                        <div style={{ fontWeight: 700, color: "var(--cms-text)", marginTop: 2 }}>{detailSub.renewalDate}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="csp-drawer-card">
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>
                       Subscription Actions
                     </span>
                     <div style={{ display: "flex", gap: 8 }}>
@@ -1306,12 +1307,12 @@ export default function CollegeSubscriptionsPage() {
 
               {drawerTab === "usage" && (
                 <div className="csp-drawer-card">
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>
                     Account Capacity
                   </span>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
-                    <strong style={{ fontSize: 24, color: "#1e293b" }}>{detailSub.activeAccounts}</strong>
-                    <span style={{ fontSize: 13, color: "#64748b" }}>/ {detailSub.accountLimit} Allowed Accounts</span>
+                    <strong style={{ fontSize: 24, color: "var(--cms-text)" }}>{detailSub.activeAccounts}</strong>
+                    <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>/ {detailSub.accountLimit} Allowed Accounts</span>
                   </div>
                   <div className="csp-progress-bar-wrap" style={{ height: 10, marginTop: 8 }}>
                     <div
@@ -1319,7 +1320,7 @@ export default function CollegeSubscriptionsPage() {
                       style={{ width: `${Math.min(100, (detailSub.activeAccounts / detailSub.accountLimit) * 100)}%` }}
                     />
                   </div>
-                  <p style={{ margin: "10px 0 0", fontSize: 12, color: "#64748b" }}>
+                  <p style={{ margin: "10px 0 0", fontSize: 12, color: "var(--cms-muted)" }}>
                     Available logins remaining: <strong>{Math.max(0, detailSub.accountLimit - detailSub.activeAccounts)}</strong>
                   </p>
                 </div>
@@ -1327,12 +1328,12 @@ export default function CollegeSubscriptionsPage() {
 
               {drawerTab === "modules" && (
                 <div className="csp-drawer-card">
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--cms-muted)", textTransform: "uppercase" }}>
                     Included Feature Modules
                   </span>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                     {(detailSub.modules || ["Academic Management", "Examinations", "Attendance", "Fees", "Staff"]).map((mod, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#334155" }}>
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--cms-text)" }}>
                         <CheckCircle2 size={14} color="#16a34a" />
                         <span>{mod}</span>
                       </div>
@@ -1380,7 +1381,7 @@ export default function CollegeSubscriptionsPage() {
                       className={`csp-plan-option-card ${selectedNewPlan === p.name ? "is-selected" : ""}`}
                       onClick={() => setSelectedNewPlan(p.name)}
                     >
-                      <PIcon size={18} color={selectedNewPlan === p.name ? "#16a34a" : "#64748b"} />
+                      <PIcon size={18} color={selectedNewPlan === p.name ? "#16a34a" : "var(--cms-muted)"} />
                       <div className="csp-plan-option-name">{p.name}</div>
                       <div className="csp-plan-option-price">{p.price}</div>
                       <div className="csp-plan-option-limit">Up to {p.limit} accounts</div>
@@ -1426,7 +1427,7 @@ export default function CollegeSubscriptionsPage() {
           onClose={() => setRenewModalSub(null)}
         >
           <form onSubmit={handleRenewSubmit}>
-            <p style={{ margin: "0 0 14px", fontSize: 13, color: "#64748b" }}>
+            <p style={{ margin: "0 0 14px", fontSize: 13, color: "var(--cms-muted)" }}>
               Current renewal date: <strong>{renewModalSub.renewalDate}</strong> ({renewModalSub.plan} Plan)
             </p>
 
@@ -1494,7 +1495,7 @@ export default function CollegeSubscriptionsPage() {
                       className={`csp-plan-option-card ${selectedNewPlan === p.name ? "is-selected" : ""}`}
                       onClick={() => setSelectedNewPlan(p.name)}
                     >
-                      <PIcon size={18} color={selectedNewPlan === p.name ? "#16a34a" : "#64748b"} />
+                      <PIcon size={18} color={selectedNewPlan === p.name ? "#16a34a" : "var(--cms-muted)"} />
                       <div className="csp-plan-option-name">{p.name}</div>
                       <div className="csp-plan-option-price">{p.price}</div>
                       <div className="csp-plan-option-limit">Up to {p.limit} accounts</div>

@@ -4,6 +4,7 @@ import { Modal, SkeletonRow } from "@/shared/components/Ui.jsx";
 import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { formatCurrency, formatDate } from "@/data/feeManagementData.js";
+import { UTR_SUBMITTED_EVENT } from "../services/paymentGatewaySession.js";
 
 export default function OfflineUtrQueueTab({
   scope,
@@ -25,9 +26,26 @@ export default function OfflineUtrQueueTab({
   const [uncertain, setUncertain] = useState(new Set());
   const guard = useRef(false);
   const mutation = useRef(null);
+  const reviewActive = useRef(false);
+  const refreshPending = useRef(false);
+  reviewActive.current = processing || Boolean(review);
   const accessRef = useRef(canReview);
   accessRef.current = canReview;
   const scopeKey = JSON.stringify(scope);
+  useEffect(() => {
+    const refresh = () => {
+      if (reviewActive.current) { refreshPending.current = true; return; }
+      setVersion(value => value + 1);
+    };
+    window.addEventListener?.(UTR_SUBMITTED_EVENT, refresh);
+    return () => window.removeEventListener?.(UTR_SUBMITTED_EVENT, refresh);
+  }, []);
+  useEffect(() => {
+    if (!processing && !review && refreshPending.current) {
+      refreshPending.current = false;
+      setVersion(value => value + 1);
+    }
+  }, [processing, review]);
   useEffect(() => {
     const controller = new AbortController();
     setItems([]);
@@ -72,6 +90,7 @@ export default function OfflineUtrQueueTab({
       );
       if (controller.signal.aborted) return;
       const approved = review.action === "Approve";
+      refreshPending.current = false;
       setItems((current) => current.filter((item) => String(item.id) !== String(review.id)));
       setReview(null);
       setVersion((value) => value + 1);

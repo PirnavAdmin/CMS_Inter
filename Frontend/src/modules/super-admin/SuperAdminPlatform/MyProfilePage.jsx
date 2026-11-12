@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   User,
   Mail,
@@ -28,6 +28,7 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import profileIllustration from "@/assets/settings-3d/roles-permissions.png";
 import "./MyProfilePage.css";
@@ -301,6 +302,36 @@ function ChangePasswordModal({ onClose, onSuccess }) {
 }
 
 // ── Main Page Component ─────────────────────────────────────────────────────
+function ProfileSettingsModal({ type, email, expiry, onClose }) {
+  const details = {
+    twoFactor: ["Two-Factor Authentication", "Two-factor authentication is enabled", "Your account currently reports 2FA as enabled. Contact your platform administrator if you need to change the authentication method."],
+    sessions: ["Active Sessions", "This device", `Signed in as ${email}. Session expires ${expiry}.`],
+    notifications: ["Notification Settings", "Email notifications", "Notification delivery preferences are managed by your platform settings. Review platform-wide notification rules in Global Settings."],
+  }[type];
+  if (!details) return null;
+
+  return (
+    <div className="mpp-modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="mpp-modal mpp-settings-modal" role="dialog" aria-modal="true" aria-labelledby="mpp-settings-title">
+        <header className="mpp-modal-header">
+          <div className="mpp-modal-title-row">
+            <div className="mpp-modal-icon"><Shield size={18} /></div>
+            <div>
+              <h3 className="mpp-modal-title" id="mpp-settings-title">{details[0]}</h3>
+              <p className="mpp-modal-sub">Review settings for your platform account.</p>
+            </div>
+          </div>
+          <button type="button" className="mpp-modal-close" onClick={onClose} aria-label="Close"><X size={16} /></button>
+        </header>
+        <div className="mpp-modal-body mpp-settings-modal-body">
+          <div className="mpp-settings-summary"><strong>{details[1]}</strong><p>{details[2]}</p></div>
+          <div className="mpp-modal-footer"><button type="button" className="mpp-btn-save" onClick={onClose}>Done</button></div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function MyProfilePage() {
   const { session } = useSuperAdmin?.() || {};
 
@@ -309,6 +340,12 @@ export default function MyProfilePage() {
   const [toast, setToast] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [activeProfilePanel, setActiveProfilePanel] = useState(null);
+  const [photoMode, setPhotoMode] = useState(null);
+  const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem("sa-profile-photo") || "");
+  const [photoCandidate, setPhotoCandidate] = useState("");
+  const [photoError, setPhotoError] = useState("");
+  const photoInputRef = useRef(null);
 
   // Custom user overrides if edited
   const [customName, setCustomName] = useState(null);
@@ -374,6 +411,66 @@ export default function MyProfilePage() {
     showToast(`Language set to ${val}`);
   };
 
+  const closePhotoModal = () => {
+    if (photoCandidate.startsWith("blob:")) URL.revokeObjectURL(photoCandidate);
+    setPhotoCandidate("");
+    setPhotoError("");
+    setPhotoMode(null);
+  };
+
+  const selectProfilePhoto = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file to continue.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("Photo file size cannot exceed 5 MB.");
+      return;
+    }
+    if (photoCandidate.startsWith("blob:")) URL.revokeObjectURL(photoCandidate);
+    setPhotoCandidate(URL.createObjectURL(file));
+    setPhotoError("");
+    setPhotoMode("preview");
+  };
+
+  const saveProfilePhoto = async () => {
+    if (!photoCandidate) return;
+    try {
+      const image = new Image();
+      image.src = photoCandidate;
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error("Unable to read this image. Choose another photo."));
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = 600;
+      canvas.height = 600;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Photo editing is unavailable in this browser.");
+      const cropSize = Math.min(image.naturalWidth, image.naturalHeight);
+      context.drawImage(image,
+        (image.naturalWidth - cropSize) / 2,
+        (image.naturalHeight - cropSize) / 2,
+        cropSize,
+        cropSize,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+      const result = canvas.toDataURL("image/jpeg", 0.86);
+      localStorage.setItem("sa-profile-photo", result);
+      setProfilePhoto(result);
+      closePhotoModal();
+      showToast("Profile photo saved in this browser.");
+    } catch (error) {
+      setPhotoError(error.message || "Unable to save this photo.");
+    }
+  };
+
   return (
     <div className="mpp-page">
       {/* Toast Notification */}
@@ -397,6 +494,58 @@ export default function MyProfilePage() {
         />
       )}
 
+      {activeProfilePanel && (
+        <ProfileSettingsModal
+          type={activeProfilePanel}
+          email={displayEmail}
+          expiry={displayExpiry}
+          onClose={() => setActiveProfilePanel(null)}
+        />
+      )}
+
+      <input ref={photoInputRef} type="file" accept="image/*" hidden onChange={selectProfilePhoto} />
+      {photoMode && (
+        <div className="mpp-modal-overlay" onClick={(event) => event.target === event.currentTarget && closePhotoModal()}>
+          <section className="mpp-modal mpp-photo-modal" role="dialog" aria-modal="true" aria-labelledby="mpp-photo-title">
+            <header className="mpp-modal-header">
+              <div className="mpp-modal-title-row">
+                <div className="mpp-modal-icon"><Camera size={18} /></div>
+                <div>
+                  <h3 className="mpp-modal-title" id="mpp-photo-title">{photoMode === "preview" ? "Preview Profile Photo" : photoMode === "view" ? "Profile Photo" : "Update Profile Photo"}</h3>
+                  <p className="mpp-modal-sub">Choose a photo for your Super Admin profile.</p>
+                </div>
+              </div>
+              <button type="button" className="mpp-modal-close" onClick={closePhotoModal} aria-label="Close"><X size={16} /></button>
+            </header>
+            <div className="mpp-modal-body mpp-photo-modal-body">
+              {photoMode === "menu" && <>
+                <div className="mpp-photo-preview">{profilePhoto ? <img src={profilePhoto} alt="Current profile" /> : <span>{initials}</span>}</div>
+                <div className="mpp-photo-menu">
+                  <button type="button" disabled={!profilePhoto} onClick={() => setPhotoMode("view")}><Eye size={17} />View photo</button>
+                  <button type="button" onClick={() => photoInputRef.current?.click()}><Camera size={17} />Upload photo</button>
+                  <button type="button" className="is-danger" disabled={!profilePhoto} onClick={() => { localStorage.removeItem("sa-profile-photo"); setProfilePhoto(""); closePhotoModal(); showToast("Profile photo removed from this browser."); }}><X size={17} />Remove photo</button>
+                </div>
+              </>}
+              {photoMode === "view" && <img className="mpp-photo-large-preview" src={profilePhoto} alt="Super Admin profile" />}
+              {photoMode === "preview" && photoCandidate && <>
+                <p className="mpp-photo-help">Preview the centered square crop. JPG, PNG, WEBP or GIF · Maximum 5 MB.</p>
+                <div className="mpp-photo-preview is-large"><img src={photoCandidate} alt="Selected profile preview" /></div>
+                <button type="button" className="mpp-photo-change" onClick={() => photoInputRef.current?.click()}>Choose a different photo</button>
+              </>}
+              {photoError && <p className="mpp-photo-error" role="alert">{photoError}</p>}
+            </div>
+            <footer className="mpp-modal-footer mpp-photo-modal-footer">
+              {photoMode === "view" && <button type="button" className="mpp-btn-cancel" onClick={() => setPhotoMode("menu")}>Back</button>}
+              {photoMode === "preview" && <>
+                <button type="button" className="mpp-btn-cancel" onClick={() => { if (photoCandidate.startsWith("blob:")) URL.revokeObjectURL(photoCandidate); setPhotoCandidate(""); setPhotoMode("menu"); setPhotoError(""); }}>Cancel</button>
+                <button type="button" className="mpp-btn-save" onClick={saveProfilePhoto}>Save Photo</button>
+              </>}
+              {photoMode === "menu" && <button type="button" className="mpp-btn-cancel" onClick={closePhotoModal}>Close</button>}
+            </footer>
+          </section>
+        </div>
+      )}
+
       {/* ── BREADCRUMB ── */}
       <nav className="mpp-breadcrumb">
         <span>Platform Management</span>
@@ -408,7 +557,7 @@ export default function MyProfilePage() {
       <div className="mpp-header-card">
         <div className="mpp-header-left">
           <div className="mpp-header-icon">
-            <User size={22} />
+            <ThreeDIcon name="staff-management" size={34} />
           </div>
           <div className="mpp-header-text">
             <h1 className="mpp-page-title">My Profile</h1>
@@ -445,13 +594,13 @@ export default function MyProfilePage() {
             {/* Large Olive Green Avatar with Camera Button */}
             <div className="mpp-avatar-wrap">
               <div className="mpp-avatar-circle">
-                <span className="mpp-avatar-initials">{initials}</span>
+                {profilePhoto ? <img src={profilePhoto} alt="Super Admin profile" /> : <span className="mpp-avatar-initials">{initials}</span>}
               </div>
               <button
                 type="button"
                 className="mpp-camera-badge"
                 title="Change Profile Photo"
-                onClick={() => showToast("Avatar upload feature ready.")}
+                onClick={() => setPhotoMode("menu")}
               >
                 <Camera size={13} />
               </button>
@@ -569,7 +718,7 @@ export default function MyProfilePage() {
             </button>
 
             {/* 2FA row */}
-            <div className="mpp-security-row mpp-security-row-static">
+            <button type="button" className="mpp-security-row" onClick={() => setActiveProfilePanel("twoFactor")}>
               <div className="mpp-sec-left">
                 <Shield size={15} className="mpp-sec-icon" />
                 <span className="mpp-sec-label">Two-Factor Authentication (2FA)</span>
@@ -578,10 +727,10 @@ export default function MyProfilePage() {
                 <span className="mpp-2fa-badge">Enabled</span>
                 <ChevronRight size={15} className="mpp-sec-arrow" />
               </div>
-            </div>
+            </button>
 
             {/* Active Sessions row */}
-            <div className="mpp-security-row mpp-security-row-static">
+            <button type="button" className="mpp-security-row" onClick={() => setActiveProfilePanel("sessions")}>
               <div className="mpp-sec-left">
                 <Clock size={15} className="mpp-sec-icon" />
                 <span className="mpp-sec-label">Active Sessions</span>
@@ -590,7 +739,7 @@ export default function MyProfilePage() {
                 <span className="mpp-session-count">1</span>
                 <ChevronRight size={15} className="mpp-sec-arrow" />
               </div>
-            </div>
+            </button>
           </div>
 
           {/* Preferences Card */}
@@ -601,13 +750,13 @@ export default function MyProfilePage() {
             </div>
 
             {/* Notification Settings */}
-            <div className="mpp-pref-row">
+            <button type="button" className="mpp-pref-row mpp-pref-row-button" onClick={() => setActiveProfilePanel("notifications")}>
               <div className="mpp-pref-left">
                 <Bell size={14} className="mpp-pref-icon" />
                 <span className="mpp-pref-label">Notification Settings</span>
               </div>
               <ChevronRight size={15} className="mpp-pref-arrow" />
-            </div>
+            </button>
 
             {/* Language */}
             <div className="mpp-pref-row">

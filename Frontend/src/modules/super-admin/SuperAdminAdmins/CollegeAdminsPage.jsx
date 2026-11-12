@@ -37,6 +37,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeAdminsPage.css";
@@ -371,7 +372,7 @@ export default function CollegeAdminsPage() {
       <header className="cap-header">
         <div className="cap-header-left">
           <div className="cap-header-icon">
-            <Users size={24} />
+            <ThreeDIcon name="staff-management" size={36} />
           </div>
           <div>
             <h1 className="cap-title">College Admins</h1>

@@ -315,7 +315,7 @@ export const wardenMenu = [
       { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon },
       { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
       { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon },
-      { to: "/warden-dashboard/expenses", label: "Expenses & Reimbursements", icon: reimbursementIcon },
+      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon },
     ],
   },
 ];
@@ -335,7 +335,6 @@ export const examCellMenu = [
     section: "Examinations",
     items: [
       { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
-      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon, moduleKey: "examinations", screenKey: "hall-allocation" },
       ...(SHOW_HALL_TICKETS
         ? [{ to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" }]
         : []),
@@ -361,7 +360,6 @@ export const examCellMenu = [
   {
     section: "Reports & Account",
     items: [
-      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
       { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: "profile" },
       { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: "settings" },
     ],
@@ -645,6 +643,7 @@ export default function DashboardLayout({
   showCampusSelector = true,
   showBoardSelector = true,
   showAcademicYearSelector = true,
+  hidePageHeader = false,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -1649,14 +1648,14 @@ export default function DashboardLayout({
         </header>
 
         <main className="cms-content">
-          <div className="cms-page-head">
+          {!hidePageHeader && <div className="cms-page-head">
             {backLink ? (
               <div className="cms-page-heading-with-back">
                 {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
               </div>
             ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
-          </div>
+          </div>}
 
           {children}
         </main>

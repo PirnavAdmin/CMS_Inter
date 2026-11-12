@@ -13,6 +13,7 @@ class NotificationHubService {
     this.connectingPromise = null;
     this.subscribers = new Set();
     this.currentCampusId = null;
+    this.recentEventKeys = new Map();
   }
 
   /**
@@ -59,9 +60,25 @@ class NotificationHubService {
 
           this.connection = builder.build();
 
-          this.connection.on("NotificationReceived", (payload) => {
+          const handleIncoming = (payload) => {
+            if (!payload) return;
+            const now = Date.now();
+            const eventKey = payload.notificationId
+              ? `id:${payload.notificationId}`
+              : `msg:${payload.type || ""}:${payload.title || ""}:${payload.message || ""}:${payload.actionUrl || ""}`;
+
+            for (const [k, ts] of this.recentEventKeys.entries()) {
+              if (now - ts > 5000) this.recentEventKeys.delete(k);
+            }
+            if (this.recentEventKeys.has(eventKey)) {
+              return;
+            }
+            this.recentEventKeys.set(eventKey, now);
             this.notifySubscribers(payload);
-          });
+          };
+
+          this.connection.on("ReceiveNotification", handleIncoming);
+          this.connection.on("NotificationReceived", handleIncoming);
 
           this.connection.onreconnected(async () => {
             if (this.currentCampusId && this.connection?.state === HubConnectionState.Connected) {
@@ -70,6 +87,9 @@ class NotificationHubService {
               } catch {
                 // Ignore silent join error on reconnect
               }
+            }
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("cms-notifications-resync"));
             }
           });
         }
