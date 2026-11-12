@@ -35,6 +35,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./DashboardPage.css";
 
 // Helper to calculate days remaining
@@ -433,7 +434,7 @@ export default function DashboardPage() {
           <span className="sad-eyebrow">WELCOME BACK, SUPER ADMINISTRATOR</span>
           <div className="sad-title-row">
             <div className="sad-header-icon">
-              <LayoutDashboard size={20} />
+              <ThreeDIcon name="dashboard" size={28} />
             </div>
             <div>
               <h1 className="sad-page-title">Super Admin Dashboard</h1>

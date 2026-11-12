@@ -25,6 +25,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./AddCollegeAdminPage.css";
 
 /* ─── Field wrapper with leading icon & optional top badge ─── */
@@ -241,7 +242,7 @@ export default function AddCollegeAdminPage() {
       {/* ── Page Header ── */}
       <header className="aca-header">
         <div className="aca-header-icon">
-          <UserPlus size={24} />
+          <ThreeDIcon name="add-staff" size={38} />
         </div>
         <div>
           <h1 className="aca-title">Add College Admin</h1>

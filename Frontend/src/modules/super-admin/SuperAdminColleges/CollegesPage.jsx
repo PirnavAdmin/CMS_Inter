@@ -6,6 +6,7 @@ import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import { activeAccountCount } from "../superAdminPreview.js";
 import CollegeDetailDrawer from "./CollegeDetailDrawer.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   Home,
   Building2,
@@ -303,7 +304,7 @@ export default function CollegesPage() {
       <header className="rnp-page-header">
         <div className="rnp-header-left">
           <div className="rnp-title-icon-badge">
-            <Building2 size={20} />
+            <ThreeDIcon name="campus-configuration" size={30} />
           </div>
           <div className="rnp-title-wrap">
             <h1 className="rnp-page-title">College Management</h1>

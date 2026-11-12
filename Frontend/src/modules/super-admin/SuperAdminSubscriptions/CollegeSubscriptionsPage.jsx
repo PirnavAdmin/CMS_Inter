@@ -34,6 +34,7 @@ import {
   Users
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeSubscriptionsPage.css";
@@ -455,7 +456,7 @@ export default function CollegeSubscriptionsPage() {
       <header className="csp-header">
         <div className="csp-header-left">
           <div className="csp-header-icon">
-            <CreditCard size={24} />
+            <ThreeDIcon name="fees" size={36} />
           </div>
           <div>
             <h1 className="csp-title">College Subscriptions</h1>
