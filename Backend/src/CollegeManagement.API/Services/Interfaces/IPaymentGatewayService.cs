@@ -27,6 +27,9 @@ public interface IPaymentGatewayService
     /// <summary>Resolves campusId and studentId for ownership checks on order creation / status polling.</summary>
     Task<int?> GetStudentIdForFeeAsync(int studentFeeId);
 
+    /// <summary>Resolves assigned CampusId for a student for strict per-campus gateway authorization.</summary>
+    Task<int?> GetStudentCampusIdAsync(int studentId);
+
     /// <summary>Resolves studentId for a payment transaction.</summary>
     Task<int?> GetStudentIdForTransactionAsync(string orderId);
 
@@ -36,6 +39,6 @@ public interface IPaymentGatewayService
     /// <summary>Gets active payment receiving account and gateway configuration.</summary>
     Task<PaymentGatewayConfigDto> GetConfigAsync(int? campusId, string? apiBaseUrl = null);
 
-    /// <summary>Updates payment receiving account and gateway configuration.</summary>
-    Task<PaymentGatewayConfigDto> UpdateConfigAsync(UpdatePaymentGatewayConfigRequest request, int? userId, string? apiBaseUrl = null);
+    /// <summary>Updates payment receiving account and gateway configuration with full validation.</summary>
+    Task<UpdateGatewayConfigResult> UpdateConfigAsync(UpdatePaymentGatewayConfigRequest request, int? userId, string? apiBaseUrl = null);
 }

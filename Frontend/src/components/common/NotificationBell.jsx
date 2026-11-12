@@ -13,6 +13,7 @@ const getCategoryIcon = (type = "") => {
   if (t.includes("exam") || t.includes("mark") || t.includes("result")) return { icon: "📝", className: "exam" };
   if (t.includes("transport") || t.includes("trip") || t.includes("bus")) return { icon: "🚌", className: "transport" };
   if (t.includes("leave") || t.includes("holiday")) return { icon: "🏖️", className: "leave" };
+  if (t.includes("attend") || t.includes("regulariz")) return { icon: "📋", className: "attendance" };
   return { icon: "🔔", className: "general" };
 };
 
@@ -22,6 +23,7 @@ export default function NotificationBell({ className = "", customIcon = null, cu
   const [notifications, setNotifications] = useState([]);
   const [activeTab, setActiveTab] = useState("all"); // 'all' | 'unread'
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
@@ -30,34 +32,47 @@ export default function NotificationBell({ className = "", customIcon = null, cu
     try {
       const count = await notificationApi.getUnreadCount();
       setUnreadCount(count);
-    } catch {
-      // Gracefully ignore silent failure
+    } catch (err) {
+      console.warn("[NotificationBell] Failed to refresh unread count:", err);
     }
   }, []);
 
   // Fetch full notification list
   const loadNotifications = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const res = await notificationApi.getNotifications({ page: 1, pageSize: 20 });
       if (res?.success) {
         setNotifications(res.items || []);
         setUnreadCount(res.unreadCount ?? 0);
+      } else {
+        setLoadError(res?.error || "Unable to load notifications.");
       }
-    } catch {
-      // Fallback
+    } catch (err) {
+      setLoadError(err?.message || "Unable to load notifications.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // On mount: fetch count and subscribe to live SignalR events
+  // On mount: fetch count, listen for SignalR reconnect resync, and subscribe to live SignalR events
   useEffect(() => {
     refreshUnreadCount();
+    const seenIds = new Set();
+
+    const handleResync = () => {
+      refreshUnreadCount();
+    };
+    window.addEventListener("cms-notifications-resync", handleResync);
 
     // Subscribe to centralized SignalR notification broadcasts
     const unsubscribe = notificationHubService.subscribe((payload) => {
-      // Real-time notification arrived!
+      if (payload?.notificationId) {
+        if (seenIds.has(payload.notificationId)) return;
+        seenIds.add(payload.notificationId);
+      }
+
       setUnreadCount((prev) => prev + 1);
 
       if (payload) {
@@ -77,6 +92,7 @@ export default function NotificationBell({ className = "", customIcon = null, cu
     });
 
     return () => {
+      window.removeEventListener("cms-notifications-resync", handleResync);
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, [refreshUnreadCount]);
@@ -196,6 +212,13 @@ export default function NotificationBell({ className = "", customIcon = null, cu
             {loading && notifications.length === 0 ? (
               <div className="cms-notif-empty">
                 <p>Loading notifications...</p>
+              </div>
+            ) : loadError && filteredNotifications.length === 0 ? (
+              <div className="cms-notif-empty">
+                <p>{loadError}</p>
+                <button type="button" className="cms-notif-mark-all-btn" onClick={loadNotifications}>
+                  Retry
+                </button>
               </div>
             ) : filteredNotifications.length === 0 ? (
               <div className="cms-notif-empty">

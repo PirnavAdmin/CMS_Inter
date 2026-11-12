@@ -794,7 +794,7 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.Description).HasMaxLength(500);
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-                entity.HasIndex(x => new { x.BoardId, x.AcademicYearId, x.GroupId, x.ProgramId }).IsUnique();
+                entity.HasIndex(x => new { x.BoardId, x.AcademicYearId, x.AcademicLevelId, x.GroupId, x.ProgramId, x.StructureName }).IsUnique();
                 entity.HasOne(x => x.Board).WithMany().HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.AcademicLevel).WithMany().HasForeignKey(x => x.AcademicLevelId).OnDelete(DeleteBehavior.Restrict);

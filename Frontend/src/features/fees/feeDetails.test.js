@@ -73,3 +73,11 @@ test("schedules use their saved installment number without creating installments
   assert.equal(data.schedules[0].feeSchedule, "Fee Schedule 4");
   assert.equal(data.schedules[0].Amount, 17500);
 });
+
+test("empty saved breakdowns and schedules remain empty for the display adapter", () => {
+  const detail = normalizeFeeDetails({ studentFeeId: 92, totalPayable: 70000, totalPaid: 70000,
+    outstandingBalance: 0, breakdown: [], schedules: [] });
+  assert.deepEqual(detail.breakdown, []);
+  assert.deepEqual(detail.schedules, []);
+  assert.equal(detail.outstandingBalance, 0);
+});

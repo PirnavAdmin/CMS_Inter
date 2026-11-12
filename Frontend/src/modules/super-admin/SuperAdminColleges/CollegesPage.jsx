@@ -270,7 +270,7 @@ export default function CollegesPage() {
 
   // Export to CSV
   const handleExport = () => {
-    const csvHeader = "#,College Name,Code,College Admins,Students,Status\n";
+    const csvHeader = "#,College Name,Code,College Admins,Users,Status\n";
     const csvRows = filteredRows
       .map((r, i) =>
         `"${i + 1}","${(r.name || "").replace(/"/g, '""')}","${r.code || ""}","${(r.adminNames || "Not Assigned").replace(/"/g, '""')}","${r.students || 0}","${r.displayStatus}"`
@@ -541,7 +541,7 @@ export default function CollegesPage() {
                   </th>
                   <th style={{ textAlign: "center" }}>
                     <span className="rnp-th-content" onClick={() => handleSort("students")}>
-                      STUDENTS <ArrowUpDown size={12} />
+                      USERS COUNT <ArrowUpDown size={12} />
                     </span>
                   </th>
                   <th style={{ textAlign: "center" }}>

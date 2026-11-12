@@ -42,3 +42,9 @@ test("summary does not invent a second year or use a pair from another scope", (
   assert.deepEqual(savedStructureSummary(first, [first, { ...second, pairedStructureId: "8" }]), { first: 78000, second: undefined });
   assert.deepEqual(savedStructureSummary(undefined, []), { first: undefined, second: undefined });
 });
+
+test("summary accepts the backend second-year total when the paired row is absent", () => {
+  assert.deepEqual(savedStructureSummary({ ...first, secondYearTotalAmount: 82000 }, [first]), { first: 78000, second: 82000 });
+  assert.deepEqual(savedStructureSummary({ ...first, secondYearTotalAmount: 0 }, [first]), { first: 78000, second: 0 });
+  assert.deepEqual(savedStructureSummary({ ...first, secondYearTotalAmount: 99999 }, [first, second]), { first: 78000, second: 82000 });
+});

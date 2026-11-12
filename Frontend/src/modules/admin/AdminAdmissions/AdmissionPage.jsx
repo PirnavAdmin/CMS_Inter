@@ -3084,7 +3084,19 @@ export default function AdmissionPage() {
   const allowAutomaticNumberAllocation = useRef(false);
   const [values, setValues] = useState(initialDraft.values);
   const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState("");
+  const [toast, setToastState] = useState({ message: "", type: "success" });
+  const setToast = useCallback((value, type = "success") => {
+    if (!value) {
+      setToastState({ message: "", type: "success" });
+      return;
+    }
+    if (typeof value === "object") {
+      setToastState({ message: String(value.message || ""), type: value.type || "success" });
+      return;
+    }
+    setToastState({ message: String(value), type });
+  }, []);
+  const clearToast = useCallback(() => setToastState({ message: "", type: "success" }), []);
   const [saving, setSaving] = useState(false);
   const [admissions, setAdmissions] = useState([]);
   const [listLoading, setListLoading] = useState(false);
@@ -3685,7 +3697,7 @@ export default function AdmissionPage() {
 
   const exportAdmissionsExcel = async () => {
     if (!admissionExportRows.length) {
-      setToast("No admissions available to export.");
+      setToast("No admissions available to export.", "warning");
       setExportOpen(false);
       return;
     }
@@ -3699,7 +3711,7 @@ export default function AdmissionPage() {
 
   const exportAdmissionsPdf = async () => {
     if (!admissionExportRows.length) {
-      setToast("No admissions available to export.");
+      setToast("No admissions available to export.", "warning");
       setExportOpen(false);
       return;
     }
@@ -3826,7 +3838,7 @@ export default function AdmissionPage() {
       setAdmissions(apiRows);
       return apiRows;
     } catch (err) {
-      if (admissionsRequestRef.current === requestId) setToast(getApiErrorMessage(err));
+      if (admissionsRequestRef.current === requestId) setToast(getApiErrorMessage(err), "error");
       return [];
     } finally {
       if (admissionsRequestRef.current === requestId) setListLoading(false);
@@ -4668,7 +4680,7 @@ export default function AdmissionPage() {
           return next;
         });
       } catch {
-        if (!ignore && pincodeRequestRef.current === requestId) setToast("Pincode details could not be loaded. You can enter address details manually.");
+        if (!ignore && pincodeRequestRef.current === requestId) setToast("Pincode details could not be loaded. You can enter address details manually.", "warning");
       }
     }, 450);
     return () => {
@@ -5097,7 +5109,7 @@ export default function AdmissionPage() {
       setErrors(next);
       setStep(firstInvalidStep < ADMISSION_FORM_STEP_COUNT ? 0 : firstInvalidStep);
       focusFirstError(next);
-      setToast(`Please complete ${firstInvalidStep < ADMISSION_FORM_STEP_COUNT ? "Admission Form" : steps[firstInvalidStep].title} before continuing`);
+      setToast(`Please complete ${firstInvalidStep < ADMISSION_FORM_STEP_COUNT ? "Admission Form" : steps[firstInvalidStep].title} before continuing`, "warning");
       return false;
     }
     return true;
@@ -5239,7 +5251,7 @@ export default function AdmissionPage() {
   const continueAdmission = async (record, targetStep = record.currentStep || 0, { restoring = false, isCurrent = () => true } = {}) => {
     const admissionId = record.admissionId || record.id;
     if (!admissionId) {
-      setToast("Admission ID is required to load admission details.");
+      setToast("Admission ID is required to load admission details.", "error");
       return;
     }
     setActionBusy(`Load-${record.id}`);
@@ -5316,7 +5328,7 @@ export default function AdmissionPage() {
       });
       return true;
     } catch (err) {
-      if (isCurrent()) setToast(getApiErrorMessage(err));
+      if (isCurrent()) setToast(getApiErrorMessage(err), "error");
       return false;
     } finally {
       if (isCurrent()) setActionBusy("");
@@ -5334,7 +5346,7 @@ export default function AdmissionPage() {
       allowAutomaticNumberAllocation.current = false;
       if (!numericId(requestedAdmissionId)) {
         recovery.navigateAdmission("list", { replace: true });
-        setToast("Admission details could not be restored. Please select the admission again.");
+        setToast("Admission details could not be restored. Please select the admission again.", "warning");
       } else {
         recovery.continueAdmission({ id: requestedAdmissionId }, step, {
           restoring: true,
@@ -5353,7 +5365,7 @@ export default function AdmissionPage() {
         selection: draft.feeSelection,
         restoring: true,
       });
-      if (targetStep !== step) setToast("The saved draft cannot restore this step. Please continue from the admission form.");
+      if (targetStep !== step) setToast("The saved draft cannot restore this step. Please continue from the admission form.", "warning");
     }
     return () => { active = false; };
   }, [editingAdmissionId, formRequested, requestedAdmissionId, step]);
@@ -5492,11 +5504,11 @@ export default function AdmissionPage() {
     const admissionId = record.admissionId || record.id;
     const admissionKey = admissionKeyFor(record);
     if (!admissionId) {
-      setToast("Admission ID is required for this action.");
+      setToast("Admission ID is required for this action.", "error");
       return;
     }
     if (normalizeAdmissionStatus(record.status) === "Approved") {
-      setToast(`Admission ${record.admissionNo} is already approved.`);
+      setToast(`Admission ${record.admissionNo} is already approved.`, "info");
       setApproveTarget(null);
       return;
     }
@@ -5511,17 +5523,17 @@ export default function AdmissionPage() {
         if (latestRow.status === "Approved") {
           setApproveTarget(null);
           await refreshAdmissions();
-          setToast(`Admission ${latestRow.admissionNo || record.admissionNo} is already approved.`);
+          setToast(`Admission ${latestRow.admissionNo || record.admissionNo} is already approved.`, "info");
           return;
         }
         if (latestRow.status !== "Verified") {
           await refreshAdmissions();
-          setToast(`Admission ${latestRow.admissionNo || record.admissionNo} is ${latestRow.status}. Verify it before approving.`);
+          setToast(`Admission ${latestRow.admissionNo || record.admissionNo} is ${latestRow.status}. Verify it before approving.`, "warning");
           return;
         }
       }
       if (status === "Approved" && !isAdmissionVerified(record.raw, record)) {
-        setToast("Verify the admission before approving.");
+        setToast("Verify the admission before approving.", "warning");
         return;
       }
       const response = status === "Approved"
@@ -5541,7 +5553,7 @@ export default function AdmissionPage() {
             setValues((current) => ({ ...current, ...feeAccount.persistedFeeValues }));
           }
         } catch (feeErr) {
-          setToast(`Admission ${record.admissionNo} was approved, but fee account creation failed: ${getApiErrorMessage(feeErr)}`);
+          setToast(`Admission ${record.admissionNo} was approved, but fee account creation failed: ${getApiErrorMessage(feeErr)}`, "warning");
           return;
         }
         approveStatusCheckRef.current.delete(admissionKey);
@@ -5554,7 +5566,7 @@ export default function AdmissionPage() {
       if (status === "Approved") approveStatusCheckRef.current.add(admissionKey);
       setToast(status === "Approved"
         ? `Admission approval failed: ${getApiErrorMessage(err)}`
-        : getApiErrorMessage(err));
+        : getApiErrorMessage(err), "error");
     } finally {
       if (status === "Approved") approveInFlightRef.current.delete(admissionKey);
       setActionBusy("");
@@ -5567,7 +5579,7 @@ export default function AdmissionPage() {
     const admissionId = record.admissionId || record.id;
     const admissionKey = admissionKeyFor(record);
     if (!admissionId) {
-      setToast("Admission ID is required for this action.");
+      setToast("Admission ID is required for this action.", "error");
       return;
     }
     if (verifiedInFlightRef.current.has(admissionKey)) return;
@@ -5580,7 +5592,7 @@ export default function AdmissionPage() {
       setViewMode("list");
       setPage(1);
     } catch (err) {
-      setToast(`Admission verification failed: ${getApiErrorMessage(err)}`);
+      setToast(`Admission verification failed: ${getApiErrorMessage(err)}`, "error");
     } finally {
       verifiedInFlightRef.current.delete(admissionKey);
       setActionBusy("");
@@ -5590,11 +5602,11 @@ export default function AdmissionPage() {
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
     if (!isCrossCampusAdmission && feeStructureLoading) {
-      setToast("Fee structure is being prepared. Please wait.");
+      setToast("Fee structure is being prepared. Please wait.", "warning");
       return;
     }
     if (!validateAdmission()) {
-      setToast("Please complete required admission details before submitting");
+      setToast("Please complete required admission details before submitting", "warning");
       return;
     }
 
@@ -5685,7 +5697,7 @@ export default function AdmissionPage() {
           setEditingAdmissionId(savedAdmissionId);
           navigateAdmission(stepView(step, savedAdmissionId), { admissionId: savedAdmissionId, replace: true });
         }
-        setToast(`Admission ${submittedAdmissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
+        setToast(`Admission ${submittedAdmissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`, "warning");
         submitInFlightRef.current = false;
         setSaving(false);
         return;
@@ -5706,13 +5718,13 @@ export default function AdmissionPage() {
           }));
           setViewMode("list");
           setPage(1);
-          setToast(`Admission ${committedRow.admissionNo || submittedAdmissionNo} was created successfully, but fee setup could not be completed: ${message}`);
+          setToast(`Admission ${committedRow.admissionNo || submittedAdmissionNo} was created successfully, but fee setup could not be completed: ${message}`, "warning");
           submitInFlightRef.current = false;
           setSaving(false);
           return;
         }
       }
-      setToast(message);
+      setToast(message, "error");
       submitInFlightRef.current = false;
       setSaving(false);
       return;
@@ -5935,7 +5947,7 @@ export default function AdmissionPage() {
             <p style={{ margin: 0, color: "var(--cms-muted)" }}>Are you sure you want to reject this admission?</p>
           </Modal>
         ) : null}
-        <Toast message={toast} onClose={() => setToast("")} />
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
       </DashboardLayout>
     );
   }
@@ -6127,7 +6139,7 @@ export default function AdmissionPage() {
         </Modal>
       ) : null}
 
-      <Toast message={toast} onClose={() => setToast("")} />
+      <Toast message={toast.message} type={toast.type} onClose={clearToast} />
     </DashboardLayout>
   );
 }

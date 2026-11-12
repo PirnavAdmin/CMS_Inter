@@ -20,8 +20,10 @@ export function savedStructureSummary(selected, structures) {
     && ["campusId", "boardId", "academicYearId", "groupId", "programId"].every(key =>
       String(row[key] ?? "") === String(selected[key] ?? "")));
   const records = pair ? [selected, pair] : [selected];
+  const first = records.find(row => Number(row.academicLevelId) === 1);
+  const second = records.find(row => Number(row.academicLevelId) === 2);
   return {
-    first: records.find(row => Number(row.academicLevelId) === 1)?.totalFee,
-    second: records.find(row => Number(row.academicLevelId) === 2)?.totalFee,
+    first: first?.totalFee,
+    second: second?.totalFee ?? first?.secondYearTotalAmount,
   };
 }
