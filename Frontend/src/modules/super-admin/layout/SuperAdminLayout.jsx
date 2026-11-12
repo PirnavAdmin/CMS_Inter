@@ -127,7 +127,7 @@ export default function SuperAdminLayout() {
               aria-expanded={profileOpen}
               title="Super Administrator Menu"
             >
-              <span className="sa-avatar">SA</span>
+              <span className="sa-avatar"><User size={19} aria-hidden="true" /></span>
               <div className="sa-profile-meta">
                 <strong>{session.name}</strong>
                 <small>Super Admin</small>

@@ -87,6 +87,22 @@ export const getFacultyWorkloadDetails = (params, config = {}) => {
   return api.get("/api/v1/reports/details/staff-workload", { params, ...defaultOpt(config) });
 };
 
+export const getStudentPerformanceDetails = (params, config = {}) => {
+  return api.get("/api/v1/reports/details/student-performance", { params, ...defaultOpt(config) });
+};
+
+export const getSubjectsDetails = (params, config = {}) => {
+  return api.get("/api/v1/reports/details/subjects", { params, ...defaultOpt(config) });
+};
+
+export const getGroupsDetails = (params, config = {}) => {
+  return api.get("/api/v1/reports/details/groups", { params, ...defaultOpt(config) });
+};
+
+export const getSectionsDetails = (params, config = {}) => {
+  return api.get("/api/v1/reports/details/sections", { params, ...defaultOpt(config) });
+};
+
 // --- 4. Audit Logs ---
 export const getAuditLogs = (params, config = {}) => {
   return api.get("/api/v1/reports/details/audit-logs", { params, ...defaultOpt(config) });

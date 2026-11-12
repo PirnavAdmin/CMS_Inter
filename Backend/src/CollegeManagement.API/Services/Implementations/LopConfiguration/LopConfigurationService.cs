@@ -32,7 +32,7 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             if (request == null) throw new ArgumentNullException(nameof(request));
 
             if (string.IsNullOrWhiteSpace(request.ShiftStart))
-                request.ShiftStart = "09:00";
+                throw new ArgumentException("Shift start time is required.");
 
             if (request.GraceMinutes < 0 || request.GraceMinutes > 120)
                 throw new ArgumentException("Grace period must be between 0 and 120 minutes.");
@@ -45,6 +45,15 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
 
             if (request.PenaltyDays != 0.5m && request.PenaltyDays != 1.0m)
                 request.PenaltyDays = 0.5m;
+
+            if (request.AllowedMissedCheckouts < 0 || request.AllowedMissedCheckouts > 31)
+                throw new ArgumentException("Allowed missed checkouts must be between 0 and 31.");
+
+            if (request.MissedCheckoutsPerPenalty < 1 || request.MissedCheckoutsPerPenalty > 31)
+                throw new ArgumentException("Missed checkouts per deduction must be between 1 and 31.");
+
+            if (request.MissedCheckoutPenaltyDays != 0.5m && request.MissedCheckoutPenaltyDays != 1.0m)
+                request.MissedCheckoutPenaltyDays = 0.5m;
 
             if (string.IsNullOrWhiteSpace(request.EffectiveFrom))
                 request.EffectiveFrom = DateTime.UtcNow.ToString("yyyy-MM");
@@ -90,12 +99,13 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             if (string.IsNullOrWhiteSpace(request.Reason)) throw new ArgumentException("Reason is required.");
 
             var staffList = await _repository.GetStaffListForLopAsync(ct);
-            var staff = staffList.FirstOrDefault(s => s.StaffId == request.StaffId || s.Id == request.StaffId);
+            var staff = staffList.FirstOrDefault(s => s.StaffId == request.StaffId || s.Id == request.StaffId)
+                ?? throw new ArgumentException("Selected staff member was not found.");
 
-            var staffName = staff?.Name ?? "Staff Member";
-            var employeeId = staff?.EmployeeId ?? $"EMP{request.StaffId}";
-            var department = staff?.Department ?? "General";
-            var salary = staff?.Salary ?? 30000.00m;
+            var staffName = staff.Name;
+            var employeeId = staff.EmployeeId;
+            var department = staff.Department;
+            var salary = staff.Salary;
 
             var calc = CalculateLop(new LopCalculateRequest
             {
@@ -164,23 +174,48 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             return await _repository.GetStaffListForLopAsync(ct);
         }
 
+        public static (decimal LatePenaltyDays, decimal MissedCheckoutPenaltyDays, decimal TotalLopDays) CalculateAttendanceLop(
+            LopPolicyDto policy,
+            int lateDays,
+            int unresolvedMissedCheckouts,
+            int absentDays,
+            string targetMonth,
+            int maxPeriodDays)
+        {
+            var isEffective = policy.Enabled &&
+                (string.IsNullOrWhiteSpace(policy.EffectiveFrom) ||
+                 string.Compare(targetMonth, policy.EffectiveFrom, StringComparison.OrdinalIgnoreCase) >= 0);
+
+            decimal latePenalty = 0m;
+            decimal missedPenalty = 0m;
+
+            if (isEffective)
+            {
+                if (policy.LateLoginsPerPenalty > 0)
+                {
+                    int penalizableLate = Math.Max(0, lateDays - policy.AllowedLateLogins);
+                    latePenalty = (penalizableLate / policy.LateLoginsPerPenalty) * policy.PenaltyDays;
+                }
+
+                if (policy.MissedCheckoutLopEnabled && policy.MissedCheckoutsPerPenalty > 0)
+                {
+                    int penalizableMissed = Math.Max(0, unresolvedMissedCheckouts - policy.AllowedMissedCheckouts);
+                    missedPenalty = (penalizableMissed / policy.MissedCheckoutsPerPenalty) * policy.MissedCheckoutPenaltyDays;
+                }
+            }
+
+            decimal total = Math.Min(Math.Max(0, maxPeriodDays), absentDays + latePenalty + missedPenalty);
+            return (latePenalty, missedPenalty, total);
+        }
+
         public async Task<IEnumerable<LopDeductionPreviewDto>> GetPreviewAsync(string? month = null, string? searchTerm = null, CancellationToken ct = default)
         {
             var policy = await _repository.GetPolicyAsync(ct);
             var targetMonth = string.IsNullOrWhiteSpace(month) ? DateTime.UtcNow.ToString("yyyy-MM") : month.Trim();
             var staffList = (await _repository.GetStaffListForLopAsync(ct)).ToList();
+            var attendanceCounts = await _repository.GetMonthlyAttendanceCountsAsync(targetMonth, policy.ShiftStart, policy.GraceMinutes, ct);
 
             var daysInMonth = GetPeriodDays(targetMonth, policy.Basis);
-
-            var sampleLogins = new Dictionary<string, List<string>>
-            {
-                { "1", new List<string> { "09:05", "09:11", "09:20", "09:25", "09:30", "09:15", "09:18" } },
-                { "2", new List<string> { "08:55", "09:08", "09:09", "09:12" } },
-                { "3", new List<string> { "09:15", "09:21", "09:30", "09:35", "09:12", "09:20", "09:25", "09:40" } }
-            };
-
-            var thresholdMinutes = ParseTimeToMinutes(policy.ShiftStart) + policy.GraceMinutes;
-
             var results = new List<LopDeductionPreviewDto>();
 
             foreach (var staff in staffList)
@@ -196,20 +231,16 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                     }
                 }
 
-                var logins = sampleLogins.TryGetValue(staff.StaffId, out var times) ? times :
-                    (sampleLogins.TryGetValue(staff.EmployeeId, out var empTimes) ? empTimes : new List<string> { "09:15", "09:20", "09:25" });
+                int.TryParse(staff.StaffId, out int staffNumericId);
+                attendanceCounts.TryGetValue(staffNumericId, out var counts);
 
-                var lateCount = logins.Count(l => ParseTimeToMinutes(l) > thresholdMinutes);
-                var excess = Math.Max(0, lateCount - policy.AllowedLateLogins);
-
-                decimal lopDays = 0;
-                var isEffective = policy.Enabled && string.Compare(targetMonth, policy.EffectiveFrom, StringComparison.OrdinalIgnoreCase) >= 0;
-
-                if (isEffective && policy.LateLoginsPerPenalty > 0)
-                {
-                    int penaltyGroups = excess / policy.LateLoginsPerPenalty;
-                    lopDays = Math.Min(daysInMonth, penaltyGroups * policy.PenaltyDays);
-                }
+                var (_, _, lopDays) = CalculateAttendanceLop(
+                    policy,
+                    counts.LateCount,
+                    counts.MissedCheckoutCount,
+                    counts.AbsentCount,
+                    targetMonth,
+                    daysInMonth);
 
                 var deduction = Math.Round((staff.Salary * lopDays) / daysInMonth, 2);
                 var salaryAfterLop = Math.Round(staff.Salary - deduction, 2);
@@ -220,7 +251,9 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                     EmployeeId = staff.EmployeeId,
                     Name = staff.Name,
                     Department = staff.Department,
-                    LateCount = lateCount,
+                    LateCount = counts.LateCount,
+                    MissedCheckoutCount = counts.MissedCheckoutCount,
+                    AbsentCount = counts.AbsentCount,
                     LopDays = lopDays,
                     Deduction = deduction,
                     SalaryAfterLop = salaryAfterLop,
@@ -263,22 +296,6 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             }
 
             return 30;
-        }
-
-        private static int ParseTimeToMinutes(string? timeStr)
-        {
-            if (string.IsNullOrWhiteSpace(timeStr)) return 9 * 60;
-            if (TimeSpan.TryParse(timeStr, out var ts))
-            {
-                return (int)ts.TotalMinutes;
-            }
-
-            if (DateTime.TryParse(timeStr, out var dt))
-            {
-                return dt.Hour * 60 + dt.Minute;
-            }
-
-            return 9 * 60;
         }
     }
 }

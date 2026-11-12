@@ -109,6 +109,7 @@ const getInitialProfileData = () => {
       department: authUser.department || baseUser.department,
       mobile: authUser.mobile || authUser.phone || baseUser.mobile,
       photoUrl: authUser.photoUrl || authUser.photoPath || authUser.profilePhoto || "",
+      _isDetailedLoaded: false,
     };
   } catch {
     return {};
@@ -170,13 +171,21 @@ export function FacultyProvider({ children }) {
 
   // Profile Data State
   const [profileData, setProfileData] = useState(getInitialProfileData);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(() => Boolean(getAuthUser()));
+  const hasLoadedProfileRef = useRef(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileStep, setProfileStep] = useState(1);
 
   // Synchronize profile data with authenticated user and fetch full staff record if available
   const fetchStaffProfileSafe = useCallback(() => {
     const authUser = getAuthUser();
-    if (!authUser) return;
+    if (!authUser) {
+      setIsLoadingProfile(false);
+      return;
+    }
+    if (!hasLoadedProfileRef.current) {
+      setIsLoadingProfile(true);
+    }
 
     const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
     const firstName = authUser.firstName || nameParts[0] || "";
@@ -275,7 +284,9 @@ export function FacultyProvider({ children }) {
               ifsc: apiStaff.ifscCode || apiStaff.ifsc || current.ifsc || "",
               ifscCode: apiStaff.ifscCode || apiStaff.ifsc || current.ifscCode || "",
               branch: apiStaff.branch || apiStaff.bankDetails?.branch || current.branch || "",
-              accountType: apiStaff.accountType || apiStaff.bankDetails?.accountType || current.accountType || "Savings",
+              accountType: apiStaff.accountType || apiStaff.bankDetails?.accountType || current.accountType || "",
+              uanNumber: apiStaff.uanNumber || apiStaff.pfNumber || apiStaff.bankDetails?.uanNumber || apiStaff.bankDetails?.pfNumber || current.uanNumber || "",
+              pfNumber: apiStaff.pfNumber || apiStaff.uanNumber || apiStaff.bankDetails?.pfNumber || apiStaff.bankDetails?.uanNumber || current.pfNumber || "",
               department: apiStaff.department || apiStaff.departmentName || current.department,
               designation: apiStaff.designation || apiStaff.designationName || current.designation,
               allocatedSubjects: apiStaff.allocatedSubjects || apiStaff.subjects || current.allocatedSubjects || [],
@@ -283,6 +294,7 @@ export function FacultyProvider({ children }) {
               photoUrl: serverPhoto,
               profileStatus: pStatus,
               isOnboarded: isCompleted,
+              _isDetailedLoaded: true,
             };
 
             const unifiedPct = calculateStaffProfileCompletion(updated);
@@ -300,6 +312,11 @@ export function FacultyProvider({ children }) {
       })
       .catch((err) => {
         console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
+        setProfileData((current) => ({ ...current, _isDetailedLoaded: true }));
+      })
+      .finally(() => {
+        hasLoadedProfileRef.current = true;
+        setIsLoadingProfile(false);
       });
   }, []);
 
@@ -407,6 +424,7 @@ export function FacultyProvider({ children }) {
     () => ({
       profileData,
       setProfileData,
+      isLoadingProfile,
       persistStaffProfile,
       isEditingProfile,
       setIsEditingProfile,
@@ -435,6 +453,7 @@ export function FacultyProvider({ children }) {
     }),
     [
       profileData,
+      isLoadingProfile,
       isEditingProfile,
       profileStep,
       punchState,

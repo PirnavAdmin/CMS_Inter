@@ -19,7 +19,6 @@ export async function lopRequest(path, { method = "get", data, params, signal } 
     data,
     params,
     signal,
-    _isMockFallback: true,
     transformRequest: [
       ...api.defaults.transformRequest,
       function serverOnly(body) {

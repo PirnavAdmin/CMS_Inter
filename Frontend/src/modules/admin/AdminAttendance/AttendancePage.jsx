@@ -12,6 +12,7 @@ import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import FacultyMyAttendance from "@/modules/faculty/pages/FacultyMyAttendance.jsx";
+import StaffRegularizePanel from "./StaffRegularizePanel.jsx";
 import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
 
@@ -130,7 +131,10 @@ export default function AttendancePage({ area: areaProp } = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
   const normalizeStaffTab = (t) => {
-    if (!t) return "my-attendance";
+    if (!t) {
+      if (searchParams.get("view") === "regularize" || searchParams.get("regId")) return "staff-attendance";
+      return "my-attendance";
+    }
     const clean = String(t).trim().toLowerCase().replace(/\s+|_/g, "-");
     if (clean === "staff-attendance" || clean === "staff") return "staff-attendance";
     if (clean === "my-attendance" || clean === "my") return "my-attendance";
@@ -355,7 +359,7 @@ function AttendanceImportModal({ staff, say, onClose }) {
   </div></Modal>;
 }
 
-function useOptions(staff, boardId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff, boardId]); return o; }
+function useOptions(staff, boardId, campusId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const deptUrl = campusId ? `${apiEndpoints.departments.getAll}?includeInactive=false&campusId=${campusId}` : `${apiEndpoints.departments.getAll}?includeInactive=false`; const facUrl = boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list; apiClient.get(deptUrl).then((r) => { if (mounted) setO((prev) => ({ ...prev, departments: asList(body(r)) })); }).catch(() => { if (mounted) setO((prev) => ({ ...prev, departments: [] })); }); apiClient.get(facUrl).then((r) => { if (mounted) setO((prev) => ({ ...prev, faculty: asList(body(r)) })); }).catch(() => { if (mounted) setO((prev) => ({ ...prev, faculty: [] })); }); return () => { mounted = false; }; }, [staff, boardId, campusId]); return o; }
 
 function useStudentOptions(boardId, academicYearId, levelId, groupId, programId, campusId, setFilters) {
   const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, groupsError: "", loadingPrograms: false, loadingSections: false });
@@ -476,7 +480,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    return filters;
  });
  const viewParam = editParams.get(staff ? "view" : "tab");
- const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(!staff ? { defaulters: "Defaulters" } : {}) };
+ const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(staff ? { regularize: "Regularize" } : { defaulters: "Defaulters" }) };
  const selectedView = viewNames[viewParam] || (!viewParam && Object.values(viewNames).includes(restoredState?.filters?.view) ? restoredState.filters.view : "Attendance");
  const f = useMemo(() => ({ ...filterState, view: selectedView }), [filterState, selectedView]);
  const [rows, setRows] = useState(() => restoredState?.rows || []);
@@ -577,7 +581,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }, [staff, navbarCampusId, say]);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
- const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
+ const staffOptions = useOptions(staff, navbarBoardId, num(navbarCampusId)), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
  const options = staff ? staffOptions : studentOptions;
 
  const update = (key) => (e) => {
@@ -589,7 +593,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    setPage(1);
    setEditParams((previous) => {
      const params = new URLSearchParams(previous);
-     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : "attendance");
+     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : newView === "Regularize" ? "regularize" : "attendance");
+     if (newView !== "Regularize") params.delete("regId");
      return params;
    });
  };
@@ -610,6 +615,11 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
 
  const load = async (overrideView) => {
    const currentView = typeof overrideView === "string" ? overrideView : f.view;
+   if (staff && currentView === "Regularize") {
+     setLoaded(true);
+     setBusy(false);
+     return;
+   }
    setPage(1);
    setBusy(true);
    setDirty(false);
@@ -922,24 +932,28 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                />
              </div>
              <div className="att-toolbar-actions">
-               <button
-                 type="button"
-                 className="cms-btn cms-btn-outline"
-                 onClick={markAllPresent}
-                 disabled={busy || holidayLocked || rows.length === 0}
-                 title="Mark all eligible records as Present"
-               >
-                 <UserCheck size={16} /> Mark All Present
-               </button>
-               {dirty && (
-                 <button
-                   type="button"
-                   className="cms-btn cms-btn-primary"
-                   onClick={saveAllAttendance}
-                   disabled={busy || holidayLocked}
-                 >
-                   Save Attendance
-                 </button>
+               {!staff && (
+                 <>
+                   <button
+                     type="button"
+                     className="cms-btn cms-btn-outline"
+                     onClick={markAllPresent}
+                     disabled={busy || holidayLocked || rows.length === 0}
+                     title="Mark all eligible records as Present"
+                   >
+                     <UserCheck size={16} /> Mark All Present
+                   </button>
+                   {dirty && (
+                     <button
+                       type="button"
+                       className="cms-btn cms-btn-primary"
+                       onClick={saveAllAttendance}
+                       disabled={busy || holidayLocked}
+                     >
+                       Save Attendance
+                     </button>
+                   )}
+                 </>
                )}
                {staff ? (
                  <>
@@ -963,6 +977,10 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    <>
      <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} search={search} onSearchChange={setSearch} switchView={switchView} />
 
+     {staff && f.view === "Regularize" ? (
+       <StaffRegularizePanel departments={options.departments} campusId={num(navbarCampusId)} onNotify={say} />
+     ) : (
+       <>
      {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
      <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
@@ -1030,6 +1048,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
          </section>
        </>
      ))}
+       </>
+     )}
      {!staff && holidayError ? <p role="alert" className="att-holiday-banner">{holidayError}</p> : null}
      {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError ? <><p role="alert">{editError}</p><button type="button" className="cms-btn cms-btn-outline" onClick={() => setEditLoadAttempt((attempt) => attempt + 1)}>Retry</button></> : (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
      {editRequested && editing && restoredEditKey === editKey && !editLoading && !holidayLocked ? (
@@ -1052,9 +1072,10 @@ function Filters({ f, update, o, staff, busy, load, exportReport, search, onSear
     </div>
     {f.view !== "Attendance" ? <section className="att-card att-student-report-filters"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search students" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by name, admission no, roll no..." /></label><StudentAttendanceFilters f={f} update={update} o={o} /></section> : null}
   </>;
+  const isRegularize = f.view === "Regularize";
   return <>
     <div className="att-student-date-card att-staff-date-row">
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      {!isRegularize && (isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>)}
       <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
       {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
@@ -1082,7 +1103,7 @@ function StudentAttendanceFilters({ f, update, o }) {
 }
 
 function AttendanceViewSection({ view, update, staff }) {
-  return <div className="attendance-view-section"><div className="attendance-view-tabs" role="tablist" aria-label="Attendance view"><button type="button" role="tab" aria-selected={view === "Attendance"} className={view === "Attendance" ? "active" : ""} onClick={() => update("Attendance")}>Attendance</button><button type="button" role="tab" aria-selected={view === "Monthly Report"} className={view === "Monthly Report" ? "active" : ""} onClick={() => update("Monthly Report")}>Monthly Report</button>{!staff && <button type="button" role="tab" aria-selected={view === "Defaulters"} className={view === "Defaulters" ? "active" : ""} onClick={() => update("Defaulters")}>Defaulters</button>}</div></div>;
+  return <div className="attendance-view-section"><div className="attendance-view-tabs" role="tablist" aria-label="Attendance view"><button type="button" role="tab" aria-selected={view === "Attendance"} className={view === "Attendance" ? "active" : ""} onClick={() => update("Attendance")}>Attendance</button><button type="button" role="tab" aria-selected={view === "Monthly Report"} className={view === "Monthly Report" ? "active" : ""} onClick={() => update("Monthly Report")}>Monthly Report</button>{staff ? <button type="button" role="tab" aria-selected={view === "Regularize"} className={view === "Regularize" ? "active" : ""} onClick={() => update("Regularize")}>Regularize</button> : <button type="button" role="tab" aria-selected={view === "Defaulters"} className={view === "Defaulters" ? "active" : ""} onClick={() => update("Defaulters")}>Defaulters</button>}</div></div>;
 }
 
 function StudentSummary({ rows }) {
@@ -1213,7 +1234,11 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                     <td><button type="button" className="att-name-link" onClick={() => view(r)}>{get(r, "staffName", "facultyName")}</button></td>
                     <td>{get(r, "departmentName", "department") || "—"}</td>
                     <td>{get(r, "designationName", "staffTypeName") || "—"}</td>
-                    <td><Pill value={staffStatus(r.status)} staff={true} /></td>
+                    <td>
+                      <Pill value={staffStatus(r.status)} staff={true} />
+                      {r.isMissedCheckout && !r.isMissedCheckoutResolved ? <span className="att-time-tag is-missed">Missed Checkout</span> : null}
+                      {r.isMissedCheckoutResolved ? <span className="att-time-tag is-resolved">Regularized</span> : null}
+                    </td>
                     <td>
                       <span className={r.isLate || staffStatus(r.status) === "Late" ? "att-time-late" : ""}>{get(r, "inTime") || "—"}</span>
                       {(r.isLate || staffStatus(r.status) === "Late") && get(r, "inTime") ? <span className="att-time-tag is-late">Late</span> : null}
@@ -1221,6 +1246,7 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                     <td>
                       <span className={r.isEarlyCheckout || /early checkout/i.test(r.remarks || "") ? "att-time-early" : ""}>{get(r, "outTime") || "—"}</span>
                       {(r.isEarlyCheckout || /early checkout/i.test(r.remarks || "")) && get(r, "outTime") ? <span className="att-time-tag is-early">Early</span> : null}
+                      {r.isMissedCheckout && !r.isMissedCheckoutResolved && !get(r, "outTime") ? <span className="att-time-tag is-missed">Missed</span> : null}
                     </td>
                   </>
                 ) : (
@@ -1235,9 +1261,20 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                   </>
                 )}
                 <td>
-                  <button className="cms-action-btn" disabled={disabled} title={holiday ? "Holiday — attendance disabled" : "Edit Attendance"} aria-label="Edit Attendance" onClick={() => edit(r)}>
-                    <Pencil size={16} />
-                  </button>
+                  {(() => {
+                    const noStaffRecord = staff && !r.staffAttendanceId && !r.isAttendanceMarked;
+                    return (
+                      <button
+                        className="cms-action-btn"
+                        disabled={disabled || noStaffRecord}
+                        title={noStaffRecord ? "Only existing attendance records can be edited; missing punches must go through Regularization." : holiday ? "Holiday — attendance disabled" : "Edit Attendance"}
+                        aria-label="Edit Attendance"
+                        onClick={() => edit(r)}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    );
+                  })()}
                 </td>
               </tr>
             ))
@@ -1324,8 +1361,11 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
             />
             <div className="att-time-fields">
               <StaffTimeInput label="In Time" value={editing.inTime} disabled={busy} onChange={(value) => setEditing({ ...editing, inTime: value })} />
-              <StaffTimeInput label="Out Time" value={editing.outTime} disabled={busy} onChange={(value) => setEditing({ ...editing, outTime: value })} />
+              <StaffTimeInput label="Out Time" value={editing.outTime} disabled={busy || (Boolean(r.isMissedCheckout) && !r.isMissedCheckoutResolved)} onChange={(value) => setEditing({ ...editing, outTime: value })} />
             </div>
+            {r.isMissedCheckout && !r.isMissedCheckoutResolved && (
+              <p className="att-reg-unreviewed-note">Out Time cannot be fabricated for an unresolved Missed Checkout. Use Staff Attendance → Regularize to review the staff member's regularization request.</p>
+            )}
           </>
         ) : (
           <>

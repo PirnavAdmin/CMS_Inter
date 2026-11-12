@@ -21,6 +21,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./PaymentsInvoicesPage.css";
 
@@ -364,7 +365,7 @@ export default function PaymentsInvoicesPage() {
       <div className="pip-header-card">
         <div className="pip-header-left">
           <div className="pip-header-icon-wrap">
-            <FileText size={24} />
+            <ThreeDIcon name="payments" size={34} />
           </div>
           <div className="pip-header-text">
             <h1 className="pip-header-title">Payments &amp; Invoices</h1>

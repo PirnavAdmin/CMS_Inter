@@ -961,6 +961,17 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.JoiningDate = dto.JoiningDate ?? dto.DateOfJoining!.Value;
             }
 
+            if (!string.IsNullOrWhiteSpace(dto.AccountNumber) || !string.IsNullOrWhiteSpace(dto.Ifsc ?? dto.IfscCode))
+            {
+                var existingBankForUpdate = DeserializeObject<StaffBankDetails>(existingStaff.BankDetailsJson);
+                ValidateBankDetails(
+                    !string.IsNullOrWhiteSpace(dto.BankName) ? dto.BankName : existingBankForUpdate?.BankName,
+                    dto.AccountNumber,
+                    dto.Ifsc ?? dto.IfscCode,
+                    null
+                );
+            }
+
             SyncFlattenedPropertiesToJson(existingStaff, dto.BankName, dto.AccountHolder ?? dto.AccountHolderName, dto.AccountNumber, dto.Ifsc ?? dto.IfscCode, dto.Branch, dto.AccountType, dto.BasicSalary,
                 dto.EmergencyName ?? dto.ContactName, dto.EmergencyRelationship ?? dto.Relationship, dto.EmergencyMobile, dto.EmergencyAlternate, dto.EmergencyAddress,
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
@@ -1307,6 +1318,17 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
+            if (dto.Bank != null)
+            {
+                var existingBank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
+                ValidateBankDetails(
+                    !string.IsNullOrWhiteSpace(dto.Bank.BankName) ? dto.Bank.BankName : existingBank?.BankName,
+                    dto.Bank.AccountNumber,
+                    dto.Bank.IfscCode,
+                    !string.IsNullOrWhiteSpace(dto.Bank.UanNumber) ? dto.Bank.UanNumber : dto.Bank.PfNumber
+                );
+            }
+
             ApplySectionUpdate(staff, dto);
 
             var photoDocItem = dto.Documents?.FirstOrDefault(d => string.Equals(d.type, "Photo", StringComparison.OrdinalIgnoreCase) || string.Equals(d.name, "Photo", StringComparison.OrdinalIgnoreCase));
@@ -1340,6 +1362,11 @@ namespace CollegeManagement.API.Services.Implementations
             return await SaveProfileDraftAsync(staff.Id, dto);
         }
 
+        private static bool HasOfferLetterBeenIssued(Staff staff) =>
+            staff.ApprovedAt.HasValue ||
+            string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+
         public async Task<StaffProfileFullDto> SubmitProfileAsync(int id)
         {
             var staff = await _staffRepository.GetByIdAsync(id);
@@ -1350,6 +1377,38 @@ namespace CollegeManagement.API.Services.Implementations
             if (percentage < 50)
             {
                 throw new ValidationException($"Profile completion must be at least 50% to submit. Current completion is {percentage}%.");
+            }
+
+            // Offer letter generation & email dispatch is strictly one-time per staff member.
+            // Subsequent profile updates after onboarding completion preserve Completed/Approved status without regenerating or re-sending.
+            if (HasOfferLetterBeenIssued(staff))
+            {
+                if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    staff.ProfileStatus = "Completed";
+                }
+                if (!staff.SubmittedAt.HasValue)
+                {
+                    staff.SubmittedAt = DateTime.UtcNow;
+                }
+                if (!staff.ApprovedAt.HasValue)
+                {
+                    staff.ApprovedAt = DateTime.UtcNow;
+                }
+                staff.ProfileCompletionPercentage = Math.Max(percentage, staff.ProfileCompletionPercentage);
+                staff.ProfileLinkToken = null;
+                await _staffRepository.UpdateAsync(staff);
+                await EnsureStaffPayrollStructureProvisionedAsync(staff);
+
+                try
+                {
+                    await _auditLogger.LogAsync("UpdateSubmittedProfile", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", "Staff updated profile details after offer letter issuance. Skipped duplicate offer letter generation and email.");
+                }
+                catch { }
+
+                var updatedDto = MapToFullProfileDto(staff);
+                updatedDto.OfferLetterDispatchedNow = false;
+                return updatedDto;
             }
 
             var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
@@ -1391,12 +1450,12 @@ namespace CollegeManagement.API.Services.Implementations
                 }
                 catch { }
 
-                return MapToFullProfileDto(staff);
+                var pendingDto = MapToFullProfileDto(staff);
+                pendingDto.OfferLetterDispatchedNow = false;
+                return pendingDto;
             }
 
-            // Workflow 1: Automatic Offer Letter Generation
-            bool alreadyCompleted = string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) && staff.SubmittedAt.HasValue;
-
+            // Workflow 1: Automatic Offer Letter Generation (first completion only)
             staff.ProfileStatus = "Completed";
             if (!staff.SubmittedAt.HasValue)
             {
@@ -1411,57 +1470,53 @@ namespace CollegeManagement.API.Services.Implementations
             await _staffRepository.UpdateAsync(staff);
             await EnsureStaffPayrollStructureProvisionedAsync(staff);
 
-            // Generate Offer Letter PDF and dispatch via Email (idempotent: skip duplicate generation if already completed)
-            if (!alreadyCompleted)
+            try
             {
-                try
+                var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                if (!string.IsNullOrWhiteSpace(staff.Email))
                 {
-                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                    string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                    subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                    string body = workflowConfig.EmailBody ?? $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                            <h2>Welcome to Pirnav Educational Society</h2>
+                            <p>Dear {staffFullName},</p>
+                            <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
+                            <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                            <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                            <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                        </div>";
+                    body = body.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                    await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                    if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
                     {
-                        string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
-                        string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                        subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                        string body = workflowConfig.EmailBody ?? $@"
-                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
-                                <h2>Welcome to Pirnav Educational Society</h2>
-                                <p>Dear {staffFullName},</p>
-                                <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
-                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
-                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
-                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>";
-                        body = body.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
-
-                        if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                        try
                         {
-                            try
-                            {
-                                await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
-                            }
-                            catch { }
+                            await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
                         }
-
-                        _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                        catch { }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
-                }
 
-                // Staff Portal Notification via existing notification infrastructure
-                try
-                {
-                    await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Generated", "Your official offer letter has been generated and sent to your registered email.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                    _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to deliver offer letter generated notification to staff #{StaffId}", staff.Id);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
+            }
+
+            // Staff Portal Notification via existing notification infrastructure
+            try
+            {
+                await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Generated", "Your official offer letter has been generated and sent to your registered email.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deliver offer letter generated notification to staff #{StaffId}", staff.Id);
             }
 
             try
@@ -1470,7 +1525,9 @@ namespace CollegeManagement.API.Services.Implementations
             }
             catch { }
 
-            return MapToFullProfileDto(staff);
+            var firstIssueDto = MapToFullProfileDto(staff);
+            firstIssueDto.OfferLetterDispatchedNow = true;
+            return firstIssueDto;
         }
 
         public async Task<StaffProfileFullDto> SubmitProfileByTokenAsync(string token)
@@ -1490,36 +1547,50 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (string.Equals(dto.Action, "Approve", StringComparison.OrdinalIgnoreCase))
             {
-                staff.ProfileStatus = "Completed";
-                staff.ApprovedAt = DateTime.UtcNow;
+                bool alreadyIssued = HasOfferLetterBeenIssued(staff);
+                if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    staff.ProfileStatus = "Completed";
+                }
+                if (!staff.SubmittedAt.HasValue)
+                {
+                    staff.SubmittedAt = DateTime.UtcNow;
+                }
+                if (!staff.ApprovedAt.HasValue)
+                {
+                    staff.ApprovedAt = DateTime.UtcNow;
+                }
                 staff.CorrectionNotes = null;
                 staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
                 await _staffRepository.UpdateAsync(staff);
                 await EnsureStaffPayrollStructureProvisionedAsync(staff);
 
-                // Dispatch Offer Letter PDF via Email
-                try
+                // Dispatch Offer Letter PDF via Email once only
+                if (!alreadyIssued)
                 {
-                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    try
                     {
-                        string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                        string body = $@"
-                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
-                                <h2>Welcome to Pirnav Educational Society</h2>
-                                <p>Dear {staff.FirstName} {staff.LastName},</p>
-                                <p>Congratulations! Your faculty profile has been verified and approved by Human Resources.</p>
-                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
-                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
-                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>";
+                        var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                        if (!string.IsNullOrWhiteSpace(staff.Email))
+                        {
+                            string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                            string body = $@"
+                                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                                    <h2>Welcome to Pirnav Educational Society</h2>
+                                    <p>Dear {staff.FirstName} {staff.LastName},</p>
+                                    <p>Congratulations! Your faculty profile has been verified and approved by Human Resources.</p>
+                                    <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                                    <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                                    <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                                </div>";
 
-                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                            await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to generate or email offer letter for approved staff ID {StaffId}", staff.Id);
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to generate or email offer letter for approved staff ID {StaffId}", staff.Id);
+                    }
                 }
             }
             else if (string.Equals(dto.Action, "RequestCorrection", StringComparison.OrdinalIgnoreCase))
@@ -3032,7 +3103,13 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.Ifsc = bank.IfscCode;
                 dto.Branch = bank.Branch;
                 dto.AccountType = bank.AccountType;
+                dto.PfNumber = !string.IsNullOrWhiteSpace(bank.PfNumber) ? bank.PfNumber : bank.UanNumber;
+                dto.UanNumber = !string.IsNullOrWhiteSpace(bank.UanNumber) ? bank.UanNumber : bank.PfNumber;
                 dto.BasicSalary = bank.BasicSalary;
+                if (string.IsNullOrWhiteSpace(dto.PanNumber) && !string.IsNullOrWhiteSpace(bank.PanNumber))
+                {
+                    dto.PanNumber = bank.PanNumber;
+                }
             }
 
             // Emergency Contact
@@ -3093,6 +3170,8 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
+            var computedPct = CalculateCompletionPercentage(staff);
+            dto.ProfileCompletionPercentage = computedPct;
             return dto;
         }
 
@@ -3154,10 +3233,23 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (dto.Bank != null)
             {
-                staff.BankDetailsJson = JsonSerializer.Serialize(dto.Bank);
+                var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson) ?? new StaffBankDetails();
+                if (dto.Bank.BankName != null) bank.BankName = dto.Bank.BankName.Trim();
+                if (dto.Bank.AccountHolderName != null) bank.AccountHolderName = dto.Bank.AccountHolderName.Trim();
+                if (dto.Bank.AccountNumber != null) bank.AccountNumber = dto.Bank.AccountNumber.Trim();
+                if (dto.Bank.IfscCode != null) bank.IfscCode = dto.Bank.IfscCode.Trim().ToUpperInvariant();
+                if (dto.Bank.Branch != null) bank.Branch = dto.Bank.Branch.Trim();
+                if (dto.Bank.AccountType != null) bank.AccountType = dto.Bank.AccountType.Trim();
+                if (dto.Bank.PanNumber != null) bank.PanNumber = dto.Bank.PanNumber.Trim().ToUpperInvariant();
+                if (dto.Bank.PfNumber != null) bank.PfNumber = dto.Bank.PfNumber.Trim();
+                if (dto.Bank.UanNumber != null) bank.UanNumber = dto.Bank.UanNumber.Trim();
+                if (string.IsNullOrWhiteSpace(bank.PfNumber) && !string.IsNullOrWhiteSpace(bank.UanNumber)) bank.PfNumber = bank.UanNumber;
+                if (string.IsNullOrWhiteSpace(bank.UanNumber) && !string.IsNullOrWhiteSpace(bank.PfNumber)) bank.UanNumber = bank.PfNumber;
+                if (dto.Bank.BasicSalary.HasValue) bank.BasicSalary = dto.Bank.BasicSalary.Value;
+                staff.BankDetailsJson = JsonSerializer.Serialize(bank);
                 if (!string.IsNullOrWhiteSpace(dto.Bank.PanNumber))
                 {
-                    staff.PanNumber = dto.Bank.PanNumber.Trim();
+                    staff.PanNumber = dto.Bank.PanNumber.Trim().ToUpperInvariant();
                 }
             }
 
@@ -3487,6 +3579,92 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 // Fallback gracefully without breaking staff save
                 _logger.LogWarning(ex, "[StaffSubjectAllocationSync] Notice: {Message}", ex.Message);
+            }
+        }
+
+        private static readonly Dictionary<string, (int MinLen, int MaxLen, string[] IfscPrefixes)> BankValidationRules =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["state bank of india"] = (11, 17, new[] { "SBIN0" }),
+                ["sbi"] = (11, 17, new[] { "SBIN0" }),
+                ["hdfc bank"] = (14, 14, new[] { "HDFC0" }),
+                ["hdfc"] = (14, 14, new[] { "HDFC0" }),
+                ["icici bank"] = (12, 12, new[] { "ICIC0" }),
+                ["icici"] = (12, 12, new[] { "ICIC0" }),
+                ["punjab national bank"] = (16, 16, new[] { "PUNB0" }),
+                ["pnb"] = (16, 16, new[] { "PUNB0" }),
+                ["bank of baroda"] = (14, 14, new[] { "BARB0" }),
+                ["bob"] = (14, 14, new[] { "BARB0" }),
+                ["canara bank"] = (13, 13, new[] { "CNRB0" }),
+                ["union bank of india"] = (15, 15, new[] { "UBIN0" }),
+                ["axis bank"] = (15, 15, new[] { "UTIB0" }),
+                ["kotak mahindra bank"] = (10, 14, new[] { "KKBK0" }),
+                ["indusind bank"] = (12, 12, new[] { "INDB0" }),
+                ["bank of india"] = (15, 15, new[] { "BKID0" }),
+                ["central bank of india"] = (10, 10, new[] { "CBIN0" }),
+                ["indian bank"] = (9, 12, new[] { "IDIB0" }),
+                ["indian overseas bank"] = (15, 15, new[] { "IOBA0" }),
+                ["uco bank"] = (14, 14, new[] { "UCBA0" }),
+                ["bank of maharashtra"] = (11, 11, new[] { "MAHB0" }),
+                ["punjab & sind bank"] = (14, 14, new[] { "PSIB0" }),
+                ["federal bank"] = (14, 14, new[] { "FDRL0" }),
+                ["idbi bank"] = (12, 16, new[] { "IBKL0" }),
+                ["yes bank"] = (15, 15, new[] { "YESB0" }),
+                ["south indian bank"] = (16, 16, new[] { "SIBL0" }),
+                ["karur vysya bank"] = (16, 16, new[] { "KVBL0" }),
+                ["city union bank"] = (15, 15, new[] { "CIUB0" }),
+                ["bandhan bank"] = (14, 14, new[] { "BDBL0" }),
+                ["rbl bank"] = (12, 12, new[] { "RATN0" }),
+                ["au small finance bank"] = (16, 16, new[] { "AUBL0" }),
+                ["equitas small finance bank"] = (12, 12, new[] { "ESFB0" }),
+                ["ujjivan small finance bank"] = (16, 16, new[] { "UJVN0" }),
+                ["jana small finance bank"] = (14, 16, new[] { "JSFB0" }),
+                ["andhra pragathi grameena bank"] = (11, 11, new[] { "APGB0" }),
+                ["chaitanya godavari grameena bank"] = (11, 15, new[] { "ANDC0", "CGGB0", "UBIN0" }),
+                ["telangana grameena bank"] = (11, 11, new[] { "SBIN0", "TGB00", "TGBX0", "IDIB0" }),
+                ["andhra pradesh grameena vikas bank"] = (11, 11, new[] { "APGV0", "SBIN0" })
+            };
+
+        private static void ValidateBankDetails(string? bankName, string? accountNumber, string? ifscCode, string? uanNumber)
+        {
+            var bankKey = (bankName ?? string.Empty).Trim();
+            var hasRule = BankValidationRules.TryGetValue(bankKey, out var rule);
+            int minLen = hasRule ? rule.MinLen : 9;
+            int maxLen = hasRule ? rule.MaxLen : 18;
+
+            if (!string.IsNullOrWhiteSpace(accountNumber))
+            {
+                var acc = accountNumber.Trim();
+                if (!Regex.IsMatch(acc, @"^\d+$"))
+                    throw new ValidationException("Account number must contain numeric digits only.");
+                if (Regex.IsMatch(acc, @"^(\d)\1+$"))
+                    throw new ValidationException("Please enter a valid bank account number.");
+                if (acc.Length < minLen || acc.Length > maxLen)
+                {
+                    var lenLabel = minLen == maxLen ? $"{minLen}" : $"{minLen}-{maxLen}";
+                    var bankLabel = string.IsNullOrWhiteSpace(bankKey) ? "Bank" : bankKey;
+                    throw new ValidationException($"{bankLabel} account number must be {lenLabel} digits.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(ifscCode))
+            {
+                var ifsc = ifscCode.Trim().ToUpperInvariant();
+                if (!Regex.IsMatch(ifsc, @"^[A-Z]{4}0[A-Z0-9]{6}$"))
+                    throw new ValidationException("IFSC code must be 11 characters (4 letters, '0', and 6 alphanumeric characters).");
+
+                if (hasRule && rule.IfscPrefixes.Length > 0 &&
+                    !rule.IfscPrefixes.Any(p => ifsc.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new ValidationException($"IFSC code must start with {string.Join(" or ", rule.IfscPrefixes)} for {bankKey}.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(uanNumber))
+            {
+                var uan = uanNumber.Trim();
+                if (!Regex.IsMatch(uan, @"^\d{12}$") || Regex.IsMatch(uan, @"^(\d)\1{11}$"))
+                    throw new ValidationException("PF / UAN number must be a valid 12-digit number.");
             }
         }
 
@@ -3972,8 +4150,19 @@ namespace CollegeManagement.API.Services.Implementations
             var staff = await _staffRepository.GetByIdAsync(staffId);
             if (staff == null) throw new NotFoundException($"Staff #{staffId} not found.");
 
-            staff.ProfileStatus = "Completed";
-            staff.ApprovedAt = DateTime.UtcNow;
+            bool alreadyIssued = HasOfferLetterBeenIssued(staff);
+            if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                staff.ProfileStatus = "Completed";
+            }
+            if (!staff.SubmittedAt.HasValue)
+            {
+                staff.SubmittedAt = DateTime.UtcNow;
+            }
+            if (!staff.ApprovedAt.HasValue)
+            {
+                staff.ApprovedAt = DateTime.UtcNow;
+            }
             staff.CorrectionNotes = null;
             staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
             await _staffRepository.UpdateAsync(staff);
@@ -3981,66 +4170,69 @@ namespace CollegeManagement.API.Services.Implementations
 
             var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
 
-            // Generate Offer Letter PDF and dispatch via Email
-            try
+            // Generate Offer Letter PDF and dispatch via Email once only
+            if (!alreadyIssued)
             {
-                var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                if (!string.IsNullOrWhiteSpace(staff.Email))
+                try
                 {
-                    string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
-                    string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                    subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                    string portalUrl = _configuration["App:ClientUrl"] ?? "http://localhost:5173/login";
-                    if (!portalUrl.EndsWith("/login") && !portalUrl.Contains("login"))
+                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                    if (!string.IsNullOrWhiteSpace(staff.Email))
                     {
-                        portalUrl = portalUrl.TrimEnd('/') + "/login";
-                    }
+                        string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                        string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                        subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
 
-                    string body = $@"
-                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
-                            <div style='background: #355e3b; padding: 24px; text-align: center; color: #ffffff;'>
-                                <h2 style='margin: 0; font-size: 20px;'>Pirnav Educational Society</h2>
-                                <p style='margin: 4px 0 0; opacity: 0.9; font-size: 13px;'>Official Appointment &amp; Offer Letter</p>
-                            </div>
-                            <div style='padding: 28px; background: #ffffff;'>
-                                <p>Dear <strong>{staffFullName}</strong>,</p>
-                                <p>Your onboarding request has been reviewed and approved by Central Administration, and your offer letter has been generated successfully.</p>
-                                <p>You can now access the Staff Portal to view and download your offer letter.</p>
-                                <div style='margin: 30px 0; text-align: center;'>
-                                    <a href='{portalUrl}' style='background: #355e3b; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(53, 94, 59, 0.25);'>Access Your Staff Portal &rarr;</a>
-                                </div>
-                                <p style='font-size: 13px; color: #64748b; margin-top: 24px;'>Please find attached your official signed QuestPDF document for your personal records.</p>
-                                <p style='font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;'>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>
-                        </div>";
-
-                    await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
-
-                    if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
-                    {
-                        try
+                        string portalUrl = _configuration["App:ClientUrl"] ?? "http://localhost:5173/login";
+                        if (!portalUrl.EndsWith("/login") && !portalUrl.Contains("login"))
                         {
-                            await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                            portalUrl = portalUrl.TrimEnd('/') + "/login";
                         }
-                        catch { }
-                    }
-                    _logger.LogInformation("Offer Letter approval email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Notice: Offer Letter approval email delivery failure for {Email}: {Msg}", staff.Email, ex.Message);
-            }
 
-            // Staff Portal Notification via existing notification infrastructure
-            try
-            {
-                await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Available", "Your onboarding request has been approved and your official offer letter is now available in your portal.", "OfferLetter", staff.Id, "/faculty-dashboard/profile?tab=offerletter");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deliver approval notification to staff #{StaffId}", staff.Id);
+                        string body = $@"
+                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
+                                <div style='background: #355e3b; padding: 24px; text-align: center; color: #ffffff;'>
+                                    <h2 style='margin: 0; font-size: 20px;'>Pirnav Educational Society</h2>
+                                    <p style='margin: 4px 0 0; opacity: 0.9; font-size: 13px;'>Official Appointment &amp; Offer Letter</p>
+                                </div>
+                                <div style='padding: 28px; background: #ffffff;'>
+                                    <p>Dear <strong>{staffFullName}</strong>,</p>
+                                    <p>Your onboarding request has been reviewed and approved by Central Administration, and your offer letter has been generated successfully.</p>
+                                    <p>You can now access the Staff Portal to view and download your offer letter.</p>
+                                    <div style='margin: 30px 0; text-align: center;'>
+                                        <a href='{portalUrl}' style='background: #355e3b; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(53, 94, 59, 0.25);'>Access Your Staff Portal &rarr;</a>
+                                    </div>
+                                    <p style='font-size: 13px; color: #64748b; margin-top: 24px;'>Please find attached your official signed QuestPDF document for your personal records.</p>
+                                    <p style='font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;'>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                                </div>
+                            </div>";
+
+                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                        if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                        {
+                            try
+                            {
+                                await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                            }
+                            catch { }
+                        }
+                        _logger.LogInformation("Offer Letter approval email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Notice: Offer Letter approval email delivery failure for {Email}: {Msg}", staff.Email, ex.Message);
+                }
+
+                // Staff Portal Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Available", "Your onboarding request has been approved and your official offer letter is now available in your portal.", "OfferLetter", staff.Id, "/faculty-dashboard/profile?tab=offerletter");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deliver approval notification to staff #{StaffId}", staff.Id);
+                }
             }
 
             try

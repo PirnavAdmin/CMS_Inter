@@ -2,17 +2,18 @@
 -- MODULE 10: STUDENT ADMISSION STORED PROCEDURES
 -- Canonical Stored Procedures for CMS_Inter Student Admission Module
 -- Architecture: 100% Stored Procedures, 0% Inline SQL, Dapper Compliant
+-- Verified against live CollegeManagement MySQL schema
 -- =============================================================================
 
 -- Ensure support table for Admission Optional Fee Selections exists
 CREATE TABLE IF NOT EXISTS `AdmissionFeeSelections` (
-    `Id` INT NOT NULL AUTO_INCREMENT,
+    `AdmissionFeeSelectionId` INT NOT NULL AUTO_INCREMENT,
     `AdmissionId` INT NOT NULL,
     `FeeStructureComponentId` INT NOT NULL,
     `IsSelected` TINYINT(1) NOT NULL DEFAULT 1,
     `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     `UpdatedAt` DATETIME(6) NULL,
-    PRIMARY KEY (`Id`),
+    PRIMARY KEY (`AdmissionFeeSelectionId`),
     KEY `IX_AdmissionFeeSelections_AdmissionId` (`AdmissionId`),
     KEY `IX_AdmissionFeeSelections_ComponentId` (`FeeStructureComponentId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -94,9 +95,9 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
-        sa.SectionId,
+        stu.SectionId,
         sec.SectionName,
-        sa.RollNo,
+        stu.RollNo,
         sa.StudentType,
         sa.TransportRequired,
         sa.BusType,
@@ -129,7 +130,17 @@ BEGIN
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
-    LEFT JOIN `Sections` sec ON sa.SectionId = sec.SectionId
+    LEFT JOIN (
+        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        FROM `Students` s1
+        INNER JOIN (
+            SELECT AdmissionId, MAX(StudentId) AS MaxStudentId
+            FROM `Students`
+            WHERE IsActive = 1
+            GROUP BY AdmissionId
+        ) latest ON latest.MaxStudentId = s1.StudentId
+    ) stu ON stu.AdmissionId = sa.AdmissionId
+    LEFT JOIN `Sections` sec ON stu.SectionId = sec.SectionId
     LEFT JOIN `FeeStructures` fs ON sa.FeeStructureId = fs.FeeStructureId
     LEFT JOIN `hostel_blocks` hb ON sa.HostelId = hb.HostelId
     LEFT JOIN `room_masters` rm ON sa.RoomId = rm.RoomId
@@ -216,9 +227,9 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
-        sa.SectionId,
+        stu.SectionId,
         sec.SectionName,
-        sa.RollNo,
+        stu.RollNo,
         sa.StudentType,
         sa.TransportRequired,
         sa.BusType,
@@ -251,7 +262,14 @@ BEGIN
     LEFT JOIN `Campuses` c ON sa.CampusId = c.CampusId
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
-    LEFT JOIN `Sections` sec ON sa.SectionId = sec.SectionId
+    LEFT JOIN (
+        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        FROM `Students` s1
+        WHERE s1.AdmissionId = p_AdmissionId AND s1.IsActive = 1
+        ORDER BY s1.StudentId DESC
+        LIMIT 1
+    ) stu ON stu.AdmissionId = sa.AdmissionId
+    LEFT JOIN `Sections` sec ON stu.SectionId = sec.SectionId
     LEFT JOIN `FeeStructures` fs ON sa.FeeStructureId = fs.FeeStructureId
     LEFT JOIN `hostel_blocks` hb ON sa.HostelId = hb.HostelId
     LEFT JOIN `room_masters` rm ON sa.RoomId = rm.RoomId
@@ -266,6 +284,22 @@ BEGIN
     SELECT FeeStructureComponentId 
     FROM `AdmissionFeeSelections` 
     WHERE `AdmissionId` = p_AdmissionId AND `IsSelected` = 1;
+END //
+
+-- =============================================================================
+-- 2B. GET STUDENT DOMAIN RECORD BY ADMISSION ID
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_GetStudentByAdmissionId`//
+CREATE PROCEDURE `sp_GetStudentByAdmissionId`
+(
+    IN p_AdmissionId INT
+)
+BEGIN
+    SELECT s.*
+    FROM `Students` s
+    WHERE s.AdmissionId = p_AdmissionId
+    ORDER BY s.StudentId DESC
+    LIMIT 1;
 END //
 
 -- =============================================================================
@@ -377,7 +411,7 @@ BEGIN
     END IF;
 
     SET v_InitialStatus = 'Pending';
-    SET v_AdmissionNo = TRIM(p_AdmissionNo);
+    SET v_AdmissionNo = NULLIF(TRIM(p_AdmissionNo), '');
 
     INSERT INTO `StudentAdmissions`
     (
@@ -397,7 +431,7 @@ BEGIN
     )
     VALUES
     (
-        p_AdmissionDate, v_AdmissionNo, p_AdmissionType, p_AdmissionQuota, p_CampusId, p_SourceCampusId, p_IsReferral, p_AdmittedById,
+        p_AdmissionDate, v_AdmissionNo, p_AdmissionType, p_AdmissionQuota, p_CampusId, p_SourceCampusId, COALESCE(p_IsReferral, 0), p_AdmittedById,
         p_BoardId, p_AcademicYearId, p_AcademicLevelId, p_GroupId, p_ProgramId, p_FirstName, p_LastName,
         p_Gender, p_DateOfBirth, p_BloodGroup, p_StudentEmail, p_StudentMobileNumber,
         p_StudentPhoto, p_AadhaarNumber, p_Nationality, p_Religion, p_Category,
@@ -415,7 +449,7 @@ BEGIN
     SET v_AdmissionId = LAST_INSERT_ID();
 
     -- Fallback default admission number if non-referral and empty
-    IF (v_AdmissionNo IS NULL OR v_AdmissionNo = '') AND (p_IsReferral = 0 OR p_IsReferral IS NULL) THEN
+    IF v_AdmissionNo IS NULL AND (p_IsReferral = 0 OR p_IsReferral IS NULL) THEN
         SET v_AdmissionNo = CONCAT('ADM-', LPAD(v_AdmissionId, 4, '0'));
         UPDATE `StudentAdmissions` SET `AdmissionNo` = v_AdmissionNo WHERE `AdmissionId` = v_AdmissionId;
     END IF;
@@ -692,13 +726,15 @@ BEGIN
     SET `IsVerified` = 1,
         `Status` = 'Verified',
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1
+      AND `IsRejected` = 0;
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
 
 -- =============================================================================
--- 6. APPROVE STUDENT ADMISSION & DOMAIN STUDENT UPSERT
+-- 6. APPROVE STUDENT ADMISSION & DOMAIN STUDENT / FEE / ALLOCATION UPSERT
 -- =============================================================================
 DROP PROCEDURE IF EXISTS `sp_ApproveStudentAdmission`//
 CREATE PROCEDURE `sp_ApproveStudentAdmission`
@@ -706,83 +742,383 @@ CREATE PROCEDURE `sp_ApproveStudentAdmission`
     IN p_AdmissionId INT,
     IN p_PasswordHash VARCHAR(500)
 )
-BEGIN
-    DECLARE v_StudentId INT DEFAULT NULL;
+proc_label: BEGIN
+    DECLARE v_AdmissionExists INT DEFAULT 0;
+    DECLARE v_FeeStructureId INT;
+    DECLARE v_PaymentPlan VARCHAR(50);
+    DECLARE v_HallTicketNumber VARCHAR(50);
+    DECLARE v_StudentType VARCHAR(30);
+    DECLARE v_TransportRequired TINYINT(1);
+    DECLARE v_BusType VARCHAR(20);
+    DECLARE v_BusRoute VARCHAR(100);
+    DECLARE v_PickupPoint VARCHAR(100);
+    DECLARE v_HostelBlock VARCHAR(50);
+    DECLARE v_HostelRoom VARCHAR(50);
+    DECLARE v_HostelBed VARCHAR(50);
+    DECLARE v_HostelId INT;
+    DECLARE v_RoomId INT;
+    DECLARE v_BedId INT;
+    DECLARE v_RouteId INT;
+    DECLARE v_PickupPointId INT;
+    DECLARE v_CampusId INT;
 
-    IF NOT EXISTS (
-        SELECT 1 FROM `StudentAdmissions`
-        WHERE `AdmissionId` = p_AdmissionId AND `IsActive` = 1 AND `IsRejected` = 0
-    ) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admission record not found or rejected';
+    DECLARE v_StudentId INT;
+    DECLARE v_StudentFeeId INT;
+    DECLARE v_FeePaymentPlanId INT;
+    DECLARE v_TotalAmount DECIMAL(18,2) DEFAULT 0.00;
+    DECLARE v_InstallmentAmount DECIMAL(18,2) DEFAULT 0.00;
+    DECLARE v_LastInstallmentAmount DECIMAL(18,2) DEFAULT 0.00;
+
+    SELECT 
+        COUNT(1), 
+        MAX(FeeStructureId), 
+        MAX(PaymentPlan), 
+        MAX(HallTicketNumber),
+        MAX(StudentType),
+        MAX(TransportRequired),
+        MAX(BusType),
+        MAX(BusRoute),
+        MAX(PickupPoint),
+        MAX(HostelBlock),
+        MAX(HostelRoom),
+        MAX(HostelBed),
+        MAX(HostelId),
+        MAX(RoomId),
+        MAX(BedId),
+        MAX(RouteId),
+        MAX(PickupPointId),
+        MAX(CampusId)
+    INTO 
+        v_AdmissionExists, 
+        v_FeeStructureId, 
+        v_PaymentPlan, 
+        v_HallTicketNumber,
+        v_StudentType,
+        v_TransportRequired,
+        v_BusType,
+        v_BusRoute,
+        v_PickupPoint,
+        v_HostelBlock,
+        v_HostelRoom,
+        v_HostelBed,
+        v_HostelId,
+        v_RoomId,
+        v_BedId,
+        v_RouteId,
+        v_PickupPointId,
+        v_CampusId
+    FROM `StudentAdmissions`
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1;
+
+    IF v_AdmissionExists = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Admission record not found or inactive.';
     END IF;
 
-    -- Check if student domain record already exists
+    IF v_FeeStructureId IS NULL OR NOT EXISTS (SELECT 1 FROM `FeeStructures` WHERE `FeeStructureId` = v_FeeStructureId AND `IsActive` = 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A valid and active Fee Structure must be selected prior to admission approval.';
+    END IF;
+
+    IF v_PaymentPlan IS NULL OR TRIM(v_PaymentPlan) = '' THEN
+        SET v_PaymentPlan = 'Schedule Payment';
+    END IF;
+
     SELECT `StudentId` INTO v_StudentId
     FROM `Students`
     WHERE `AdmissionId` = p_AdmissionId
-    ORDER BY `StudentId` DESC
     LIMIT 1;
 
     IF v_StudentId IS NULL THEN
         INSERT INTO `Students`
         (
-            AdmissionId, BoardId, SectionId,
-            AdmissionNo, RollNo, StudentName, Photo,
-            Gender, DateOfBirth, BloodGroup, Email, MobileNumber, AadhaarNumber, Address,
-            City, District, State, Pincode,
-            Board, AcademicYearId, AcademicLevel, GroupId, Section, AdmissionDate,
-            AdmissionType, Medium, PreviousSchool, PreviousBoard, PreviousPercentage, PreviousYearOfPassing,
-            SecondLanguage, StudentType, TransportRequired, BusType, RouteId, BusRoute,
-            PickupPointId, PickupPoint, HostelId, HostelBlock, RoomId, HostelRoom, BedId, HostelBed,
-            HallTicketNumber, PreviousHallTicketNumber, Category, ScholarshipStatus,
-            FatherName, FatherOccupation, FatherMobile,
-            MotherName, MotherOccupation, MotherMobile,
-            GuardianName, GuardianMobile, ParentGuardianEmail, AnnualIncome,
-            CampusId, FeeStructureId, PaymentPlan,
-            FeeAmount, FeePaid, ScholarshipAmount, FeeStatus,
-            AttendancePercentage, PerformanceGrade, CGPA, `Rank`, Remarks,
-            PasswordHash, IsFirstLogin, IsActive, CreatedAt
+            AdmissionId,
+            AdmissionNo,
+            RollNo,
+            AdmissionDate,
+            AdmissionType,
+            AdmissionQuota,
+            Medium,
+            SecondLanguage,
+            StudentName,
+            Photo,
+            Gender,
+            DateOfBirth,
+            BloodGroup,
+            Email,
+            MobileNumber,
+            AadhaarNumber,
+            Nationality,
+            Religion,
+            Category,
+            Address,
+            City,
+            District,
+            State,
+            Pincode,
+            BoardId,
+            AcademicYearId,
+            AcademicLevelId,
+            GroupId,
+            ProgramId,
+            FeeStructureId,
+            PaymentPlan,
+            SectionId,
+            PreviousSchool,
+            PreviousBoard,
+            PreviousYearOfPassing,
+            PreviousPercentage,
+            PreviousHallTicketNumber,
+            ScholarshipStatus,
+            FatherName,
+            FatherOccupation,
+            FatherMobile,
+            FatherEmail,
+            MotherName,
+            MotherOccupation,
+            MotherMobile,
+            MotherEmail,
+            GuardianName,
+            GuardianMobile,
+            ParentGuardianEmail,
+            AnnualIncome,
+            Remarks,
+            PasswordHash,
+            IsFirstLogin,
+            Status,
+            IsActive,
+            CreatedAt,
+            AdmittedById,
+            StudentType,
+            TransportRequired,
+            BusType,
+            RouteId,
+            BusRoute,
+            PickupPointId,
+            PickupPoint,
+            HostelId,
+            HostelBlock,
+            RoomId,
+            HostelRoom,
+            BedId,
+            HostelBed,
+            HallTicketNumber,
+            CampusId
         )
         SELECT
-            sa.AdmissionId, sa.BoardId, sa.SectionId,
+            sa.AdmissionId,
             sa.AdmissionNo,
-            COALESCE(sa.RollNo, CONCAT('R', LPAD(sa.AdmissionId, 5, '0'))),
-            CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            NULL,
+            sa.AdmissionDate,
+            sa.AdmissionType,
+            sa.AdmissionQuota,
+            sa.Medium,
+            sa.SecondLanguage,
+            CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             sa.StudentPhoto,
-            sa.Gender, DATE(sa.DateOfBirth), sa.BloodGroup,
-            COALESCE(NULLIF(sa.StudentEmail, ''), NULLIF(sa.ParentGuardianEmail, ''), CONCAT(sa.AdmissionNo, '@student.local')),
-            sa.StudentMobileNumber, sa.AadhaarNumber,
-            CONCAT_WS(', ', NULLIF(sa.HouseDoorNumber, ''), NULLIF(sa.StreetVillage, '')),
-            sa.City, sa.District, sa.State, sa.Pincode,
-            COALESCE(b.BoardName, ''), sa.AcademicYearId, COALESCE(al.LevelName, ''), sa.GroupId, COALESCE(sec.SectionName, ''), DATE(sa.AdmissionDate),
-            sa.AdmissionType, sa.Medium, sa.PreviousSchool, sa.PreviousBoard, sa.PreviousPercentage, sa.PreviousYearOfPassing,
-            sa.SecondLanguage, sa.StudentType, sa.TransportRequired, sa.BusType, sa.RouteId, sa.BusRoute,
-            sa.PickupPointId, sa.PickupPoint, sa.HostelId, sa.HostelBlock, sa.RoomId, sa.HostelRoom, sa.BedId, sa.HostelBed,
-            sa.HallTicketNumber, sa.HallTicketNumber, sa.Category, sa.ScholarshipStatus,
-            sa.FatherName, sa.FatherOccupation, sa.FatherMobile,
-            sa.MotherName, sa.MotherOccupation, sa.MotherMobile,
-            sa.GuardianName, sa.GuardianMobile, sa.ParentGuardianEmail, sa.AnnualIncome,
-            sa.CampusId, sa.FeeStructureId, sa.PaymentPlan,
-            0, 0, 0, 'Pending',
-            0, NULL, NULL, NULL, sa.Remarks,
-            COALESCE(p_PasswordHash, ''), 1, 1, CURRENT_TIMESTAMP(6)
+            sa.Gender,
+            sa.DateOfBirth,
+            sa.BloodGroup,
+            sa.StudentEmail,
+            sa.StudentMobileNumber,
+            CASE
+                WHEN sa.AadhaarNumber IS NULL OR TRIM(sa.AadhaarNumber) = '' OR LOWER(TRIM(sa.AadhaarNumber)) = 'string'
+                THEN NULL
+                ELSE TRIM(sa.AadhaarNumber)
+            END,
+            sa.Nationality,
+            sa.Religion,
+            sa.Category,
+            CONCAT_WS(', ', NULLIF(TRIM(sa.HouseDoorNumber), ''), NULLIF(TRIM(sa.StreetVillage), ''), NULLIF(TRIM(sa.City), ''), NULLIF(TRIM(sa.District), ''), NULLIF(TRIM(sa.State), ''), NULLIF(TRIM(sa.Pincode), '')),
+            sa.City,
+            sa.District,
+            sa.State,
+            sa.Pincode,
+            sa.BoardId,
+            sa.AcademicYearId,
+            sa.AcademicLevelId,
+            sa.GroupId,
+            sa.ProgramId,
+            sa.FeeStructureId,
+            v_PaymentPlan,
+            NULL,
+            sa.PreviousSchool,
+            sa.PreviousBoard,
+            sa.PreviousYearOfPassing,
+            sa.PreviousPercentage,
+            sa.HallTicketNumber,
+            sa.ScholarshipStatus,
+            sa.FatherName,
+            sa.FatherOccupation,
+            sa.FatherMobile,
+            sa.FatherEmail,
+            sa.MotherName,
+            sa.MotherOccupation,
+            sa.MotherMobile,
+            sa.MotherEmail,
+            sa.GuardianName,
+            sa.GuardianMobile,
+            sa.ParentGuardianEmail,
+            sa.AnnualIncome,
+            sa.Remarks,
+            COALESCE(NULLIF(p_PasswordHash, ''), ''),
+            1,
+            'Active',
+            1,
+            CURRENT_TIMESTAMP(6),
+            sa.AdmittedById,
+            sa.StudentType,
+            sa.TransportRequired,
+            sa.BusType,
+            sa.RouteId,
+            sa.BusRoute,
+            sa.PickupPointId,
+            sa.PickupPoint,
+            sa.HostelId,
+            sa.HostelBlock,
+            sa.RoomId,
+            sa.HostelRoom,
+            sa.BedId,
+            sa.HostelBed,
+            sa.HallTicketNumber,
+            sa.CampusId
         FROM `StudentAdmissions` sa
-        LEFT JOIN `Boards` b ON b.BoardId = sa.BoardId
-        LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = sa.AcademicLevelId
-        LEFT JOIN `Sections` sec ON sec.SectionId = sa.SectionId
         WHERE sa.AdmissionId = p_AdmissionId;
 
         SET v_StudentId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `Students` sa_target
+        JOIN `StudentAdmissions` sa_src ON sa_src.AdmissionId = p_AdmissionId
+        SET
+            sa_target.FeeStructureId = v_FeeStructureId,
+            sa_target.PaymentPlan = v_PaymentPlan,
+            sa_target.PreviousHallTicketNumber = COALESCE(v_HallTicketNumber, sa_target.PreviousHallTicketNumber),
+            sa_target.StudentType = COALESCE(sa_src.StudentType, sa_target.StudentType),
+            sa_target.TransportRequired = COALESCE(sa_src.TransportRequired, sa_target.TransportRequired),
+            sa_target.BusType = COALESCE(sa_src.BusType, sa_target.BusType),
+            sa_target.RouteId = COALESCE(sa_src.RouteId, sa_target.RouteId),
+            sa_target.BusRoute = COALESCE(sa_src.BusRoute, sa_target.BusRoute),
+            sa_target.PickupPointId = COALESCE(sa_src.PickupPointId, sa_target.PickupPointId),
+            sa_target.PickupPoint = COALESCE(sa_src.PickupPoint, sa_target.PickupPoint),
+            sa_target.HostelId = COALESCE(sa_src.HostelId, sa_target.HostelId),
+            sa_target.HostelBlock = COALESCE(sa_src.HostelBlock, sa_target.HostelBlock),
+            sa_target.RoomId = COALESCE(sa_src.RoomId, sa_target.RoomId),
+            sa_target.HostelRoom = COALESCE(sa_src.HostelRoom, sa_target.HostelRoom),
+            sa_target.BedId = COALESCE(sa_src.BedId, sa_target.BedId),
+            sa_target.HostelBed = COALESCE(sa_src.HostelBed, sa_target.HostelBed),
+            sa_target.HallTicketNumber = COALESCE(sa_src.HallTicketNumber, sa_target.HallTicketNumber),
+            sa_target.PasswordHash = CASE WHEN p_PasswordHash IS NOT NULL AND TRIM(p_PasswordHash) <> '' THEN p_PasswordHash ELSE sa_target.PasswordHash END,
+            sa_target.UpdatedAt = CURRENT_TIMESTAMP(6)
+        WHERE sa_target.StudentId = v_StudentId;
     END IF;
 
     UPDATE `StudentAdmissions`
-    SET `IsApproved` = 1,
-        `IsRejected` = 0,
-        `Status` = 'Approved',
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    SET
+        IsApproved = 1,
+        IsVerified = 1,
+        Status = 'Approved',
+        IsRejected = 0,
+        UpdatedAt = CURRENT_TIMESTAMP(6)
+    WHERE AdmissionId = p_AdmissionId;
 
-    SELECT 1 AS Success;
+    -- HOSTEL ALLOCATION ON APPROVAL
+    IF v_BedId IS NOT NULL AND v_HostelId IS NOT NULL AND v_RoomId IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM `hostel_student_allocations` WHERE `StudentId` = v_StudentId AND `Status` = 'Active') THEN
+            INSERT INTO `hostel_student_allocations` (StudentId, HostelId, RoomId, BedId, JoiningDate, Status, CreatedAt)
+            VALUES (v_StudentId, v_HostelId, v_RoomId, v_BedId, CURRENT_DATE, 'Active', CURRENT_TIMESTAMP);
+            UPDATE `hostel_beds` SET `BedStatus` = 'Occupied' WHERE `BedId` = v_BedId;
+        END IF;
+    END IF;
+
+    -- TRANSPORT ALLOCATION ON APPROVAL
+    IF v_TransportRequired = 1 AND v_RouteId IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM `StudentTransportAssignments` WHERE `StudentId` = v_StudentId AND `IsActive` = 1) THEN
+            INSERT INTO `StudentTransportAssignments` (StudentId, RouteId, PickupPointId, TransportType, StartDate, IsActive, CreatedAt)
+            VALUES (v_StudentId, v_RouteId, v_PickupPointId, 'TwoWay', CURRENT_DATE, 1, CURRENT_TIMESTAMP(6));
+        END IF;
+    END IF;
+
+    -- FEE SETUP & PAYMENT PLAN ON APPROVAL
+    SELECT COALESCE(SUM(fsc.Amount), 0.00)
+    INTO v_TotalAmount
+    FROM `FeeStructureComponents` fsc
+    WHERE fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsActive = 1
+      AND (fsc.IsMandatory = 1 OR EXISTS (
+          SELECT 1 FROM `AdmissionFeeSelections` afs
+          WHERE afs.AdmissionId = p_AdmissionId
+            AND afs.FeeStructureComponentId = fsc.FeeStructureComponentId
+            AND afs.IsSelected = 1
+      ));
+
+    SELECT `StudentFeeId` INTO v_StudentFeeId
+    FROM `StudentFees`
+    WHERE `StudentId` = v_StudentId AND `FeeStructureId` = v_FeeStructureId
+    LIMIT 1;
+
+    IF v_StudentFeeId IS NULL THEN
+        INSERT INTO `StudentFees` (StudentId, FeeStructureId, PaymentPlan, TotalAmount, ConcessionAmount, PayableAmount, PaidAmount, BalanceAmount, Status)
+        VALUES (v_StudentId, v_FeeStructureId, v_PaymentPlan, v_TotalAmount, 0.00, v_TotalAmount, 0.00, v_TotalAmount, 'Pending');
+        SET v_StudentFeeId = LAST_INSERT_ID();
+    ELSE
+        UPDATE `StudentFees` SET `PaymentPlan` = v_PaymentPlan, `UpdatedAt` = CURRENT_TIMESTAMP(6) WHERE `StudentFeeId` = v_StudentFeeId;
+    END IF;
+
+    INSERT INTO `StudentFeeComponents` (StudentFeeId, FeeStructureComponentId, Amount, ConcessionAmount, PayableAmount, PaidAmount, BalanceAmount, DueDate, Status)
+    SELECT v_StudentFeeId, fsc.FeeStructureComponentId, fsc.Amount, 0.00, fsc.Amount, 0.00, fsc.Amount, fsc.DueDate, 'Pending'
+    FROM `FeeStructureComponents` fsc
+    WHERE fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsActive = 1
+      AND (fsc.IsMandatory = 1 OR EXISTS (
+          SELECT 1 FROM `AdmissionFeeSelections` afs
+          WHERE afs.AdmissionId = p_AdmissionId AND afs.FeeStructureComponentId = fsc.FeeStructureComponentId AND afs.IsSelected = 1
+      ))
+      AND NOT EXISTS (
+          SELECT 1 FROM `StudentFeeComponents` sfc
+          WHERE sfc.StudentFeeId = v_StudentFeeId AND sfc.FeeStructureComponentId = fsc.FeeStructureComponentId
+      );
+
+    SELECT `FeePaymentPlanId` INTO v_FeePaymentPlanId
+    FROM `FeePaymentPlans`
+    WHERE `StudentFeeId` = v_StudentFeeId AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_FeePaymentPlanId IS NULL THEN
+        IF v_PaymentPlan = 'Schedule Payment' THEN
+            INSERT INTO `FeePaymentPlans` (StudentFeeId, PlanName, TotalAmount, NumberOfInstallments, IsActive)
+            VALUES (v_StudentFeeId, 'Schedule Payment', v_TotalAmount, 4, 1);
+        ELSE
+            INSERT INTO `FeePaymentPlans` (StudentFeeId, PlanName, TotalAmount, NumberOfInstallments, IsActive)
+            VALUES (v_StudentFeeId, 'Full Payment', v_TotalAmount, 1, 1);
+        END IF;
+        SET v_FeePaymentPlanId = LAST_INSERT_ID();
+    END IF;
+
+    IF v_PaymentPlan = 'Schedule Payment' THEN
+        SET v_InstallmentAmount = ROUND(v_TotalAmount / 4, 2);
+        SET v_LastInstallmentAmount = v_TotalAmount - (v_InstallmentAmount * 3);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 1, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 1);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 2, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 2 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 2);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 3, v_InstallmentAmount, 0.00, v_InstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 3 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 3);
+
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 4, v_LastInstallmentAmount, 0.00, v_LastInstallmentAmount, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 4 MONTH), 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 4);
+    ELSE
+        INSERT INTO `FeeInstallments` (FeePaymentPlanId, InstallmentNumber, Amount, PaidAmount, BalanceAmount, DueDate, Status)
+        SELECT v_FeePaymentPlanId, 1, v_TotalAmount, 0.00, v_TotalAmount, CURRENT_TIMESTAMP, 'Pending'
+        FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM `FeeInstallments` WHERE FeePaymentPlanId = v_FeePaymentPlanId AND InstallmentNumber = 1);
+    END IF;
+
+    SELECT 1 AS Result;
 END //
 
 -- =============================================================================
@@ -792,7 +1128,7 @@ DROP PROCEDURE IF EXISTS `sp_RejectStudentAdmission`//
 CREATE PROCEDURE `sp_RejectStudentAdmission`
 (
     IN p_AdmissionId INT,
-    IN p_RejectionReason VARCHAR(500),
+    IN p_RejectionReason VARCHAR(1000),
     IN p_Remarks VARCHAR(1000)
 )
 BEGIN
@@ -803,7 +1139,8 @@ BEGIN
         `RejectionReason` = p_RejectionReason,
         `Remarks` = p_Remarks,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1;
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -938,15 +1275,11 @@ CREATE PROCEDURE `sp_AllocateStudentAdmissionSection`
     IN p_SectionId INT
 )
 BEGIN
-    UPDATE `StudentAdmissions`
-    SET `SectionId` = p_SectionId,
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
-
     UPDATE `Students`
     SET `SectionId` = p_SectionId,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND (`IsActive` = 1 OR `IsActive` IS NULL);
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -959,17 +1292,12 @@ CREATE PROCEDURE `sp_AllocateStudentAdmissionRollNumber`
     IN p_RollNo VARCHAR(30)
 )
 BEGIN
-    UPDATE `StudentAdmissions`
-    SET `RollNo` = p_RollNo,
-        `SectionId` = p_SectionId,
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
-
     UPDATE `Students`
     SET `RollNo` = p_RollNo,
         `SectionId` = p_SectionId,
         `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId;
+    WHERE `AdmissionId` = p_AdmissionId
+      AND (`IsActive` = 1 OR `IsActive` IS NULL);
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -984,7 +1312,28 @@ CREATE PROCEDURE `sp_SaveAdmissionFeeSelections`
     IN p_SelectedComponentIds JSON
 )
 BEGIN
-    DELETE FROM `AdmissionFeeSelections` WHERE `AdmissionId` = p_AdmissionId;
+    DECLARE v_FeeStructureId INT DEFAULT NULL;
+    DECLARE v_SelectedCount INT DEFAULT 0;
+
+    SELECT `FeeStructureId`
+    INTO v_FeeStructureId
+    FROM `StudentAdmissions`
+    WHERE `AdmissionId` = p_AdmissionId
+      AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_FeeStructureId IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Admission not found or fee structure not assigned';
+    END IF;
+
+    DELETE afs
+    FROM `AdmissionFeeSelections` afs
+    INNER JOIN `FeeStructureComponents` fsc
+        ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
+    WHERE afs.AdmissionId = p_AdmissionId
+      AND fsc.FeeStructureId = v_FeeStructureId
+      AND fsc.IsMandatory = 0;
 
     IF p_SelectedComponentIds IS NOT NULL AND JSON_LENGTH(p_SelectedComponentIds) > 0 THEN
         INSERT INTO `AdmissionFeeSelections` (AdmissionId, FeeStructureComponentId, IsSelected, CreatedAt)
@@ -996,12 +1345,24 @@ BEGIN
         FROM JSON_TABLE(
             p_SelectedComponentIds,
             '$[*]' COLUMNS (ComponentId INT PATH '$')
-        ) jt;
+        ) jt
+        INNER JOIN `FeeStructureComponents` fsc
+            ON fsc.FeeStructureComponentId = jt.ComponentId
+        WHERE fsc.FeeStructureId = v_FeeStructureId
+          AND fsc.IsActive = 1
+          AND fsc.IsMandatory = 0;
     END IF;
 
-    SELECT COUNT(*) AS SelectedOptionalFees
-    FROM `AdmissionFeeSelections`
-    WHERE `AdmissionId` = p_AdmissionId AND `IsSelected` = 1;
+    SELECT COUNT(*)
+    INTO v_SelectedCount
+    FROM `AdmissionFeeSelections` afs
+    INNER JOIN `FeeStructureComponents` fsc
+        ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
+    WHERE afs.AdmissionId = p_AdmissionId
+      AND fsc.FeeStructureId = v_FeeStructureId
+      AND afs.IsSelected = 1;
+
+    SELECT v_SelectedCount AS SelectedOptionalFees;
 END //
 
 -- =============================================================================
@@ -1024,14 +1385,11 @@ BEGIN
     IF v_StudentId IS NOT NULL THEN
         UPDATE `Students` s
         JOIN `StudentAdmissions` sa ON s.AdmissionId = sa.AdmissionId
-        LEFT JOIN `Boards` b ON b.BoardId = sa.BoardId
-        LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = sa.AcademicLevelId
-        LEFT JOIN `Sections` sec ON sec.SectionId = sa.SectionId
         SET
-            s.StudentName = CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            s.StudentName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             s.Photo = COALESCE(sa.StudentPhoto, s.Photo),
             s.Gender = COALESCE(sa.Gender, s.Gender),
-            s.DateOfBirth = COALESCE(DATE(sa.DateOfBirth), s.DateOfBirth),
+            s.DateOfBirth = COALESCE(sa.DateOfBirth, s.DateOfBirth),
             s.BloodGroup = COALESCE(sa.BloodGroup, s.BloodGroup),
             s.Email = COALESCE(sa.StudentEmail, s.Email),
             s.MobileNumber = COALESCE(sa.StudentMobileNumber, s.MobileNumber),
@@ -1039,21 +1397,16 @@ BEGIN
             s.Nationality = COALESCE(sa.Nationality, s.Nationality),
             s.Religion = COALESCE(sa.Religion, s.Religion),
             s.Category = COALESCE(sa.Category, s.Category),
-            s.Address = CONCAT_WS(', ', NULLIF(sa.HouseDoorNumber, ''), NULLIF(sa.StreetVillage, '')),
+            s.Address = CONCAT_WS(', ', NULLIF(TRIM(sa.HouseDoorNumber), ''), NULLIF(TRIM(sa.StreetVillage), ''), NULLIF(TRIM(sa.City), ''), NULLIF(TRIM(sa.District), ''), NULLIF(TRIM(sa.State), ''), NULLIF(TRIM(sa.Pincode), '')),
             s.City = COALESCE(sa.City, s.City),
             s.District = COALESCE(sa.District, s.District),
             s.State = COALESCE(sa.State, s.State),
             s.Pincode = COALESCE(sa.Pincode, s.Pincode),
             s.BoardId = COALESCE(sa.BoardId, s.BoardId),
-            s.Board = COALESCE(b.BoardName, s.Board),
             s.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId),
             s.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId),
-            s.AcademicLevel = COALESCE(al.LevelName, s.AcademicLevel),
             s.GroupId = COALESCE(sa.GroupId, s.GroupId),
             s.ProgramId = COALESCE(sa.ProgramId, s.ProgramId),
-            s.SectionId = COALESCE(sa.SectionId, s.SectionId),
-            s.Section = COALESCE(sec.SectionName, s.Section),
-            s.RollNo = COALESCE(sa.RollNo, s.RollNo),
             s.Medium = COALESCE(sa.Medium, s.Medium),
             s.SecondLanguage = COALESCE(sa.SecondLanguage, s.SecondLanguage),
             s.PreviousSchool = COALESCE(sa.PreviousSchool, s.PreviousSchool),
@@ -1065,9 +1418,11 @@ BEGIN
             s.FatherName = COALESCE(sa.FatherName, s.FatherName),
             s.FatherOccupation = COALESCE(sa.FatherOccupation, s.FatherOccupation),
             s.FatherMobile = COALESCE(sa.FatherMobile, s.FatherMobile),
+            s.FatherEmail = COALESCE(sa.FatherEmail, s.FatherEmail),
             s.MotherName = COALESCE(sa.MotherName, s.MotherName),
             s.MotherOccupation = COALESCE(sa.MotherOccupation, s.MotherOccupation),
             s.MotherMobile = COALESCE(sa.MotherMobile, s.MotherMobile),
+            s.MotherEmail = COALESCE(sa.MotherEmail, s.MotherEmail),
             s.GuardianName = COALESCE(sa.GuardianName, s.GuardianName),
             s.GuardianMobile = COALESCE(sa.GuardianMobile, s.GuardianMobile),
             s.ParentGuardianEmail = COALESCE(sa.ParentGuardianEmail, s.ParentGuardianEmail),
@@ -1096,7 +1451,7 @@ BEGIN
         UPDATE `Users` u
         JOIN `StudentAdmissions` sa ON sa.AdmissionId = p_AdmissionId
         SET 
-            u.FullName = CONCAT(TRIM(sa.FirstName), ' ', COALESCE(TRIM(sa.LastName), '')),
+            u.FullName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
             u.Email = COALESCE(NULLIF(sa.StudentEmail, ''), u.Email),
             u.PhoneNumber = COALESCE(NULLIF(sa.StudentMobileNumber, ''), u.PhoneNumber),
             u.UpdatedAt = CURRENT_TIMESTAMP(6)

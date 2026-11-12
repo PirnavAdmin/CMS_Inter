@@ -281,6 +281,8 @@ export default function LOPConfigurationPage() {
           enablePdfExport
           enableTablePrint={false}
           onView={undefined}
+          onAdd={() => setModal({ record: null })}
+          onEdit={edit}
           onEdit={edit}
           onDelete={async (r) => {
             if (window.confirm(`Remove the LOP entry for ${r.name} (${r.month})?`))

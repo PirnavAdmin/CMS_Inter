@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   getCollegeCodeSeriesSettings,
   formatCollegeCode,
@@ -486,7 +487,7 @@ export default function RegisterCollegePage() {
       {/* ── Page Header ── */}
       <div className="rcf-page-header">
         <div className="rcf-page-header-icon">
-          <Building2 size={28} />
+          <ThreeDIcon name="campus-configuration" size={40} />
         </div>
         <div>
           <h1>Register New College</h1>

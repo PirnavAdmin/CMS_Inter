@@ -46,12 +46,12 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                         commandType: CommandType.StoredProcedure,
                         cancellationToken: ct));
 
-                return result ?? new LopPolicyDto();
+                return result ?? throw new InvalidOperationException("LOP policy configuration is missing in database.");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute sp_LopPolicy_Get");
-                return new LopPolicyDto();
+                throw;
             }
         }
 
@@ -70,6 +70,10 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 parameters.Add("p_Basis", request.Basis ?? "calendar");
                 parameters.Add("p_EffectiveFrom", request.EffectiveFrom ?? DateTime.UtcNow.ToString("yyyy-MM"));
                 parameters.Add("p_UpdatedByUserId", updatedByUserId);
+                parameters.Add("p_MissedCheckoutLopEnabled", request.MissedCheckoutLopEnabled ? 1 : 0);
+                parameters.Add("p_AllowedMissedCheckouts", request.AllowedMissedCheckouts);
+                parameters.Add("p_MissedCheckoutsPerPenalty", Math.Max(1, request.MissedCheckoutsPerPenalty));
+                parameters.Add("p_MissedCheckoutPenaltyDays", request.MissedCheckoutPenaltyDays);
 
                 var saved = await conn.QueryFirstOrDefaultAsync<LopPolicyDto>(
                     new CommandDefinition(
@@ -78,17 +82,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                         commandType: CommandType.StoredProcedure,
                         cancellationToken: ct));
 
-                return saved ?? new LopPolicyDto
-                {
-                    Enabled = request.Enabled,
-                    ShiftStart = request.ShiftStart,
-                    GraceMinutes = request.GraceMinutes,
-                    AllowedLateLogins = request.AllowedLateLogins,
-                    LateLoginsPerPenalty = request.LateLoginsPerPenalty,
-                    PenaltyDays = request.PenaltyDays,
-                    Basis = request.Basis,
-                    EffectiveFrom = request.EffectiveFrom
-                };
+                return saved ?? throw new InvalidOperationException("Failed to retrieve saved LOP policy from database.");
             }
             catch (Exception ex)
             {
@@ -118,7 +112,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute sp_LopStaffRecords_GetAll");
-                return Enumerable.Empty<LopStaffRecordDto>();
+                throw;
             }
         }
 
@@ -137,7 +131,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute sp_LopStaffRecord_GetById: {Id}", id);
-                return null;
+                throw;
             }
         }
 
@@ -161,7 +155,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute sp_LopStaffRecords_GetKpis");
-                return new LopKpisDto();
+                throw;
             }
         }
 
@@ -231,6 +225,121 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             return rowsAffected > 0;
         }
 
+        public async Task<Dictionary<int, (int LateCount, int MissedCheckoutCount, int AbsentCount)>> GetMonthlyAttendanceCountsAsync(
+            string targetMonth,
+            string shiftStart,
+            int graceMinutes,
+            CancellationToken ct = default)
+        {
+            var result = new Dictionary<int, (int LateCount, int MissedCheckoutCount, int AbsentCount)>();
+            if (!DateTime.TryParseExact($"{targetMonth}-01", "yyyy-MM-dd", null, System.Globalization.DateTimeStyles.None, out var monthStart))
+            {
+                monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            }
+            var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+            var today = DateTime.Today;
+            var nowTime = DateTime.Now.TimeOfDay;
+
+            var thresholdTime = TimeSpan.TryParse(shiftStart, out var parsedStart)
+                ? parsedStart.Add(TimeSpan.FromMinutes(Math.Clamp(graceMinutes, 0, 120)))
+                : new TimeSpan(9, 10, 0);
+
+            const string sql = @"
+SELECT
+    sa.FacultyId,
+    DATE(sas.AttendanceDate) AS AttDate,
+    sa.Status,
+    sa.InTime,
+    sa.OutTime,
+    COALESCE(sa.IsMissedCheckoutResolved, 0) AS IsMissedCheckoutResolved,
+    COALESCE(tc.WorkEndTime, IF(LOWER(COALESCE(st.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')) AS WorkEndTime,
+    COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+FROM `StaffAttendances` sa
+INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+INNER JOIN `Staff` st ON st.Id = sa.FacultyId AND st.IsDeleted = 0
+LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
+    SELECT tc2.Id FROM `AttendanceTimingConfigs` tc2
+    WHERE tc2.IsActive = 1
+      AND (tc2.StaffType IS NULL OR tc2.StaffType = IF(LOWER(COALESCE(st.StaffType, 'Teaching')) LIKE '%non%', 2, 1))
+      AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = st.DepartmentId)
+    ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
+    LIMIT 1
+)
+WHERE sa.IsActive = 1
+  AND sas.IsActive = 1
+  AND DATE(sas.AttendanceDate) >= @MonthStart
+  AND DATE(sas.AttendanceDate) <= @MonthEnd;
+
+SELECT
+    COALESCE(StaffId, FacultyId) AS StaffId,
+    DATE(AttendanceDate) AS AttDate,
+    COALESCE(RequestType, 'Late Attendance') AS RequestType,
+    Status
+FROM `StaffAttendanceRegularizations`
+WHERE DATE(AttendanceDate) >= @MonthStart
+  AND DATE(AttendanceDate) <= @MonthEnd
+  AND LOWER(Status) = 'approved';";
+
+            var conn = await GetOpenConnectionAsync(ct);
+            using var multi = await conn.QueryMultipleAsync(
+                new CommandDefinition(
+                    sql,
+                    new { MonthStart = monthStart.Date, MonthEnd = monthEnd.Date },
+                    cancellationToken: ct));
+
+            var rows = (await multi.ReadAsync<dynamic>()).ToList();
+            var approvedRegs = (await multi.ReadAsync<dynamic>()).ToList();
+
+            var approvedLateSet = new HashSet<(int, DateTime)>();
+            var approvedMissedSet = new HashSet<(int, DateTime)>();
+            foreach (var r in approvedRegs)
+            {
+                int sId = Convert.ToInt32(r.StaffId ?? 0);
+                if (sId <= 0) continue;
+                DateTime dt = Convert.ToDateTime(r.AttDate).Date;
+                string reqType = ((string?)r.RequestType ?? "").ToLowerInvariant();
+                if (reqType.Contains("missed")) approvedMissedSet.Add((sId, dt));
+                else approvedLateSet.Add((sId, dt));
+            }
+
+            foreach (var row in rows)
+            {
+                int facultyId = Convert.ToInt32(row.FacultyId);
+                DateTime attDate = Convert.ToDateTime(row.AttDate).Date;
+                byte status = Convert.ToByte(row.Status);
+                TimeSpan? inTime = row.InTime == null ? null : (row.InTime is TimeSpan it ? it : TimeSpan.TryParse(row.InTime.ToString(), out TimeSpan itp) ? itp : (TimeSpan?)null);
+                TimeSpan? outTime = row.OutTime == null ? null : (row.OutTime is TimeSpan ot ? ot : TimeSpan.TryParse(row.OutTime.ToString(), out TimeSpan otp) ? otp : (TimeSpan?)null);
+                bool resolvedFlag = Convert.ToInt32(row.IsMissedCheckoutResolved ?? 0) == 1 || approvedMissedSet.Contains((facultyId, attDate));
+
+                TimeSpan workEnd = row.WorkEndTime is TimeSpan we ? we : (TimeSpan.TryParse(row.WorkEndTime?.ToString(), out TimeSpan wep) ? wep : new TimeSpan(15, 20, 0));
+                int checkoutGrace = Convert.ToInt32(row.GracePeriodMinutes ?? 15);
+                var checkoutCutoff = workEnd.Add(TimeSpan.FromMinutes(checkoutGrace));
+
+                if (!result.TryGetValue(facultyId, out var counts))
+                {
+                    counts = (0, 0, 0);
+                }
+
+                if (status == 2)
+                {
+                    counts.AbsentCount++;
+                }
+                else
+                {
+                    bool isLate = (status == 3 || (inTime.HasValue && inTime.Value > thresholdTime)) && !approvedLateSet.Contains((facultyId, attDate));
+                    if (isLate) counts.LateCount++;
+
+                    bool cutoffPassed = attDate < today || (attDate == today && nowTime > checkoutCutoff);
+                    bool isMissedCheckout = inTime.HasValue && !outTime.HasValue && !resolvedFlag && cutoffPassed && status != 2 && status != 5 && status != 6;
+                    if (isMissedCheckout) counts.MissedCheckoutCount++;
+                }
+
+                result[facultyId] = counts;
+            }
+
+            return result;
+        }
+
         public async Task<IEnumerable<LopStaffDropdownDto>> GetStaffListForLopAsync(CancellationToken ct = default)
         {
             try
@@ -247,7 +356,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to execute sp_LopStaffList_Get");
-                return Enumerable.Empty<LopStaffDropdownDto>();
+                throw;
             }
         }
     }

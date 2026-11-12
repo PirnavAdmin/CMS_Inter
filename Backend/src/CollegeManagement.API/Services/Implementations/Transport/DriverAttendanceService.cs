@@ -74,10 +74,10 @@ namespace CollegeManagement.API.Services.Implementations.Transport
 
             return summary ?? new DriverAttendanceSummaryResponse
             {
-                WorkingDays = Math.Max(1, (int)(toDate - fromDate).TotalDays + 1),
-                PresentDays = 1,
+                WorkingDays = 0,
+                PresentDays = 0,
                 ApprovedLeaves = 0,
-                PunctualityRate = 100.0m
+                PunctualityRate = 0.0m
             };
         }
 
