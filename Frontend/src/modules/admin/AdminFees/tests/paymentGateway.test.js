@@ -515,6 +515,7 @@ await describe("Admin payment gateway", async () => {
       Copy: "Copy",
       CreditCard: "CreditCard",
       QrCode: "QrCode",
+      Upload: "Upload",
       ChevronDown: "ChevronDown",
       PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"],
       useState: (initial) => {
@@ -628,6 +629,26 @@ await describe("Admin payment gateway", async () => {
     form.props.onSubmit({ preventDefault() {} }); assert.equal(state.submissions.length, 1);
     assert.equal(state.submissions[0].feeInstallmentIds, undefined);
     view.unmount(); assert.equal(state.footer, null);
+  });
+  test("unsupported payment proof stays unavailable and never blocks or alters UTR submission", async () => {
+    const { view, state, fill } = await qrVerificationFixture();
+    state.footer.onDone();
+    const tree = view.render();
+    const proof = tree.find(node => node.props.id === "qr-verification-proof");
+    assert.equal(proof.props.type, "file");
+    assert.equal(proof.props.disabled, true);
+    assert.notEqual(proof.props.required, true);
+    const help = tree.find(node => node.props.id === "qr-verification-proof-help");
+    assert.match(help.props.children.join(""), /no screenshot will be sent or saved/);
+    assert.ok(tree.indexOf(proof) > tree.findIndex(node => node.props.id === "qr-verification-amountPaid"));
+    assert.ok(tree.indexOf(proof) < tree.findIndex(node => node.props.id === "qr-verification-remarks"));
+    fill("utrNumber", utrDraft.utrNumber); fill("bankName", utrDraft.bankName);
+    view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    await flush();
+    assert.equal(state.pending, 1);
+    assert.equal(state.submissions.length, 1);
+    assert.deepEqual(Object.keys(state.submissions[0]).sort(), ["studentId", "studentFeeId", "amount", "utrNumber", "bankName", "paymentDate", "remarks"].sort());
+    view.unmount();
   });
   test("Direct QR validation is inline and does not post mismatched amounts or missing bank details", async () => {
     const { view, state, fill } = await qrVerificationFixture();

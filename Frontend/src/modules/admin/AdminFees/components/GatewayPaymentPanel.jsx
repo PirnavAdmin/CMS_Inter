@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle, Copy, CreditCard, QrCode } from "lucide-react";
+import { CheckCircle, Copy, CreditCard, QrCode, Upload } from "lucide-react";
 import { feePaymentGatewayApi, getPaymentGatewayConfigApi, loadRazorpayCheckout } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { formatCurrency, todayISO, COLLEGE_NAME } from "@/data/feeManagementData.js";
@@ -512,7 +512,6 @@ export default function GatewayPaymentPanel({
                 ["utrNumber", "UTR / UPI Transaction Reference Number", "text", 50],
                 ["bankName", "Bank Name / Payment App", "text", 200],
                 ["paymentDate", "Payment Date", "date"], ["amountPaid", "Amount Paid", "number"],
-                ["remarks", "Remarks", "text", 500],
               ].map(([key, label, type, maxLength]) => <div className={`cms-field${key === "remarks" ? " full" : ""}`} key={key}>
                 <label htmlFor={`qr-verification-${key}`}>{label}{key !== "remarks" ? <span className="req" aria-hidden="true">*</span> : null}</label>
                 <input id={`qr-verification-${key}`} type={type} required={key !== "remarks"} maxLength={maxLength}
@@ -523,6 +522,29 @@ export default function GatewayPaymentPanel({
                   onChange={event => { setVerificationDraft(current => ({ ...current, [key]: event.target.value })); setVerificationErrors(current => ({ ...current, [key]: "" })); }} />
                 {verificationErrors[key] ? <span id={`qr-verification-${key}-error`} className="cms-error" role="alert">{verificationErrors[key]}</span> : null}
               </div>)}
+              {/* No payment-proof storage or authenticated retrieval contract exists yet.
+                  Keep this unavailable instead of accepting a file that cannot be submitted. */}
+              <div className="cms-field full">
+                <label htmlFor="qr-verification-proof">Payment Screenshot / Transaction Proof</label>
+                <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="qr-verification-proof-help">
+                  <Upload size={16} aria-hidden="true" /> Choose Payment Screenshot
+                </button>
+                <input id="qr-verification-proof" type="file" disabled hidden
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                  aria-describedby="qr-verification-proof-help" />
+                <p id="qr-verification-proof-help" className="cms-fee-note">
+                  Payment proof uploads are currently unavailable. You can submit the UTR details without an attachment; no screenshot will be sent or saved.
+                  {" "}Requested formats: JPG, JPEG, PNG or PDF, up to 5 MB.
+                </p>
+              </div>
+              <div className="cms-field full">
+                <label htmlFor="qr-verification-remarks">Remarks</label>
+                <input id="qr-verification-remarks" type="text" maxLength={500} value={verificationDraft.remarks}
+                  aria-invalid={Boolean(verificationErrors.remarks)}
+                  aria-describedby={verificationErrors.remarks ? "qr-verification-remarks-error" : undefined}
+                  onChange={event => { setVerificationDraft(current => ({ ...current, remarks: event.target.value })); setVerificationErrors(current => ({ ...current, remarks: "" })); }} />
+                {verificationErrors.remarks ? <span id="qr-verification-remarks-error" className="cms-error" role="alert">{verificationErrors.remarks}</span> : null}
+              </div>
             </div>
           </fieldset>
           {verificationErrors.order ? <p className="cms-error" role="alert">{verificationErrors.order}</p> : null}
