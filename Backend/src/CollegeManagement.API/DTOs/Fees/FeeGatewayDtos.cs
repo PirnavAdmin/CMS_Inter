@@ -35,6 +35,7 @@ public class CreateGatewayOrderResponse
     public string? PayeeName { get; set; }
     public string? PaymentLink { get; set; }
     public string? KeyId { get; set; }
+    public bool IsTestMode { get; set; }
     public string? ErrorMessage { get; set; }
 }
 
@@ -61,6 +62,19 @@ public class GatewayStatusResponse
     public int? FeePaymentId { get; set; }
     public string? TransactionId { get; set; }
     public string? FailureReason { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = string.Empty;
+    public decimal? SettledAmount { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? TransactionReference { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public int? ReceiptId { get; set; }
+    public bool ReceiptAvailable { get; set; }
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public DateTime? EmailSentAt { get; set; }
+    public string? EmailFailureReason { get; set; }
+    public bool IsTestMode { get; set; }
 }
 
 // ========================= SUBMIT UTR (OFFLINE / DIRECT VPA) =========================
@@ -75,6 +89,62 @@ public class SubmitUtrRequest
     [MaxLength(200)] public string? BankName { get; set; }
     public DateTime? PaymentDate { get; set; }
     [MaxLength(500)] public string? Remarks { get; set; }
+    [MaxLength(128)] public string? IdempotencyKey { get; set; }
+}
+
+public class PaymentProofAttachmentDto
+{
+    public int AttachmentId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public string Sha256Hash { get; set; } = string.Empty;
+    public DateTime UploadedAtUtc { get; set; }
+    public string ViewUrl { get; set; } = string.Empty;
+    public string DownloadUrl { get; set; } = string.Empty;
+}
+
+public class SubmitUtrResponse
+{
+    public bool Success { get; set; }
+    public int TransactionId { get; set; }
+    public string OrderId { get; set; } = string.Empty;
+    public int StudentId { get; set; }
+    public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string Status { get; set; } = "PendingVerification";
+    public decimal Amount { get; set; }
+    public string UtrNumber { get; set; } = string.Empty;
+    public string? BankName { get; set; }
+    public DateTime PaymentDate { get; set; }
+    public DateTime SubmittedAtUtc { get; set; }
+    public string Message { get; set; } = "UTR submitted for verification.";
+    public PaymentProofAttachmentDto? Attachment { get; set; }
+}
+
+public class PaymentProofSubmissionResult
+{
+    public bool Success { get; set; }
+    public int HttpStatusCode { get; set; } = 200;
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public Dictionary<string, string[]>? Errors { get; set; }
+    public SubmitUtrResponse? Data { get; set; }
+}
+
+public class PaymentProofDownloadResult
+{
+    public bool Success { get; set; }
+    public int HttpStatusCode { get; set; } = 200;
+    public string? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int AttachmentId { get; set; }
+    public int TransactionId { get; set; }
+    public int? CampusId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public string StorageRelativePath { get; set; } = string.Empty;
 }
 
 // ========================= APPROVE / REJECT UTR =========================
@@ -96,6 +166,10 @@ public class ReversePaymentRequest
 public class PendingUtrResponse
 {
     public int Id { get; set; }
+    public string OrderId { get; set; } = string.Empty;
+    public int StudentId { get; set; }
+    public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNo { get; set; } = string.Empty;
     public string Group { get; set; } = string.Empty;
@@ -103,8 +177,20 @@ public class PendingUtrResponse
     public decimal Amount { get; set; }
     public string UtrNumber { get; set; } = string.Empty;
     public string? BankName { get; set; }
+    public DateTime PaymentDate { get; set; }
     public DateTime Date { get; set; }
+    public DateTime SubmittedAt { get; set; }
     public string Status { get; set; } = "PendingVerification";
+    public string? Remarks { get; set; }
+
+    // Payment proof attachment metadata (null when submitted without an attachment)
+    public int? AttachmentId { get; set; }
+    public string? AttachmentFileName { get; set; }
+    public string? AttachmentContentType { get; set; }
+    public long? AttachmentSizeBytes { get; set; }
+    public DateTime? AttachmentUploadedAt { get; set; }
+    public string? AttachmentViewUrl { get; set; }
+    public string? AttachmentDownloadUrl { get; set; }
 }
 
 // ========================= SETTLEMENT RESULT (INTERNAL) =========================
@@ -116,6 +202,16 @@ public class SettlementResult
     public string? ReceiptNumber { get; set; }
     public int? FeePaymentId { get; set; }
     public decimal Amount { get; set; }
+    public int? ReceiptId { get; set; }
+    public bool ReceiptAvailable { get; set; }
+    public decimal OutstandingBalance { get; set; }
+    public DateTime? PaymentDate { get; set; }
+    public string PaymentStatus { get; set; } = "Settled";
+    public string VerificationStatus { get; set; } = "Verified";
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public DateTime? EmailSentAt { get; set; }
+    public string? EmailFailureReason { get; set; }
     public string? ErrorMessage { get; set; }
 }
 
@@ -338,4 +434,143 @@ public class UpdatePaymentGatewayConfigRequest : IValidatableObject
         return trimmed.Contains("your_", StringComparison.OrdinalIgnoreCase) ||
                trimmed.Equals("placeholder", StringComparison.OrdinalIgnoreCase);
     }
+}
+
+// ========================= NOTIFICATION & EMAIL STATUS CONTRACT =========================
+public class PaymentNotificationStatusResponse
+{
+    public int FeePaymentId { get; set; }
+    public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = string.Empty;
+    public decimal SettledAmount { get; set; }
+    public string PaymentMethod { get; set; } = string.Empty;
+    public string? TransactionReference { get; set; }
+    public DateTime PaymentDate { get; set; }
+    public decimal OutstandingBalance { get; set; }
+    public int? ReceiptId { get; set; }
+    public string? ReceiptNumber { get; set; }
+    public bool ReceiptAvailable { get; set; }
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public DateTime? EmailSentAt { get; set; }
+    public string? EmailFailureReason { get; set; }
+    public List<PaymentEmailOutboxItemDto> Recipients { get; set; } = new();
+}
+
+public class PaymentEmailOutboxItemDto
+{
+    public int Id { get; set; }
+    public string NotificationType { get; set; } = string.Empty;
+    public string RecipientType { get; set; } = string.Empty;
+    public string MaskedRecipient { get; set; } = string.Empty;
+    public string Status { get; set; } = "NOT_REQUESTED";
+    public int AttemptCount { get; set; }
+    public DateTime? SentAtUtc { get; set; }
+    public string? LastError { get; set; }
+}
+
+public class RetryEmailResponse
+{
+    public bool Success { get; set; }
+    public int FeePaymentId { get; set; }
+    public int RequeuedCount { get; set; }
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public string Message { get; set; } = string.Empty;
+}
+
+// ========================= PAYMENT COMMUNICATION TEMPLATES & SETTINGS =========================
+public class PaymentEmailTemplateDto
+{
+    [MaxLength(1000)] public string Subject { get; set; } = string.Empty;
+    [MaxLength(1000)] public string Heading { get; set; } = string.Empty;
+    [MaxLength(10000)] public string Body { get; set; } = string.Empty;
+    [MaxLength(1000)] public string Closing { get; set; } = string.Empty;
+    [MaxLength(1000)] public string Signature { get; set; } = string.Empty;
+}
+
+public class PaymentEmailTemplateSetDto
+{
+    public PaymentEmailTemplateDto Successful { get; set; } = new();
+    public PaymentEmailTemplateDto Pending { get; set; } = new();
+    public PaymentEmailTemplateDto Rejected { get; set; } = new();
+    public PaymentEmailTemplateDto Reminder { get; set; } = new();
+}
+
+public class PaymentReceiptVisibilityDto
+{
+    public bool AcademicYear { get; set; } = true;
+    public bool CampusName { get; set; } = true;
+    public bool PaymentMethod { get; set; } = true;
+    public bool TransactionReference { get; set; } = true;
+    public bool Installments { get; set; } = true;
+    public bool RemainingBalance { get; set; } = true;
+    public bool Contact { get; set; } = true;
+}
+
+public class PaymentReceiptTemplateSettingsDto
+{
+    [MaxLength(200)] public string CollegeName { get; set; } = string.Empty;
+    [MaxLength(200)] public string CampusName { get; set; } = string.Empty;
+    [MaxLength(500)] public string Address { get; set; } = string.Empty;
+    [MaxLength(50)] public string Phone { get; set; } = string.Empty;
+    [MaxLength(254)] public string Email { get; set; } = string.Empty;
+    [MaxLength(300)] public string Website { get; set; } = string.Empty;
+    [MaxLength(150)] public string Title { get; set; } = "FEE PAYMENT RECEIPT";
+    [MaxLength(20)] public string AccentColor { get; set; } = "#6941a5";
+    [MaxLength(500)] public string Footer { get; set; } = string.Empty;
+    [MaxLength(1000)] public string Instructions { get; set; } = string.Empty;
+    [MaxLength(150)] public string SignatureName { get; set; } = string.Empty;
+    [MaxLength(150)] public string SignatureDesignation { get; set; } = string.Empty;
+    [MaxLength(20)] public string Layout { get; set; } = "split";
+    public PaymentReceiptVisibilityDto Visibility { get; set; } = new();
+}
+
+public class PaymentDeliverySettingsDto
+{
+    [MaxLength(150)] public string SenderName { get; set; } = string.Empty;
+    [MaxLength(254)] public string ReplyTo { get; set; } = string.Empty;
+    [MaxLength(20)] public string Recipients { get; set; } = "both";
+    public bool AttachPdf { get; set; } = true;
+    public bool Pending { get; set; } = true;
+    public bool Rejected { get; set; } = true;
+    public bool Reminder { get; set; } = false;
+}
+
+public class PaymentCommunicationSettingsDto
+{
+    public int? CampusId { get; set; }
+    public string Scope { get; set; } = "System Default";
+    public string ActiveSource { get; set; } = "System Default";
+    public PaymentEmailTemplateSetDto Emails { get; set; } = new();
+    public PaymentReceiptTemplateSettingsDto Receipt { get; set; } = new();
+    public PaymentDeliverySettingsDto Delivery { get; set; } = new();
+    public DateTime? UpdatedAt { get; set; }
+}
+
+public class UpdatePaymentCommunicationSettingsRequest
+{
+    public int? CampusId { get; set; }
+    public bool SaveAsCollegeDefault { get; set; }
+    public PaymentEmailTemplateSetDto? Emails { get; set; }
+    public PaymentReceiptTemplateSettingsDto? Receipt { get; set; }
+    public PaymentDeliverySettingsDto? Delivery { get; set; }
+}
+
+public class SendTestPaymentEmailRequest
+{
+    public int? CampusId { get; set; }
+    [Required, EmailAddress, MaxLength(254)] public string TestRecipient { get; set; } = string.Empty;
+    [MaxLength(30)] public string TemplateType { get; set; } = "successful";
+    public PaymentEmailTemplateDto? TemplateOverride { get; set; }
+    public PaymentDeliverySettingsDto? DeliveryOverride { get; set; }
+}
+
+public class SendTestPaymentEmailResponse
+{
+    public bool Success { get; set; }
+    public string Status { get; set; } = "SENT";
+    public string Message { get; set; } = string.Empty;
 }

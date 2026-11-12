@@ -116,8 +116,19 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentException(
                     "Invalid AdmissionId.");
 
-            return await _repository.GetByIdAsync(
+            var admission = await _repository.GetByIdAsync(
                 admissionId);
+
+            if (admission != null && admission.IsApproved && (!admission.StudentId.HasValue || admission.StudentId.Value <= 0))
+            {
+                var student = await _repository.GetStudentByAdmissionIdAsync(admissionId);
+                if (student != null && student.StudentId > 0)
+                {
+                    admission.StudentId = student.StudentId;
+                }
+            }
+
+            return admission;
         }
 
 

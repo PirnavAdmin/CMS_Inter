@@ -31,6 +31,12 @@ import {
   normalizePaymentConfig,
   paymentConfigErrors,
   paymentConfigPayload,
+  PAYMENT_EMAIL_TYPES,
+  PAYMENT_TEMPLATE_TOKENS,
+  newPaymentTemplateDraft,
+  paymentTemplateSample,
+  insertPaymentTemplateText,
+  renderPaymentTemplateSample,
 } from "../services/paymentGatewaySession.js";
 
 await describe("Admin payment gateway", async () => {
@@ -413,8 +419,19 @@ await describe("Admin payment gateway", async () => {
     }
   });
   test("wrapped UTR submission/approval requires explicit backend acknowledgment", async () => {
-    adapter(() => ({ success: true, data: { message: "Submitted" } }));
-    assert.equal((await api.submitUtr({})).success, true);
+    const payload = { studentId: 11, studentFeeId: 41, amount: 100, orderId: "order_fixture", utrNumber: "UTRFIXTURE" };
+    adapter(() => ({ success: true, data: { transactionId: 99, amount: 100, message: "Submitted" } }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
+    for (const result of [{ success: true }, { success: true, amount: 100 },
+      { success: true, transactionId: 99, amount: 101 },
+      { success: true, transactionId: 99, amount: 100, status: "Created" },
+      { success: true, transactionId: 99, amount: 100, studentFeeId: 42 },
+      { success: true, transactionId: 99, amount: 100, orderId: "other_order" }]) {
+      adapter(() => result);
+      await assert.rejects(api.submitUtr(payload), /persistence was not confirmed/);
+    }
+    adapter(() => ({ success: true, transactionId: 99, amount: 100, status: "PendingVerification", ...payload }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
     adapter(() => ({}));
     await assert.rejects(api.approveUtr({}), /not acknowledged/);
     adapter(() => ({ success: false, message: "UTR duplicate" }));
@@ -429,6 +446,9 @@ await describe("Admin payment gateway", async () => {
     const rows = await api.pendingUtrs({ campusId: 2, academicYearId: 3 });
     assert.equal(rows[0].id, 9);
     assert.deepEqual(call.params, { campusId: 2, academicYearId: 3 });
+    assert.equal(call.headers["Cache-Control"], "no-cache");
+    adapter(() => [{ id: 9, amount: 100, status: "PendingVerification" }]);
+    assert.equal((await api.pendingUtrs({ campusId: 2 }))[0].id, 9);
     adapter(() => ({}));
     await assert.rejects(api.pendingUtrs({}), /transaction list/);
   });
@@ -617,10 +637,14 @@ await describe("Admin payment gateway", async () => {
     let pdfReads = 0;
     const revoked = [];
     const payment = { status: "Paid", feePaymentId: 901, studentFeeId: 41, receiptNumber: "R901", amount: 300, emailStatus: "FAILED" };
+    let emailRetries = 0;
     const view = await mount(confirmationSource, "PaymentConfirmation", {
       apiClient: { get: async url => ({ data: url.includes("student-fees") ? { studentFeeId: 41, balanceAmount: 400 } : payment }) },
       apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}`, getAssignment: id => `/student-fees/${id}` } },
-      feePaymentGatewayApi: { receiptPdf: async id => { assert.equal(id, 901); pdfReads++; return {}; } },
+      feePaymentGatewayApi: {
+        receiptPdf: async id => { assert.equal(id, 901); pdfReads++; return {}; },
+        retryEmail: async id => { assert.equal(id, 901); emailRetries++; return { feePaymentId: 901, emailStatus: "QUEUED" }; },
+      },
       URL: { createObjectURL: () => "blob:private-receipt", revokeObjectURL: url => revoked.push(url) },
     }, { payment, onClose() {} });
     view.render(); await flush(); let tree = view.render(); await flush(); tree = view.render();
@@ -630,6 +654,11 @@ await describe("Admin payment gateway", async () => {
     const download = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "a" && node.props.download);
     assert.equal(download.props.href, "blob:private-receipt");
     assert.equal(pdfReads, 1);
+    const retryBtn = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Retry Email"));
+    assert.ok(retryBtn);
+    await retryBtn.props.onClick(); await flush(); tree = view.render();
+    assert.equal(emailRetries, 1);
+    assert.ok(tree.some(node => node.props.children.includes("Email Queued")));
     view.unmount(); assert.deepEqual(revoked, ["blob:private-receipt"]);
   });
   test("pending requests never retrieve paid receipts; receipt failure never reverses confirmed payment", async () => {
@@ -733,7 +762,7 @@ await describe("Admin payment gateway", async () => {
     const state = { orders: 0, submissions: [], uploadOptions: [], pending: 0, events: [], footer: null, polled: null };
     const props = { mode: "UPI_QR", campusId: 2, account, target: "schedules", selectedIds: [101], amount: 300,
       onSaved: () => assert.fail("UTR submission must not settle or generate a receipt"),
-      onPending: () => { state.pending++; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
+      onPending: result => { state.pending++; state.savedRequest = result; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
     const view = await mount(gatewaySource, "GatewayPaymentPanel", {
       Event,
       window: { setTimeout, clearTimeout, dispatchEvent: event => state.events.push(event.type) },
@@ -772,8 +801,9 @@ await describe("Admin payment gateway", async () => {
     assert.equal(state.submissions.length, 1);
     assert.equal(state.footer.showDone, false);
     view.render(); assert.equal(state.footer.busy, true);
-    release({ success: true }); await flush(); tree = view.render();
+    release({ success: true, transactionId: 99, amount: 300, status: "PendingVerification" }); await flush(); tree = view.render();
     assert.equal(state.orders, 1); assert.equal(state.pending, 1);
+    assert.equal(state.savedRequest.transactionId, 99);
     assert.equal(account.balance, 700);
     assert.ok(state.events.includes(UTR_SUBMITTED_EVENT));
     assert.ok(buttonNamed(tree, "Pending Verification").props.disabled);
@@ -871,6 +901,125 @@ await describe("Admin payment gateway", async () => {
     Building2: "Building2", Clock: "Clock", Eye: "Eye", EyeOff: "EyeOff", RefreshCw: "RefreshCw", Save: "Save", ConfirmDialog: "ConfirmDialog",
   };
   const configFixture = () => normalizePaymentConfig({ ...paymentSettings, enableRazorpay: false, hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false }, 2);
+  const templateSource = await readFile(new URL("../../AdminSettings/PaymentTemplatesEditor.jsx", import.meta.url), "utf8");
+  const templateBindings = {
+    PAYMENT_EMAIL_TYPES, PAYMENT_TEMPLATE_TOKENS, newPaymentTemplateDraft, paymentTemplateSample,
+    insertPaymentTemplateText, renderPaymentTemplateSample, ConfirmDialog: "ConfirmDialog",
+    getApiErrorMessage: e => e?.message || "error",
+    getCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    updateCommunicationSettingsApi: async payload => ({ ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }),
+    restoreCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    sendTestCommunicationEmailApi: async () => ({ success: true, status: "SENT", message: "Test email sent." }),
+  };
+  const templateProps = () => ({ campusId: 2, campusName: "Sample Campus A", editable: true, drafts: new Map() });
+  const inputById = (view, id) => view.render().find(node => node.props.id === id);
+  const templateSection = (view, name) => inputById(view, `template-section-${name}`).props.onClick();
+  test("template tab is added without replacing any existing gateway settings panels", async () => {
+    const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings, PaymentTemplatesEditor: "PaymentTemplatesEditor",
+      getPaymentGatewayConfigApi: async () => configFixture() }, { campusId: 2, campusName: "Fixture", editable: true, templatesEditable: false });
+    view.render(); await flush();
+    for (const name of ["bank", "upi", "razorpay", "advanced"]) assert.ok(inputById(view, `payment-tab-${name}`));
+    inputById(view, "payment-tab-templates").props.onClick(); let tree = view.render();
+    assert.equal(tree.find(node => node.type === "PaymentTemplatesEditor").props.editable, false);
+    assert.equal(tree.some(node => node.type === "form"), false);
+    inputById(view, "payment-tab-bank").props.onClick(); tree = view.render();
+    assert.equal(inputById(view, "payment-config-bankName").props.value, "Fixture Bank");
+    view.unmount();
+  });
+  test("email types have independent edits and token insertion replaces the cursor selection", async () => {
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
+    inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello NAME!", selectionStart: 6, selectionEnd: 10 } });
+    let restoredCursor;
+    inputById(view, "payment-email-subject").props.ref({ focus() {}, setSelectionRange: (start, end) => { restoredCursor = [start, end]; } });
+    view.render().find(node => node.type === "button" && node.props.title === "Student name").props.onClick();
+    assert.equal(inputById(view, "payment-email-subject").props.value, "Hello {{studentName}}!");
+    assert.deepEqual(restoredCursor, [21, 21]);
+    inputById(view, "payment-email-type").props.onChange({ target: { value: "pending" } });
+    assert.match(inputById(view, "payment-email-subject").props.value, /Pending Verification/);
+    inputById(view, "payment-email-body").props.onChange({ target: { value: "Pending edit", selectionStart: 0, selectionEnd: 7 } });
+    buttonNamed(view.render(), "Bold").props.onClick();
+    assert.equal(inputById(view, "payment-email-body").props.value, "**Pending** edit");
+    inputById(view, "payment-email-type").props.onChange({ target: { value: "successful" } });
+    assert.equal(inputById(view, "payment-email-subject").props.value, "Hello {{studentName}}!");
+    assert.equal(props.drafts.get(2).emails.pending.body, "**Pending** edit");
+    assert.equal(buttonNamed(view.render(), "Publish Email Templates").props.disabled, false);
+    view.unmount();
+  });
+  test("sample previews update safely, receipt financial fields cannot be edited, and visibility follows edits", async () => {
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, templateProps()); view.render(); await flush();
+    inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello {{studentName}} <script>sample</script>", selectionStart: 0, selectionEnd: 0 } });
+    buttonNamed(view.render(), "Live Preview").props.onClick();
+    assert.ok(view.render().some(node => node.props.children.includes("Hello Sample Student <script>sample</script>")));
+    assert.equal(view.render().some(node => node.props.dangerouslySetInnerHTML || node.type === "script"), false);
+    inputById(view, "payment-email-heading").props.onChange({ target: { value: "Edited preview", selectionStart: 0, selectionEnd: 0 } });
+    assert.ok(view.render().some(node => node.type === "h3" && node.props.children.includes("Edited preview")));
+    templateSection(view, "receipt");
+    inputById(view, "payment-receipt-title").props.onChange({ target: { value: "Sample Custom Receipt" } });
+    inputById(view, "payment-receipt-accentColor").props.onChange({ target: { value: "#123456" } });
+    const balanceToggle = view.render().find(node => node.type === "label" && node.props.children.includes("Remaining balance"));
+    nodes(balanceToggle).find(node => node.type === "input").props.onChange({ target: { checked: false } });
+    buttonNamed(view.render(), "Live Preview").props.onClick(); const tree = view.render();
+    assert.ok(tree.some(node => node.type === "h4" && node.props.children.includes("Sample Custom Receipt")));
+    assert.equal(tree.find(node => node.props["aria-label"] === "Sample receipt preview").props.style["--receipt-accent"], "#123456");
+    assert.equal(tree.some(node => node.type === "dt" && node.props.children.includes("Remaining Balance")), false);
+    assert.ok(tree.some(node => node.type === "dt" && node.props.children.includes("Amount Paid")));
+    assert.equal(tree.some(node => ["amountPaid", "studentName", "receiptNumber", "transactionReference"].some(key => node.props.id === `payment-receipt-${key}`)), false);
+    assert.equal(buttonNamed(tree, "Save Receipt Settings").props.disabled, false);
+    view.unmount();
+  });
+  test("campus drafts survive remount without leaking to other campuses; restore requires confirmation", async () => {
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
+    inputById(view, "payment-email-heading").props.onChange({ target: { value: "Campus A draft", selectionStart: 0, selectionEnd: 0 } });
+    view.unmount();
+    const other = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, { ...props, campusId: 3, campusName: "Sample Campus B" }); other.render(); await flush();
+    assert.notEqual(inputById(other, "payment-email-heading").props.value, "Campus A draft"); other.unmount();
+    const back = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    buttonNamed(back.render(), "Restore Default").props.onClick();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    back.render().find(node => node.type === "ConfirmDialog").props.onCancel();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    buttonNamed(back.render(), "Restore Default").props.onClick();
+    await back.render().find(node => node.type === "ConfirmDialog").props.onConfirm();
+    await flush();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Payment Successful"); back.unmount();
+  });
+  test("delivery preferences call backend for editable admins and readonly users cannot mutate or publish any template", async () => {
+    let savedPayload = null;
+    let testEmailPayload = null;
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", {
+      ...templateBindings,
+      updateCommunicationSettingsApi: async payload => { savedPayload = payload; return { ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }; },
+      sendTestCommunicationEmailApi: async payload => { testEmailPayload = payload; return { success: true, status: "SENT", message: "Test email sent." }; },
+    }, props);
+    view.render(); await flush();
+    await buttonNamed(view.render(), "Publish Email Templates").props.onClick(); await flush();
+    assert.equal(savedPayload.campusId, 2);
+    templateSection(view, "delivery");
+    inputById(view, "payment-delivery-replyTo").props.onChange({ target: { value: "accounts@example.test" } });
+    inputById(view, "payment-delivery-testRecipient").props.onChange({ target: { value: "qa@example.test" } });
+    assert.equal(props.drafts.get(2).delivery.replyTo, "accounts@example.test");
+    for (const label of ["Save Delivery Settings", "Send Test Email"]) assert.equal(buttonNamed(view.render(), label).props.disabled, false);
+    await buttonNamed(view.render(), "Send Test Email").props.onClick(); await flush();
+    assert.equal(testEmailPayload.campusId, 2);
+    assert.equal(testEmailPayload.testRecipient, "qa@example.test");
+    view.unmount();
+    const deniedProps = { ...templateProps(), editable: false };
+    const denied = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, deniedProps); denied.render(); await flush();
+    const original = inputById(denied, "payment-email-subject").props.value;
+    inputById(denied, "payment-email-subject").props.onChange({ target: { value: "Unauthorized", selectionStart: 0, selectionEnd: 0 } });
+    assert.equal(inputById(denied, "payment-email-subject").props.value, original);
+    assert.equal(deniedProps.drafts.size, 0);
+    assert.equal(denied.render().find(node => node.type === "fieldset").props.disabled, true);
+    assert.equal(buttonNamed(denied.render(), "Restore Default").props.disabled, true);
+    assert.equal(buttonNamed(denied.render(), "Live Preview").props.disabled, undefined);
+    denied.unmount();
+    assert.equal(renderPaymentTemplateSample("{{studentName}} {{unknown}} {{toString}}", paymentTemplateSample("Fixture")), "Sample Student {{unknown}} {{toString}}");
+    assert.deepEqual(insertPaymentTemplateText("abcd", "XY", 1, 3), { value: "aXYd", cursor: 3 });
+  });
   test("saved bank card masks details and selection never activates, adds or overwrites an account", async () => {
     let writes = 0;
     const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings,
@@ -1345,6 +1494,28 @@ await describe("Admin payment gateway", async () => {
     const routes = await readFile(new URL("../../../../routes/AppRoutes.jsx", import.meta.url), "utf8");
     assert.ok(routes.includes('path="/dashboard/settings"'));
     admin.unmount();
+  });
+  test("only admin editors can author templates; page exit warnings protect all retained campus drafts", async () => {
+    const listeners = new Map(), documentListeners = new Map();
+    const permissions = { loading: false, error: "", isSuperOrAdmin: true, canView: () => true, canDo: () => true };
+    const base = { ...configBindings, useEffectivePermissions: () => permissions,
+      useCampusContext: () => ({ selectedCampusId: "2", selectedCampus: { campusId: 2, name: "Fixture" } }),
+      getAuthItem: () => "Admin", getAuthUser: () => ({ role: "Admin", campusId: 2 }), hasRole: () => false,
+      window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name), location: { href: "https://cms.example.test/dashboard/settings/payment-gateway" }, confirm: () => false },
+      document: { addEventListener: (name, fn) => documentListeners.set(name, fn), removeEventListener: name => documentListeners.delete(name) } };
+    const view = await mount(configSource, "PaymentGatewayConfigPage", base, { embedded: true });
+    const campus = view.render().find(node => typeof node.type === "function" && node.type.name === "CampusPaymentConfig");
+    assert.equal(campus.props.templatesEditable, true);
+    let warned = false, prevented = false, stopped = false;
+    listeners.get("beforeunload")({ preventDefault: () => { warned = true; } }); assert.equal(warned, false);
+    campus.props.templateDrafts.set(3, { dirty: true });
+    listeners.get("beforeunload")({ preventDefault: () => { warned = true; } }); assert.equal(warned, true);
+    documentListeners.get("click")({ target: { closest: () => ({ href: "https://cms.example.test/dashboard", hasAttribute: () => false }) }, preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; } });
+    assert.equal(prevented, true); assert.equal(stopped, true);
+    permissions.isSuperOrAdmin = false;
+    assert.equal(view.render().find(node => typeof node.type === "function" && node.type.name === "CampusPaymentConfig").props.templatesEditable, false);
+    assert.equal(campus.props.templateDrafts.size, 0);
+    view.unmount(); assert.equal(listeners.size, 0); assert.equal(documentListeners.size, 0);
   });
   test("QR creation is explicit, duplicate clicks create one order, only actual QR is rendered", async () => {
     let calls = 0,
@@ -1980,6 +2151,52 @@ await describe("Admin payment gateway", async () => {
     date: "2026-11-09",
     status: "PendingVerification",
   };
+  test("queue load failures never claim an empty queue and Refresh recovers with saved requests", async () => {
+    let reads = 0;
+    const view = await mount(queueSource, "OfflineUtrQueueTab", {
+      feePaymentGatewayApi: { pendingUtrs: async () => {
+        if (++reads === 1) throw new Error("Fixture API unavailable");
+        return [queueRow];
+      } },
+    }, { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" });
+    const hasEmpty = tree => tree.some(node => node.props.children.includes("No pending UTR transactions."));
+    assert.equal(hasEmpty(view.render()), false);
+    await flush(); let tree = view.render();
+    assert.equal(hasEmpty(tree), false);
+    assert.ok(tree.some(node => node.props.role === "alert"));
+    assert.equal(tree.some(node => node.type === "Pagination"), false);
+    buttonNamed(tree, " Refresh").props.onClick(); view.render(); await flush(); tree = view.render();
+    assert.equal(reads, 2);
+    assert.ok(tree.some(node => node.props.children.includes("UTRFIXTURE")));
+    assert.equal(tree.some(node => node.props.role === "alert"), false);
+    view.unmount();
+  });
+  test("queue preserves five-row pagination, search, scope filters and fresh reads on reopen", async () => {
+    const calls = [];
+    const props = { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" };
+    const bindings = { feePaymentGatewayApi: { pendingUtrs: async scope => {
+      calls.push(scope);
+      return scope.campusId === 2 ? Array.from({ length: 7 }, (_, index) => ({ ...queueRow, id: 90 + index, utrNumber: `FIXTURE-${index}` })) : [];
+    } } };
+    const view = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    view.render(); await flush(); let tree = view.render();
+    const references = tree => tree.filter(node => node.type === "td" && node.props.children.some(value => typeof value === "string" && value.startsWith("FIXTURE-")));
+    assert.equal(references(tree).length, 5);
+    tree.find(node => node.type === "Pagination").props.onPageChange(2);
+    assert.equal(references(view.render()).length, 2);
+    view.render().find(node => node.props["aria-label"] === "Search pending UTRs").props.onChange({ target: { value: "FIXTURE-6" } });
+    assert.equal(references(view.render()).length, 1);
+    props.scope = { campusId: 4, academicYearId: 3 }; view.render(); await flush(); tree = view.render();
+    assert.equal(references(tree).length, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ campusId: 2, academicYearId: 3 }, { campusId: 4, academicYearId: 3 }]);
+    view.unmount();
+    const reopened = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    reopened.render(); await flush(); reopened.render(); assert.equal(calls.length, 3); reopened.unmount();
+    const denied = await mount(queueSource, "OfflineUtrQueueTab", bindings, { ...props, canView: false });
+    denied.render(); await flush(); tree = denied.render(); assert.equal(calls.length, 3);
+    assert.equal(tree.some(node => node.props.children.includes("No pending UTR transactions.")), false);
+    denied.unmount();
+  });
   test("authorized queue proof viewing supports images/PDFs and releases private URLs on scope change", async () => {
     for (const type of ["image/png", "application/pdf"]) {
       const revoked = [], ids = [];

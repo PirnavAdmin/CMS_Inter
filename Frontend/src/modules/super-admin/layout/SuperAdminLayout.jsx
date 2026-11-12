@@ -28,6 +28,7 @@ const navigationIcons = {
 
 export default function SuperAdminLayout() {
   const { session, data, message, clearMessage } = useSuperAdmin();
+  const platformName = String(data?.settings?.platformName || "").trim() || "PIRNAV CMS";
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
   const unreadCount = (data?.notifications || []).filter((n) => n.read !== "Read" && !n.isRead).length;
@@ -69,7 +70,7 @@ export default function SuperAdminLayout() {
   };
   return <div className={`cms-shell sa-shell ${open ? "sa-nav-open" : ""} ${collapsed ? "sa-nav-collapsed" : ""}`} data-dashboard-palette={palette || "olive"}>
     {open ? <button type="button" className="sa-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)}/> : null}
-    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label="Pirnav Super Admin Dashboard"><img src={collegeLogo} alt="Pirnav College"/><small>SUPER ADMIN PORTAL</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
+    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label={`${platformName} Super Admin Dashboard`}><img src={collegeLogo} alt="Pirnav College"/><small title={platformName}>{platformName}</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
     <div className="sa-workspace">
       <header className="sa-topbar">
         <div className="sa-topbar-start">
@@ -78,7 +79,7 @@ export default function SuperAdminLayout() {
           </button>
           <span className="sa-platform-label">
             <ThreeDIcon name="board" size={24}/>
-            <span><small>PLATFORM WORKSPACE</small><strong>All colleges</strong></span>
+            <span><small>PLATFORM WORKSPACE</small><strong title={platformName}>{platformName}</strong></span>
           </span>
         </div>
 

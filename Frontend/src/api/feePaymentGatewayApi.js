@@ -48,6 +48,16 @@ export const feePaymentGatewayApi = {
   },
   createOrder: (payload, signal) => post(apiEndpoints.feeGateway.createOrder, payload, signal),
   verify: (payload, signal) => post(apiEndpoints.feeGateway.verify, payload, signal),
+  paymentStatus: async (feePaymentId, signal) => {
+    const id = Number(feePaymentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid payment ID is required.");
+    return gatewayData((await apiClient.get(apiEndpoints.feeGateway.paymentStatus(id), { ...config, signal })).data);
+  },
+  retryEmail: async (feePaymentId, signal) => {
+    const id = Number(feePaymentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid payment ID is required.");
+    return post(apiEndpoints.feeGateway.retryEmail(id), {}, signal);
+  },
   reverse: async (payload, signal) => {
     const data = await post(apiEndpoints.feeGateway.reverse, reversalPayload(payload), signal);
     if (data.success !== true)
@@ -79,8 +89,16 @@ export const feePaymentGatewayApi = {
         throw new Error("The backend did not confirm that this verification request and its proof were stored together. Check the pending queue before retrying.");
       }
     } else data = await post(apiEndpoints.feeGateway.submitUtr, payload, signal);
-    if (data.success !== true)
-      throw new Error("UTR submission was not acknowledged. Review the queue before retrying.");
+    // The legacy JSON contract confirms persistence with an ID and amount;
+    // newer responses also echo status and account/order details.
+    if (data.success !== true || !Number.isSafeInteger(Number(data.transactionId)) || Number(data.transactionId) <= 0
+      || !Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0
+      || Math.abs(Number(data.amount) - Number(payload.amount)) > 0.005
+      || (data.status != null && String(data.status).toLowerCase() !== "pendingverification")
+      || ["studentId", "studentFeeId"].some(key => data[key] != null && Number(data[key]) !== Number(payload[key]))
+      || (data.orderId != null && payload.orderId && data.orderId !== payload.orderId)
+      || (data.utrNumber != null && data.utrNumber !== payload.utrNumber))
+      throw new Error("UTR persistence was not confirmed with a matching saved request ID and amount. Review the queue before retrying.");
     return data;
   },
   approveUtr: async (payload, signal) => {
@@ -107,7 +125,7 @@ export const feePaymentGatewayApi = {
   },
   pendingUtrs: async (params, signal) => {
     const data = gatewayData(
-      (await apiClient.get(apiEndpoints.feeGateway.pendingUtrs, { ...config, params, signal }))
+      (await apiClient.get(apiEndpoints.feeGateway.pendingUtrs, { ...config, params, signal, headers: { "Cache-Control": "no-cache" } }))
         .data,
     );
     const rows = Array.isArray(data) ? data : data.items || data.results || data.$values;
@@ -205,6 +223,52 @@ export async function updatePaymentGatewayConfigApi(form, signal, section) {
   if (data.success !== true && Number(data.campusId) !== payload.campusId)
     throw new Error("The backend did not acknowledge the configuration update. Refresh before retrying.");
   return data;
+}
+
+export async function getCommunicationSettingsApi(campusId, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.get(apiEndpoints.feeGateway.communicationSettings, {
+    ...config,
+    params: { campusId: id },
+    signal,
+    headers: { "X-Campus-Id": String(id) },
+  });
+  return response.data;
+}
+
+export async function updateCommunicationSettingsApi(payload, signal) {
+  const id = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.put(
+    apiEndpoints.feeGateway.communicationSettings,
+    { ...payload, campusId: id },
+    { ...config, signal, headers: { "X-Campus-Id": String(id) } },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function restoreCommunicationSettingsApi(campusId, restoreCollegeDefault = false, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.restoreCommunicationSettings,
+    null,
+    {
+      ...config,
+      params: { campusId: id, restoreCollegeDefault },
+      signal,
+      headers: { "X-Campus-Id": String(id) },
+    },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function sendTestCommunicationEmailApi(payload, signal) {
+  const id = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.sendTestCommunicationEmail,
+    { ...payload, campusId: id },
+    { ...config, signal, headers: { "X-Campus-Id": String(id) } },
+  );
+  return response.data;
 }
 
 let checkoutPromise;

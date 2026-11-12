@@ -16,7 +16,8 @@ export default function OfflineUtrQueueTab({
   Pagination,
 }) {
   const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(canView));
+  const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
@@ -89,6 +90,7 @@ export default function OfflineUtrQueueTab({
     setPage(1);
     setReview(null);
     setError("");
+    setLoadError("");
     setProcessing(false);
     setLoading(canView);
     if (canView)
@@ -98,7 +100,7 @@ export default function OfflineUtrQueueTab({
           if (!controller.signal.aborted) setItems(rows);
         })
         .catch((failure) => {
-          if (!controller.signal.aborted) setError(getApiErrorMessage(failure));
+          if (!controller.signal.aborted) setLoadError(getApiErrorMessage(failure));
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoading(false);
@@ -201,6 +203,7 @@ export default function OfflineUtrQueueTab({
         </div>
         {!canView && <p className="cms-error">Fee Management view permission is required.</p>}
         {notice ? <p role="status" className="cms-fee-note">{notice}</p> : null}
+        {loadError && <p className="cms-error" role="alert">Unable to load pending UTR requests: {loadError}</p>}
         {error && (
           <p className="cms-error" role="alert">
             {error}
@@ -223,7 +226,7 @@ export default function OfflineUtrQueueTab({
             <tbody>
               {loading
                 ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
-                : rows.slice((page - 1) * 5, page * 5).map((row, index) => (
+                : canView && !loadError ? rows.slice((page - 1) * 5, page * 5).map((row, index) => (
                     <tr key={row.id || index}>
                       <td>
                         <strong>{row.studentName || "-"}</strong>
@@ -267,18 +270,19 @@ export default function OfflineUtrQueueTab({
                         </div>
                       </td>
                     </tr>
-                  ))}
-              {!loading && !rows.length && (
+                  )) : null}
+              {!loading && canView && loadError && <tr><td colSpan={8} className="cms-fee-empty-row">Pending UTR requests could not be loaded. Use Refresh to try again.</td></tr>}
+              {!loading && canView && !loadError && !rows.length && (
                 <tr>
                   <td colSpan={8} className="cms-fee-empty-row">
-                    No pending UTR transactions.
+                    {search.trim() ? "No pending UTR transactions match your search." : "No pending UTR transactions."}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        <Pagination page={page} totalItems={rows.length} onPageChange={setPage} />
+        {canView && !loading && !loadError ? <Pagination page={page} totalItems={rows.length} onPageChange={setPage} /> : null}
       </div>
       {proof && canView && proof.scopeKey === scopeKey ? <Modal title="Payment Proof" onClose={closeProof} footer={<>
         <button type="button" className="cms-btn cms-btn-ghost" onClick={closeProof}>Close</button>
