@@ -35,6 +35,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
         Task<(int RegularizationId, string RequestType, string OriginalStatus, int? CampusId)> SubmitRegularizationWithDetailsAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
         Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId, int? campusId = null, string? requestType = null, string? search = null);
+        Task<RegularizationItemDto?> GetRegularizationByIdAsync(int regularizationId);
         Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId);
 
         // Helper resolution

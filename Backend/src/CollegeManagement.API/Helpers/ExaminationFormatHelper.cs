@@ -12,6 +12,46 @@ namespace CollegeManagement.API.Helpers
 {
     public static class ExaminationFormatHelper
     {
+        public static bool IsObjectivePattern(string? pattern)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) return false;
+            var upper = pattern.Trim().ToUpperInvariant();
+            if (upper.Contains("REGULAR")) return false;
+            return upper.Contains("OBJECTIVE") ||
+                   upper.Contains("JEE") ||
+                   upper.Contains("NEET") ||
+                   upper.Contains("MAINS") ||
+                   upper.Contains("ADVANCE") ||
+                   upper.Contains("EAMCET") ||
+                   upper.Contains("BITSAT") ||
+                   upper.Contains("CUET") ||
+                   upper.Contains("PATTERN");
+        }
+
+        public static bool IsObjectiveConfiguration(
+            string? examPattern,
+            string? examType = null,
+            string? subjectType = null,
+            string? scheduleMode = null,
+            string? scheduleExamMode = null,
+            string? patternName = null)
+        {
+            if (string.Equals(scheduleExamMode?.Trim(), "Objective", StringComparison.OrdinalIgnoreCase)) return true;
+            if (!string.IsNullOrWhiteSpace(scheduleMode))
+            {
+                var sm = scheduleMode.Trim().ToUpperInvariant();
+                if (sm == "PATTERN_WISE" || sm == "COMBINED_OBJECTIVE" || sm == "COMBINED" || sm == "OBJECTIVE")
+                    return true;
+            }
+            if (!string.IsNullOrWhiteSpace(patternName) && !patternName.Trim().ToUpperInvariant().Contains("REGULAR"))
+                return true;
+            if (string.Equals(examType?.Trim(), "Objective", StringComparison.OrdinalIgnoreCase)) return true;
+            if (!string.IsNullOrWhiteSpace(examType) && examType.Contains("Objective", StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(subjectType?.Trim(), "Objective", StringComparison.OrdinalIgnoreCase)) return true;
+            if (IsObjectivePattern(examPattern)) return true;
+            return false;
+        }
+
         /// <summary>
         /// Synchronously checks if an examination and/or schedule is configured as Objective.
         /// Evaluates actual configuration attributes rather than inferring from examination name.
@@ -20,25 +60,31 @@ namespace CollegeManagement.API.Helpers
         {
             if (schedule != null)
             {
-                if (string.Equals(schedule.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase)) return true;
-                if (string.Equals(schedule.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase)) return true;
-                if (!string.IsNullOrWhiteSpace(schedule.PatternName)) return true;
+                if (string.Equals(schedule.ExamMode?.Trim(), "Objective", StringComparison.OrdinalIgnoreCase)) return true;
+                if (!string.IsNullOrWhiteSpace(schedule.ScheduleMode))
+                {
+                    var sm = schedule.ScheduleMode.Trim().ToUpperInvariant();
+                    if (sm == "PATTERN_WISE" || sm == "COMBINED_OBJECTIVE" || sm == "COMBINED" || sm == "OBJECTIVE")
+                        return true;
+                }
+                if (!string.IsNullOrWhiteSpace(schedule.PatternName) && !schedule.PatternName.Trim().ToUpperInvariant().Contains("REGULAR"))
+                    return true;
             }
 
             if (exam != null)
             {
-                if (string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase)) return true;
-                if (exam.AssessmentType != null && exam.AssessmentType.AssessmentTypeName.Contains("Objective", StringComparison.OrdinalIgnoreCase)) return true;
-                if (!string.IsNullOrWhiteSpace(exam.ExamPattern) && (
-                    exam.ExamPattern.ToUpper().Contains("OBJECTIVE") ||
-                    exam.ExamPattern.ToUpper().Contains("JEE") ||
-                    exam.ExamPattern.ToUpper().Contains("NEET") ||
-                    exam.ExamPattern.ToUpper().Contains("PATTERN"))) return true;
-
+                if (exam.AssessmentType != null && exam.AssessmentType.AssessmentTypeName.Contains("Objective", StringComparison.OrdinalIgnoreCase))
+                    return true;
                 if (exam.ExamSchedules != null && exam.ExamSchedules.Any(s => s.IsActive && (
-                    string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(s.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
-                    !string.IsNullOrWhiteSpace(s.PatternName)))) return true;
+                    string.Equals(s.ExamMode?.Trim(), "Objective", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.ScheduleMode?.Trim(), "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.ScheduleMode?.Trim(), "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.ScheduleMode?.Trim(), "COMBINED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.ScheduleMode?.Trim(), "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(s.PatternName) && !s.PatternName.Trim().ToUpperInvariant().Contains("REGULAR")))))
+                    return true;
+                if (IsObjectivePattern(exam.ExamPattern))
+                    return true;
             }
 
             return false;
@@ -91,21 +137,15 @@ namespace CollegeManagement.API.Helpers
                 if (row != null)
                 {
                     var dict = (IDictionary<string, object>)row;
-                    string pattern = dict.ContainsKey("ExamPattern") && dict["ExamPattern"] != null ? dict["ExamPattern"].ToString() : string.Empty;
-                    string category = dict.ContainsKey("ExamCategory") && dict["ExamCategory"] != null ? dict["ExamCategory"].ToString() : string.Empty;
-                    string assessType = dict.ContainsKey("AssessmentTypeName") && dict["AssessmentTypeName"] != null ? dict["AssessmentTypeName"].ToString() : string.Empty;
-                    string scheduleMode = dict.ContainsKey("ScheduleMode") && dict["ScheduleMode"] != null ? dict["ScheduleMode"].ToString() : string.Empty;
-                    string examMode = dict.ContainsKey("ScheduleExamMode") && dict["ScheduleExamMode"] != null ? dict["ScheduleExamMode"].ToString() : string.Empty;
-                    string patternName = dict.ContainsKey("PatternName") && dict["PatternName"] != null ? dict["PatternName"].ToString() : string.Empty;
+                    string pattern = dict.ContainsKey("ExamPattern") && dict["ExamPattern"] != null ? dict["ExamPattern"].ToString() ?? string.Empty : string.Empty;
+                    string category = dict.ContainsKey("ExamCategory") && dict["ExamCategory"] != null ? dict["ExamCategory"].ToString() ?? string.Empty : string.Empty;
+                    string assessType = dict.ContainsKey("AssessmentTypeName") && dict["AssessmentTypeName"] != null ? dict["AssessmentTypeName"].ToString() ?? string.Empty : string.Empty;
+                    string scheduleMode = dict.ContainsKey("ScheduleMode") && dict["ScheduleMode"] != null ? dict["ScheduleMode"].ToString() ?? string.Empty : string.Empty;
+                    string examMode = dict.ContainsKey("ScheduleExamMode") && dict["ScheduleExamMode"] != null ? dict["ScheduleExamMode"].ToString() ?? string.Empty : string.Empty;
+                    string patternName = dict.ContainsKey("PatternName") && dict["PatternName"] != null ? dict["PatternName"].ToString() ?? string.Empty : string.Empty;
 
-                    bool isObjective = pattern.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
-                                       pattern.Contains("JEE", StringComparison.OrdinalIgnoreCase) ||
-                                       pattern.Contains("NEET", StringComparison.OrdinalIgnoreCase) ||
-                                       category.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
-                                       assessType.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
-                                       scheduleMode.Contains("PATTERN", StringComparison.OrdinalIgnoreCase) ||
-                                       examMode.Contains("OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
-                                       !string.IsNullOrWhiteSpace(patternName);
+                    bool isObjective = string.Equals(category, "Objective", StringComparison.OrdinalIgnoreCase) ||
+                                       IsObjectiveConfiguration(pattern, assessType, null, scheduleMode, examMode, patternName);
 
                     decimal maxMarks = dict.ContainsKey("MaxMarks") && dict["MaxMarks"] != null ? Convert.ToDecimal(dict["MaxMarks"]) : 100m;
                     decimal passMarks = dict.ContainsKey("PassingMarks") && dict["PassingMarks"] != null ? Convert.ToDecimal(dict["PassingMarks"]) : 35m;
@@ -119,6 +159,61 @@ namespace CollegeManagement.API.Helpers
             }
 
             return (false, 100m, 35m);
+        }
+
+        public static async Task<(bool IsObjective, decimal MaxMarks, decimal InternalMax, decimal PracticalMax, decimal TheoryMax, decimal PassingMarks)> ResolveFormatAndComponentLimitsAsync(
+            IDbConnection connection, int examinationId, int subjectId, CancellationToken ct = default)
+        {
+            try
+            {
+                if (connection.State != ConnectionState.Open && connection is System.Data.Common.DbConnection dbConn)
+                {
+                    await dbConn.OpenAsync(ct);
+                }
+
+                var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    new CommandDefinition("sp_GetExamFormatAndLimits",
+                        new { p_ExaminationId = examinationId, p_SubjectId = subjectId },
+                        commandType: CommandType.StoredProcedure,
+                        cancellationToken: ct));
+
+                if (row != null)
+                {
+                    var dict = (IDictionary<string, object>)row;
+                    string pattern = dict.ContainsKey("ExamPattern") && dict["ExamPattern"] != null ? dict["ExamPattern"].ToString() ?? string.Empty : string.Empty;
+                    string category = dict.ContainsKey("ExamCategory") && dict["ExamCategory"] != null ? dict["ExamCategory"].ToString() ?? string.Empty : string.Empty;
+                    string assessType = dict.ContainsKey("AssessmentTypeName") && dict["AssessmentTypeName"] != null ? dict["AssessmentTypeName"].ToString() ?? string.Empty : string.Empty;
+                    string scheduleMode = dict.ContainsKey("ScheduleMode") && dict["ScheduleMode"] != null ? dict["ScheduleMode"].ToString() ?? string.Empty : string.Empty;
+                    string examMode = dict.ContainsKey("ScheduleExamMode") && dict["ScheduleExamMode"] != null ? dict["ScheduleExamMode"].ToString() ?? string.Empty : string.Empty;
+                    string patternName = dict.ContainsKey("PatternName") && dict["PatternName"] != null ? dict["PatternName"].ToString() ?? string.Empty : string.Empty;
+
+                    bool isObjective = string.Equals(category, "Objective", StringComparison.OrdinalIgnoreCase) ||
+                                       IsObjectiveConfiguration(pattern, assessType, null, scheduleMode, examMode, patternName);
+
+                    decimal maxMarks = dict.ContainsKey("MaxMarks") && dict["MaxMarks"] != null ? Convert.ToDecimal(dict["MaxMarks"]) : 100m;
+                    decimal passMarks = dict.ContainsKey("PassingMarks") && dict["PassingMarks"] != null ? Convert.ToDecimal(dict["PassingMarks"]) : 35m;
+                    decimal intMax = !isObjective && dict.ContainsKey("InternalMax") && dict["InternalMax"] != null ? Convert.ToDecimal(dict["InternalMax"]) : 0m;
+                    decimal pracMax = !isObjective && dict.ContainsKey("PracticalMax") && dict["PracticalMax"] != null ? Convert.ToDecimal(dict["PracticalMax"]) : 0m;
+                    decimal thMax = !isObjective && dict.ContainsKey("TheoryMax") && dict["TheoryMax"] != null ? Convert.ToDecimal(dict["TheoryMax"]) : 0m;
+
+                    if (!isObjective && (intMax + pracMax + thMax) > 0m)
+                    {
+                        maxMarks = intMax + pracMax + thMax;
+                    }
+                    else if (!isObjective)
+                    {
+                        thMax = maxMarks;
+                    }
+
+                    return (isObjective, maxMarks, intMax, pracMax, thMax, passMarks);
+                }
+            }
+            catch
+            {
+                // Fallback default
+            }
+
+            return (false, 100m, 0m, 0m, 100m, 35m);
         }
 
         /// <summary>

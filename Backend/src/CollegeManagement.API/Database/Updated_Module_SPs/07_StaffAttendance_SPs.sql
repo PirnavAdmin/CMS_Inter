@@ -696,39 +696,53 @@ CREATE PROCEDURE `sp_SubmitStaffRegularization`(
 )
 BEGIN
     DECLARE v_TargetDate DATE;
-    DECLARE v_ExistingPending INT DEFAULT 0;
-    DECLARE v_ExistingApproved INT DEFAULT 0;
+    DECLARE v_TodayDate DATE;
+    DECLARE v_NowTime TIME;
+    DECLARE v_WorkEnd TIME DEFAULT '15:20:00';
+    DECLARE v_Grace INT DEFAULT 15;
+    DECLARE v_Cutoff TIME DEFAULT '15:35:00';
+    DECLARE v_ExistingCount INT DEFAULT 0;
     DECLARE v_AttId INT DEFAULT NULL;
     DECLARE v_OrigStatus TINYINT DEFAULT NULL;
     DECLARE v_OrigStatusText VARCHAR(50) DEFAULT 'Absent';
     DECLARE v_OrigIn TIME DEFAULT NULL;
     DECLARE v_OrigOut TIME DEFAULT NULL;
+    DECLARE v_IsResolved TINYINT(1) DEFAULT 0;
     DECLARE v_ReqType VARCHAR(50) DEFAULT 'Late Attendance';
 
     SET v_TargetDate = DATE(p_AttendanceDate);
+    SET v_TodayDate = DATE(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'));
+    SET v_NowTime = TIME(CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'));
 
-    SELECT COUNT(1) INTO v_ExistingPending
-    FROM `StaffAttendanceRegularizations`
-    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
-      AND DATE(AttendanceDate) = v_TargetDate
-      AND Status = 'Pending';
-
-    IF v_ExistingPending > 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A pending regularization request already exists for this date.';
+    IF v_TargetDate != v_TodayDate THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance regularization is only permitted on the current attendance day within the allowed window.';
     END IF;
 
-    SELECT COUNT(1) INTO v_ExistingApproved
-    FROM `StaffAttendanceRegularizations`
-    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
-      AND DATE(AttendanceDate) = v_TargetDate
-      AND Status = 'Approved';
-
-    IF v_ExistingApproved > 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance for this date has already been regularized and approved.';
+    IF DAYOFWEEK(v_TargetDate) = 1 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance regularization is not permitted on weekly off days.';
     END IF;
 
-    SELECT sa.StaffAttendanceId, sa.Status, sa.InTime, sa.OutTime
-    INTO v_AttId, v_OrigStatus, v_OrigIn, v_OrigOut
+    SELECT
+        COALESCE(tc.WorkEndTime, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')),
+        COALESCE(tc.GracePeriodMinutes, 15)
+    INTO v_WorkEnd, v_Grace
+    FROM `Staff` s
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
+        SELECT tc2.Id
+        FROM `AttendanceTimingConfigs` tc2
+        WHERE tc2.IsActive = 1
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', 2, 1))
+          AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
+        ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
+        LIMIT 1
+    )
+    WHERE s.Id = p_FacultyId AND s.IsDeleted = 0
+    LIMIT 1;
+
+    SET v_Cutoff = ADDTIME(v_WorkEnd, SEC_TO_TIME(v_Grace * 60));
+
+    SELECT sa.StaffAttendanceId, sa.Status, sa.InTime, sa.OutTime, COALESCE(sa.IsMissedCheckoutResolved, 0)
+    INTO v_AttId, v_OrigStatus, v_OrigIn, v_OrigOut, v_IsResolved
     FROM `StaffAttendances` sa
     INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
     WHERE sa.FacultyId = p_FacultyId
@@ -741,17 +755,29 @@ BEGIN
     IF v_OrigStatus = 3 THEN
         SET v_OrigStatusText = 'Late';
         SET v_ReqType = 'Late Attendance';
-    ELSEIF v_OrigStatus = 1 AND v_OrigIn IS NOT NULL AND v_OrigOut IS NULL THEN
+    ELSEIF v_OrigStatus = 1 AND v_OrigIn IS NOT NULL AND v_OrigOut IS NULL AND v_IsResolved = 0 AND v_NowTime > v_Cutoff THEN
         SET v_OrigStatusText = 'Missed Checkout';
         SET v_ReqType = 'Missed Checkout';
-    ELSEIF v_OrigStatus = 1 THEN
-        SET v_OrigStatusText = 'Present';
-        SET v_ReqType = IF(v_OrigOut IS NULL AND v_OrigIn IS NOT NULL, 'Missed Checkout', 'Other');
-    ELSEIF v_OrigStatus = 2 OR v_AttId IS NULL THEN
-        SET v_OrigStatusText = 'Absent';
+    ELSEIF v_OrigStatus IN (5, 6) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Holiday and approved leave days cannot be regularized.';
+    ELSEIF v_OrigStatus = 1 AND (v_OrigOut IS NOT NULL OR v_IsResolved = 1 OR v_NowTime <= v_Cutoff) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This attendance record is already complete or within the normal check-out window and cannot be regularized.';
+    ELSEIF v_OrigStatus = 2 OR v_OrigStatus = 4 OR (v_AttId IS NULL AND v_NowTime > v_WorkEnd) THEN
+        SET v_OrigStatusText = IF(v_OrigStatus = 4, 'Half Day', 'Absent');
         SET v_ReqType = 'Absent';
     ELSE
-        SET v_OrigStatusText = 'Other';
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance is not yet eligible for regularization today.';
+    END IF;
+
+    SELECT COUNT(1) INTO v_ExistingCount
+    FROM `StaffAttendanceRegularizations`
+    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
+      AND DATE(AttendanceDate) = v_TargetDate
+      AND LOWER(COALESCE(RequestType, 'Late Attendance')) = LOWER(v_ReqType)
+      AND LOWER(Status) IN ('pending', 'approved', 'rejected');
+
+    IF v_ExistingCount > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A regularization request for this type and date has already been submitted or processed.';
     END IF;
 
     INSERT INTO `StaffAttendanceRegularizations` (
@@ -761,7 +787,7 @@ BEGIN
     ) VALUES (
         p_FacultyId, p_FacultyId, v_AttId, v_TargetDate, v_ReqType,
         v_OrigStatusText, v_OrigStatus, v_OrigIn, v_OrigOut,
-        p_RequestedInTime, p_RequestedOutTime, p_Reason, 'Pending', UTC_TIMESTAMP()
+        p_RequestedInTime, IF(v_ReqType = 'Missed Checkout', NULL, p_RequestedOutTime), p_Reason, 'Pending', UTC_TIMESTAMP()
     );
 
     SELECT LAST_INSERT_ID() AS RegularizationId;

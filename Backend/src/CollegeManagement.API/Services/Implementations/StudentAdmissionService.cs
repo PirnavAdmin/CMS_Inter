@@ -1,7 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
+using System.Linq;
 using System.Net.Mail;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
@@ -11,8 +16,11 @@ using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Repositories.Implementations;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Validators.StudentAdmission;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -54,54 +62,295 @@ namespace CollegeManagement.API.Services.Implementations
 
 
         // =====================================================
-        // CREATE ADMISSION
+        // CREATE ADMISSION (VALIDATED, TRANSACTIONAL, IDEMPOTENT)
         // =====================================================
 
         public async Task<StudentAdmissionResponseDto> CreateAsync(
             CreateStudentAdmissionRequest request)
         {
+            var result = await CreateIdempotentAsync(request, request?.IdempotencyKey, null);
+            return result.Admission;
+        }
+
+        public async Task<StudentAdmissionCreateResultDto> CreateIdempotentAsync(
+            CreateStudentAdmissionRequest request,
+            string? idempotencyKey = null,
+            int? createdByUserId = null)
+        {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            ValidateCreateRequest(request);
+            var effectiveKey = string.IsNullOrWhiteSpace(idempotencyKey)
+                ? (string.IsNullOrWhiteSpace(request.IdempotencyKey) ? null : request.IdempotencyKey.Trim())
+                : idempotencyKey.Trim();
 
-            // ---------------------------------------------
-            // Allocate sequential number strictly upon submission
-            // (Only for non-referrals)
-            // ---------------------------------------------
-            if (!request.IsReferral)
+            if (!string.IsNullOrEmpty(effectiveKey) && effectiveKey.Length > 128)
+                throw new ArgumentException("Idempotency-Key cannot exceed 128 characters.");
+
+            // 1. Run ALL mandatory, business-rule, photo, and master reference validations BEFORE any sequence allocation
+            await ValidateCreateAndPhotoAsync(request);
+            await _repository.ValidateMasterReferencesAsync(request);
+
+            // 2. Acquire or replay persistent DB idempotency record when key is present
+            string? requestHash = null;
+            if (!string.IsNullOrEmpty(effectiveKey))
             {
-                var allocatedNumber = await GenerateAdmissionNumberAsync(
-                    request.CampusId, 
-                    request.BoardId, 
-                    request.AcademicYearId, 
-                    isReferral: false);
+                requestHash = await ComputeCreateRequestHashAsync(request);
+                var lockRecord = await _repository.TryBeginIdempotencyAsync(
+                    effectiveKey,
+                    request.CampusId,
+                    createdByUserId,
+                    requestHash,
+                    DateTime.UtcNow.AddHours(24));
 
-                if (!string.IsNullOrWhiteSpace(allocatedNumber) && allocatedNumber != "0")
+                if (lockRecord == null)
+                    throw new InvalidOperationException("Failed to initialize admission idempotency lock.");
+
+                if (lockRecord.LockAcquired == 0)
                 {
-                    request.AdmissionNo = allocatedNumber;
+                    return await ResolveExistingIdempotencyRecordAsync(effectiveKey, requestHash, lockRecord);
                 }
             }
 
-            // ---------------------------------------------
-            // Save only Student Photo
-            // ---------------------------------------------
-
-            string? photoPath = null;
-
-            if (request.StudentPhoto != null &&
-                request.StudentPhoto.Length > 0)
+            // 3. Execute number allocation + photo write + admission insert + idempotency completion in ONE DB transaction
+            string? savedPhotoPhysicalPath = null;
+            try
             {
-                photoPath = await SaveStudentPhotoAsync(
-                    request.StudentPhoto);
-            }
-            // ---------------------------------------------
-            // Create Admission
-            // ---------------------------------------------
+                var strategy = _context.Database.CreateExecutionStrategy();
+                StudentAdmissionResponseDto created = await strategy.ExecuteAsync(async () =>
+                {
+                    // Reset per execution-strategy attempt
+                    if (!string.IsNullOrWhiteSpace(savedPhotoPhysicalPath) && File.Exists(savedPhotoPhysicalPath))
+                    {
+                        try { File.Delete(savedPhotoPhysicalPath); } catch { }
+                        savedPhotoPhysicalPath = null;
+                    }
 
-            return await _repository.CreateAsync(
-                request,
-                photoPath);
+                    await using var efTransaction = await _context.Database.BeginTransactionAsync();
+                    var dbConnection = _context.Database.GetDbConnection();
+                    var dbTransaction = efTransaction.GetDbTransaction();
+
+                    try
+                    {
+                        if (!request.IsReferral)
+                        {
+                            var allocatedNumber = await GenerateAdmissionNumberAsync(
+                                request.CampusId,
+                                request.BoardId,
+                                request.AcademicYearId,
+                                isReferral: false);
+
+                            if (string.IsNullOrWhiteSpace(allocatedNumber) || allocatedNumber == "0")
+                            {
+                                throw new InvalidOperationException("Active admission number could not be allocated.");
+                            }
+
+                            request.AdmissionNo = allocatedNumber;
+                        }
+                        else
+                        {
+                            request.AdmissionNo = null;
+                        }
+
+                        string? photoPath = null;
+                        if (request.StudentPhoto != null)
+                        {
+                            var saved = await SaveStudentPhotoAsync(request.StudentPhoto);
+                            photoPath = saved.RelativePath;
+                            savedPhotoPhysicalPath = saved.PhysicalPath;
+                        }
+
+                        var inserted = await _repository.CreateAsync(
+                            request,
+                            photoPath,
+                            dbConnection,
+                            dbTransaction);
+
+                        if (!string.IsNullOrEmpty(effectiveKey))
+                        {
+                            var responseJson = JsonSerializer.Serialize(inserted);
+                            await _repository.CompleteIdempotencyAsync(
+                                effectiveKey,
+                                inserted.AdmissionId,
+                                inserted.AdmissionNo,
+                                201,
+                                responseJson,
+                                dbConnection,
+                                dbTransaction);
+                        }
+
+                        await efTransaction.CommitAsync();
+                        return inserted;
+                    }
+                    catch
+                    {
+                        await efTransaction.RollbackAsync();
+                        if (!string.IsNullOrWhiteSpace(savedPhotoPhysicalPath) && File.Exists(savedPhotoPhysicalPath))
+                        {
+                            try { File.Delete(savedPhotoPhysicalPath); } catch { }
+                            savedPhotoPhysicalPath = null;
+                        }
+                        throw;
+                    }
+                });
+
+                return new StudentAdmissionCreateResultDto
+                {
+                    Admission = created,
+                    IsIdempotentReplay = false,
+                    IdempotencyKey = effectiveKey
+                };
+            }
+            catch (Exception ex) when (
+                !string.IsNullOrEmpty(effectiveKey) &&
+                ex is not AdmissionIdempotencyConflictException &&
+                ex is not AdmissionIdempotencyInProgressException)
+            {
+                if (!string.IsNullOrWhiteSpace(savedPhotoPhysicalPath) && File.Exists(savedPhotoPhysicalPath))
+                {
+                    try { File.Delete(savedPhotoPhysicalPath); } catch { }
+                }
+
+                int failureStatusCode = ex is ArgumentException ? 400 : 500;
+                try
+                {
+                    await _repository.FailIdempotencyAsync(effectiveKey, failureStatusCode, ex.Message);
+                }
+                catch (Exception failEx)
+                {
+                    _logger.LogWarning(failEx, "Failed to mark idempotency key {IdempotencyKey} as FAILED.", effectiveKey);
+                }
+
+                throw;
+            }
+        }
+
+        public async Task<StudentAdmissionRecoveryResponseDto?> RecoverByIdempotencyKeyAsync(string idempotencyKey)
+        {
+            if (string.IsNullOrWhiteSpace(idempotencyKey))
+                throw new ArgumentException("Idempotency-Key is required.");
+
+            var record = await _repository.GetIdempotencyRecordAsync(idempotencyKey.Trim());
+            if (record == null)
+                return null;
+
+            StudentAdmissionResponseDto? admission = null;
+            if (string.Equals(record.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+            {
+                if (record.AdmissionId.HasValue && record.AdmissionId.Value > 0)
+                {
+                    admission = await _repository.GetByIdAsync(record.AdmissionId.Value);
+                }
+
+                if (admission == null && !string.IsNullOrWhiteSpace(record.ResponseJson))
+                {
+                    try
+                    {
+                        admission = JsonSerializer.Deserialize<StudentAdmissionResponseDto>(
+                            record.ResponseJson,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    }
+                    catch { }
+                }
+            }
+
+            var normalizedStatus = record.Status.ToUpperInvariant();
+            var resultStatus = normalizedStatus switch
+            {
+                "COMPLETED" => "Created",
+                "IN_PROGRESS" => "Processing",
+                "FAILED" => "Failed",
+                _ => record.Status
+            };
+
+            return new StudentAdmissionRecoveryResponseDto
+            {
+                IdempotencyKey = record.IdempotencyKey,
+                Status = normalizedStatus,
+                ResultStatus = resultStatus,
+                AdmissionId = record.AdmissionId,
+                AdmissionNo = admission?.AdmissionNo ?? record.AdmissionNo,
+                HttpStatusCode = record.HttpStatusCode ?? (normalizedStatus == "IN_PROGRESS" ? 202 : null),
+                ErrorMessage = record.ErrorMessage,
+                Admission = admission,
+                CreatedAt = record.CreatedAt,
+                UpdatedAt = record.UpdatedAt
+            };
+        }
+
+        private async Task<StudentAdmissionCreateResultDto> ResolveExistingIdempotencyRecordAsync(
+            string idempotencyKey,
+            string requestHash,
+            AdmissionIdempotencyRecordDto existing)
+        {
+            if (!string.Equals(existing.RequestHash, requestHash, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new AdmissionIdempotencyConflictException(
+                    idempotencyKey,
+                    "Idempotency-Key has already been used with a different admission request payload.");
+            }
+
+            var current = existing;
+            if (string.Equals(current.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
+            {
+                // Briefly wait in case a simultaneous concurrent request is finishing commit
+                for (int i = 0; i < 10; i++)
+                {
+                    await Task.Delay(250);
+                    var refreshed = await _repository.GetIdempotencyRecordAsync(idempotencyKey);
+                    if (refreshed == null) break;
+                    current = refreshed;
+                    if (!string.Equals(current.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
+                        break;
+                }
+            }
+
+            if (string.Equals(current.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new AdmissionIdempotencyInProgressException(
+                    idempotencyKey,
+                    "An admission submission with this Idempotency-Key is currently in progress. Please check the recovery endpoint.");
+            }
+
+            if (string.Equals(current.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+            {
+                StudentAdmissionResponseDto? replayDto = null;
+                if (current.AdmissionId.HasValue && current.AdmissionId.Value > 0)
+                {
+                    replayDto = await _repository.GetByIdAsync(current.AdmissionId.Value);
+                }
+
+                if (replayDto == null && !string.IsNullOrWhiteSpace(current.ResponseJson))
+                {
+                    replayDto = JsonSerializer.Deserialize<StudentAdmissionResponseDto>(
+                        current.ResponseJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+
+                if (replayDto == null)
+                {
+                    throw new InvalidOperationException("Idempotent admission record is marked completed, but the admission details could not be loaded.");
+                }
+
+                return new StudentAdmissionCreateResultDto
+                {
+                    Admission = replayDto,
+                    IsIdempotentReplay = true,
+                    IdempotencyKey = idempotencyKey
+                };
+            }
+
+            if (string.Equals(current.Status, "FAILED", StringComparison.OrdinalIgnoreCase))
+            {
+                var errMsg = current.ErrorMessage ?? "Previous submission with this Idempotency-Key failed.";
+                if ((current.HttpStatusCode ?? 500) < 500)
+                {
+                    throw new ArgumentException(errMsg);
+                }
+                throw new InvalidOperationException(errMsg);
+            }
+
+            throw new InvalidOperationException($"Unsupported idempotency state '{current.Status}'.");
         }
 
 
@@ -153,11 +402,11 @@ namespace CollegeManagement.API.Services.Implementations
             string? photoPath = null;
 
             // Photo only if user uploads a new one
-            if (request.StudentPhoto != null &&
-                request.StudentPhoto.Length > 0)
+            if (request.StudentPhoto != null)
             {
-                photoPath = await SaveStudentPhotoAsync(
-                    request.StudentPhoto);
+                ValidateStudentPhoto(request.StudentPhoto);
+                var saved = await SaveStudentPhotoAsync(request.StudentPhoto);
+                photoPath = saved.RelativePath;
             }
 
             return await _repository.UpdateAsync(
@@ -202,50 +451,49 @@ namespace CollegeManagement.API.Services.Implementations
         {
             if (isReferral) return null;
 
-            try
+            var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync("ADMISSION_NO", campusId);
+            if (seriesConfig == null || !seriesConfig.IsActive)
             {
-                string? boardCode = null;
-                if (boardId.HasValue && boardId.Value > 0)
-                {
-                    var b = await _context.Boards.FindAsync(boardId.Value);
-                    boardCode = b?.BoardCode;
-                }
-
-                string? ayName = null;
-                if (academicYearId.HasValue && academicYearId.Value > 0)
-                {
-                    var ay = await _context.AcademicYears.FindAsync(academicYearId.Value);
-                    ayName = ay?.AcademicYearName;
-                }
-
-                string? campusCode = null;
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    var c = await _context.Campuses.FindAsync(campusId.Value);
-                    campusCode = c?.CampusCode;
-                }
-
-                var preview = await _numberSeriesService.GetLivePreviewAsync(
-                    "ADMISSION_NO", 
-                    pattern: null, 
-                    numberLength: null, 
-                    prefix: null, 
-                    campusId: campusId, 
-                    board: boardCode ?? boardId?.ToString(), 
-                    academicYear: ayName ?? academicYearId?.ToString(),
-                    campusCode: campusCode);
-
-                if (!string.IsNullOrWhiteSpace(preview) && preview != "0")
-                {
-                    return preview;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "GetLivePreviewAsync failed for admission number preview, falling back to repository calculation.");
+                throw new ArgumentException("Active admission number series configuration (ADMISSION_NO) was not found.");
             }
 
-            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
+            string? boardCode = null;
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                var b = await _context.Boards.FindAsync(boardId.Value);
+                boardCode = b?.BoardCode;
+            }
+
+            string? ayName = null;
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                var ay = await _context.AcademicYears.FindAsync(academicYearId.Value);
+                ayName = ay?.AcademicYearName;
+            }
+
+            string? campusCode = null;
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var c = await _context.Campuses.FindAsync(campusId.Value);
+                campusCode = c?.CampusCode;
+            }
+
+            var preview = await _numberSeriesService.GetLivePreviewAsync(
+                "ADMISSION_NO",
+                pattern: null,
+                numberLength: null,
+                prefix: null,
+                campusId: campusId,
+                board: boardCode ?? boardId?.ToString(),
+                academicYear: ayName ?? academicYearId?.ToString(),
+                campusCode: campusCode);
+
+            if (string.IsNullOrWhiteSpace(preview) || preview == "0")
+            {
+                throw new InvalidOperationException("Unable to calculate admission number preview.");
+            }
+
+            return preview;
         }
 
         // =====================================================
@@ -277,24 +525,21 @@ namespace CollegeManagement.API.Services.Implementations
                 campusCode = c?.CampusCode;
             }
 
-            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
-            { 
+            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto
+            {
                 Board = boardCode ?? boardId?.ToString(),
                 BoardCode = boardCode,
                 AcademicYear = ayName ?? academicYearId?.ToString(),
                 CampusCode = campusCode
             };
-            
-            // Generate next number purely from the NumberSeriesSequences table for global continuity
+
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
-            
-            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && generatedDto.GeneratedNumber != "0")
+            if (generatedDto == null || string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) || generatedDto.GeneratedNumber == "0")
             {
-                return generatedDto.GeneratedNumber;
+                throw new ArgumentException("Active admission number series configuration (ADMISSION_NO) could not generate the next number.");
             }
-            
-            // Fallback to repository if number series configuration doesn't exist
-            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
+
+            return generatedDto.GeneratedNumber;
         }
 
         // =====================================================
@@ -317,21 +562,41 @@ namespace CollegeManagement.API.Services.Implementations
             if (admission == null)
                 throw new KeyNotFoundException($"Admission request with ID {admissionId} not found.");
 
-            // Generate an admission number for the target campus if one is not yet assigned
-            string admissionNo = admission.AdmissionNo ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(admissionNo))
+            string finalAdmissionNo = admission.AdmissionNo ?? string.Empty;
+            var strategy = _context.Database.CreateExecutionStrategy();
+            var result = await strategy.ExecuteAsync(async () =>
             {
-                var generated = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId, isReferral: false);
-                if (!string.IsNullOrWhiteSpace(generated))
+                await using var efTransaction = await _context.Database.BeginTransactionAsync();
+                var dbConn = _context.Database.GetDbConnection();
+                var dbTx = efTransaction.GetDbTransaction();
+                try
                 {
-                    admissionNo = generated;
-                }
-            }
+                    string admissionNo = admission.AdmissionNo ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(admissionNo))
+                    {
+                        admissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId, isReferral: false) ?? string.Empty;
+                    }
+                    finalAdmissionNo = admissionNo;
 
-            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, admissionNo, remarks);
+                    var ok = await _repository.ApproveAdmissionRequestAsync(admissionId, admissionNo, remarks, dbConn, dbTx);
+                    if (!ok)
+                    {
+                        await efTransaction.RollbackAsync();
+                        return false;
+                    }
+                    await efTransaction.CommitAsync();
+                    return true;
+                }
+                catch
+                {
+                    await efTransaction.RollbackAsync();
+                    throw;
+                }
+            });
+
             if (result)
             {
-                await _auditLoggingService.LogAsync("Request Approved", "Admissions", admissionNo, "Info", "Success", remarks);
+                await _auditLoggingService.LogAsync("Request Approved", "Admissions", finalAdmissionNo, "Info", "Success", remarks);
             }
             return result;
         }
@@ -370,30 +635,28 @@ namespace CollegeManagement.API.Services.Implementations
                 return true;
             }
 
-            // Generate admission number if it was deferred (e.g. for referrals)
-            if (string.IsNullOrWhiteSpace(admission.AdmissionNo))
-            {
-                admission.AdmissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
-                if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
-                {
-                    // Persist generated admission number via repository stored procedure
-                    await _repository.UpdateAdmissionNumberAsync(admission.AdmissionId, admission.AdmissionNo);
-                }
-            }
-
-            // 2. Open database connection and begin outer transaction for atomicity
-            var connection = _context.Database.GetDbConnection();
-            if (connection.State != ConnectionState.Open)
-            {
-                await connection.OpenAsync();
-            }
-
-            using var transaction = connection.BeginTransaction();
             UserProvisioningResult? userProvisioningResult = null;
             ParentUserProvisioningResult? parentProvisioningResult = null;
 
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+            var committed = await strategy.ExecuteAsync(async () =>
             {
+                await using var efTransaction = await _context.Database.BeginTransactionAsync();
+                var connection = _context.Database.GetDbConnection();
+                var transaction = efTransaction.GetDbTransaction();
+                userProvisioningResult = null;
+                parentProvisioningResult = null;
+
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(admission.AdmissionNo))
+                    {
+                        admission.AdmissionNo = await GenerateAdmissionNumberAsync(admission.CampusId, admission.BoardId, admission.AcademicYearId);
+                        if (!string.IsNullOrWhiteSpace(admission.AdmissionNo))
+                        {
+                            await _repository.UpdateAdmissionNumberAsync(admission.AdmissionId, admission.AdmissionNo, connection, transaction);
+                        }
+                    }
                 // 3. Approve admission and create Student domain record in same transaction
                 var approveSuccess = await _repository.ApproveAsync(
                     request,
@@ -525,26 +788,22 @@ namespace CollegeManagement.API.Services.Implementations
                         request.AdmissionId, student.StudentId);
                 }
 
-                // 7. Commit single atomic transaction (Student + Student User + Parent User + Bridging Mapping created atomically)
-                transaction.Commit();
-                _logger.LogInformation(
-                    "Successfully committed Student approval for AdmissionId {AdmissionId} (StudentId: {StudentId}, StudentUserProvisioned: {StudentUser}, ParentUserProvisioned: {ParentUser})",
-                    request.AdmissionId, student.StudentId, userProvisioningResult?.Success == true, parentProvisioningResult?.Success == true);
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    transaction.Rollback();
+                    await efTransaction.CommitAsync();
+                    _logger.LogInformation(
+                        "Successfully committed Student approval for AdmissionId {AdmissionId} (StudentId: {StudentId}, StudentUserProvisioned: {StudentUser}, ParentUserProvisioned: {ParentUser})",
+                        request.AdmissionId, student.StudentId, userProvisioningResult?.Success == true, parentProvisioningResult?.Success == true);
+                    return true;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Ignore rollback errors if already aborted
+                    try { await efTransaction.RollbackAsync(); } catch { }
+                    _logger.LogError(ex, "Transaction rolled back during Student admission approval for AdmissionId {AdmissionId}", request.AdmissionId);
+                    throw;
                 }
+            });
 
-                _logger.LogError(ex, "Transaction rolled back during Student admission approval for AdmissionId {AdmissionId}", request.AdmissionId);
-                throw;
-            }
+            if (!committed)
+                return false;
 
             // 8. Post-commit Student initial credential onboarding email dispatch
             if (userProvisioningResult?.Success == true && !string.IsNullOrWhiteSpace(userProvisioningResult.TemporaryPassword))
@@ -769,9 +1028,33 @@ namespace CollegeManagement.API.Services.Implementations
         // CREATE VALIDATION
         // =====================================================
 
+        private async Task ValidateCreateAndPhotoAsync(
+            CreateStudentAdmissionRequest request)
+        {
+            ValidateCreateRequest(request);
+
+            var validator = new CreateStudentAdmissionRequestValidator();
+            var validationResult = await validator.ValidateAsync(request);
+            if (!validationResult.IsValid)
+            {
+                var firstError = validationResult.Errors.FirstOrDefault()?.ErrorMessage ?? "Invalid admission request payload.";
+                throw new ArgumentException(firstError);
+            }
+
+            ValidateStudentPhoto(request.StudentPhoto);
+        }
+
         private static void ValidateCreateRequest(
             CreateStudentAdmissionRequest request)
         {
+            if (!request.CampusId.HasValue || request.CampusId.Value <= 0)
+                throw new ArgumentException(
+                    "Valid Campus is required.");
+
+            if (request.AdmissionDate == default)
+                throw new ArgumentException(
+                    "Admission Date is required.");
+
             if (request.BoardId <= 0)
                 throw new ArgumentException(
                     "Board is required.");
@@ -792,7 +1075,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentException(
                     "Program is required.");
 
-            if (request.FeeStructureId <= 0)
+            if (!request.IsReferral && (!request.FeeStructureId.HasValue || request.FeeStructureId.Value <= 0))
                 throw new ArgumentException(
                     "Fee structure is required.");
 
@@ -813,10 +1096,6 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.DateOfBirth == default)
                 throw new ArgumentException(
                     "Date of birth is required.");
-
-            
-
-            
         }
 
 
@@ -856,8 +1135,8 @@ namespace CollegeManagement.API.Services.Implementations
         }
         //optional check box//
         public async Task<int> SaveAdmissionFeeSelectionsAsync(
-      int admissionId,
-      SaveAdmissionFeeSelectionsRequest request)
+            int admissionId,
+            SaveAdmissionFeeSelectionsRequest request)
         {
             if (admissionId <= 0)
                 throw new ArgumentException("Invalid AdmissionId.");
@@ -865,8 +1144,12 @@ namespace CollegeManagement.API.Services.Implementations
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
-            request.SelectedFeeStructureComponentIds ??=
-                new List<int>();
+            var deduplicatedIds = (request.SelectedFeeStructureComponentIds ?? new List<int>())
+                .Distinct()
+                .ToList();
+            request.SelectedFeeStructureComponentIds = deduplicatedIds;
+
+            await _repository.ValidateFeeSelectionInputsAsync(admissionId, deduplicatedIds);
 
             return await _repository.SaveAdmissionFeeSelectionsAsync(
                 admissionId,
@@ -874,42 +1157,50 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         // =====================================================
-        // SAVE STUDENT PHOTO
+        // PHOTO VALIDATION, FILE SAVE & REQUEST FINGERPRINTING
         // =====================================================
 
-        private async Task<string> SaveStudentPhotoAsync(
-            IFormFile file)
+        private static void ValidateStudentPhoto(IFormFile? file)
         {
-            if (file == null || file.Length == 0)
-                throw new ArgumentException(
-                    "Student photo is required.");
+            if (file == null)
+                return;
 
-            var extension =
-                Path.GetExtension(file.FileName)
-                    .ToLowerInvariant();
-
-            var allowedExtensions = new[]
-            {
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp"
-            };
-
-            if (!allowedExtensions.Contains(extension))
-            {
-                throw new ArgumentException(
-                    "Only JPG, JPEG, PNG and WEBP photos are allowed.");
-            }
+            if (file.Length <= 0)
+                throw new ArgumentException("Uploaded student photo file cannot be empty.");
 
             const long maxFileSize = 5 * 1024 * 1024;
-
             if (file.Length > maxFileSize)
-            {
-                throw new ArgumentException(
-                    "Student photo must be less than 5 MB.");
-            }
+                throw new ArgumentException("Student photo must be less than 5 MB.");
 
+            var extension = Path.GetExtension(file.FileName ?? string.Empty).ToLowerInvariant();
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+            if (!allowedExtensions.Contains(extension))
+                throw new ArgumentException("Only JPG, JPEG, PNG and WEBP photos are allowed.");
+
+            Span<byte> header = stackalloc byte[12];
+            using var stream = file.OpenReadStream();
+            int read = stream.Read(header);
+            if (read < 4)
+                throw new ArgumentException("Invalid or corrupted student photo image.");
+
+            bool validImage = extension switch
+            {
+                ".jpg" or ".jpeg" => header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+                ".png" => read >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47,
+                ".webp" => read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+                                     && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50,
+                _ => false
+            };
+
+            if (!validImage)
+                throw new ArgumentException("Uploaded student photo content does not match a valid JPG, PNG, or WEBP image.");
+        }
+
+        private async Task<(string RelativePath, string PhysicalPath)> SaveStudentPhotoAsync(IFormFile file)
+        {
+            ValidateStudentPhoto(file);
+
+            var extension = Path.GetExtension(file.FileName ?? string.Empty).ToLowerInvariant();
             var folder = Path.Combine(
                 _environment.WebRootPath ?? "wwwroot",
                 "uploads",
@@ -917,21 +1208,84 @@ namespace CollegeManagement.API.Services.Implementations
 
             Directory.CreateDirectory(folder);
 
-            var fileName =
-                $"{Guid.NewGuid():N}{extension}";
+            var fileName = $"{Guid.NewGuid():N}{extension}";
+            var fullPath = Path.Combine(folder, fileName);
 
-            var fullPath =
-                Path.Combine(folder, fileName);
-
-            await using var stream =
-                new FileStream(
-                    fullPath,
-                    FileMode.Create);
-
+            await using var stream = new FileStream(fullPath, FileMode.Create);
             await file.CopyToAsync(stream);
 
-            return
-                $"/uploads/student-photos/{fileName}";
+            return ($"/uploads/student-photos/{fileName}", fullPath);
+        }
+
+        private static async Task<string> ComputeCreateRequestHashAsync(CreateStudentAdmissionRequest request)
+        {
+            string? photoHash = null;
+            if (request.StudentPhoto != null && request.StudentPhoto.Length > 0)
+            {
+                using var photoStream = request.StudentPhoto.OpenReadStream();
+                using var shaPhoto = SHA256.Create();
+                var hashBytes = await shaPhoto.ComputeHashAsync(photoStream);
+                photoHash = Convert.ToHexString(hashBytes);
+            }
+
+            var canonicalPayload = new
+            {
+                AdmissionDate = request.AdmissionDate.ToString("O"),
+                AdmissionNo = request.AdmissionNo?.Trim() ?? string.Empty,
+                AdmissionType = request.AdmissionType?.Trim() ?? string.Empty,
+                AdmissionQuota = request.AdmissionQuota?.Trim() ?? string.Empty,
+                request.CampusId,
+                request.SourceCampusId,
+                request.AdmittedById,
+                request.IsReferral,
+                request.BoardId,
+                request.AcademicYearId,
+                request.AcademicLevelId,
+                request.GroupId,
+                request.ProgramId,
+                request.FeeStructureId,
+                PaymentPlan = request.PaymentPlan?.Trim() ?? string.Empty,
+                FirstName = request.FirstName?.Trim() ?? string.Empty,
+                LastName = request.LastName?.Trim() ?? string.Empty,
+                Gender = request.Gender?.Trim() ?? string.Empty,
+                DateOfBirth = request.DateOfBirth.ToString("yyyy-MM-dd"),
+                BloodGroup = request.BloodGroup?.Trim() ?? string.Empty,
+                StudentEmail = request.StudentEmail?.Trim() ?? string.Empty,
+                StudentMobileNumber = request.StudentMobileNumber?.Trim() ?? string.Empty,
+                AadhaarNumber = request.AadhaarNumber?.Trim() ?? string.Empty,
+                FatherName = request.FatherName?.Trim() ?? string.Empty,
+                FatherMobile = request.FatherMobile?.Trim() ?? string.Empty,
+                MotherName = request.MotherName?.Trim() ?? string.Empty,
+                MotherMobile = request.MotherMobile?.Trim() ?? string.Empty,
+                GuardianName = request.GuardianName?.Trim() ?? string.Empty,
+                GuardianMobile = request.GuardianMobile?.Trim() ?? string.Empty,
+                ParentGuardianEmail = request.ParentGuardianEmail?.Trim() ?? string.Empty,
+                request.AnnualIncome,
+                HouseDoorNumber = request.HouseDoorNumber?.Trim() ?? string.Empty,
+                StreetVillage = request.StreetVillage?.Trim() ?? string.Empty,
+                City = request.City?.Trim() ?? string.Empty,
+                District = request.District?.Trim() ?? string.Empty,
+                State = request.State?.Trim() ?? string.Empty,
+                Pincode = request.Pincode?.Trim() ?? string.Empty,
+                PreviousSchool = request.PreviousSchool?.Trim() ?? string.Empty,
+                PreviousBoard = request.PreviousBoard?.Trim() ?? string.Empty,
+                request.PreviousPercentage,
+                request.PreviousYearOfPassing,
+                StudentType = request.StudentType?.Trim() ?? string.Empty,
+                request.TransportRequired,
+                request.RouteId,
+                request.PickupPointId,
+                request.HostelId,
+                request.RoomId,
+                request.BedId,
+                SelectedComponents = (request.SelectedFeeStructureComponentIds ?? new List<int>()).OrderBy(id => id).ToArray(),
+                PhotoFileName = request.StudentPhoto?.FileName ?? string.Empty,
+                PhotoLength = request.StudentPhoto?.Length ?? 0,
+                PhotoHash = photoHash ?? string.Empty
+            };
+
+            var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(canonicalPayload));
+            return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         }
     }
 }

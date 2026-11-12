@@ -21,6 +21,42 @@ import { Skeleton } from "@/shared/components/Ui.jsx";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
 import { attendanceService } from "@/api/attendanceService.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
+import notificationHubService from "@/services/notificationHubService.js";
+
+const getIstTodayIsoStr = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
+const resolveRangeForDate = (dateParam) => {
+  const target = String(dateParam || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return null;
+  const todayIso = getIstTodayIsoStr();
+  const todayUtc = new Date(`${todayIso}T00:00:00Z`);
+  const diffToMon = (todayUtc.getUTCDay() + 6) % 7;
+  const weekStart = new Date(todayUtc);
+  weekStart.setUTCDate(todayUtc.getUTCDate() - diffToMon);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const weekStartIso = weekStart.toISOString().slice(0, 10);
+  const weekEndIso = weekEnd.toISOString().slice(0, 10);
+  if (target >= weekStartIso && target <= weekEndIso) return "week";
+  if (target.slice(0, 7) === todayIso.slice(0, 7)) return "month";
+  return "last_month";
+};
+
+const formatDecisionDate = (raw) => {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  const normalized = s.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -101,6 +137,7 @@ const normalizeTodayData = (raw) => {
     regularizationType: raw.regularizationType || raw.RegularizationType || null,
     regularizationReason: raw.regularizationReason || raw.RegularizationReason || null,
     regularizationAdminRemarks: raw.regularizationAdminRemarks || raw.RegularizationAdminRemarks || null,
+    reviewedAt: raw.reviewedAt || raw.ReviewedAt || null,
   };
 };
 
@@ -110,14 +147,12 @@ export default function TransportManagerMyAttendance() {
   const [activeStaffTab, setActiveStaffTab] = useState("my-attendance");
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setShiftUpdateTick((prev) => prev + 1);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const [activeFilter, setActiveFilter] = useTransportRouteValue(navigation, "range", "week", value => ["week", "last_week", "month", "last_month"].includes(value));
+  const transportSearchParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const highlightedRegId = transportSearchParams.get("regId") || "";
+  const notifDateParam = transportSearchParams.get("date") || "";
+  const defaultRange = resolveRangeForDate(notifDateParam) || (highlightedRegId ? "month" : "week");
+  const highlightedRowRef = useRef(null);
+  const [activeFilter, setActiveFilter] = useTransportRouteValue(navigation, "range", defaultRange, value => ["week", "last_week", "month", "last_month"].includes(value));
   const [loadingToday, setLoadingToday] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -150,7 +185,16 @@ export default function TransportManagerMyAttendance() {
     regularizationType: null,
     regularizationReason: null,
     regularizationAdminRemarks: null,
+    reviewedAt: null,
   });
+
+  useEffect(() => {
+    if (todayData.status !== "punched_in") return undefined;
+    const timer = setInterval(() => {
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [todayData.status]);
 
   const [historyData, setHistoryData] = useState({
     logs: [],
@@ -232,6 +276,31 @@ export default function TransportManagerMyAttendance() {
     }
   }, [syncGlobalPunchState]);
 
+  useEffect(() => {
+    const refreshAll = () => {
+      fetchTodayStatus();
+      fetchHistory(activeFilter);
+    };
+    window.addEventListener("cms-attendance-resync", refreshAll);
+    window.addEventListener("cms-notifications-resync", refreshAll);
+    const unsubHub = notificationHubService.subscribe((payload) => {
+      const t = String(payload?.type || "").toLowerCase();
+      if (t.includes("attend") || t.includes("regulariz")) refreshAll();
+    });
+    return () => {
+      window.removeEventListener("cms-attendance-resync", refreshAll);
+      window.removeEventListener("cms-notifications-resync", refreshAll);
+      if (typeof unsubHub === "function") unsubHub();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter]);
+
+  useEffect(() => {
+    if (highlightedRegId && !loadingHistory && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedRegId, loadingHistory, historyData.logs]);
+
   const historyRequest = useRef(0);
   const fetchHistory = useCallback(async (period) => {
     const request = ++historyRequest.current;
@@ -257,9 +326,14 @@ export default function TransportManagerMyAttendance() {
           device: l.device || l.Device,
           status: l.status || l.Status,
           isMissedCheckout: Boolean(l.isMissedCheckout ?? l.IsMissedCheckout),
+          isMissedCheckoutResolved: Boolean(l.isMissedCheckoutResolved ?? l.IsMissedCheckoutResolved),
           canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
           isToday: Boolean(l.isToday ?? l.IsToday),
+          regularizationId: l.regularizationId ?? l.RegularizationId ?? null,
           regularizationState: l.regularizationState || l.RegularizationState,
+          regularizationType: l.regularizationType || l.RegularizationType || null,
+          regularizationAdminRemarks: l.regularizationAdminRemarks || l.RegularizationAdminRemarks || null,
+          reviewedAt: l.reviewedAt || l.ReviewedAt || null,
           holidayName: l.holidayName || l.HolidayName || null,
         })),
         metrics: {
@@ -509,7 +583,13 @@ export default function TransportManagerMyAttendance() {
                 <div className="sp-summary-col">
                   <span className="sp-metric-col-label">CHECK OUT</span>
                   <span className="sp-metric-col-val">
-                    {todayData.outTime || "--:-- --"}
+                    {todayData.isMissedCheckout && !todayData.isMissedCheckoutResolved ? (
+                      <span className="sp-checkout-missed-pill">Missed Checkout</span>
+                    ) : todayData.isMissedCheckoutResolved ? (
+                      <span className="sp-checkout-resolved-pill">{todayData.outTime || "Checkout Regularized"}</span>
+                    ) : (
+                      todayData.outTime || "--:-- --"
+                    )}
                   </span>
                 </div>
                 <div className="sp-summary-col">
@@ -759,17 +839,17 @@ export default function TransportManagerMyAttendance() {
             </div>
           </div>
 
-          <div className="cms-table-wrap">
+          <div className="cms-table-wrap" role="region" aria-label="Attendance logs" tabIndex={0}>
             <table className="sp-attendance-table">
               <thead>
                 <tr>
-                  <th style={{ width: "16%" }}>DAY</th>
-                  <th style={{ width: "22%" }}>SHIFT</th>
-                  <th style={{ width: "15%" }}>CHECK IN</th>
-                  <th style={{ width: "15%" }}>CHECK OUT</th>
-                  <th style={{ width: "12%" }}>HOURS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                  <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+                  <th scope="col" style={{ width: "16%" }}>DAY</th>
+                  <th scope="col" style={{ width: "22%" }}>SHIFT</th>
+                  <th scope="col" style={{ width: "15%" }}>CHECK IN</th>
+                  <th scope="col" style={{ width: "15%" }}>CHECK OUT</th>
+                  <th scope="col" style={{ width: "12%" }}>HOURS</th>
+                  <th scope="col" style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                  <th scope="col" style={{ width: "10%", textAlign: "center" }}>ACTION</th>
                 </tr>
               </thead>
               <tbody>
@@ -798,10 +878,14 @@ export default function TransportManagerMyAttendance() {
                     const canReg = log.canRegularize ?? log.CanRegularize;
                     const regState = log.regularizationState || log.RegularizationState;
                     const holidayName = log.holidayName || log.HolidayName;
-                    const isUpcoming = status === "-" || status === "--";
+                    const displayStatus = status === "Missed Checkout" ? "Present" : status;
+                    const isUpcoming = displayStatus === "-" || displayStatus === "--";
+                    const regLower = String(regState || "").toLowerCase();
+                    const isHighlighted = Boolean(highlightedRegId && log.regularizationId && String(log.regularizationId) === String(highlightedRegId));
+                    const decisionDateStr = formatDecisionDate(log.reviewedAt);
 
                     return (
-                      <tr key={id}>
+                      <tr key={id} ref={isHighlighted ? highlightedRowRef : undefined} className={isHighlighted ? "sp-reg-row-highlight" : undefined}>
                         <td>
                           <div className="sp-day-name">{day}</div>
                           <div className="sp-day-date">{date}</div>
@@ -815,7 +899,15 @@ export default function TransportManagerMyAttendance() {
                           </span>
                         </td>
                         <td>
-                          <span className="sp-time-text">{outTime}</span>
+                          {log.isMissedCheckout && !log.isMissedCheckoutResolved ? (
+                            <span className="sp-checkout-missed-pill">Missed Checkout</span>
+                          ) : log.isMissedCheckoutResolved ? (
+                            <span className="sp-checkout-resolved-pill" title="Missed checkout regularized by Admin">
+                              {outTime !== "--" ? outTime : "Checkout Regularized"}
+                            </span>
+                          ) : (
+                            <span className="sp-time-text">{outTime}</span>
+                          )}
                         </td>
                         <td>
                           <span className="sp-hours-text">{hours}</span>
@@ -825,8 +917,8 @@ export default function TransportManagerMyAttendance() {
                             <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
                           ) : (
                             <div className="sp-status-cell">
-                              <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
-                                {status}
+                              <span className={`sp-status-badge ${getStatusBadgeClass(displayStatus)}`}>
+                                {displayStatus}
                               </span>
                               {holidayName && (
                                 <span className="sp-holiday-name-subtext" title={holidayName}>
@@ -837,13 +929,24 @@ export default function TransportManagerMyAttendance() {
                           )}
                         </td>
                         <td style={{ textAlign: "center" }}>
-                          {regState === "pending" ? (
-                            <span className="sp-reg-badge pending">Pending</span>
-                          ) : regState === "approved" ? (
+                          {regLower === "pending" ? (
+                            <span className="sp-reg-badge pending">Regularization Pending</span>
+                          ) : regLower === "approved" ? (
                             <span className="sp-reg-badge approved">Approved</span>
-                          ) : regState === "rejected" ? (
-                            <span className="sp-reg-badge rejected">Rejected</span>
-                          ) : canReg ? (
+                          ) : regLower === "rejected" ? (
+                            <div className="sp-reg-action-info">
+                              <span className="sp-reg-badge rejected">Rejected</span>
+                              <span className="sp-reg-decision-by rejected">Rejected by Admin</span>
+                              {decisionDateStr && (
+                                <span className="sp-reg-submeta">{decisionDateStr}</span>
+                              )}
+                              {log.regularizationAdminRemarks && (
+                                <span className="sp-reg-submeta remarks" title={log.regularizationAdminRemarks}>
+                                  Remarks: {log.regularizationAdminRemarks}
+                                </span>
+                              )}
+                            </div>
+                          ) : canReg && log.isToday ? (
                             <button
                               type="button"
                               className="sp-btn-regularize"

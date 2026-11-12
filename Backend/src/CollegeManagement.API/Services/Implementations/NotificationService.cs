@@ -1,37 +1,89 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Notification;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Hubs;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Primitives;
 
 namespace CollegeManagement.API.Services.Implementations
 {
     public class NotificationService : INotificationService
     {
+        private static readonly ConcurrentDictionary<int, CancellationTokenSource> UserCacheTokens = new();
+        private static long GlobalCacheEpoch = 0;
+
         private readonly INotificationRepository _notificationRepo;
         private readonly AppDbContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
+        private readonly IMemoryCache _cache;
         private readonly ILogger<NotificationService> _logger;
 
         public NotificationService(
             INotificationRepository notificationRepo,
             AppDbContext context,
             IHubContext<NotificationHub> hubContext,
+            IMemoryCache cache,
             ILogger<NotificationService> logger)
         {
             _notificationRepo = notificationRepo;
             _context = context;
             _hubContext = hubContext;
+            _cache = cache;
             _logger = logger;
         }
+
+        private static IChangeToken GetUserChangeToken(int userId)
+        {
+            var cts = UserCacheTokens.GetOrAdd(userId, _ => new CancellationTokenSource());
+            return new CancellationChangeToken(cts.Token);
+        }
+
+        public static void InvalidateUserCache(int userId)
+        {
+            if (UserCacheTokens.TryRemove(userId, out var oldCts))
+            {
+                try
+                {
+                    oldCts.Cancel();
+                    oldCts.Dispose();
+                }
+                catch
+                {
+                    // Ignore cancellation errors during invalidation
+                }
+            }
+        }
+
+        public static void InvalidateAllUserCaches()
+        {
+            Interlocked.Increment(ref GlobalCacheEpoch);
+            foreach (var uid in UserCacheTokens.Keys.ToList())
+            {
+                InvalidateUserCache(uid);
+            }
+        }
+
+        private static MemoryCacheEntryOptions BuildCacheOptions(int userId, TimeSpan absoluteExpiration)
+        {
+            return new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(absoluteExpiration)
+                .AddExpirationToken(GetUserChangeToken(userId));
+        }
+
+        private static string BuildCacheKey(string kind, int userId, string suffix) =>
+            $"notif:v{Volatile.Read(ref GlobalCacheEpoch)}:{kind}:{userId}:{suffix}";
 
         public async Task<int> PublishEventNotificationsAsync(int eventId)
         {
@@ -51,7 +103,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 // 1. Resolve Matching Students
                 var studentsQuery = _context.Students.AsNoTracking()
-                    .Where(s => (s.CampusId != null || s.BoardId != null)); // basic validation
+                    .Where(s => (s.CampusId != null || s.BoardId != null));
 
                 if (calendarEvent.BoardId > 0)
                     studentsQuery = studentsQuery.Where(s => s.BoardId == calendarEvent.BoardId);
@@ -138,7 +190,7 @@ namespace CollegeManagement.API.Services.Implementations
                     foreach (var uid in staffUserIds) targetUserIds.Add(uid);
                 }
 
-                // If scope is global / wide or few targeted, also notify active Admins
+                // Also notify active Admins
                 var adminUserIds = await _context.Users.AsNoTracking()
                     .Where(u => u.IsActive && u.AdminId.HasValue)
                     .Select(u => u.UserId)
@@ -151,7 +203,6 @@ namespace CollegeManagement.API.Services.Implementations
                     return 0;
                 }
 
-                // Format Message
                 var dateRangeStr = calendarEvent.StartDate.Date == calendarEvent.EndDate.Date
                     ? calendarEvent.StartDate.ToString("dd MMM yyyy")
                     : $"{calendarEvent.StartDate:dd MMM yyyy} to {calendarEvent.EndDate:dd MMM yyyy}";
@@ -162,34 +213,16 @@ namespace CollegeManagement.API.Services.Implementations
                 var title = $"Academic Calendar: {calendarEvent.Title}";
                 var message = $"{calendarEvent.EventType} has been scheduled for {dateRangeStr}{timeStr}{locationStr}.";
 
-                var notifications = targetUserIds.Select(uid => new Notification
-                {
-                    UserId = uid,
-                    Title = title,
-                    Message = message,
-                    Type = "AcademicCalendar",
-                    ReferenceId = calendarEvent.EventId,
-                    ActionUrl = "/dashboard/academic-calendar",
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
+                int insertedCount = await SendToUsersAsync(
+                    targetUserIds,
+                    title,
+                    message,
+                    "AcademicCalendar",
+                    calendarEvent.EventId,
+                    "/dashboard/academic-calendar");
 
-                int insertedCount = await _notificationRepo.CreateBatchNotificationsAsync(notifications);
                 _logger.LogInformation("PublishEventNotificationsAsync: Created {Count} notifications for Event #{EventId}", insertedCount, eventId);
 
-                // Real-time broadcast via SignalR
-                var notificationPayload = new
-                {
-                    title = title,
-                    message = message,
-                    type = "AcademicCalendar",
-                    referenceId = calendarEvent.EventId,
-                    actionUrl = "/dashboard/academic-calendar",
-                    createdAt = DateTime.UtcNow
-                };
-
-                // Broadcast to AllNotifications
-                await _hubContext.Clients.Group("AllNotifications").SendAsync("ReceiveNotification", notificationPayload);
                 await _hubContext.Clients.All.SendAsync("AcademicCalendarEventPublished", new
                 {
                     eventId = calendarEvent.EventId,
@@ -208,190 +241,186 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+        private static NotificationDto MapToDto(Notification n) => new NotificationDto
+        {
+            NotificationId = n.NotificationId,
+            UserId = n.UserId,
+            Title = n.Title,
+            Message = n.Message,
+            Type = n.Type,
+            ReferenceId = n.ReferenceId,
+            ActionUrl = n.ActionUrl,
+            GroupKey = !string.IsNullOrWhiteSpace(n.GroupKey)
+                ? n.GroupKey
+                : NotificationGroupingHelper.ResolveGroupKey(n.Type, n.Title, n.ActionUrl),
+            GroupCount = 1,
+            IsRead = n.IsRead,
+            ReadAt = n.ReadAt.HasValue ? DateTime.SpecifyKind(n.ReadAt.Value, DateTimeKind.Utc) : null,
+            CreatedAt = DateTime.SpecifyKind(n.CreatedAt, DateTimeKind.Utc)
+        };
+
         public async Task<(List<NotificationDto> Items, int TotalCount, int UnreadCount)> GetUserNotificationsAsync(
             int userId, int page = 1, int pageSize = 20, bool? unreadOnly = null)
         {
-            var (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
+            bool activeOnly = unreadOnly ?? true;
+            string filterTag = activeOnly ? "active" : "all";
+            string key = BuildCacheKey("list", userId, $"{filterTag}:{page}:{pageSize}");
 
-            if (totalCount == 0 && page == 1)
+            if (_cache.TryGetValue(key, out (List<NotificationDto> Items, int TotalCount, int UnreadCount) cached))
             {
-                await SeedInitialNotificationsForUserAsync(userId);
-                (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
+                return cached;
             }
 
-            var dtos = items.Select(n => new NotificationDto
+            if (activeOnly)
             {
-                NotificationId = n.NotificationId,
-                UserId = n.UserId,
-                Title = n.Title,
-                Message = n.Message,
-                Type = n.Type,
-                ReferenceId = n.ReferenceId,
-                ActionUrl = n.ActionUrl,
-                IsRead = n.IsRead,
-                ReadAt = n.ReadAt,
-                CreatedAt = n.CreatedAt
-            }).ToList();
+                var rawUnread = await _notificationRepo.GetActiveUnreadNotificationsAsync(userId);
+                var groupedAll = NotificationGroupingHelper.AggregateActiveUnread(rawUnread, MapToDto);
+                int p = page > 0 ? page : 1;
+                int ps = Math.Clamp(pageSize > 0 ? pageSize : 20, 1, 100);
+                var paged = groupedAll.Skip((p - 1) * ps).Take(ps).ToList();
+                int totalGrouped = groupedAll.Count;
+                var groupedResult = (paged, totalGrouped, totalGrouped);
+                _cache.Set(key, groupedResult, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                return groupedResult;
+            }
 
-            return (dtos, totalCount, unreadCount);
+            var (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
+            var result = (items.Select(MapToDto).ToList(), totalCount, unreadCount);
+            _cache.Set(key, result, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+            return result;
+        }
+
+        public async Task<(List<NotificationDto> Items, int UnreadCount)> GetUserNotificationHistoryAsync(
+            int userId, int limit = 10)
+        {
+            int clampedLimit = Math.Clamp(limit, 1, 10);
+            string key = BuildCacheKey("history", userId, $"{clampedLimit}");
+
+            if (_cache.TryGetValue(key, out (List<NotificationDto> Items, int UnreadCount) cached))
+            {
+                return cached;
+            }
+
+            var (items, unreadCount) = await _notificationRepo.GetLatestNotificationHistoryAsync(userId, clampedLimit);
+            var result = (items.Select(MapToDto).ToList(), unreadCount);
+            _cache.Set(key, result, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+            return result;
         }
 
         public async Task<int> GetUnreadCountAsync(int userId)
         {
-            var count = await _notificationRepo.GetUnreadCountAsync(userId);
-            if (count == 0)
+            string key = BuildCacheKey("unread", userId, "cnt");
+            if (_cache.TryGetValue(key, out int cachedCount))
             {
-                var total = (await _notificationRepo.GetUserNotificationsAsync(userId, 1, 1)).TotalCount;
-                if (total == 0)
-                {
-                    await SeedInitialNotificationsForUserAsync(userId);
-                    count = await _notificationRepo.GetUnreadCountAsync(userId);
-                }
+                return cachedCount;
             }
+
+            int count = await _notificationRepo.GetUnreadCountAsync(userId);
+            _cache.Set(key, count, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
             return count;
-        }
-
-        private async Task SeedInitialNotificationsForUserAsync(int userId)
-        {
-            try
-            {
-                var user = await _context.Users.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == userId);
-                if (user == null) return;
-
-                var now = DateTime.UtcNow;
-                var list = new List<Notification>();
-                var roleName = user.Role?.RoleName?.ToLowerInvariant() ?? "";
-
-                if (roleName.Contains("admin") || roleName.Contains("principal") || roleName.Contains("exam"))
-                {
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "New Certificate Request",
-                        Message = "Sahithi R (ADM-52) submitted a request for Conduct Certificate.",
-                        Type = "Certificate",
-                        ActionUrl = "/dashboard/certificates",
-                        IsRead = false,
-                        CreatedAt = now.AddMinutes(-15)
-                    });
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Staff Reimbursement Claim",
-                        Message = "New travel allowance reimbursement claim pending your review.",
-                        Type = "Finance",
-                        ActionUrl = "/dashboard/reimbursements",
-                        IsRead = false,
-                        CreatedAt = now.AddHours(-2)
-                    });
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Academic Calendar Published",
-                        Message = "Mid-Term Examination schedule has been published for all campuses.",
-                        Type = "Academic",
-                        ActionUrl = "/dashboard/academic-calendar",
-                        IsRead = true,
-                        CreatedAt = now.AddDays(-1)
-                    });
-                }
-                else if (roleName.Contains("student"))
-                {
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Examination Schedule",
-                        Message = "Semester Mid-Term Examinations announced. Hall tickets will be issued shortly.",
-                        Type = "Exam",
-                        ActionUrl = "/student-dashboard/examinations",
-                        IsRead = false,
-                        CreatedAt = now.AddHours(-1)
-                    });
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Fee Payment Reminder",
-                        Message = "Semester tuition fee payment deadline is approaching.",
-                        Type = "Finance",
-                        ActionUrl = "/student-dashboard",
-                        IsRead = false,
-                        CreatedAt = now.AddDays(-2)
-                    });
-                }
-                else if (roleName.Contains("faculty") || roleName.Contains("teacher"))
-                {
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Examination Duty Assigned",
-                        Message = "You have been assigned invigilation duty for the upcoming exams.",
-                        Type = "Exam",
-                        ActionUrl = "/faculty-dashboard",
-                        IsRead = false,
-                        CreatedAt = now.AddHours(-3)
-                    });
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Leave Balances Updated",
-                        Message = "Your casual and earned leave credits for this semester are now active.",
-                        Type = "Leave",
-                        ActionUrl = "/faculty-dashboard/leave",
-                        IsRead = true,
-                        CreatedAt = now.AddDays(-1)
-                    });
-                }
-                else if (roleName.Contains("accountant"))
-                {
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Pending Fee Approvals",
-                        Message = "5 fee payment transactions require reconciliation.",
-                        Type = "Finance",
-                        ActionUrl = "/accountant-dashboard/fees",
-                        IsRead = false,
-                        CreatedAt = now.AddMinutes(-30)
-                    });
-                }
-                else
-                {
-                    list.Add(new Notification
-                    {
-                        UserId = userId,
-                        Title = "Welcome to CMS Portal",
-                        Message = "Your college management workspace notifications are active.",
-                        Type = "General",
-                        ActionUrl = "/dashboard",
-                        IsRead = false,
-                        CreatedAt = now
-                    });
-                }
-
-                if (list.Any())
-                {
-                    await _notificationRepo.CreateBatchNotificationsAsync(list);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to auto-seed welcome notifications for User {UserId}", userId);
-            }
         }
 
         public async Task<bool> MarkAsReadAsync(int notificationId, int userId)
         {
-            return await _notificationRepo.MarkAsReadAsync(notificationId, userId);
+            var (updated, groupKey, markedIds) = await _notificationRepo.MarkNotificationOrGroupAsReadAsync(notificationId, userId);
+            if (updated)
+            {
+                InvalidateUserCache(userId);
+                try
+                {
+                    int unreadCount = await _notificationRepo.GetUnreadCountAsync(userId);
+                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), unreadCount, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationRead", new
+                    {
+                        notificationId,
+                        notificationIds = markedIds,
+                        groupKey,
+                        userId,
+                        unreadCount,
+                        readAt = DateTime.UtcNow
+                    });
+                }
+                catch
+                {
+                    // Non-blocking SignalR cross-tab sync
+                }
+            }
+            return updated;
+        }
+
+        public async Task<bool> MarkGroupAsReadAsync(string groupKey, int userId)
+        {
+            var (updated, markedIds) = await _notificationRepo.MarkGroupAsReadAsync(groupKey, userId);
+            if (updated)
+            {
+                InvalidateUserCache(userId);
+                try
+                {
+                    int unreadCount = await _notificationRepo.GetUnreadCountAsync(userId);
+                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), unreadCount, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationRead", new
+                    {
+                        notificationId = markedIds.FirstOrDefault(),
+                        notificationIds = markedIds,
+                        groupKey,
+                        userId,
+                        unreadCount,
+                        readAt = DateTime.UtcNow
+                    });
+                }
+                catch
+                {
+                    // Non-blocking SignalR cross-tab sync
+                }
+            }
+            return updated;
         }
 
         public async Task<bool> MarkAllAsReadAsync(int userId)
         {
-            return await _notificationRepo.MarkAllAsReadAsync(userId);
+            bool updated = await _notificationRepo.MarkAllAsReadAsync(userId);
+            if (updated)
+            {
+                InvalidateUserCache(userId);
+                try
+                {
+                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), 0, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    await _hubContext.Clients.Group($"User_{userId}").SendAsync("AllNotificationsRead", new
+                    {
+                        userId,
+                        unreadCount = 0,
+                        readAt = DateTime.UtcNow
+                    });
+                }
+                catch
+                {
+                    // Non-blocking SignalR cross-tab sync
+                }
+            }
+            return updated;
+        }
+
+        private async Task<NotificationDto> BuildRealtimeGroupedDtoAsync(Notification latestRow)
+        {
+            string groupKey = !string.IsNullOrWhiteSpace(latestRow.GroupKey)
+                ? latestRow.GroupKey
+                : NotificationGroupingHelper.ResolveGroupKey(latestRow.Type, latestRow.Title, latestRow.ActionUrl);
+
+            var groupItems = await _notificationRepo.GetActiveUnreadByGroupKeyAsync(latestRow.UserId, groupKey);
+            if (!groupItems.Any(x => x.NotificationId == latestRow.NotificationId))
+            {
+                groupItems.Insert(0, latestRow);
+            }
+
+            var dto = NotificationGroupingHelper.BuildGroupedDto(groupKey, groupItems, MapToDto);
+            dto.UnreadCount = await _notificationRepo.GetUnreadCountAsync(latestRow.UserId);
+            return dto;
         }
 
         public async Task<NotificationDto> SendToUserAsync(
             int userId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
         {
+            string groupKey = NotificationGroupingHelper.ResolveGroupKey(type, title, actionUrl);
             var notification = new Notification
             {
                 UserId = userId,
@@ -400,29 +429,19 @@ namespace CollegeManagement.API.Services.Implementations
                 Type = type,
                 ReferenceId = referenceId,
                 ActionUrl = actionUrl,
+                GroupKey = groupKey,
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
 
             var created = await _notificationRepo.CreateNotificationAsync(notification);
+            InvalidateUserCache(userId);
 
-            var dto = new NotificationDto
-            {
-                NotificationId = created.NotificationId,
-                UserId = created.UserId,
-                Title = created.Title,
-                Message = created.Message,
-                Type = created.Type,
-                ReferenceId = created.ReferenceId,
-                ActionUrl = created.ActionUrl,
-                IsRead = created.IsRead,
-                CreatedAt = created.CreatedAt
-            };
+            var dto = await BuildRealtimeGroupedDtoAsync(created);
 
             try
             {
                 await _hubContext.Clients.Group($"User_{userId}").SendAsync("ReceiveNotification", dto);
-                await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationReceived", new { type, notificationId = created.NotificationId, title });
             }
             catch (Exception ex)
             {
@@ -439,6 +458,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (!distinctIds.Any()) return 0;
 
             var now = DateTime.UtcNow;
+            string groupKey = NotificationGroupingHelper.ResolveGroupKey(type, title, actionUrl);
             var notifications = distinctIds.Select(uid => new Notification
             {
                 UserId = uid,
@@ -447,6 +467,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Type = type,
                 ReferenceId = referenceId,
                 ActionUrl = actionUrl,
+                GroupKey = groupKey,
                 IsRead = false,
                 CreatedAt = now
             }).ToList();
@@ -455,23 +476,11 @@ namespace CollegeManagement.API.Services.Implementations
 
             foreach (var notif in notifications)
             {
-                var payload = new
-                {
-                    notificationId = notif.NotificationId,
-                    userId = notif.UserId,
-                    title = notif.Title,
-                    message = notif.Message,
-                    type = notif.Type,
-                    referenceId = notif.ReferenceId,
-                    actionUrl = notif.ActionUrl,
-                    isRead = false,
-                    createdAt = notif.CreatedAt
-                };
-
+                InvalidateUserCache(notif.UserId);
                 try
                 {
-                    await _hubContext.Clients.Group($"User_{notif.UserId}").SendAsync("ReceiveNotification", payload);
-                    await _hubContext.Clients.Group($"User_{notif.UserId}").SendAsync("NotificationReceived", payload);
+                    var groupedDto = await BuildRealtimeGroupedDtoAsync(notif);
+                    await _hubContext.Clients.Group($"User_{notif.UserId}").SendAsync("ReceiveNotification", groupedDto);
                 }
                 catch { }
             }
@@ -565,28 +574,13 @@ namespace CollegeManagement.API.Services.Implementations
                         u.AdminId.HasValue ||
                         (u.Role != null && u.Role.RoleName.ToLower().Contains("admin"))));
 
-                var userIds = await query.Select(u => u.UserId).ToListAsync();
+                var userIds = await query.Select(u => u.UserId).Distinct().ToListAsync();
                 if (userIds.Any())
                 {
-                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                    return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
                 }
 
-                var payload = new
-                {
-                    title,
-                    message,
-                    type,
-                    referenceId,
-                    actionUrl,
-                    campusId,
-                    isRead = false,
-                    createdAt = DateTime.UtcNow
-                };
-
-                await _hubContext.Clients.Group($"Campus_{campusId}").SendAsync("ReceiveNotification", payload);
-                await _hubContext.Clients.Group($"Campus_{campusId}").SendAsync("NotificationReceived", new { type, title });
-
-                return userIds.Count;
+                return 0;
             }
             catch (Exception ex)
             {
@@ -607,24 +601,10 @@ namespace CollegeManagement.API.Services.Implementations
 
                 if (userIds.Any())
                 {
-                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                    return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
                 }
 
-                var payload = new
-                {
-                    title,
-                    message,
-                    type,
-                    referenceId,
-                    actionUrl,
-                    isRead = false,
-                    createdAt = DateTime.UtcNow
-                };
-
-                await _hubContext.Clients.Group("AllNotifications").SendAsync("ReceiveNotification", payload);
-                await _hubContext.Clients.Group("AllNotifications").SendAsync("NotificationReceived", new { type, title });
-
-                return userIds.Count;
+                return 0;
             }
             catch (Exception ex)
             {
@@ -677,7 +657,6 @@ namespace CollegeManagement.API.Services.Implementations
                         createdAt = DateTime.UtcNow
                     };
                     await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("ReceiveNotification", payload);
-                    await _hubContext.Clients.Group($"Staff_{staffId}").SendAsync("NotificationReceived", payload);
                 }
                 catch { }
 
@@ -705,19 +684,10 @@ namespace CollegeManagement.API.Services.Implementations
 
                 if (userIds.Any())
                 {
-                    await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
+                    return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
                 }
 
-                foreach (var sid in distinctStaffIds)
-                {
-                    try
-                    {
-                        await _hubContext.Clients.Group($"Staff_{sid}").SendAsync("NotificationReceived", new { type, title });
-                    }
-                    catch { }
-                }
-
-                return userIds.Count;
+                return 0;
             }
             catch (Exception ex)
             {
