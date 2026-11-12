@@ -413,8 +413,19 @@ await describe("Admin payment gateway", async () => {
     }
   });
   test("wrapped UTR submission/approval requires explicit backend acknowledgment", async () => {
-    adapter(() => ({ success: true, data: { message: "Submitted" } }));
-    assert.equal((await api.submitUtr({})).success, true);
+    const payload = { studentId: 11, studentFeeId: 41, amount: 100, orderId: "order_fixture", utrNumber: "UTRFIXTURE" };
+    adapter(() => ({ success: true, data: { transactionId: 99, amount: 100, message: "Submitted" } }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
+    for (const result of [{ success: true }, { success: true, amount: 100 },
+      { success: true, transactionId: 99, amount: 101 },
+      { success: true, transactionId: 99, amount: 100, status: "Created" },
+      { success: true, transactionId: 99, amount: 100, studentFeeId: 42 },
+      { success: true, transactionId: 99, amount: 100, orderId: "other_order" }]) {
+      adapter(() => result);
+      await assert.rejects(api.submitUtr(payload), /persistence was not confirmed/);
+    }
+    adapter(() => ({ success: true, transactionId: 99, amount: 100, status: "PendingVerification", ...payload }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
     adapter(() => ({}));
     await assert.rejects(api.approveUtr({}), /not acknowledged/);
     adapter(() => ({ success: false, message: "UTR duplicate" }));
@@ -429,6 +440,9 @@ await describe("Admin payment gateway", async () => {
     const rows = await api.pendingUtrs({ campusId: 2, academicYearId: 3 });
     assert.equal(rows[0].id, 9);
     assert.deepEqual(call.params, { campusId: 2, academicYearId: 3 });
+    assert.equal(call.headers["Cache-Control"], "no-cache");
+    adapter(() => [{ id: 9, amount: 100, status: "PendingVerification" }]);
+    assert.equal((await api.pendingUtrs({ campusId: 2 }))[0].id, 9);
     adapter(() => ({}));
     await assert.rejects(api.pendingUtrs({}), /transaction list/);
   });
@@ -733,7 +747,7 @@ await describe("Admin payment gateway", async () => {
     const state = { orders: 0, submissions: [], uploadOptions: [], pending: 0, events: [], footer: null, polled: null };
     const props = { mode: "UPI_QR", campusId: 2, account, target: "schedules", selectedIds: [101], amount: 300,
       onSaved: () => assert.fail("UTR submission must not settle or generate a receipt"),
-      onPending: () => { state.pending++; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
+      onPending: result => { state.pending++; state.savedRequest = result; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
     const view = await mount(gatewaySource, "GatewayPaymentPanel", {
       Event,
       window: { setTimeout, clearTimeout, dispatchEvent: event => state.events.push(event.type) },
@@ -772,8 +786,9 @@ await describe("Admin payment gateway", async () => {
     assert.equal(state.submissions.length, 1);
     assert.equal(state.footer.showDone, false);
     view.render(); assert.equal(state.footer.busy, true);
-    release({ success: true }); await flush(); tree = view.render();
+    release({ success: true, transactionId: 99, amount: 300, status: "PendingVerification" }); await flush(); tree = view.render();
     assert.equal(state.orders, 1); assert.equal(state.pending, 1);
+    assert.equal(state.savedRequest.transactionId, 99);
     assert.equal(account.balance, 700);
     assert.ok(state.events.includes(UTR_SUBMITTED_EVENT));
     assert.ok(buttonNamed(tree, "Pending Verification").props.disabled);
@@ -1980,6 +1995,52 @@ await describe("Admin payment gateway", async () => {
     date: "2026-11-09",
     status: "PendingVerification",
   };
+  test("queue load failures never claim an empty queue and Refresh recovers with saved requests", async () => {
+    let reads = 0;
+    const view = await mount(queueSource, "OfflineUtrQueueTab", {
+      feePaymentGatewayApi: { pendingUtrs: async () => {
+        if (++reads === 1) throw new Error("Fixture API unavailable");
+        return [queueRow];
+      } },
+    }, { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" });
+    const hasEmpty = tree => tree.some(node => node.props.children.includes("No pending UTR transactions."));
+    assert.equal(hasEmpty(view.render()), false);
+    await flush(); let tree = view.render();
+    assert.equal(hasEmpty(tree), false);
+    assert.ok(tree.some(node => node.props.role === "alert"));
+    assert.equal(tree.some(node => node.type === "Pagination"), false);
+    buttonNamed(tree, " Refresh").props.onClick(); view.render(); await flush(); tree = view.render();
+    assert.equal(reads, 2);
+    assert.ok(tree.some(node => node.props.children.includes("UTRFIXTURE")));
+    assert.equal(tree.some(node => node.props.role === "alert"), false);
+    view.unmount();
+  });
+  test("queue preserves five-row pagination, search, scope filters and fresh reads on reopen", async () => {
+    const calls = [];
+    const props = { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" };
+    const bindings = { feePaymentGatewayApi: { pendingUtrs: async scope => {
+      calls.push(scope);
+      return scope.campusId === 2 ? Array.from({ length: 7 }, (_, index) => ({ ...queueRow, id: 90 + index, utrNumber: `FIXTURE-${index}` })) : [];
+    } } };
+    const view = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    view.render(); await flush(); let tree = view.render();
+    const references = tree => tree.filter(node => node.type === "td" && node.props.children.some(value => typeof value === "string" && value.startsWith("FIXTURE-")));
+    assert.equal(references(tree).length, 5);
+    tree.find(node => node.type === "Pagination").props.onPageChange(2);
+    assert.equal(references(view.render()).length, 2);
+    view.render().find(node => node.props["aria-label"] === "Search pending UTRs").props.onChange({ target: { value: "FIXTURE-6" } });
+    assert.equal(references(view.render()).length, 1);
+    props.scope = { campusId: 4, academicYearId: 3 }; view.render(); await flush(); tree = view.render();
+    assert.equal(references(tree).length, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ campusId: 2, academicYearId: 3 }, { campusId: 4, academicYearId: 3 }]);
+    view.unmount();
+    const reopened = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    reopened.render(); await flush(); reopened.render(); assert.equal(calls.length, 3); reopened.unmount();
+    const denied = await mount(queueSource, "OfflineUtrQueueTab", bindings, { ...props, canView: false });
+    denied.render(); await flush(); tree = denied.render(); assert.equal(calls.length, 3);
+    assert.equal(tree.some(node => node.props.children.includes("No pending UTR transactions.")), false);
+    denied.unmount();
+  });
   test("authorized queue proof viewing supports images/PDFs and releases private URLs on scope change", async () => {
     for (const type of ["image/png", "application/pdf"]) {
       const revoked = [], ids = [];

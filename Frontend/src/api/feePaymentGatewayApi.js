@@ -79,8 +79,16 @@ export const feePaymentGatewayApi = {
         throw new Error("The backend did not confirm that this verification request and its proof were stored together. Check the pending queue before retrying.");
       }
     } else data = await post(apiEndpoints.feeGateway.submitUtr, payload, signal);
-    if (data.success !== true)
-      throw new Error("UTR submission was not acknowledged. Review the queue before retrying.");
+    // The legacy JSON contract confirms persistence with an ID and amount;
+    // newer responses also echo status and account/order details.
+    if (data.success !== true || !Number.isSafeInteger(Number(data.transactionId)) || Number(data.transactionId) <= 0
+      || !Number.isFinite(Number(data.amount)) || Number(data.amount) <= 0
+      || Math.abs(Number(data.amount) - Number(payload.amount)) > 0.005
+      || (data.status != null && String(data.status).toLowerCase() !== "pendingverification")
+      || ["studentId", "studentFeeId"].some(key => data[key] != null && Number(data[key]) !== Number(payload[key]))
+      || (data.orderId != null && payload.orderId && data.orderId !== payload.orderId)
+      || (data.utrNumber != null && data.utrNumber !== payload.utrNumber))
+      throw new Error("UTR persistence was not confirmed with a matching saved request ID and amount. Review the queue before retrying.");
     return data;
   },
   approveUtr: async (payload, signal) => {
@@ -107,7 +115,7 @@ export const feePaymentGatewayApi = {
   },
   pendingUtrs: async (params, signal) => {
     const data = gatewayData(
-      (await apiClient.get(apiEndpoints.feeGateway.pendingUtrs, { ...config, params, signal }))
+      (await apiClient.get(apiEndpoints.feeGateway.pendingUtrs, { ...config, params, signal, headers: { "Cache-Control": "no-cache" } }))
         .data,
     );
     const rows = Array.isArray(data) ? data : data.items || data.results || data.$values;

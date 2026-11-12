@@ -28,6 +28,7 @@ export default function GatewayPaymentPanel({
   const [notice, setNotice] = useState("");
   const [linkCopy, setLinkCopy] = useState({ busy: false, message: "", error: "" });
   const [submitted, setSubmitted] = useState(false);
+  const pendingSubmission = useRef(null);
   const [uncertain, setUncertain] = useState(false);
   const [configurationUnavailable, setConfigurationUnavailable] = useState(false);
   const [verificationOpen, setVerificationOpen] = useState(false);
@@ -328,7 +329,7 @@ export default function GatewayPaymentPanel({
     }
     run(async (signal) => {
       const { feeInstallmentIds, ...accountPayload } = payload;
-      await feePaymentGatewayApi.submitUtr(
+      const result = await feePaymentGatewayApi.submitUtr(
         {
           ...accountPayload,
           ...(feeInstallmentIds?.length ? { feeInstallmentIds } : {}),
@@ -340,10 +341,11 @@ export default function GatewayPaymentPanel({
         signal,
       );
       if (signal.aborted) return;
+      pendingSubmission.current = result;
       setSubmitted(true);
       setNotice("Payment details submitted successfully. Your payment is pending verification.");
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(UTR_SUBMITTED_EVENT));
-      onPending();
+      onPending?.(pendingSubmission.current);
     });
   };
   const chooseProof = async event => {
@@ -403,7 +405,8 @@ export default function GatewayPaymentPanel({
       verificationRequest.current = { fingerprint, key: `utr-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`}` };
     }
     run(async signal => {
-      try { await feePaymentGatewayApi.submitUtr(payload, signal, { attachment, idempotencyKey: verificationRequest.current.key }); }
+      let result;
+      try { result = await feePaymentGatewayApi.submitUtr(payload, signal, { attachment, idempotencyKey: verificationRequest.current.key }); }
       catch (failure) {
         if (failure.response?.status === 409) setUncertain(true);
         if (failure.response?.status === 413) setVerificationErrors(current => ({ ...current, attachment: "The server rejected the upload size. Choose a payment proof of 5 MB or smaller." }));
@@ -413,11 +416,12 @@ export default function GatewayPaymentPanel({
         throw failure;
       }
       if (signal.aborted || !alive.current) return;
+      pendingSubmission.current = result;
       submittedReferences.current.add(payload.utrNumber);
       setSubmitted(true);
       setNotice("Payment details submitted successfully. Your payment is pending verification.");
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(UTR_SUBMITTED_EVENT));
-      onPending?.();
+      onPending?.(pendingSubmission.current);
     });
   };
   const submitInlineDirectUtr = (approveImmediately) => {
@@ -452,19 +456,20 @@ export default function GatewayPaymentPanel({
       );
       if (signal.aborted) return;
       submittedReferences.current.add(cleanUtr);
+      pendingSubmission.current = submittedRes;
       setSubmitted(true);
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(UTR_SUBMITTED_EVENT));
       if (!approveImmediately) {
         setSubmitted(true);
         setNotice("UTR submitted for queue verification. Fees will be credited after approval.");
-        onPending();
+        onPending?.(pendingSubmission.current);
         return;
       }
       const txnId = Number(submittedRes.transactionId);
       if (!Number.isSafeInteger(txnId) || txnId <= 0) {
         setSubmitted(true);
         setNotice("UTR submitted for verification. Approve it in the Pending UTR Queue to credit fees.");
-        onPending();
+        onPending?.(pendingSubmission.current);
         return;
       }
       let approved;
@@ -476,7 +481,7 @@ export default function GatewayPaymentPanel({
       } catch (failure) {
         if (signal.aborted || !alive.current) return;
         setNotice("UTR was submitted. Check the Pending UTR Queue and payment history before attempting approval again.");
-        onPending?.();
+        onPending?.(pendingSubmission.current);
         throw failure;
       }
       if (signal.aborted || completed.current) return;
@@ -489,7 +494,7 @@ export default function GatewayPaymentPanel({
       } else {
         setSubmitted(true);
         setNotice("UTR submitted. Refresh Fee Management or check Pending UTR Queue.");
-        onPending();
+        onPending?.(pendingSubmission.current);
       }
     });
   };
