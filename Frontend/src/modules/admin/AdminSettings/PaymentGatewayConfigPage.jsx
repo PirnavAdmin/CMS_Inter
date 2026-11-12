@@ -11,10 +11,12 @@ import { getApiErrorMessage } from "@/api/axios.js";
 import { getPaymentGatewayConfigApi, updatePaymentGatewayConfigApi } from "@/api/feePaymentGatewayApi.js";
 import { hasPaymentReversalRole, PAYMENT_CONFIG_DEFAULTS, PAYMENT_CONFIG_SECTIONS, paymentConfigErrors, paymentConfigPayload } from "../AdminFees/services/paymentGatewaySession.js";
 import "./PaymentGatewayConfigPage.css";
+import PaymentTemplatesEditor from "./PaymentTemplatesEditor.jsx";
 
 const tabs = [
   ["bank", "College Bank Account", Building2], ["upi", "Dynamic UPI QR", QrCode],
   ["razorpay", "Razorpay Gateway", CreditCard], ["advanced", "Countertop & Polling", Clock],
+  ["templates", "Email & Receipt Templates", Copy],
 ];
 const fields = {
   bank: [["bankName", "Bank Name"], ["accountHolderName", "Account Holder / Beneficiary Name"],
@@ -58,7 +60,7 @@ function maskedBankAccount(value) {
   return number.length > 4 && /\d{4}$/.test(number) ? `XXXXXXXX${number.slice(-4)}` : "Account number hidden";
 }
 
-function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
+function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateDrafts, templatesEditable = false }) {
   const retained = drafts?.get(campusId);
   const [tab, setTab] = useState("bank");
   const [form, setForm] = useState(() => retained?.form || { ...PAYMENT_CONFIG_DEFAULTS, campusId });
@@ -234,7 +236,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
       <p className="cms-payment-config-note">Changing bank details does not change the bank linked to a UPI ID or Razorpay's merchant settlement account. Those must be verified with the bank or payment provider.</p>
       <h4>{hasConfiguredBank ? "Update Configured Bank Account" : "Bank Account Form"}</h4>
     </section>}
-    <form noValidate onSubmit={submit}>
+    {tab === "templates" ? <PaymentTemplatesEditor campusId={campusId} campusName={campusName} editable={templatesEditable && !accessDenied} drafts={templateDrafts} /> : <form noValidate onSubmit={submit}>
       <fieldset disabled={saving || !editable || accessDenied || Boolean(confirmation)}>
         <div id="payment-settings-panel" role="tabpanel" aria-labelledby={`payment-tab-${tab}`}>
           {tab === "razorpay" && <div className="cms-payment-config-mode"><span>Environment</span>{[[false, "Test / Sandbox"], [true, "Live / Production"]].map(([live, label]) => <label key={label}><input type="radio" name="payment-mode" checked={form.isLiveMode === live} onChange={() => update("isLiveMode", live)} /> {label}</label>)}</div>}
@@ -259,20 +261,43 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts }) {
           : tab === "razorpay" ? "Leave stored secrets blank to preserve them. Enter a replacement only when changing credentials; saved secrets are never displayed."
             : "These settings do not change the Vite proxy, API base URL or workstation network. Mobile checkout and backend LAN resolution must be supported separately."}</p>
       <div className="cms-payment-config-actions"><button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : "Save Settings"}</button></div>
-    </form>
+    </form>}
     {confirmation && <ConfirmDialog title="Confirm payment settings" message={confirmation} confirmLabel="Confirm & Save" onCancel={() => setConfirmation("")} onConfirm={save} loading={saving} />}
   </section>;
 }
 
 export default function PaymentGatewayConfigPage({ embedded = false }) {
   const drafts = useRef(new Map());
+  const templateDrafts = useRef(new Map());
   const permissions = useEffectivePermissions();
   const { selectedCampusId, selectedCampus } = useCampusContext();
   const user = getAuthUser() || {};
   const allowedRole = hasPaymentReversalRole(user, getAuthItem("role"));
   const canView = allowedRole && !permissions.loading && !permissions.error && permissions.canView("settings", "payment-gateway");
   const canEdit = canView && permissions.canDo("settings", "edit", "payment-gateway");
+  const templatesEditable = canEdit && permissions.isSuperOrAdmin;
   useEffect(() => { if (!canEdit) drafts.current.clear(); }, [canEdit]);
+  useEffect(() => { if (!templatesEditable) templateDrafts.current.clear(); }, [templatesEditable]);
+  useEffect(() => {
+    const beforeUnload = event => {
+      if (!templateDrafts.current.size) return;
+      event.preventDefault(); event.returnValue = "";
+    };
+    const beforeLink = event => {
+      const link = event.target?.closest?.("a[href]");
+      if (!templateDrafts.current.size || !link || link.target === "_blank" || link.hasAttribute("download")) return;
+      if (link.href === window.location?.href) return;
+      if (!window.confirm("Leave payment settings? Unsaved email and receipt template drafts will be discarded.")) {
+        event.preventDefault(); event.stopPropagation();
+      }
+    };
+    window.addEventListener?.("beforeunload", beforeUnload);
+    if (typeof document !== "undefined") document.addEventListener("click", beforeLink, true);
+    return () => {
+      window.removeEventListener?.("beforeunload", beforeUnload);
+      if (typeof document !== "undefined") document.removeEventListener("click", beforeLink, true);
+    };
+  }, []);
   const campusId = Number(selectedCampusId);
   const isAdmin = permissions.isSuperOrAdmin;
   const assigned = Array.isArray(user.assignedCampusIds) && user.assignedCampusIds.length ? user.assignedCampusIds : [user.campusId];
@@ -283,7 +308,7 @@ export default function PaymentGatewayConfigPage({ embedded = false }) {
   const content = permissions.loading ? <p role="status">Checking payment settings permissions…</p>
     : !canView ? <p role="alert">Access restricted. An authorized accounting role and Settings view permission are required.</p>
       : !inScope ? <p role="alert">Select a permitted campus in the header. No default receiving account will be loaded. Assigned campus access must be present in your account.</p>
-        : <CampusPaymentConfig key={`${campusId}:${canEdit}`} campusId={campusId} campusName={selectedCampus.name || selectedCampus.campusName || `Campus ${campusId}`} editable={canEdit} drafts={drafts.current} />;
+        : <CampusPaymentConfig key={`${campusId}:${canEdit}:${templatesEditable}`} campusId={campusId} campusName={selectedCampus.name || selectedCampus.campusName || `Campus ${campusId}`} editable={canEdit} drafts={drafts.current} templateDrafts={templateDrafts.current} templatesEditable={templatesEditable} />;
   return embedded ? <><h1>Payment Gateway & Bank Accounts</h1>{content}</>
     : <DashboardLayout actions={<Link className="cms-btn cms-btn-ghost" to="/dashboard/settings">&larr; Back to Settings</Link>} title="Payment Gateway & Bank Accounts" subtitle="Configure campus receiving bank accounts and payment processing." breadcrumb={["Settings", "Payment Gateway"]}>{content}</DashboardLayout>;
 }

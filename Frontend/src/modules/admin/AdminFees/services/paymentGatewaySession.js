@@ -490,3 +490,45 @@ export function startPaymentPolling({
   tick();
   return stop;
 }
+// Preview-only authoring data. These are not published templates or a backend
+// placeholder allowlist. Never use these samples to generate official receipts.
+export const PAYMENT_EMAIL_TYPES = [
+  ["successful", "Payment Successful"], ["pending", "Pending Verification"],
+  ["rejected", "Payment Rejected"], ["reminder", "Payment Reminder"],
+];
+export const PAYMENT_TEMPLATE_TOKENS = {
+  collegeName: "College display name", campusName: "Payment campus", studentName: "Student name",
+  admissionNumber: "Admission number", academicYear: "Payment academic year", amountPaid: "Verified amount paid",
+  paymentDate: "Recorded payment date", paymentMethod: "Recorded payment method", transactionReference: "Verified transaction reference",
+  receiptNumber: "Official receipt number", remainingBalance: "Backend account balance", paymentStatus: "Backend payment status",
+};
+export function paymentTemplateSample(campusName, type = "successful") {
+  return { collegeName: "Pirnav College", campusName, studentName: "Sample Student", admissionNumber: "SAMPLE-001",
+    academicYear: "2026–2027", amountPaid: "₹17,500", paymentDate: "14 Nov 2026", paymentMethod: "UPI",
+    transactionReference: "SAMPLE-REFERENCE", receiptNumber: "SAMPLE-RCP-001", remainingBalance: "₹52,500",
+    paymentStatus: ({ successful: "Payment Successful", pending: "Pending Verification", rejected: "Payment Rejected", reminder: "Payment Reminder" })[type] };
+}
+export function newPaymentTemplateDraft(campusName) {
+  return { emails: Object.fromEntries(PAYMENT_EMAIL_TYPES.map(([type, label]) => [type, {
+    subject: `${label} - {{collegeName}}`, heading: label,
+    body: ({ successful: "Dear {{studentName}},\n\nWe have received your payment of {{amountPaid}} for academic year {{academicYear}}.\n\nReceipt: {{receiptNumber}}\nRemaining balance: {{remainingBalance}}",
+      pending: "Dear {{studentName}},\n\nYour payment details are pending verification. No fee credit has been applied.\n\nReference: {{transactionReference}}",
+      rejected: "Dear {{studentName}},\n\nYour payment verification request was rejected. Please contact the accounts department.\n\nReference: {{transactionReference}}",
+      reminder: "Dear {{studentName}},\n\nThis is a reminder about your fee balance of {{remainingBalance}} for {{academicYear}}. Please contact the accounts department for assistance." })[type],
+    closing: "Thank you. Please contact the accounts department if you need help.", signature: "Accounts Department\n{{collegeName}}",
+  }])), receipt: { collegeName: "Pirnav College", campusName, address: "Campus Administration & Accounts Division",
+    phone: "", email: "", website: "", title: "FEE PAYMENT RECEIPT", layout: "split", accentColor: "#6941a5",
+    footer: "Thank you for your payment.", instructions: "", signatureName: "Accounts Department", signatureDesignation: "Authorized Signatory",
+    visibility: { academicYear: true, campusName: true, paymentMethod: true, transactionReference: true, installments: true, remainingBalance: true, contact: true } },
+    delivery: { senderName: "Accounts Department", replyTo: "", recipients: "both", attachPdf: true, pending: true, rejected: true, reminder: false, testRecipient: "" },
+    dirty: false };
+}
+export function insertPaymentTemplateText(value, text, start, end) {
+  const from = Math.max(0, Math.min(value.length, Number(start) || 0));
+  const to = Math.max(from, Math.min(value.length, Number(end) || from));
+  return { value: value.slice(0, from) + text + value.slice(to), cursor: from + text.length };
+}
+export function renderPaymentTemplateSample(value, sample) {
+  return String(value || "").replace(/\{\{(\w+)\}\}/g, (token, key) =>
+    Object.hasOwn(PAYMENT_TEMPLATE_TOKENS, key) && Object.hasOwn(sample, key) ? String(sample[key]) : token);
+}
