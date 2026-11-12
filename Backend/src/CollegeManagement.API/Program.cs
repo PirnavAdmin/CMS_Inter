@@ -96,6 +96,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+        options.Filters.Add<CollegeManagement.API.Filters.TenantIsolationActionFilter>();
     })
     .AddJsonOptions(options =>
     {
@@ -317,8 +318,12 @@ builder.Services.Configure<PaymentGatewaySettings>(builder.Configuration.GetSect
 builder.Services.AddSingleton<CollegeManagement.API.Helpers.AppUrlResolver>();
 builder.Services.AddScoped<IPaymentGatewayService, PaymentGatewayService>();
 builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentProofStorageService, PaymentProofStorageService>();
+builder.Services.AddScoped<IPaymentUtrVerificationService, PaymentUtrVerificationService>();
 builder.Services.AddScoped<IPaymentLedgerService, PaymentLedgerService>();
 builder.Services.AddScoped<IFeeReceiptPdfService, FeeReceiptPdfService>();
+builder.Services.AddSingleton<CollegeManagement.API.Services.Implementations.PaymentEmailDispatchSignal>();
+builder.Services.AddScoped<IPaymentEmailOutboxService, PaymentEmailOutboxService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -411,6 +416,7 @@ builder.Services.AddHttpClient("RazorpayAssets", client =>
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.NotificationHistoryCleanupWorker>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeePaymentEmailDispatcherWorker>();
 #endregion
 
 #region Email Configuration
@@ -660,6 +666,13 @@ if (args.Contains("--test-student-portal"))
 if (args.Contains("--test-parent-portal"))
 {
     var success = await CollegeManagement.API.Tests.ParentPortalBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-fee-gateway-flow"))
+{
+    var success = await CollegeManagement.API.Tests.PaymentSettlementReceiptEmailTester.RunAllTestsAsync(app.Services);
     Environment.Exit(success ? 0 : 1);
     return;
 }
@@ -1269,6 +1282,8 @@ catch (Exception ex)
         {
             ("GatewayQrCodeId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `GatewayQrCodeId` VARCHAR(100) NULL AFTER `OrderId`;"),
             ("CampusId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `CampusId` INT NULL AFTER `StudentFeeId`;"),
+            ("PaymentDate", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `PaymentDate` DATETIME(6) NULL AFTER `BankName`;"),
+            ("ClientIdempotencyKey", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ClientIdempotencyKey` VARCHAR(128) NULL AFTER `IdempotencyKey`;"),
             ("ExpiresAt", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ExpiresAt` DATETIME(6) NULL AFTER `SettledAt`;"),
             ("LastGatewaySyncAtUtc", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `LastGatewaySyncAtUtc` DATETIME(6) NULL AFTER `ExpiresAt`;")
         };
@@ -1308,6 +1323,94 @@ catch (Exception ex)
                 KEY `IX_PaymentLedgerEntries_Campus_Created` (`CampusId`, `CreatedAt`),
                 KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
                 KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentProofAttachments` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `PaymentGatewayTransactionId` INT NOT NULL,
+                `OrderId` VARCHAR(100) NOT NULL,
+                `StudentId` INT NOT NULL,
+                `StudentFeeId` INT NOT NULL,
+                `CampusId` INT NULL,
+                `OriginalFileName` VARCHAR(255) NOT NULL,
+                `StoredFileName` VARCHAR(255) NOT NULL,
+                `StorageRelativePath` VARCHAR(500) NOT NULL,
+                `ContentType` VARCHAR(100) NOT NULL,
+                `FileSizeBytes` BIGINT NOT NULL,
+                `Sha256Hash` VARCHAR(64) NOT NULL,
+                `UploadedByUserId` INT NULL,
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+                `ActiveTransactionKey` INT NULL,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UK_PaymentProof_StoredFileName` (`StoredFileName`),
+                UNIQUE KEY `UK_PaymentProof_ActiveTxn` (`ActiveTransactionKey`),
+                KEY `IX_PaymentProof_TxnActive` (`PaymentGatewayTransactionId`, `IsActive`),
+                KEY `IX_PaymentProof_OrderId` (`OrderId`),
+                KEY `IX_PaymentProof_StudentFeeId` (`StudentFeeId`),
+                KEY `IX_PaymentProof_CampusId` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `FeePaymentEmailOutbox` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `EventEntityId` INT NOT NULL,
+                `FeePaymentId` INT NULL,
+                `PaymentGatewayTransactionId` INT NULL,
+                `StudentId` INT NOT NULL,
+                `CampusId` INT NULL,
+                `RecipientEmail` VARCHAR(255) NOT NULL,
+                `RecipientType` VARCHAR(30) NOT NULL DEFAULT 'StudentOrParent',
+                `NotificationType` VARCHAR(50) NOT NULL DEFAULT 'PAYMENT_SUCCESS_RECEIPT',
+                `Status` VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+                `AttemptCount` INT NOT NULL DEFAULT 0,
+                `MaxAttempts` INT NOT NULL DEFAULT 5,
+                `NextAttemptAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `LockedUntilUtc` DATETIME(6) NULL,
+                `SentAtUtc` DATETIME(6) NULL,
+                `LastAttemptAtUtc` DATETIME(6) NULL,
+                `LastError` VARCHAR(500) NULL,
+                `PayloadJson` TEXT NULL,
+                `CreatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UX_FeePaymentEmailOutbox_Dedup` (`NotificationType`, `EventEntityId`, `RecipientEmail`),
+                KEY `IX_FeePaymentEmailOutbox_Dispatch` (`Status`, `NextAttemptAtUtc`, `LockedUntilUtc`),
+                KEY `IX_FeePaymentEmailOutbox_FeePaymentId` (`FeePaymentId`),
+                KEY `IX_FeePaymentEmailOutbox_StudentCampus` (`StudentId`, `CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `PaymentCommunicationSettings` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NULL,
+                `CollegeDisplayName` VARCHAR(200) NULL,
+                `CampusDisplayName` VARCHAR(200) NULL,
+                `CollegeAddress` VARCHAR(500) NULL,
+                `ContactNumber` VARCHAR(50) NULL,
+                `ContactEmail` VARCHAR(254) NULL,
+                `Website` VARCHAR(300) NULL,
+                `ReceiptTitle` VARCHAR(150) NULL,
+                `Layout` VARCHAR(20) NULL,
+                `AccentColor` VARCHAR(20) NULL,
+                `FooterMessage` VARCHAR(500) NULL,
+                `AdditionalInstructions` VARCHAR(1000) NULL,
+                `SignatureName` VARCHAR(150) NULL,
+                `SignatureDesignation` VARCHAR(150) NULL,
+                `ReceiptVisibilityJson` TEXT NULL,
+                `SenderDisplayName` VARCHAR(150) NULL,
+                `ReplyToEmailAddress` VARCHAR(254) NULL,
+                `RecipientPreference` VARCHAR(20) NOT NULL DEFAULT 'both',
+                `AttachPdfOnSuccess` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePendingVerificationEmail` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePaymentRejectedEmail` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePaymentReminderEmail` TINYINT(1) NOT NULL DEFAULT 0,
+                `EmailTemplatesJson` MEDIUMTEXT NULL,
+                `UpdatedByUserId` INT NULL,
+                `CreatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UX_PaymentCommSettings_Campus` (`CampusId`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ");
     }

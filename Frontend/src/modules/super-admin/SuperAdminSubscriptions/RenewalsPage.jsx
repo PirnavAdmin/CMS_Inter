@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import "./RenewalsPage.css";
 
 const getDaysRemaining = (dateStr) => {
@@ -592,7 +593,7 @@ export default function RenewalsPage() {
       <header className="rnp-header">
         <div className="rnp-header-left">
           <div className="rnp-header-icon-wrap">
-            <RefreshCw size={19} />
+            <ThreeDIcon name="academic-year" size={28} />
           </div>
           <div className="rnp-title-wrap">
             <h1 className="rnp-page-title">Renewals</h1>

@@ -12,34 +12,52 @@ const STORAGE_KEY_SELECTED_CAMPUS = "cms_selected_campus_id";
 import { DEFAULT_CAMPUSES } from "../data/defaultCampuses.js";
 export { DEFAULT_CAMPUSES };
 
+const getTenantKeySuffix = () => {
+  const u = getAuthUser();
+  return u?.collegeId ? `_c${u.collegeId}` : "";
+};
+
 export function CampusProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load campuses from localStorage or fallback
+  // Load campuses from tenant-scoped localStorage (never leak another college's campuses)
   const [campuses, setCampuses] = useState(() => {
+    const u = getAuthUser();
+    const suffix = getTenantKeySuffix();
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_CAMPUSES);
+      const saved = localStorage.getItem(`${STORAGE_KEY_CAMPUSES}${suffix}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.map(campusApi.normalizeCampus);
         }
       }
     } catch (e) {
       console.warn("Failed to load campuses from localStorage", e);
     }
+    if (u?.collegeId && Number(u.collegeId) > 1) return [];
     return DEFAULT_CAMPUSES.map(campusApi.normalizeCampus);
   });
 
-  // Selected campus state
+  // Selected campus state (tenant-scoped)
   const [selectedCampusId, setSelectedCampusId] = useState(() => {
+    const u = getAuthUser();
+    const suffix = getTenantKeySuffix();
+    if (u?.collegeId && Number(u.collegeId) > 1 && campuses.length === 0) {
+      return "";
+    }
     try {
-      const savedId = localStorage.getItem(STORAGE_KEY_SELECTED_CAMPUS);
-      if (savedId) return savedId;
+      const savedId = localStorage.getItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`);
+      if (savedId) {
+        if (campuses.length === 0 || campuses.some((c) => String(c.id) === String(savedId) || String(c.campusId) === String(savedId))) {
+          return savedId;
+        }
+      }
     } catch (e) {
       console.warn("Failed to load selected campus id", e);
     }
+    if (u?.collegeId && Number(u.collegeId) > 1) return "";
     return DEFAULT_CAMPUSES[0]?.id || "";
   });
 
@@ -105,8 +123,15 @@ export function CampusProvider({ children }) {
     setError(null);
     try {
       const data = await campusApi.getCampuses();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setCampuses(data);
+        setSelectedCampusId((prev) => {
+          const exists = data.some(
+            (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
+          );
+          if (exists) return prev;
+          return data[0]?.id ? String(data[0].id) : (data[0]?.campusId ? String(data[0].campusId) : "");
+        });
       }
     } catch (err) {
       console.warn("Could not fetch campuses from API, keeping cached:", err);
@@ -121,22 +146,26 @@ export function CampusProvider({ children }) {
     fetchCampuses();
   }, [fetchCampuses]);
 
-  // Save campuses to localStorage on update
+  // Save campuses to tenant-scoped localStorage on update
   useEffect(() => {
+    const suffix = getTenantKeySuffix();
     try {
-      if (campuses?.length) {
-        localStorage.setItem(STORAGE_KEY_CAMPUSES, JSON.stringify(campuses));
+      if (Array.isArray(campuses)) {
+        localStorage.setItem(`${STORAGE_KEY_CAMPUSES}${suffix}`, JSON.stringify(campuses));
       }
     } catch (e) {
       console.warn("Failed to persist campuses to localStorage", e);
     }
   }, [campuses]);
 
-  // Save selected campus id to localStorage
+  // Save selected campus id to tenant-scoped localStorage
   useEffect(() => {
+    const suffix = getTenantKeySuffix();
     try {
       if (selectedCampusId != null && selectedCampusId !== "") {
-        localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, String(selectedCampusId));
+        localStorage.setItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`, String(selectedCampusId));
+      } else {
+        localStorage.removeItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`);
       }
     } catch (e) {
       console.warn("Failed to persist selected campus id", e);

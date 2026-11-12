@@ -14,7 +14,6 @@ import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { Settings } from "lucide-react";
-import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 
 // Shared by the Student sidebar and its navbar search.
@@ -41,8 +40,7 @@ export const studentMenuGroups = [
   ]],
 ];
 
-export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
-  const { canView } = usePermissions();
+export default function StudentSidebar({ open, collapsed, mobile, onClose, onResizePointerDown, onResizePointerMove, onResizePointerUp, onResizePointerCancel }) {
   const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
 
   return (
@@ -59,8 +57,7 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
               if (facilityAccess.type === "hostel") return path === "hostel";
               return false;
             }
-            if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
-            return canView(moduleKey);
+            return true;
           });
 
           if (!visibleLinks.length) return null;
@@ -92,6 +89,16 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
           );
         })}
       </nav>
+      {!mobile && !collapsed ? <div
+        className="sp-sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Student Portal sidebar"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={onResizePointerCancel}
+      /> : null}
     </aside>
   );
 }

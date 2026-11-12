@@ -138,6 +138,15 @@ public class FeeRepository : IFeeRepository
 
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest request)
     {
+        var ay = await _db.AcademicYears.AsNoTracking()
+            .FirstOrDefaultAsync(y => y.AcademicYearId == request.AcademicYearId);
+        if (ay == null)
+            throw new ArgumentException($"AcademicYear {request.AcademicYearId} does not exist.");
+        if (ay.BoardId.HasValue && ay.BoardId.Value != request.BoardId)
+            throw new ArgumentException($"AcademicYear {request.AcademicYearId} belongs to Board {ay.BoardId.Value}, not Board {request.BoardId}.");
+        if (ay.CampusId.HasValue && request.CampusId.HasValue && ay.CampusId.Value != request.CampusId.Value)
+            throw new ArgumentException($"AcademicYear {request.AcademicYearId} belongs to Campus {ay.CampusId.Value}, not Campus {request.CampusId.Value}.");
+
         var c = Connection();
         string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>(), _jsonOptions);
         try
@@ -372,6 +381,25 @@ public class FeeRepository : IFeeRepository
 
     public async Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest request)
     {
+        var student = await _db.Students.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.StudentId == request.StudentId);
+        var feeStructure = await _db.FeeStructures.AsNoTracking()
+            .Include(fs => fs.AcademicYear)
+            .FirstOrDefaultAsync(fs => fs.FeeStructureId == request.FeeStructureId);
+
+        if (student == null)
+            throw new ArgumentException($"Student {request.StudentId} was not found.");
+        if (feeStructure == null)
+            throw new ArgumentException($"FeeStructure {request.FeeStructureId} was not found.");
+        if (student.CampusId.HasValue && feeStructure.CampusId.HasValue && student.CampusId.Value != feeStructure.CampusId.Value)
+            throw new ArgumentException("Fee structure campus does not match the student's campus.");
+        if (student.BoardId.HasValue && feeStructure.BoardId != student.BoardId.Value)
+            throw new ArgumentException("Fee structure board does not match the student's board.");
+        if (feeStructure.AcademicYear?.BoardId != null && student.BoardId.HasValue && feeStructure.AcademicYear.BoardId.Value != student.BoardId.Value)
+            throw new ArgumentException("Fee structure academic year belongs to a different board than the student.");
+        if (student.AcademicYearId.HasValue && feeStructure.AcademicYearId != student.AcademicYearId.Value)
+            throw new ArgumentException("Fee structure academic year does not match the student's academic year.");
+
         var c = Connection();
         using var multi = await c.QueryMultipleAsync(
             "sp_StudentFee_Assign",
@@ -706,6 +734,7 @@ public class FeeRepository : IFeeRepository
         if (list == null || !list.Any()) return;
 
         var paymentIds = list.Select(p => p.FeePaymentId).Where(id => id > 0).Distinct().ToList();
+        var studentFeeIds = list.Select(p => p.StudentFeeId).Where(id => id > 0).Distinct().ToList();
         if (!paymentIds.Any()) return;
 
         try
@@ -716,32 +745,132 @@ public class FeeRepository : IFeeRepository
                 new { Ids = paymentIds },
                 transaction: activeTx);
 
-            var lookup = txns
+            var txnLookup = txns
                 .GroupBy(t => t.FeePaymentId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.GatewayTransactionId).First());
 
+            var receipts = await c.QueryAsync<(int FeePaymentId, int FeeReceiptId, string ReceiptNumber)>(
+                "SELECT FeePaymentId, FeeReceiptId, ReceiptNumber FROM FeeReceipts WHERE FeePaymentId IN @Ids",
+                new { Ids = paymentIds },
+                transaction: activeTx);
+            var receiptLookup = receipts
+                .GroupBy(r => r.FeePaymentId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.FeeReceiptId).First());
+
+            var balances = studentFeeIds.Any()
+                ? (await c.QueryAsync<(int StudentFeeId, decimal BalanceAmount)>(
+                    "SELECT StudentFeeId, BalanceAmount FROM StudentFees WHERE StudentFeeId IN @SfIds",
+                    new { SfIds = studentFeeIds },
+                    transaction: activeTx)).ToDictionary(x => x.StudentFeeId, x => x.BalanceAmount)
+                : new Dictionary<int, decimal>();
+
+            List<(int FeePaymentId, string Status, DateTime? SentAtUtc, string? LastError)> outboxRows = new();
+            try
+            {
+                outboxRows = (await c.QueryAsync<(int FeePaymentId, string Status, DateTime? SentAtUtc, string? LastError)>(
+                    @"SELECT FeePaymentId, Status, SentAtUtc, LastError
+                      FROM FeePaymentEmailOutbox
+                      WHERE FeePaymentId IN @Ids AND NotificationType = 'PAYMENT_SUCCESS_RECEIPT'",
+                    new { Ids = paymentIds },
+                    transaction: activeTx)).ToList();
+            }
+            catch
+            {
+                // Safe fallback before table migration
+            }
+
+            var emailLookup = outboxRows
+                .GroupBy(r => r.FeePaymentId)
+                .ToDictionary(g => g.Key, g =>
+                {
+                    var items = g.ToList();
+                    if (items.Any(i => i.Status == "QUEUED"))
+                        return ("QUEUED", items.Where(i => i.SentAtUtc.HasValue).Max(i => i.SentAtUtc), (string?)null);
+                    if (items.Any(i => i.Status == "FAILED"))
+                    {
+                        var err = items.Where(i => i.Status == "FAILED" && !string.IsNullOrWhiteSpace(i.LastError))
+                            .Select(i => i.LastError).FirstOrDefault() ?? "SMTP delivery failed.";
+                        return ("FAILED", items.Where(i => i.SentAtUtc.HasValue).Max(i => i.SentAtUtc), err);
+                    }
+                    if (items.All(i => i.Status == "SENT"))
+                        return ("SENT", items.Max(i => i.SentAtUtc), (string?)null);
+                    return ("NOT_REQUESTED", (DateTime?)null, (string?)null);
+                });
+
             foreach (var p in list)
             {
-                if (lookup.TryGetValue(p.FeePaymentId, out var meta))
+                bool isReversed = false;
+                if (txnLookup.TryGetValue(p.FeePaymentId, out var meta))
                 {
                     p.GatewayTransactionId = meta.GatewayTransactionId;
                     p.GatewayStatus = meta.GatewayStatus;
+                    isReversed = string.Equals(meta.GatewayStatus, "Reversed", StringComparison.OrdinalIgnoreCase);
+                }
+
+                if (receiptLookup.TryGetValue(p.FeePaymentId, out var rec))
+                {
+                    p.ReceiptId = rec.FeeReceiptId;
+                    if (string.IsNullOrWhiteSpace(p.ReceiptNumber))
+                        p.ReceiptNumber = rec.ReceiptNumber;
+                }
+
+                if (balances.TryGetValue(p.StudentFeeId, out var bal))
+                {
+                    p.OutstandingBalance = bal;
+                }
+
+                bool isSuccess = string.Equals(p.Status, "Success", StringComparison.OrdinalIgnoreCase) && !isReversed;
+                p.PaymentStatus = isReversed ? "Reversed" : (isSuccess ? "Settled" : p.Status);
+                p.VerificationStatus = isReversed ? "Reversed" : (isSuccess ? "Verified" : (p.GatewayStatus ?? p.Status));
+                p.ReceiptAvailable = isSuccess && p.ReceiptId.HasValue;
+
+                if (emailLookup.TryGetValue(p.FeePaymentId, out var mail))
+                {
+                    p.EmailNotificationStatus = mail.Item1;
+                    p.EmailDeliveryStatus = mail.Item1;
+                    p.EmailSentAt = mail.Item2;
+                    p.EmailFailureReason = mail.Item3;
+                }
+                else
+                {
+                    p.EmailNotificationStatus = "NOT_REQUESTED";
+                    p.EmailDeliveryStatus = "NOT_REQUESTED";
                 }
             }
         }
         catch
         {
-            // Safe fallback if PaymentGatewayTransactions table hasn't been initialized yet
+            // Safe fallback if auxiliary tables haven't been initialized yet
         }
     }
 
     public async Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeReceiptResponse>(
+        var receipt = await c.QueryFirstOrDefaultAsync<FeeReceiptResponse>(
             "sp_FeeReceipt_GetByNumber",
             new { p_ReceiptNumber = receiptNumber.Trim() },
             commandType: CommandType.StoredProcedure);
+
+        if (receipt == null)
+            return null;
+
+        var paymentState = await c.QueryFirstOrDefaultAsync<(string Status, string? GatewayStatus)>(
+            @"SELECT fp.Status,
+                     (SELECT pgt.Status FROM PaymentGatewayTransactions pgt
+                      WHERE pgt.FeePaymentId = fp.FeePaymentId
+                      ORDER BY pgt.Id DESC LIMIT 1) AS GatewayStatus
+              FROM FeePayments fp
+              WHERE fp.FeePaymentId = @FeePaymentId",
+            new { FeePaymentId = receipt.FeePaymentId });
+
+        if (!string.Equals(paymentState.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(paymentState.GatewayStatus, "Reversed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Official receipts are only available for verified, non-reversed payments.");
+        }
+
+        return receipt;
     }
 
     // =========================================================

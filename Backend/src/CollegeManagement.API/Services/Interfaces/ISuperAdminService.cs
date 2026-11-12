@@ -23,6 +23,7 @@ namespace CollegeManagement.API.Services.Interfaces
         // 3. College Admins
         Task<IEnumerable<CollegeAdminDto>> GetCollegeAdminsAsync(int? collegeId);
         Task<int> CreateCollegeAdminAsync(CreateCollegeAdminRequest request, string currentUserName);
+        Task<bool> ResendAdminCredentialsAsync(int userId, string currentUserName);
 
         // 4. Global Users
         Task<(IEnumerable<GlobalUserDto> Users, int TotalCount)> GetGlobalUsersPagedAsync(string? searchTerm, int? collegeId, string? role, string? status, int page, int pageSize);

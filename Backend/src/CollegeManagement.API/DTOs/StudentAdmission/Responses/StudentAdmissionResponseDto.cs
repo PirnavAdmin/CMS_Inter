@@ -168,6 +168,8 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         // ALLOCATION - populated only after approval
         // =====================================================
 
+        public int? StudentId { get; set; }
+
         public int? SectionId { get; set; }
 
         public string? SectionName { get; set; }

@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.AcademicCalendar;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -21,13 +24,22 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IAcademicCalendarService _calendarService;
         private readonly ILogger<AcademicCalendarController> _logger;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
         public AcademicCalendarController(
             IAcademicCalendarService calendarService,
-            ILogger<AcademicCalendarController> logger)
+            ILogger<AcademicCalendarController> logger,
+            IJwtTokenHelper jwtTokenHelper)
         {
             _calendarService = calendarService;
             _logger = logger;
+            _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private bool IsTenantCollege()
+        {
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            return collegeId.HasValue && collegeId.Value > 1;
         }
 
         private int? GetCurrentUserId()
@@ -47,7 +59,36 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (filter.CampusId == TenantIsolationActionFilter.NoCampusSentinel)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Academic calendar events retrieved successfully.",
+                        data = Array.Empty<object>(),
+                        total = 0,
+                        totalPages = 0,
+                        page = filter.Page,
+                        pageSize = filter.PageSize
+                    });
+                }
+
                 var (items, totalCount, totalPages) = await _calendarService.GetPagedEventsAsync(filter);
+                if (IsTenantCollege())
+                {
+                    var scopedItems = items.Where(e => e.CampusId.HasValue && e.CampusId.Value > 0 && (!filter.CampusId.HasValue || e.CampusId == filter.CampusId)).ToList();
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Academic calendar events retrieved successfully.",
+                        data = scopedItems,
+                        total = scopedItems.Count,
+                        totalPages = filter.PageSize > 0 ? (int)Math.Ceiling((double)scopedItems.Count / filter.PageSize) : 1,
+                        page = filter.Page,
+                        pageSize = filter.PageSize
+                    });
+                }
+
                 return Ok(new
                 {
                     success = true,
@@ -85,7 +126,22 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Range events retrieved successfully.",
+                        data = Array.Empty<object>()
+                    });
+                }
+
                 var items = await _calendarService.GetEventsByRangeAsync(start, end, boardId, academicYearId, campusId, academicLevelId, groupId);
+                if (IsTenantCollege())
+                {
+                    items = items.Where(e => e.CampusId.HasValue && e.CampusId.Value > 0 && (!campusId.HasValue || e.CampusId == campusId)).ToList();
+                }
+
                 return Ok(new
                 {
                     success = true,
@@ -115,6 +171,16 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Calendar metrics retrieved successfully.",
+                        data = new AcademicCalendarMetricsDto()
+                    });
+                }
+
                 var metrics = await _calendarService.GetMetricsAsync(academicYearId, boardId, campusId);
                 return Ok(new
                 {
@@ -147,7 +213,22 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Upcoming events retrieved successfully.",
+                        data = Array.Empty<object>()
+                    });
+                }
+
                 var items = await _calendarService.GetUpcomingEventsAsync(academicYearId, boardId, campusId, count);
+                if (IsTenantCollege())
+                {
+                    items = items.Where(e => e.CampusId.HasValue && e.CampusId.Value > 0 && (!campusId.HasValue || e.CampusId == campusId)).ToList();
+                }
+
                 return Ok(new
                 {
                     success = true,

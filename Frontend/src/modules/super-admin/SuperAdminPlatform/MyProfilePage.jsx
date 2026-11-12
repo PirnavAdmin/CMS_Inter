@@ -28,6 +28,7 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import profileIllustration from "@/assets/settings-3d/roles-permissions.png";
 import "./MyProfilePage.css";
@@ -556,7 +557,7 @@ export default function MyProfilePage() {
       <div className="mpp-header-card">
         <div className="mpp-header-left">
           <div className="mpp-header-icon">
-            <User size={22} />
+            <ThreeDIcon name="staff-management" size={34} />
           </div>
           <div className="mpp-header-text">
             <h1 className="mpp-page-title">My Profile</h1>

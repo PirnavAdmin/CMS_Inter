@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, Palette, ChevronDown } from "lucide-react";
+import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
-import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import SuperAdminNotificationPopover from "../components/SuperAdminNotificationPopover.jsx";
@@ -29,6 +28,7 @@ const navigationIcons = {
 
 export default function SuperAdminLayout() {
   const { session, data, message, clearMessage } = useSuperAdmin();
+  const platformName = String(data?.settings?.platformName || "").trim() || "PIRNAV CMS";
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
   const unreadCount = (data?.notifications || []).filter((n) => n.read !== "Read" && !n.isRead).length;
@@ -36,7 +36,6 @@ export default function SuperAdminLayout() {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const profileRef = useRef(null);
   const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
 
@@ -71,7 +70,7 @@ export default function SuperAdminLayout() {
   };
   return <div className={`cms-shell sa-shell ${open ? "sa-nav-open" : ""} ${collapsed ? "sa-nav-collapsed" : ""}`} data-dashboard-palette={palette || "olive"}>
     {open ? <button type="button" className="sa-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)}/> : null}
-    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label="Pirnav Super Admin Dashboard"><img src={collegeLogo} alt="Pirnav College"/><small>SUPER ADMIN PORTAL</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
+    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label={`${platformName} Super Admin Dashboard`}><img src={collegeLogo} alt="Pirnav College"/><small title={platformName}>{platformName}</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
     <div className="sa-workspace">
       <header className="sa-topbar">
         <div className="sa-topbar-start">
@@ -80,21 +79,12 @@ export default function SuperAdminLayout() {
           </button>
           <span className="sa-platform-label">
             <ThreeDIcon name="board" size={24}/>
-            <span><small>PLATFORM WORKSPACE</small><strong>All colleges</strong></span>
+            <span><small>PLATFORM WORKSPACE</small><strong title={platformName}>{platformName}</strong></span>
           </span>
         </div>
 
         <div className="sa-topbar-end">
           <ThemeToggle variant="dashboard"/>
-          <button
-            type="button"
-            className="sa-palette-btn"
-            onClick={() => setThemePaletteOpen(true)}
-            title="Theme Palette & Appearance"
-            aria-label="Choose Theme Palette"
-          >
-            <Palette size={18} />
-          </button>
           {/* Topbar Notification Bell with Popover */}
           <div className="sa-notif-btn-wrap" ref={notifRef}>
             <button
@@ -127,7 +117,7 @@ export default function SuperAdminLayout() {
               aria-expanded={profileOpen}
               title="Super Administrator Menu"
             >
-              <span className="sa-avatar">SA</span>
+              <span className="sa-avatar"><User size={19} aria-hidden="true" /></span>
               <div className="sa-profile-meta">
                 <strong>{session.name}</strong>
                 <small>Super Admin</small>
@@ -155,18 +145,6 @@ export default function SuperAdminLayout() {
                 >
                   <User size={15} className="sa-dd-icon" />
                   <span>My Profile</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="sa-dropdown-item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    setThemePaletteOpen(true);
-                  }}
-                >
-                  <Palette size={15} className="sa-dd-icon" />
-                  <span>Theme Appearance</span>
                 </button>
 
                 <button
@@ -210,12 +188,7 @@ export default function SuperAdminLayout() {
         <Outlet/>
       </main>
 
-      {/* Shared Theme Appearance Modal (5th image) */}
-      <ThemePalettePicker
-        open={themePaletteOpen}
-        onOpenChange={setThemePaletteOpen}
-        hideTrigger={true}
-      />
+
     </div>
   </div>;
 }

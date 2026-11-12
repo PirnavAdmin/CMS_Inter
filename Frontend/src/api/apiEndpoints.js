@@ -206,6 +206,11 @@ export const apiEndpoints = {
     approveUtr: "/api/v1/fee-payments/gateway/approve-utr",
     exportLedger: "/api/v1/fee-payments/gateway/export-ledger",
     reverse: "/api/v1/fee-payments/gateway/reverse",
+    paymentStatus: (feePaymentId) => `/api/v1/fee-payments/gateway/payments/${encodeURIComponent(feePaymentId)}/status`,
+    retryEmail: (feePaymentId) => `/api/v1/fee-payments/gateway/payments/${encodeURIComponent(feePaymentId)}/retry-email`,
+    communicationSettings: "/api/v1/fee-payments/gateway/communication-settings",
+    restoreCommunicationSettings: "/api/v1/fee-payments/gateway/communication-settings/restore-default",
+    sendTestCommunicationEmail: "/api/v1/fee-payments/gateway/communication-settings/send-test-email",
   },
   fee: {
     feeTypes: "/api/v1/fees/types",

@@ -15,6 +15,10 @@ import {
   pendingInstallments,
   startPaymentPolling,
   settlementState,
+  paymentUiState,
+  emailDeliveryState,
+  validatePaymentProof,
+  paymentProofType,
   backendOverdue,
   canReversePayment,
   gatewayTransactionIdFor,
@@ -27,6 +31,12 @@ import {
   normalizePaymentConfig,
   paymentConfigErrors,
   paymentConfigPayload,
+  PAYMENT_EMAIL_TYPES,
+  PAYMENT_TEMPLATE_TOKENS,
+  newPaymentTemplateDraft,
+  paymentTemplateSample,
+  insertPaymentTemplateText,
+  renderPaymentTemplateSample,
 } from "../services/paymentGatewaySession.js";
 
 await describe("Admin payment gateway", async () => {
@@ -321,6 +331,35 @@ await describe("Admin payment gateway", async () => {
       config,
     });
   };
+
+  test("official receipt API authenticates the saved payment ID and rejects non-PDF responses", async () => {
+    let requested;
+    adapter(config => { requested = config; return new Blob(["%PDF-1.7\nfixture"], { type: "application/pdf" }); });
+    const pdf = await api.receiptPdf(901);
+    assert.equal(pdf.type, "application/pdf");
+    assert.equal(requested.url, "/api/v1/fee-payments/gateway/receipt/901/pdf");
+    assert.equal(requested.responseType, "blob");
+    assert.equal(requested.skipNetworkRetry, true);
+    await assert.rejects(api.receiptPdf("invalid"));
+    adapter(() => new Blob(["<html>Error</html>"], { type: "text/html" }));
+    await assert.rejects(api.receiptPdf(901));
+    adapter(() => new Blob(["not a pdf"], { type: "application/pdf" }));
+    await assert.rejects(api.receiptPdf(901));
+  });
+  test("Accountant cash consumes backend Paid and PendingVerification independently and never retries writes", async () => {
+    const { collectStudentPayment } = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
+    for (const status of ["Paid", "PendingVerification"]) {
+      let writes = 0;
+      adapter(config => {
+        writes++; assert.equal(config.skipNetworkRetry, true);
+        return { feePaymentId: 901, studentId: 11, studentFeeId: 41, status, amount: 300, receiptNumber: status === "Paid" ? "R901" : "" };
+      });
+      const result = await collectStudentPayment({ studentId: 11, studentFeeId: 41, outstandingBalance: 700, schedules: [] },
+        { target: "full", amount: 300, discount: 0, fine: 0, paymentMode: "Cash", paymentDate: "2026-11-09" }, () => true);
+      assert.equal(paymentUiState(result), status === "Paid" ? "PAYMENT_SUCCESSFUL" : "PENDING_VERIFICATION");
+      assert.equal(writes, 1);
+    }
+  });
   test("gateway calls authenticate with the shared client, bypass loader, and avoid mock responses", async () => {
     let call;
     adapter((config) => {
@@ -380,8 +419,19 @@ await describe("Admin payment gateway", async () => {
     }
   });
   test("wrapped UTR submission/approval requires explicit backend acknowledgment", async () => {
-    adapter(() => ({ success: true, data: { message: "Submitted" } }));
-    assert.equal((await api.submitUtr({})).success, true);
+    const payload = { studentId: 11, studentFeeId: 41, amount: 100, orderId: "order_fixture", utrNumber: "UTRFIXTURE" };
+    adapter(() => ({ success: true, data: { transactionId: 99, amount: 100, message: "Submitted" } }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
+    for (const result of [{ success: true }, { success: true, amount: 100 },
+      { success: true, transactionId: 99, amount: 101 },
+      { success: true, transactionId: 99, amount: 100, status: "Created" },
+      { success: true, transactionId: 99, amount: 100, studentFeeId: 42 },
+      { success: true, transactionId: 99, amount: 100, orderId: "other_order" }]) {
+      adapter(() => result);
+      await assert.rejects(api.submitUtr(payload), /persistence was not confirmed/);
+    }
+    adapter(() => ({ success: true, transactionId: 99, amount: 100, status: "PendingVerification", ...payload }));
+    assert.equal((await api.submitUtr(payload)).transactionId, 99);
     adapter(() => ({}));
     await assert.rejects(api.approveUtr({}), /not acknowledged/);
     adapter(() => ({ success: false, message: "UTR duplicate" }));
@@ -396,6 +446,9 @@ await describe("Admin payment gateway", async () => {
     const rows = await api.pendingUtrs({ campusId: 2, academicYearId: 3 });
     assert.equal(rows[0].id, 9);
     assert.deepEqual(call.params, { campusId: 2, academicYearId: 3 });
+    assert.equal(call.headers["Cache-Control"], "no-cache");
+    adapter(() => [{ id: 9, amount: 100, status: "PendingVerification" }]);
+    assert.equal((await api.pendingUtrs({ campusId: 2 }))[0].id, 9);
     adapter(() => ({}));
     await assert.rejects(api.pendingUtrs({}), /transaction list/);
   });
@@ -479,6 +532,7 @@ await describe("Admin payment gateway", async () => {
     const context = vm.createContext({
       React,
       AbortController,
+      URLSearchParams,
       clearTimeout,
       setTimeout,
       window: { setTimeout, clearTimeout },
@@ -486,11 +540,20 @@ await describe("Admin payment gateway", async () => {
       directQrUtrPayload,
       isManualQrOrder,
       UTR_SUBMITTED_EVENT,
+      validatePaymentProof,
+      File,
+      URL: { createObjectURL: () => "blob:fixture-proof", revokeObjectURL() {} },
       sumFeeValues,
       backendOverdue,
       canReversePayment,
       gatewayTransactionIdFor,
       hasPaymentReversalRole,
+      useEffectivePermissions: () => ({ loading: false, error: "", canView: () => true, canDo: () => true }),
+      getAuthUser: () => ({ role: "Admin" }),
+      getAuthItem: () => "Admin",
+      ACTIONS: { APPROVE_REJECT: "approve-reject" },
+      useLocation: () => ({ pathname: "/dashboard/fee-structure", search: "?tab=student-ledger&subtab=fee-collection&account=41&source=collection" }),
+      Link: "Link",
       isReversedPayment,
       mobilePaymentLinkFor,
       reversalPayload,
@@ -501,6 +564,9 @@ await describe("Admin payment gateway", async () => {
       getPaymentGatewayConfigApi: async () => paymentSettings,
       pendingInstallments,
       gatewayData,
+      paymentUiState,
+      emailDeliveryState,
+      PaymentConfirmation: "PaymentConfirmation",
       getApiErrorMessage,
       formatCurrency: (value) => `INR ${value}`,
       formatDate: (value) => String(value || "-"),
@@ -515,6 +581,7 @@ await describe("Admin payment gateway", async () => {
       Copy: "Copy",
       CreditCard: "CreditCard",
       QrCode: "QrCode",
+      Upload: "Upload",
       ChevronDown: "ChevronDown",
       PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"],
       useState: (initial) => {
@@ -563,7 +630,124 @@ await describe("Admin payment gateway", async () => {
     new URL("../components/GatewayPaymentPanel.jsx", import.meta.url),
     "utf8",
   );
+  test("payment and email statuses are independent and never promote verification to paid", () => {
+    for (const [status, expected] of [["Created", "PAYMENT_INITIATED"], ["Pending", "AWAITING_PAYMENT"], ["PendingVerification", "PENDING_VERIFICATION"], ["Paid", "PAYMENT_SUCCESSFUL"], ["Rejected", "PAYMENT_REJECTED"], ["Expired", "PAYMENT_EXPIRED"], ["Failed", "PAYMENT_FAILED"]]) assert.equal(paymentUiState({ status }), expected);
+    assert.equal(paymentUiState({ status: "PendingVerification", gatewayConfirmed: true }), "PENDING_VERIFICATION");
+    assert.equal(paymentUiState({ status: "Captured", isPaid: false }), "AWAITING_PAYMENT");
+    for (const status of ["SENT", "QUEUED", "FAILED", "NOT_REQUESTED"]) assert.equal(emailDeliveryState({ emailDeliveryStatus: status }), status);
+    assert.equal(emailDeliveryState({ status: "Paid", success: true }), "UNKNOWN");
+    assert.equal(emailDeliveryState({ emailStatus: "perhaps sent" }), "UNKNOWN");
+    assert.equal(paymentUiState({ status: "Paid", emailStatus: "FAILED" }), "PAYMENT_SUCCESSFUL");
+  });
+  const confirmationSource = await readFile(new URL("../components/PaymentConfirmation.jsx", import.meta.url), "utf8");
+  test("shared success UI retrieves the official PDF, displays actual email failure and releases its private blob", async () => {
+    let pdfReads = 0;
+    const revoked = [];
+    const payment = { status: "Paid", feePaymentId: 901, studentFeeId: 41, receiptNumber: "R901", amount: 300, emailStatus: "FAILED" };
+    let emailRetries = 0;
+    const view = await mount(confirmationSource, "PaymentConfirmation", {
+      apiClient: { get: async url => ({ data: url.includes("student-fees") ? { studentFeeId: 41, balanceAmount: 400 } : payment }) },
+      apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}`, getAssignment: id => `/student-fees/${id}` } },
+      feePaymentGatewayApi: {
+        receiptPdf: async id => { assert.equal(id, 901); pdfReads++; return {}; },
+        retryEmail: async id => { assert.equal(id, 901); emailRetries++; return { feePaymentId: 901, emailStatus: "QUEUED" }; },
+      },
+      URL: { createObjectURL: () => "blob:private-receipt", revokeObjectURL: url => revoked.push(url) },
+    }, { payment, onClose() {} });
+    view.render(); await flush(); let tree = view.render(); await flush(); tree = view.render();
+    assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
+    assert.ok(tree.some(node => node.props.children.includes("Email Failed — payment remains confirmed.")));
+    assert.ok(tree.some(node => node.props.children.includes("INR 400")));
+    const download = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "a" && node.props.download);
+    assert.equal(download.props.href, "blob:private-receipt");
+    assert.equal(pdfReads, 1);
+    const retryBtn = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Retry Email"));
+    assert.ok(retryBtn);
+    await retryBtn.props.onClick(); await flush(); tree = view.render();
+    assert.equal(emailRetries, 1);
+    assert.ok(tree.some(node => node.props.children.includes("Email Queued")));
+    view.unmount(); assert.deepEqual(revoked, ["blob:private-receipt"]);
+  });
+  test("pending requests never retrieve paid receipts; receipt failure never reverses confirmed payment", async () => {
+    for (const status of ["PendingVerification", "Paid"]) {
+      let pdfReads = 0;
+      const payment = { status, feePaymentId: 901, receiptNumber: "R901", amount: 300 };
+      const view = await mount(confirmationSource, "PaymentConfirmation", {
+        apiClient: { get: async () => ({ data: payment }) }, apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}` } },
+        feePaymentGatewayApi: { receiptPdf: async () => { pdfReads++; throw new Error("PDF unavailable"); } },
+      }, { payment, onClose() {} });
+      view.render(); await flush(); const tree = view.render();
+      assert.equal(pdfReads, status === "Paid" ? 1 : 0);
+      assert.equal(tree.some(node => node.type === "a" && node.props.download), false);
+      if (status === "Paid") {
+        assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
+        assert.ok(tree.some(node => node.props.children.includes("Payment confirmed. Email delivery status is unavailable.")));
+        assert.ok(tree.some(node => node.props.role === "alert"));
+      }
+      view.unmount();
+    }
+  });
+  test("switching receipts cannot reuse another payment's loaded metadata", async () => {
+    const props = { payment: { status: "Paid", feePaymentId: 901, receiptNumber: "R901", amount: 300 }, onClose() {} };
+    const ids = [];
+    const view = await mount(confirmationSource, "PaymentConfirmation", {
+      apiClient: { get: async url => ({ data: { feePaymentId: Number(url.split("/").at(-1)), status: "Paid" } }) },
+      apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}` } },
+      feePaymentGatewayApi: { receiptPdf: async id => { ids.push(id); throw new Error("Test PDF unavailable"); } },
+    }, props);
+    view.render(); await flush(); view.render();
+    props.payment = { status: "Paid", feePaymentId: 902, receiptNumber: "R902", amount: 400 };
+    view.render(); await flush(); const tree = view.render();
+    assert.deepEqual(ids, [901, 902]);
+    assert.ok(tree.some(node => node.props.children.includes("R902")));
+    assert.equal(tree.some(node => node.props.children.includes("R901")), false);
+    view.unmount();
+  });
   const directOrder = { ...order, studentId: 11, currency: "INR", requiresManualUtr: true, qrCodeBase64: "data:image/png;base64,AAAA", upiUri: "upi://pay?pa=fixture@bank" };
+  const pngProof = (name = "payment.png") => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])], name, { type: "image/png", lastModified: 1 });
+  test("proof validation accepts actual JPG, PNG and PDF bytes and enforces the exact size boundary", async () => {
+    assert.equal(await validatePaymentProof(pngProof()), "image/png");
+    assert.equal(await validatePaymentProof(new File([new Uint8Array([255, 216, 255, 0])], "proof.jpeg", { type: "image/jpeg" })), "image/jpeg");
+    assert.equal(await validatePaymentProof(new File(["%PDF-1.7"], "proof.pdf", { type: "application/octet-stream" })), "application/pdf");
+    const boundary = new Uint8Array(5 * 1024 * 1024); boundary.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    assert.equal(await validatePaymentProof(new File([boundary], "proof.png", { type: "image/png" })), "image/png");
+    for (const file of [new File([], "empty.png"), new File(["<svg/>"], "proof.svg"), new File(["not an image"], "spoof.png", { type: "image/png" }), pngProof("proof.pdf"), new File([boundary, "x"], "oversized.png", { type: "image/png" })]) await assert.rejects(validatePaymentProof(file));
+    assert.equal(paymentProofType(new Uint8Array([0, 1, 2])), "");
+  });
+  test("multipart UTR upload uses the real file, repeated schedules and idempotency key and requires persistence confirmation", async () => {
+    const payload = { studentId: 11, studentFeeId: 41, amount: 300, utrNumber: "UPI_12345678", orderId: "order_direct_fixture", feeInstallmentIds: [101, 102], bankName: "Fixture App", paymentDate: "2026-11-09", remarks: "Proof" };
+    const attachment = pngProof();
+    let requests = 0;
+    adapter(config => {
+      requests++;
+      assert.equal(config.url, "/api/v1/fee-payments/gateway/submit-utr");
+      assert.equal(config.data instanceof FormData, true);
+      assert.equal(config.data.get("attachment").name, "payment.png");
+      assert.deepEqual(config.data.getAll("feeInstallmentIds"), ["101", "102"]);
+      assert.equal(config.data.get("orderId"), payload.orderId);
+      assert.equal(config.data.get("idempotencyKey"), "proof-key-1");
+      assert.equal(config.headers.get("Idempotency-Key"), "proof-key-1");
+      assert.equal(config.skipNetworkRetry, true);
+      return { ...payload, success: true, transactionId: 99, status: "PendingVerification", attachment: { attachmentId: 6, fileName: "payment.png", contentType: "image/png", sizeBytes: attachment.size } };
+    });
+    const result = await api.submitUtr(payload, undefined, { attachment, idempotencyKey: "proof-key-1" });
+    assert.equal(result.attachment.attachmentId, 6); assert.equal(requests, 1);
+    adapter(() => ({ ...payload, success: true, transactionId: 99, status: "PendingVerification", attachment: null }));
+    await assert.rejects(api.submitUtr(payload, undefined, { attachment }), /stored together/);
+    adapter(() => ({ ...payload, studentFeeId: 999, success: true, transactionId: 99, status: "PendingVerification", attachment: { attachmentId: 6, contentType: "image/png", sizeBytes: attachment.size } }));
+    await assert.rejects(api.submitUtr(payload, undefined, { attachment }), /stored together/);
+  });
+  test("proof retrieval uses only authenticated ID routes and rejects unsupported bytes or URL-shaped identifiers", async () => {
+    let url;
+    adapter(config => { url = config.url; assert.equal(config.responseType, "blob"); return pngProof(); });
+    assert.equal((await api.paymentProof(6)).type, "image/png");
+    assert.equal(url, "/api/v1/fee-payments/gateway/attachments/6");
+    await assert.rejects(api.paymentProof("https://untrusted.test/proof"));
+    adapter(() => new Blob(["<svg/>"], { type: "image/svg+xml" }));
+    await assert.rejects(api.paymentProof(6));
+    client.defaults.adapter = async config => { throw { config, response: { status: 403, data: { message: "Campus access denied" } } }; };
+    await assert.rejects(api.paymentProof(6));
+  });
   const utrDraft = { utrNumber: "  UPI-99887766  ", bankName: " Fixture App ", paymentDate: "2026-11-09", amountPaid: "300", remarks: "Fixture transfer" };
   const buttonNamed = (tree, label) => tree.find(node => node.type === "button" && node.props.children.includes(label));
   test("Direct QR reconciliation uses only supported DTO fields and preserves the original order in remarks", () => {
@@ -572,7 +756,7 @@ await describe("Admin payment gateway", async () => {
     assert.equal(payload.utrNumber, "UPI-99887766");
     assert.equal(payload.bankName, "Fixture App");
     assert.match(payload.remarks, /order_fixture/);
-    for (const changes of [{ utrNumber: "" }, { utrNumber: "abc" }, { utrNumber: "!".repeat(12) }, { utrNumber: "a".repeat(51) }, { bankName: "" }, { bankName: "a".repeat(201) }, { paymentDate: "2026-02-30" }, { paymentDate: "2026-11-10" }, { paymentDate: "1999-12-31" }, { amountPaid: "301" }, { amountPaid: "300.001" }, { remarks: "a".repeat(500) }]) {
+    for (const changes of [{ utrNumber: "" }, { utrNumber: "abc" }, { utrNumber: "!".repeat(12) }, { utrNumber: "a".repeat(101) }, { bankName: "" }, { bankName: "a".repeat(201) }, { paymentDate: "2026-02-30" }, { paymentDate: "2026-11-10" }, { paymentDate: "1999-12-31" }, { amountPaid: "301" }, { amountPaid: "300.001" }, { remarks: "a".repeat(500) }]) {
       assert.throws(() => directQrUtrPayload(directOrder, account, { ...utrDraft, ...changes }, "2026-11-09"));
     }
     assert.throws(() => directQrUtrPayload({ ...directOrder, studentFeeId: 42 }, account, utrDraft, "2026-11-09"), /does not match/);
@@ -582,16 +766,17 @@ await describe("Admin payment gateway", async () => {
     assert.equal(directQrUtrPayload(directOrder, account, { ...utrDraft, utrNumber: "123456789012" }, "2026-11-09").amount, 300);
   });
   async function qrVerificationFixture(submit = async () => ({ success: true }), options = {}) {
-    const state = { orders: 0, submissions: [], pending: 0, events: [], footer: null, polled: null };
+    const state = { orders: 0, submissions: [], uploadOptions: [], pending: 0, events: [], footer: null, polled: null };
     const props = { mode: "UPI_QR", campusId: 2, account, target: "schedules", selectedIds: [101], amount: 300,
       onSaved: () => assert.fail("UTR submission must not settle or generate a receipt"),
-      onPending: () => { state.pending++; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
+      onPending: result => { state.pending++; state.savedRequest = result; }, onLockChange() {}, onFooterChange: footer => { state.footer = footer; }, ...options };
     const view = await mount(gatewaySource, "GatewayPaymentPanel", {
       Event,
       window: { setTimeout, clearTimeout, dispatchEvent: event => state.events.push(event.type) },
+      ...(options.previewUrls ? { URL: options.previewUrls } : {}),
       feePaymentGatewayApi: {
         createOrder: async () => { state.orders++; return { ...directOrder, requiresManualUtr: options.manual !== false }; },
-        submitUtr: async (payload, signal) => { state.submissions.push(payload); return submit(payload, signal); },
+        submitUtr: async (payload, signal, options) => { state.submissions.push(payload); state.uploadOptions.push(options); return submit(payload, signal); },
         verify: () => assert.fail("UTR must never call Razorpay verification"),
       },
       usePaymentPolling: value => { state.polled = value; return { status: options.pollingStatus || "PENDING", secondsLeft: 300 }; },
@@ -599,17 +784,80 @@ await describe("Admin payment gateway", async () => {
     view.render().find(node => node.type === "button").props.onClick();
     await flush(); view.render(); view.render();
     const fill = (key, value) => view.render().find(node => node.props.id === `qr-verification-${key}`).props.onChange({ target: { value } });
-    return { view, state, props, fill };
+    const attach = async (file = pngProof()) => {
+      await view.render().find(node => node.props.id === "qr-verification-proof").props.onChange({ target: { files: [file] } });
+      await flush(); view.render(); view.render();
+    };
+    return { view, state, props, fill, attach };
   }
+  test("Direct UPI QR has no duplicate UTR controls; Done alone opens the proof verification form", async () => {
+    const { view, state, fill, attach } = await qrVerificationFixture();
+    let tree = view.render();
+    assert.equal(tree.some(node => node.props.id === "gateway-inline-utr"), false);
+    assert.equal(Boolean(buttonNamed(tree, "Submit UTR for Verification")), false);
+    assert.equal(Boolean(buttonNamed(tree, "Verify & Credit Payment Now")), false);
+    assert.ok(tree.some(node => node.type === "img")); assert.equal(state.footer.showDone, true);
+    state.footer.onDone(); tree = view.render();
+    assert.ok(tree.some(node => node.type === "form"));
+    const values = { utrNumber: "123456789012", bankName: "Fixture Bank", paymentDate: "2026-11-08", amountPaid: "300", remarks: "Proof fixture" };
+    for (const [key, value] of Object.entries(values)) fill(key, value);
+    await attach();
+    // Parent rerenders, focus return and a same-order metadata refresh must not reset the step.
+    state.polled.amount = "300";
+    view.render(); tree = view.render();
+    for (const [key, value] of Object.entries(values)) assert.equal(tree.find(node => node.props.id === `qr-verification-${key}`).props.value, value);
+    assert.ok(tree.some(node => node.type === "form"));
+    assert.ok(tree.some(node => node.type === "img" && node.props.alt === "Selected payment proof preview"));
+    assert.equal(state.orders, 1); assert.equal(state.submissions.length, 0);
+    buttonNamed(tree, "Back to QR").props.onClick(); tree = view.render();
+    assert.equal(Boolean(buttonNamed(tree, "Generate UPI QR")), false);
+    assert.equal(tree.some(node => node.props.id === "gateway-inline-utr"), false);
+    state.footer.onDone(); tree = view.render();
+    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, values.utrNumber);
+    assert.ok(tree.some(node => node.props.alt === "Selected payment proof preview"));
+    assert.equal(state.orders, 1); view.unmount();
+  });
+  test("local proof previews support PDF and image replacement/removal, report size and release URLs", async () => {
+    const created = [], revoked = [];
+    const { view, state, fill, attach } = await qrVerificationFixture(undefined, { previewUrls: {
+      createObjectURL: file => { created.push(file.type); return `blob:preview-${created.length}`; }, revokeObjectURL: value => revoked.push(value),
+    } });
+    state.footer.onDone(); view.render(); fill("utrNumber", "123456789012"); fill("bankName", "Fixture App");
+    await attach(new File(["%PDF-1.7"], "proof.pdf", { type: "application/pdf" }));
+    let tree = view.render();
+    const pdf = tree.find(node => node.type === "a" && node.props.children.includes("Open Selected PDF"));
+    assert.equal(pdf.props.href, "blob:preview-1"); assert.equal(pdf.props.rel, "noopener noreferrer");
+    assert.ok(tree.some(node => node.type === "span" && node.props.children.some(value => typeof value === "string" && value.includes("proof.pdf"))));
+    assert.ok(tree.some(node => node.type === "span" && node.props.children.includes(" KB)")));
+    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "123456789012");
+    await attach(); tree = view.render(); assert.ok(revoked.includes("blob:preview-1"));
+    assert.equal(tree.some(node => node.type === "a" && node.props.children.includes("Open Selected PDF")), false);
+    assert.ok(tree.some(node => node.props.alt === "Selected payment proof preview"));
+    buttonNamed(tree, "Remove").props.onClick(); view.render();
+    assert.ok(revoked.includes("blob:preview-2")); assert.equal(state.orders, 1); assert.equal(state.submissions.length, 0);
+    await attach(); view.unmount(); assert.ok(revoked.includes("blob:preview-3"));
+  });
+  test("proof upload errors stay below the attachment field and never acknowledge complete persistence", async () => {
+    const { view, state, fill, attach } = await qrVerificationFixture(async () => { throw { response: { status: 400, data: { errorCode: "INVALID_FILE_SIGNATURE", message: "Fixture server file validation failed" } } }; });
+    state.footer.onDone(); view.render(); fill("utrNumber", "123456789012"); fill("bankName", "Fixture Bank"); await attach();
+    view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }); await flush();
+    const tree = view.render();
+    assert.ok(tree.find(node => node.props.id === "qr-verification-proof-error").props.children.includes("Fixture server file validation failed"));
+    assert.ok(tree.some(node => node.type === "form")); assert.equal(state.pending, 0);
+    assert.equal(Boolean(buttonNamed(tree, "Pending Verification")), false);
+    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "123456789012");
+    assert.ok(tree.some(node => node.props.alt === "Selected payment proof preview")); view.unmount();
+  });
   test("Done opens the Direct QR form, Back preserves drafts, and one submission remains pending", async () => {
     let release;
     const fixture = await qrVerificationFixture(() => new Promise(resolve => { release = resolve; }));
-    const { view, state, fill } = fixture;
+    const { view, state, fill, attach } = fixture;
     assert.equal(state.footer.showDone, true);
     state.footer.onDone(); let tree = view.render();
     assert.ok(tree.some(node => node.type === "h3" && node.props.children.includes("Submit Payment for Verification")));
     assert.equal(tree.find(node => node.props.id === "qr-verification-amountPaid").props.value, "300");
     fill("utrNumber", utrDraft.utrNumber); fill("bankName", utrDraft.bankName);
+    await attach();
     buttonNamed(view.render(), "Back to QR").props.onClick(); tree = view.render();
     assert.ok(tree.some(node => node.type === "img"));
     state.footer.onDone(); tree = view.render();
@@ -619,15 +867,49 @@ await describe("Admin payment gateway", async () => {
     assert.equal(state.submissions.length, 1);
     assert.equal(state.footer.showDone, false);
     view.render(); assert.equal(state.footer.busy, true);
-    release({ success: true }); await flush(); tree = view.render();
+    release({ success: true, transactionId: 99, amount: 300, status: "PendingVerification" }); await flush(); tree = view.render();
     assert.equal(state.orders, 1); assert.equal(state.pending, 1);
+    assert.equal(state.savedRequest.transactionId, 99);
     assert.equal(account.balance, 700);
     assert.ok(state.events.includes(UTR_SUBMITTED_EVENT));
     assert.ok(buttonNamed(tree, "Pending Verification").props.disabled);
-    assert.equal(state.polled, null);
+    assert.equal(state.polled.requiresManualUtr, false);
     form.props.onSubmit({ preventDefault() {} }); assert.equal(state.submissions.length, 1);
-    assert.equal(state.submissions[0].feeInstallmentIds, undefined);
+    assert.deepEqual(Array.from(state.submissions[0].feeInstallmentIds), [101]);
+    assert.equal(state.uploadOptions[0].attachment.name, "payment.png");
+    assert.ok(state.uploadOptions[0].idempotencyKey);
     view.unmount(); assert.equal(state.footer, null);
+  });
+  test("proof is required, previewed, replaceable and removable without changing verification metadata", async () => {
+    const { view, state, fill, attach } = await qrVerificationFixture();
+    state.footer.onDone();
+    const tree = view.render();
+    const proof = tree.find(node => node.props.id === "qr-verification-proof");
+    assert.equal(proof.props.type, "file");
+    assert.notEqual(proof.props.disabled, true);
+    assert.equal(proof.props.required, true);
+    let pickerOpened = 0;
+    proof.props.ref.current = { click: () => { pickerOpened++; }, value: "" };
+    buttonNamed(tree, "Choose Payment Screenshot").props.onClick();
+    assert.equal(pickerOpened, 1);
+    assert.ok(tree.indexOf(proof) > tree.findIndex(node => node.props.id === "qr-verification-amountPaid"));
+    assert.ok(tree.indexOf(proof) < tree.findIndex(node => node.props.id === "qr-verification-remarks"));
+    fill("utrNumber", utrDraft.utrNumber); fill("bankName", utrDraft.bankName);
+    view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    assert.equal(state.submissions.length, 0);
+    assert.equal(view.render().find(node => node.props.id === "qr-verification-proof").props["aria-invalid"], true);
+    await attach();
+    assert.ok(view.render().some(node => node.type === "img" && node.props.alt === "Selected payment proof preview"));
+    buttonNamed(view.render(), "Remove").props.onClick();
+    assert.equal(view.render().some(node => node.type === "img" && node.props.alt === "Selected payment proof preview"), false);
+    await attach(pngProof("replacement.png"));
+    view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+    await flush();
+    assert.equal(state.pending, 1);
+    assert.equal(state.submissions.length, 1);
+    assert.equal(state.uploadOptions[0].attachment.name, "replacement.png");
+    assert.deepEqual(Object.keys(state.submissions[0]).sort(), ["studentId", "studentFeeId", "amount", "utrNumber", "bankName", "paymentDate", "remarks", "orderId", "feeInstallmentIds"].sort());
+    view.unmount();
   });
   test("Direct QR validation is inline and does not post mismatched amounts or missing bank details", async () => {
     const { view, state, fill } = await qrVerificationFixture();
@@ -640,16 +922,18 @@ await describe("Admin payment gateway", async () => {
     assert.equal(state.submissions.length, 0); view.unmount();
   });
   test("a duplicate reference is not submitted repeatedly and the form can correct a rejected reference", async () => {
-    const { view, state, fill } = await qrVerificationFixture(async () => { throw { response: { status: 400, data: { message: "This UTR has already been submitted or settled." } } }; });
+    const { view, state, fill, attach } = await qrVerificationFixture(async () => { throw { response: { status: 400, data: { message: "This UTR has already been submitted or settled." } } }; });
     state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    await attach();
     const submit = () => view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     submit(); await flush(); submit(); await flush();
     assert.equal(state.submissions.length, 1); assert.equal(state.pending, 0);
     fill("utrNumber", "REF-998878"); submit(); await flush(); assert.equal(state.submissions.length, 2); view.unmount();
   });
   test("uncertain network failures retain details and prevent automatic retries", async () => {
-    const { view, state, fill } = await qrVerificationFixture(async () => { throw new Error("Network Error"); });
+    const { view, state, fill, attach } = await qrVerificationFixture(async () => { throw new Error("Network Error"); });
     state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    await attach();
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }); await flush(); const tree = view.render();
     assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "REF-998877");
     assert.ok(buttonNamed(tree, "Submit for Verification").props.disabled);
@@ -663,16 +947,18 @@ await describe("Admin payment gateway", async () => {
   });
   test("gateway permission loss prevents a UTR submission without losing the order", async () => {
     let allowed = true;
-    const { view, state, fill } = await qrVerificationFixture(undefined, { authorize: () => allowed });
+    const { view, state, fill, attach } = await qrVerificationFixture(undefined, { authorize: () => allowed });
     state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    await attach();
     allowed = false;
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }); await flush();
     assert.equal(state.submissions.length, 0); assert.equal(state.orders, 1); assert.equal(state.pending, 0); view.unmount();
   });
   test("closing the panel aborts an in-flight UTR submission and ignores stale completion", async () => {
     let release, signal;
-    const { view, state, fill } = await qrVerificationFixture((payload, currentSignal) => { signal = currentSignal; return new Promise(resolve => { release = resolve; }); });
+    const { view, state, fill, attach } = await qrVerificationFixture((payload, currentSignal) => { signal = currentSignal; return new Promise(resolve => { release = resolve; }); });
     state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    await attach();
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     view.unmount(); assert.equal(signal.aborted, true); release({ success: true }); await flush(); assert.equal(state.pending, 0);
   });
@@ -681,6 +967,125 @@ await describe("Admin payment gateway", async () => {
     Building2: "Building2", Clock: "Clock", Eye: "Eye", EyeOff: "EyeOff", RefreshCw: "RefreshCw", Save: "Save", ConfirmDialog: "ConfirmDialog",
   };
   const configFixture = () => normalizePaymentConfig({ ...paymentSettings, enableRazorpay: false, hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false }, 2);
+  const templateSource = await readFile(new URL("../../AdminSettings/PaymentTemplatesEditor.jsx", import.meta.url), "utf8");
+  const templateBindings = {
+    PAYMENT_EMAIL_TYPES, PAYMENT_TEMPLATE_TOKENS, newPaymentTemplateDraft, paymentTemplateSample,
+    insertPaymentTemplateText, renderPaymentTemplateSample, ConfirmDialog: "ConfirmDialog",
+    getApiErrorMessage: e => e?.message || "error",
+    getCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    updateCommunicationSettingsApi: async payload => ({ ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }),
+    restoreCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    sendTestCommunicationEmailApi: async () => ({ success: true, status: "SENT", message: "Test email sent." }),
+  };
+  const templateProps = () => ({ campusId: 2, campusName: "Sample Campus A", editable: true, drafts: new Map() });
+  const inputById = (view, id) => view.render().find(node => node.props.id === id);
+  const templateSection = (view, name) => inputById(view, `template-section-${name}`).props.onClick();
+  test("template tab is added without replacing any existing gateway settings panels", async () => {
+    const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings, PaymentTemplatesEditor: "PaymentTemplatesEditor",
+      getPaymentGatewayConfigApi: async () => configFixture() }, { campusId: 2, campusName: "Fixture", editable: true, templatesEditable: false });
+    view.render(); await flush();
+    for (const name of ["bank", "upi", "razorpay", "advanced"]) assert.ok(inputById(view, `payment-tab-${name}`));
+    inputById(view, "payment-tab-templates").props.onClick(); let tree = view.render();
+    assert.equal(tree.find(node => node.type === "PaymentTemplatesEditor").props.editable, false);
+    assert.equal(tree.some(node => node.type === "form"), false);
+    inputById(view, "payment-tab-bank").props.onClick(); tree = view.render();
+    assert.equal(inputById(view, "payment-config-bankName").props.value, "Fixture Bank");
+    view.unmount();
+  });
+  test("email types have independent edits and token insertion replaces the cursor selection", async () => {
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
+    inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello NAME!", selectionStart: 6, selectionEnd: 10 } });
+    let restoredCursor;
+    inputById(view, "payment-email-subject").props.ref({ focus() {}, setSelectionRange: (start, end) => { restoredCursor = [start, end]; } });
+    view.render().find(node => node.type === "button" && node.props.title === "Student name").props.onClick();
+    assert.equal(inputById(view, "payment-email-subject").props.value, "Hello {{studentName}}!");
+    assert.deepEqual(restoredCursor, [21, 21]);
+    inputById(view, "payment-email-type").props.onChange({ target: { value: "pending" } });
+    assert.match(inputById(view, "payment-email-subject").props.value, /Pending Verification/);
+    inputById(view, "payment-email-body").props.onChange({ target: { value: "Pending edit", selectionStart: 0, selectionEnd: 7 } });
+    buttonNamed(view.render(), "Bold").props.onClick();
+    assert.equal(inputById(view, "payment-email-body").props.value, "**Pending** edit");
+    inputById(view, "payment-email-type").props.onChange({ target: { value: "successful" } });
+    assert.equal(inputById(view, "payment-email-subject").props.value, "Hello {{studentName}}!");
+    assert.equal(props.drafts.get(2).emails.pending.body, "**Pending** edit");
+    assert.equal(buttonNamed(view.render(), "Publish Email Templates").props.disabled, false);
+    view.unmount();
+  });
+  test("sample previews update safely, receipt financial fields cannot be edited, and visibility follows edits", async () => {
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, templateProps()); view.render(); await flush();
+    inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello {{studentName}} <script>sample</script>", selectionStart: 0, selectionEnd: 0 } });
+    buttonNamed(view.render(), "Live Preview").props.onClick();
+    assert.ok(view.render().some(node => node.props.children.includes("Hello Sample Student <script>sample</script>")));
+    assert.equal(view.render().some(node => node.props.dangerouslySetInnerHTML || node.type === "script"), false);
+    inputById(view, "payment-email-heading").props.onChange({ target: { value: "Edited preview", selectionStart: 0, selectionEnd: 0 } });
+    assert.ok(view.render().some(node => node.type === "h3" && node.props.children.includes("Edited preview")));
+    templateSection(view, "receipt");
+    inputById(view, "payment-receipt-title").props.onChange({ target: { value: "Sample Custom Receipt" } });
+    inputById(view, "payment-receipt-accentColor").props.onChange({ target: { value: "#123456" } });
+    const balanceToggle = view.render().find(node => node.type === "label" && node.props.children.includes("Remaining balance"));
+    nodes(balanceToggle).find(node => node.type === "input").props.onChange({ target: { checked: false } });
+    buttonNamed(view.render(), "Live Preview").props.onClick(); const tree = view.render();
+    assert.ok(tree.some(node => node.type === "h4" && node.props.children.includes("Sample Custom Receipt")));
+    assert.equal(tree.find(node => node.props["aria-label"] === "Sample receipt preview").props.style["--receipt-accent"], "#123456");
+    assert.equal(tree.some(node => node.type === "dt" && node.props.children.includes("Remaining Balance")), false);
+    assert.ok(tree.some(node => node.type === "dt" && node.props.children.includes("Amount Paid")));
+    assert.equal(tree.some(node => ["amountPaid", "studentName", "receiptNumber", "transactionReference"].some(key => node.props.id === `payment-receipt-${key}`)), false);
+    assert.equal(buttonNamed(tree, "Save Receipt Settings").props.disabled, false);
+    view.unmount();
+  });
+  test("campus drafts survive remount without leaking to other campuses; restore requires confirmation", async () => {
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
+    inputById(view, "payment-email-heading").props.onChange({ target: { value: "Campus A draft", selectionStart: 0, selectionEnd: 0 } });
+    view.unmount();
+    const other = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, { ...props, campusId: 3, campusName: "Sample Campus B" }); other.render(); await flush();
+    assert.notEqual(inputById(other, "payment-email-heading").props.value, "Campus A draft"); other.unmount();
+    const back = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    buttonNamed(back.render(), "Restore Default").props.onClick();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    back.render().find(node => node.type === "ConfirmDialog").props.onCancel();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
+    buttonNamed(back.render(), "Restore Default").props.onClick();
+    await back.render().find(node => node.type === "ConfirmDialog").props.onConfirm();
+    await flush();
+    assert.equal(inputById(back, "payment-email-heading").props.value, "Payment Successful"); back.unmount();
+  });
+  test("delivery preferences call backend for editable admins and readonly users cannot mutate or publish any template", async () => {
+    let savedPayload = null;
+    let testEmailPayload = null;
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", {
+      ...templateBindings,
+      updateCommunicationSettingsApi: async payload => { savedPayload = payload; return { ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }; },
+      sendTestCommunicationEmailApi: async payload => { testEmailPayload = payload; return { success: true, status: "SENT", message: "Test email sent." }; },
+    }, props);
+    view.render(); await flush();
+    await buttonNamed(view.render(), "Publish Email Templates").props.onClick(); await flush();
+    assert.equal(savedPayload.campusId, 2);
+    templateSection(view, "delivery");
+    inputById(view, "payment-delivery-replyTo").props.onChange({ target: { value: "accounts@example.test" } });
+    inputById(view, "payment-delivery-testRecipient").props.onChange({ target: { value: "qa@example.test" } });
+    assert.equal(props.drafts.get(2).delivery.replyTo, "accounts@example.test");
+    for (const label of ["Save Delivery Settings", "Send Test Email"]) assert.equal(buttonNamed(view.render(), label).props.disabled, false);
+    await buttonNamed(view.render(), "Send Test Email").props.onClick(); await flush();
+    assert.equal(testEmailPayload.campusId, 2);
+    assert.equal(testEmailPayload.testRecipient, "qa@example.test");
+    view.unmount();
+    const deniedProps = { ...templateProps(), editable: false };
+    const denied = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, deniedProps); denied.render(); await flush();
+    const original = inputById(denied, "payment-email-subject").props.value;
+    inputById(denied, "payment-email-subject").props.onChange({ target: { value: "Unauthorized", selectionStart: 0, selectionEnd: 0 } });
+    assert.equal(inputById(denied, "payment-email-subject").props.value, original);
+    assert.equal(deniedProps.drafts.size, 0);
+    assert.equal(denied.render().find(node => node.type === "fieldset").props.disabled, true);
+    assert.equal(buttonNamed(denied.render(), "Restore Default").props.disabled, true);
+    assert.equal(buttonNamed(denied.render(), "Live Preview").props.disabled, undefined);
+    denied.unmount();
+    assert.equal(renderPaymentTemplateSample("{{studentName}} {{unknown}} {{toString}}", paymentTemplateSample("Fixture")), "Sample Student {{unknown}} {{toString}}");
+    assert.deepEqual(insertPaymentTemplateText("abcd", "XY", 1, 3), { value: "aXYd", cursor: 3 });
+  });
   test("saved bank card masks details and selection never activates, adds or overwrites an account", async () => {
     let writes = 0;
     const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings,
@@ -1156,6 +1561,28 @@ await describe("Admin payment gateway", async () => {
     assert.ok(routes.includes('path="/dashboard/settings"'));
     admin.unmount();
   });
+  test("only admin editors can author templates; page exit warnings protect all retained campus drafts", async () => {
+    const listeners = new Map(), documentListeners = new Map();
+    const permissions = { loading: false, error: "", isSuperOrAdmin: true, canView: () => true, canDo: () => true };
+    const base = { ...configBindings, useEffectivePermissions: () => permissions,
+      useCampusContext: () => ({ selectedCampusId: "2", selectedCampus: { campusId: 2, name: "Fixture" } }),
+      getAuthItem: () => "Admin", getAuthUser: () => ({ role: "Admin", campusId: 2 }), hasRole: () => false,
+      window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name), location: { href: "https://cms.example.test/dashboard/settings/payment-gateway" }, confirm: () => false },
+      document: { addEventListener: (name, fn) => documentListeners.set(name, fn), removeEventListener: name => documentListeners.delete(name) } };
+    const view = await mount(configSource, "PaymentGatewayConfigPage", base, { embedded: true });
+    const campus = view.render().find(node => typeof node.type === "function" && node.type.name === "CampusPaymentConfig");
+    assert.equal(campus.props.templatesEditable, true);
+    let warned = false, prevented = false, stopped = false;
+    listeners.get("beforeunload")({ preventDefault: () => { warned = true; } }); assert.equal(warned, false);
+    campus.props.templateDrafts.set(3, { dirty: true });
+    listeners.get("beforeunload")({ preventDefault: () => { warned = true; } }); assert.equal(warned, true);
+    documentListeners.get("click")({ target: { closest: () => ({ href: "https://cms.example.test/dashboard", hasAttribute: () => false }) }, preventDefault: () => { prevented = true; }, stopPropagation: () => { stopped = true; } });
+    assert.equal(prevented, true); assert.equal(stopped, true);
+    permissions.isSuperOrAdmin = false;
+    assert.equal(view.render().find(node => typeof node.type === "function" && node.type.name === "CampusPaymentConfig").props.templatesEditable, false);
+    assert.equal(campus.props.templateDrafts.size, 0);
+    view.unmount(); assert.equal(listeners.size, 0); assert.equal(documentListeners.size, 0);
+  });
   test("QR creation is explicit, duplicate clicks create one order, only actual QR is rendered", async () => {
     let calls = 0,
       resolve,
@@ -1306,68 +1733,6 @@ await describe("Admin payment gateway", async () => {
       ),
     );
     mismatchView.unmount();
-  });
-  test("Direct Bank VPA QR allows inline UTR entry and immediate approval without leaving modal", async () => {
-    let submittedPayload, approvedPayload, savedPayment, timeoutFn;
-    const view = await mount(
-      gatewaySource,
-      "GatewayPaymentPanel",
-      {
-        getPaymentGatewayConfigApi: async () => paymentSettings,
-        feePaymentGatewayApi: {
-          createOrder: async () => ({
-            ...order,
-            orderId: "order_direct_inline_1",
-            currency: "INR",
-            qrCodeBase64: "data:image/png;base64,AAAA",
-            upiUri: "upi://pay?pa=college@okicici",
-            qrMode: "DIRECT_VPA_QR",
-            requiresManualUtr: true,
-            payeeVpa: "college@okicici",
-            payeeName: "College Trust",
-          }),
-          submitUtr: async (payload) => {
-            submittedPayload = payload;
-            return { success: true, transactionId: 501 };
-          },
-          approveUtr: async (payload) => {
-            approvedPayload = payload;
-            return { success: true, receiptNumber: "REC-501", amount: 300, feePaymentId: 888 };
-          },
-        },
-        usePaymentPolling: () => ({ status: "MANUAL_UTR", secondsLeft: 0 }),
-        window: { setTimeout: (fn) => { timeoutFn = fn; return 1; } },
-      },
-      {
-        mode: "UPI_QR",
-        campusId: 2,
-        account: { ...account, campusId: 2 },
-        target: "schedules",
-        selectedIds: [101],
-        amount: 300,
-        onSaved: (p) => { savedPayment = p; },
-        onPending() {},
-        onLockChange() {},
-      },
-    );
-    view.render().find((node) => node.type === "button").props.onClick();
-    await flush();
-    let tree = view.render();
-    const utrInput = tree.find((node) => node.props?.id === "gateway-inline-utr");
-    assert.ok(utrInput);
-    utrInput.props.onChange({ target: { value: "431512345678" } });
-    tree = view.render();
-    await tree.find((node) => node.type === "button" && Array.isArray(node.props?.children) && node.props.children.includes("Verify & Credit Payment Now")).props.onClick();
-    await flush();
-    assert.equal(submittedPayload.orderId, "order_direct_inline_1");
-    assert.deepEqual(Array.from(submittedPayload.feeInstallmentIds), [101]);
-    assert.equal(submittedPayload.utrNumber, "431512345678");
-    assert.equal(approvedPayload.transactionId, 501);
-    assert.equal(approvedPayload.action, "Approve");
-    timeoutFn();
-    assert.equal(savedPayment.receiptNo, "REC-501");
-    assert.equal(savedPayment.gatewayConfirmed, true);
-    view.unmount();
   });
   test("Razorpay uses returned public order, rupees-to-paise conversion and backend verify", async () => {
     let options,
@@ -1575,6 +1940,61 @@ await describe("Admin payment gateway", async () => {
   });
 
   const pageSource = await readFile(new URL("../FeeManagementPage.jsx", import.meta.url), "utf8");
+  const feeFocusEffect = pageSource.match(/ {2}useEffect\(\(\) => \{\r?\n {4}const refreshFeeAccounts = [\s\S]*?\r?\n {2}\}, \[[^\]]+\]\);/)?.[0];
+  assert.ok(feeFocusEffect, "Use the actual Fee Management focus-refresh effect in regression tests");
+  const feeFocusSource = `function FeeFocusHarness(props) {
+    const { collecting, tab = "Student Fee Ledger", ledgerTab = "Fee Collection", loadFeeAccounts, loadOverviewData } = props;
+    const [selectedDetail, setSelectedDetail] = useState({ id: "41" });
+    const [version, setSelectedDetailVersion] = useState(0);
+    const feeDetailCacheRef = useRef(new Map());
+    ${feeFocusEffect}
+    return <div data-version={version}>{collecting && selectedDetail ? <CollectPaymentModal account={selectedDetail} /> : null}</div>;
+  }`;
+  test("native file-picker focus keeps the parent payment modal mounted and preserves verification fields and files", async () => {
+    const listeners = new Map(), reloads = [];
+    const props = { collecting: true, loadFeeAccounts: source => reloads.push(source), loadOverviewData: () => reloads.push("overview") };
+    const parent = await mount(feeFocusSource, "FeeFocusHarness", {
+      STUDENT_FEES_UPDATED_EVENT: "fixture-fees-updated", CollectPaymentModal: "CollectPaymentModal",
+      window: { addEventListener: (event, fn) => listeners.set(event, fn), removeEventListener: event => listeners.delete(event) },
+    }, props);
+    assert.ok(parent.render().some(node => node.type === "CollectPaymentModal"));
+    const { view, state, fill, attach } = await qrVerificationFixture();
+    state.footer.onDone(); view.render();
+    const values = { utrNumber: "123456789012", bankName: "Fixture Bank", paymentDate: "2026-11-08", amountPaid: "300", remarks: "Keep this draft" };
+    for (const [key, value] of Object.entries(values)) fill(key, value);
+    for (const file of [pngProof("first.png"), new File([new Uint8Array([255, 216, 255, 0])], "replacement.jpg", { type: "image/jpeg" }), new File(["%PDF-1.7"], "proof.pdf", { type: "application/pdf" })]) {
+      listeners.get("focus")();
+      assert.ok(parent.render().some(node => node.type === "CollectPaymentModal"));
+      await attach(file); listeners.get("focus")();
+      assert.ok(parent.render().some(node => node.type === "CollectPaymentModal"));
+      const tree = view.render(); assert.ok(tree.some(node => node.type === "form"));
+      assert.ok(tree.some(node => node.type === "span" && node.props.children.includes(file.name)));
+      for (const [key, value] of Object.entries(values)) assert.equal(tree.find(node => node.props.id === `qr-verification-${key}`).props.value, value);
+      assert.equal(reloads.length, 0); assert.equal(state.orders, 1); assert.equal(state.submissions.length, 0);
+    }
+    buttonNamed(view.render(), "Remove").props.onClick(); listeners.get("focus")();
+    assert.ok(parent.render().some(node => node.type === "CollectPaymentModal"));
+    await attach(new File(["bad contents"], "invalid.png", { type: "image/png" }));
+    assert.ok(view.render().find(node => node.props.id === "qr-verification-proof-error"));
+    assert.ok(parent.render().some(node => node.type === "CollectPaymentModal"));
+    for (const [key, value] of Object.entries(values)) assert.equal(view.render().find(node => node.props.id === `qr-verification-${key}`).props.value, value);
+    assert.equal(reloads.length, 0); assert.equal(state.orders, 1); assert.equal(state.submissions.length, 0);
+    view.unmount(); parent.unmount(); assert.equal(listeners.size, 0);
+  });
+  test("normal focus refresh resumes after payment closes and explicit fee-update events remain active", async () => {
+    const listeners = new Map(), reloads = [];
+    const props = { collecting: true, loadFeeAccounts: source => reloads.push(source), loadOverviewData: () => reloads.push("overview") };
+    const parent = await mount(feeFocusSource, "FeeFocusHarness", {
+      STUDENT_FEES_UPDATED_EVENT: "fixture-fees-updated", CollectPaymentModal: "CollectPaymentModal",
+      window: { addEventListener: (event, fn) => listeners.set(event, fn), removeEventListener: event => listeners.delete(event) },
+    }, props);
+    parent.render(); listeners.get("focus")(); assert.equal(reloads.length, 0);
+    listeners.get("fixture-fees-updated")(); parent.render(); assert.deepEqual(reloads, ["collection"]);
+    props.collecting = false; parent.render(); listeners.get("focus")(); parent.render();
+    assert.deepEqual(reloads, ["collection", "collection"]);
+    props.tab = "Overview"; parent.render(); listeners.get("focus")(); parent.render();
+    assert.equal(reloads.at(-1), "overview"); parent.unmount(); assert.equal(listeners.size, 0);
+  });
   const helpers = pageSource.slice(
     pageSource.indexOf("const read ="),
     pageSource.indexOf("const normalizeBackendPaymentPlan"),
@@ -1587,6 +2007,58 @@ await describe("Admin payment gateway", async () => {
     );
   const read = (item, ...keys) =>
     keys.map((key) => item?.[key]).find((value) => value != null && value !== "");
+  test("Cash uses two aligned columns, hides method/reference fields and keeps the required backend method", async () => {
+    let payload, saved = 0;
+    const view = await mount(cashSource, "CollectPaymentModal", {
+      GatewayPaymentPanel: "GatewayPanel", apiEndpoints: { fee: { collect: "/api/v1/fees/collect" } },
+      apiClient: { post: async (url, body) => { assert.equal(url, "/api/v1/fees/collect"); payload = body; return { data: { feePaymentId: 99, receiptNumber: "FIXTURE-99", amount: 300, status: "Paid" } }; } },
+    }, { account, onClose() {}, onSaved: () => { saved++; }, onPending() {} });
+    buttonNamed(view.render(), "Cash / Manual").props.onClick(); let tree = view.render();
+    assert.equal(tree.some(node => ["collect-method", "collect-ref"].includes(node.props.id)), false);
+    assert.ok(tree.some(node => node.props.className === "cms-form-grid cols-2"));
+    assert.deepEqual(tree.filter(node => /collect-(amount|date|discount|fine|note)$/.test(node.props.id || "")).map(node => node.props.id),
+      ["collect-amount", "collect-date", "collect-discount", "collect-fine", "collect-note"]);
+    assert.ok(tree.some(node => node.props.className === "cms-field full" && nodes(node).some(child => child.props.id === "collect-note")));
+    assert.ok(tree.some(node => node.type === "details" && node.props.className === "cms-fee-pay-towards"));
+    for (const [mode, label] of [["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"]]) {
+      buttonNamed(view.render(), label).props.onClick(); tree = view.render();
+      assert.equal(tree.find(node => node.type === "GatewayPanel").props.mode, mode);
+      assert.ok(tree.some(node => node.props.className === "cms-form-grid cols-3"));
+      assert.equal(tree.some(node => node.props.id === "collect-date"), false);
+    }
+    buttonNamed(view.render(), "Cash / Manual").props.onClick();
+    const footer = nodes(view.render().find(node => node.type === "Modal").props.footer);
+    await buttonNamed(footer, "Save Payment").props.onClick();
+    assert.equal(payload.paymentMode, "Cash"); assert.equal(payload.transactionReference, null);
+    assert.equal(payload.amount, 300); assert.deepEqual(Array.from(payload.feeInstallmentIds), [101]); assert.equal(saved, 1);
+    view.unmount();
+  });
+  test("other manual methods remain reachable and keep their reference requirement; returning to Cash sends no stale reference", async () => {
+    for (const method of ["UPI", "Card", "Net Banking", "Cheque"]) {
+      const requests = [];
+      const view = await mount(cashSource, "CollectPaymentModal", {
+        GatewayPaymentPanel: "GatewayPanel", apiEndpoints: { fee: { collect: "/api/v1/fees/collect" } },
+        apiClient: { post: async (_url, body) => { requests.push(body); return { data: { status: "PendingVerification", amount: 300 } }; } },
+      }, { account, onClose() {}, onSaved: () => assert.fail("Unverified payment must not be credited"), onPending() {} });
+      buttonNamed(view.render(), "Cash / Manual").props.onClick();
+      buttonNamed(view.render(), method).props.onClick(); let tree = view.render();
+      assert.equal(tree.find(node => node.props.id === "collect-method").props.value, method);
+      assert.ok(tree.some(node => node.props.id === "collect-ref"));
+      assert.ok(tree.some(node => node.props.className === "cms-form-grid cols-3"));
+      let footer = nodes(tree.find(node => node.type === "Modal").props.footer);
+      await buttonNamed(footer, "Save Payment").props.onClick(); assert.equal(requests.length, 0);
+      tree = view.render();
+      tree.find(node => node.props.id === "collect-ref").props.onChange({ target: { value: "FIXTURE-REFERENCE" } });
+      tree.find(node => node.props.id === "collect-method").props.onChange({ target: { value: "Cash" } });
+      tree = view.render();
+      assert.equal(tree.some(node => ["collect-method", "collect-ref"].includes(node.props.id)), false);
+      assert.equal(tree.some(node => node.props.children.includes("Transaction / Reference Number is required for this payment method")), false);
+      footer = nodes(tree.find(node => node.type === "Modal").props.footer);
+      await buttonNamed(footer, "Save Payment").props.onClick();
+      assert.equal(requests.length, 1); assert.equal(requests[0].paymentMode, "Cash"); assert.equal(requests[0].transactionReference, null);
+      view.unmount();
+    }
+  });
   test("Admin modal places Done beside Close and locks closing only during a gateway request", async () => {
     let opened = 0, closed = 0;
     const view = await mount(cashSource, "CollectPaymentModal", { GatewayPaymentPanel: "GatewayPanel" },
@@ -1603,6 +2075,23 @@ await describe("Admin payment gateway", async () => {
     footer = nodes(view.render().find(node => node.type === "Modal").props.footer);
     buttonNamed(footer, "Close").props.onClick(); assert.equal(closed, 1); view.unmount();
   });
+  test("Admin cash pending response never opens a paid receipt or repeats the payment", async () => {
+    let writes = 0;
+    const view = await mount(cashSource, "CollectPaymentModal", {
+      GatewayPaymentPanel: "GatewayPanel",
+      apiEndpoints: { fee: { collect: "/api/v1/fees/collect" } },
+      apiClient: { post: async () => { writes++; return { data: { status: "PendingVerification", amount: 300, feePaymentId: 901 } }; } },
+    }, { account, campusId: 2, onClose() {}, onPending() {}, onSaved: () => assert.fail("Pending cash must not open a paid receipt") });
+    let tree = view.render();
+    tree.find(node => node.props.role === "tab" && node.props.children.includes("Cash / Manual")).props.onClick();
+    tree = view.render();
+    const save = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Save Payment"));
+    await save.props.onClick();
+    tree = view.render();
+    assert.ok(tree.some(node => node.props.children.some(value => typeof value === "string" && value.includes("pending verification"))), JSON.stringify({ writes, errors: tree.filter(node => node.props.className === "cms-error").map(node => node.props.children) }));
+    await nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Save Payment")).props.onClick();
+    assert.equal(writes, 1); view.unmount();
+  });
   test("Accountant reuses the gateway panel with real fee IDs and preserves cash collection", async () => {
     const source = await readFile(new URL("../../../accountant/pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
     const collectSource = source.slice(source.indexOf("function CollectPayment("), source.indexOf("const amountToWords ="));
@@ -1615,7 +2104,7 @@ await describe("Admin payment gateway", async () => {
       useCampusContext: () => ({ selectedCampusId: 2 }), readFee, feeText: readFee, feeMoney: String, feeDate: String,
       rowsOf: value => Array.isArray(value) ? value : [], requestError: getApiErrorMessage,
       GatewayPaymentPanel: "GatewayPanel", FeeNotice: "FeeNotice",
-      collectStudentPayment: async () => { cashWrites++; return { feePaymentId: 9 }; },
+      collectStudentPayment: async () => { cashWrites++; return { feePaymentId: 9, status: "Paid" }; },
     }, { account: data, authorize: () => true, onClose() {}, onSaved: () => { saved++; } });
     let tree = view.render();
     assert.ok(buttonNamed(nodes(tree.find(node => node.type === "Modal").props.footer), "Save Payment"));
@@ -1773,6 +2262,123 @@ await describe("Admin payment gateway", async () => {
     date: "2026-11-09",
     status: "PendingVerification",
   };
+  test("queue approval review embeds private image/PDF proof and payment details before any settlement", async () => {
+    for (const type of ["image/png", "application/pdf"]) {
+      const reads = [], revoked = []; let approvals = 0;
+      const row = { ...queueRow, orderId: "order_review_fixture", attachmentId: 6, attachmentFileName: "proof-fixture", attachmentUploadedAt: "2026-11-09", paymentDate: "2026-11-08", submittedAt: "2026-11-09" };
+      const view = await mount(queueSource, "OfflineUtrQueueTab", {
+        feePaymentGatewayApi: { pendingUtrs: async () => [row], paymentProof: async id => { reads.push(id); return type === "image/png" ? pngProof() : new Blob(["%PDF-1.7"], { type }); },
+          approveUtr: async () => { approvals++; return { success: true, receiptNumber: "REC-89", feePaymentId: 901, amount: 250 }; } },
+        URL: { createObjectURL: () => "blob:review-private", revokeObjectURL: value => revoked.push(value) },
+      }, { scope: { campusId: 2 }, canView: true, canReview: true, onSettled() {}, onToast() {}, Pagination: "Pagination" });
+      view.render(); await flush(); buttonNamed(view.render(), "Approve & Credit").props.onClick(); view.render(); await flush();
+      const tree = view.render(); const modal = tree.find(node => node.type === "Modal" && node.props.title === "Approve Bank Transfer");
+      assert.ok(modal); assert.equal(tree.filter(node => node.type === "Modal").length, 1); assert.deepEqual(reads, [6]);
+      assert.equal(approvals, 0);
+      const content = nodes(modal); assert.ok(content.some(node => node.type === (type === "image/png" ? "img" : "iframe")));
+      for (const value of ["order_review_fixture", "TEST-11", "Fixture Bank", "2026-11-08", "2026-11-09"]) assert.ok(content.some(node => node.props.children.includes(value)));
+      assert.equal(content.find(node => node.type === "a" && node.props.download).props.href, "blob:review-private");
+      modal.props.footer.props.children[0].props.onClick();
+      assert.equal(view.render().some(node => node.type === "Modal"), false); assert.ok(revoked.includes("blob:review-private")); view.unmount();
+    }
+  });
+  test("review explicitly reports missing or inaccessible proof without inventing an attachment or approving", async () => {
+    for (const attachmentId of [null, 6]) {
+      const view = await mount(queueSource, "OfflineUtrQueueTab", { feePaymentGatewayApi: {
+        pendingUtrs: async () => [{ ...queueRow, attachmentId }], paymentProof: async () => { throw { response: { status: 403, data: { message: "Fixture proof access denied" } } }; },
+        approveUtr: () => assert.fail("Opening a review must not approve"),
+      } }, { scope: { campusId: 2 }, canView: true, canReview: true, onSettled() {}, onToast() {}, Pagination: "Pagination" });
+      view.render(); await flush(); buttonNamed(view.render(), "Approve & Credit").props.onClick(); view.render(); await flush();
+      const tree = view.render();
+      assert.equal(tree.some(node => node.type === "img" || node.type === "iframe"), false);
+      assert.ok(tree.some(node => attachmentId ? node.props.role === "alert" : node.props.children.includes("No payment proof attached.")));
+      view.unmount();
+    }
+  });
+  test("queue load failures never claim an empty queue and Refresh recovers with saved requests", async () => {
+    let reads = 0;
+    const view = await mount(queueSource, "OfflineUtrQueueTab", {
+      feePaymentGatewayApi: { pendingUtrs: async () => {
+        if (++reads === 1) throw new Error("Fixture API unavailable");
+        return [queueRow];
+      } },
+    }, { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" });
+    const hasEmpty = tree => tree.some(node => node.props.children.includes("No pending UTR transactions."));
+    assert.equal(hasEmpty(view.render()), false);
+    await flush(); let tree = view.render();
+    assert.equal(hasEmpty(tree), false);
+    assert.ok(tree.some(node => node.props.role === "alert"));
+    assert.equal(tree.some(node => node.type === "Pagination"), false);
+    buttonNamed(tree, " Refresh").props.onClick(); view.render(); await flush(); tree = view.render();
+    assert.equal(reads, 2);
+    assert.ok(tree.some(node => node.props.children.includes("UTRFIXTURE")));
+    assert.equal(tree.some(node => node.props.role === "alert"), false);
+    view.unmount();
+  });
+  test("queue preserves five-row pagination, search, scope filters and fresh reads on reopen", async () => {
+    const calls = [];
+    const props = { scope: { campusId: 2, academicYearId: 3 }, canView: true, canReview: false, onToast() {}, Pagination: "Pagination" };
+    const bindings = { feePaymentGatewayApi: { pendingUtrs: async scope => {
+      calls.push(scope);
+      return scope.campusId === 2 ? Array.from({ length: 7 }, (_, index) => ({ ...queueRow, id: 90 + index, utrNumber: `FIXTURE-${index}` })) : [];
+    } } };
+    const view = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    view.render(); await flush(); let tree = view.render();
+    const references = tree => tree.filter(node => node.type === "td" && node.props.children.some(value => typeof value === "string" && value.startsWith("FIXTURE-")));
+    assert.equal(references(tree).length, 5);
+    tree.find(node => node.type === "Pagination").props.onPageChange(2);
+    assert.equal(references(view.render()).length, 2);
+    view.render().find(node => node.props["aria-label"] === "Search pending UTRs").props.onChange({ target: { value: "FIXTURE-6" } });
+    assert.equal(references(view.render()).length, 1);
+    props.scope = { campusId: 4, academicYearId: 3 }; view.render(); await flush(); tree = view.render();
+    assert.equal(references(tree).length, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ campusId: 2, academicYearId: 3 }, { campusId: 4, academicYearId: 3 }]);
+    view.unmount();
+    const reopened = await mount(queueSource, "OfflineUtrQueueTab", bindings, props);
+    reopened.render(); await flush(); reopened.render(); assert.equal(calls.length, 3); reopened.unmount();
+    const denied = await mount(queueSource, "OfflineUtrQueueTab", bindings, { ...props, canView: false });
+    denied.render(); await flush(); tree = denied.render(); assert.equal(calls.length, 3);
+    assert.equal(tree.some(node => node.props.children.includes("No pending UTR transactions.")), false);
+    denied.unmount();
+  });
+  test("authorized queue proof viewing supports images/PDFs and releases private URLs on scope change", async () => {
+    for (const type of ["image/png", "application/pdf"]) {
+      const revoked = [], ids = [];
+      const props = { scope: { campusId: 2 }, canView: true, canReview: false, onSettled() {}, onToast() {}, Pagination: "Pagination" };
+      const view = await mount(queueSource, "OfflineUtrQueueTab", {
+        feePaymentGatewayApi: {
+          pendingUtrs: async () => [{ ...queueRow, attachmentId: 6, attachmentFileName: type === "application/pdf" ? "proof.pdf" : "proof.png", paymentDate: "2026-11-10" }],
+          paymentProof: async id => { ids.push(id); return type === "application/pdf" ? new Blob(["%PDF-1.7"], { type }) : pngProof(); },
+          approveUtr: () => assert.fail("Viewing proof must never approve a payment"),
+        },
+        URL: { createObjectURL: () => "blob:private-proof", revokeObjectURL: url => revoked.push(url) },
+      }, props);
+      view.render(); await flush();
+      await buttonNamed(view.render(), "View Payment Proof").props.onClick();
+      const tree = view.render(), modal = tree.find(node => node.type === "Modal" && node.props.title === "Payment Proof");
+      assert.ok(modal); assert.deepEqual(ids, [6]);
+      assert.ok(tree.some(node => node.type === (type === "application/pdf" ? "iframe" : "img")));
+      const download = nodes(modal.props.footer).find(node => node.type === "a" && node.props.download);
+      assert.equal(download.props.href, "blob:private-proof");
+      props.scope = { campusId: 9 }; view.render();
+      assert.equal(view.render().some(node => node.type === "Modal" && node.props.title === "Payment Proof"), false);
+      assert.ok(revoked.includes("blob:private-proof")); view.unmount();
+    }
+  });
+  test("inaccessible queue proof reports an error without exposing a URL or changing approval", async () => {
+    const view = await mount(queueSource, "OfflineUtrQueueTab", {
+      feePaymentGatewayApi: {
+        pendingUtrs: async () => [{ ...queueRow, attachmentId: 6 }],
+        paymentProof: async () => { throw { response: { status: 403, data: { message: "Proof access denied" } } }; },
+      },
+    }, { scope: { campusId: 2 }, canView: true, canReview: false, onSettled() {}, onToast() {}, Pagination: "Pagination" });
+    view.render(); await flush(); await buttonNamed(view.render(), "View Payment Proof").props.onClick();
+    const tree = view.render();
+    assert.ok(tree.some(node => node.props.role === "alert"));
+    const modal = tree.find(node => node.type === "Modal" && node.props.title === "Payment Proof");
+    assert.equal(nodes(modal.props.footer).some(node => node.type === "a"), false);
+    view.unmount();
+  });
   test("an accepted UTR event refreshes a mounted authorized pending queue without approving", async () => {
     const listeners = new Map(); let reads = 0;
     const view = await mount(queueSource, "OfflineUtrQueueTab", {
@@ -1796,7 +2402,7 @@ await describe("Admin payment gateway", async () => {
     const pendingApproval = review.props.footer.props.children[1].props.onClick();
     view.render(); listeners.get(UTR_SUBMITTED_EVENT)(); view.render();
     assert.equal(signal.aborted, false); assert.equal(reads, 1);
-    release({ success: true }); await pendingApproval; view.render(); await flush();
+    release({ success: true, receiptNumber: "R89", feePaymentId: 901, amount: 250 }); await pendingApproval; view.render(); await flush();
     assert.equal(reads, 2); view.unmount();
   });
   test("UTR queue scopes reads, requires rejection reason, and prevents duplicate reviews", async () => {
@@ -1869,7 +2475,7 @@ await describe("Admin payment gateway", async () => {
         pendingUtrs: async () => [queueRow],
         approveUtr: async () => {
           writes++;
-          return { success: true, receiptNumber: "R89" };
+          return { success: true, receiptNumber: "R89", feePaymentId: 901, amount: 250 };
         },
       },
     };

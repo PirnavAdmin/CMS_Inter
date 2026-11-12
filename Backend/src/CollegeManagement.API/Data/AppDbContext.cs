@@ -403,9 +403,12 @@ namespace CollegeManagement.API.Data
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
         public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions { get; set; }
+        public DbSet<PaymentProofAttachment> PaymentProofAttachments { get; set; }
         public DbSet<FeePaymentAllocation> FeePaymentAllocations { get; set; }
         public DbSet<PaymentGatewayConfig> PaymentGatewayConfigs { get; set; }
         public DbSet<PaymentLedgerEntryRecord> PaymentLedgerEntries { get; set; }
+        public DbSet<FeePaymentEmailOutbox> FeePaymentEmailOutboxes { get; set; }
+        public DbSet<PaymentCommunicationSetting> PaymentCommunicationSettings { get; set; }
         public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
@@ -950,6 +953,7 @@ namespace CollegeManagement.API.Data
 
                 entity.HasIndex(x => x.OrderId).IsUnique();
                 entity.HasIndex(x => x.IdempotencyKey);
+                entity.HasIndex(x => x.ClientIdempotencyKey);
                 entity.HasIndex(x => x.RequestPayloadHash);
                 entity.HasIndex(x => x.UtrNumber);
                 entity.HasIndex(x => x.Status);
@@ -959,6 +963,38 @@ namespace CollegeManagement.API.Data
 
                 entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.StudentFee).WithMany().HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PaymentProofAttachment>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.OrderId).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.OriginalFileName).IsRequired().HasMaxLength(255);
+                entity.Property(x => x.StoredFileName).IsRequired().HasMaxLength(255);
+                entity.Property(x => x.StorageRelativePath).IsRequired().HasMaxLength(500);
+                entity.Property(x => x.ContentType).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.Sha256Hash).IsRequired().HasMaxLength(64);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.StoredFileName).IsUnique();
+                entity.HasIndex(x => x.ActiveTransactionKey).IsUnique();
+                entity.HasIndex(x => new { x.PaymentGatewayTransactionId, x.IsActive });
+                entity.HasIndex(x => x.OrderId);
+                entity.HasIndex(x => x.StudentFeeId);
+                entity.HasIndex(x => x.CampusId);
+
+                entity.HasOne(x => x.PaymentGatewayTransaction)
+                    .WithMany(t => t.ProofAttachments)
+                    .HasForeignKey(x => x.PaymentGatewayTransactionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Student)
+                    .WithMany()
+                    .HasForeignKey(x => x.StudentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.StudentFee)
+                    .WithMany()
+                    .HasForeignKey(x => x.StudentFeeId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
 
@@ -1001,6 +1037,26 @@ namespace CollegeManagement.API.Data
                 entity.HasIndex(x => new { x.CampusId, x.CreatedAt });
                 entity.HasIndex(x => x.AcademicYearId);
                 entity.HasIndex(x => x.StudentId);
+            });
+
+            modelBuilder.Entity<FeePaymentEmailOutbox>(entity =>
+            {
+                entity.HasIndex(x => new { x.NotificationType, x.EventEntityId, x.RecipientEmail })
+                    .IsUnique()
+                    .HasDatabaseName("UX_FeePaymentEmailOutbox_Dedup");
+                entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc, x.LockedUntilUtc })
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_Dispatch");
+                entity.HasIndex(x => x.FeePaymentId)
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_FeePaymentId");
+                entity.HasIndex(x => new { x.StudentId, x.CampusId })
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_StudentCampus");
+            });
+
+            modelBuilder.Entity<PaymentCommunicationSetting>(entity =>
+            {
+                entity.HasIndex(x => x.CampusId)
+                    .IsUnique()
+                    .HasDatabaseName("UX_PaymentCommSettings_Campus");
             });
 
             #region Section relational keys

@@ -31,10 +31,11 @@ import {
   Sliders,
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import settingsIllustration from "@/assets/settings-3d/campus-configuration.png";
-import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
-import { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import {
   getCollegeCodeSeriesSettings,
   saveCollegeCodeSeriesSettings,
@@ -60,7 +61,8 @@ function Toast({ msg, type, onClose }) {
 
 export default function GlobalSettingsPage() {
   const { data, refresh } = useSuperAdmin?.() || { data: {} };
-  const { theme, toggleTheme, palette, setPalette } = useTheme();
+  const { theme, toggleTheme, palette, customColor } = useTheme();
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   // Active Navigation Tab
   const [activeTab, setActiveTab] = useState("platform_reminders");
@@ -220,7 +222,7 @@ export default function GlobalSettingsPage() {
       <div className="gsp-header-card">
         <div className="gsp-header-left">
           <div className="gsp-header-icon">
-            <Settings size={22} />
+            <ThreeDIcon name="general-settings" size={34} />
           </div>
           <div className="gsp-header-text">
             <h1 className="gsp-page-title">Global Platform Settings</h1>
@@ -270,7 +272,7 @@ export default function GlobalSettingsPage() {
             onClick={() => setActiveTab("platform_identity")}
           >
             <Palette size={16} className="gsp-tab-icon" />
-            <span>Platform Appearance</span>
+            <span>Theme Appearance</span>
           </button>
 
           <button
@@ -740,7 +742,7 @@ export default function GlobalSettingsPage() {
             </form>
           )}
 
-          {/* ════ TAB 3: Platform Identity & Theme Appearance ════ */}
+          {/* ════ TAB 3: Theme Appearance ════ */}
           {activeTab === "platform_identity" && (
             <div className="gsp-form">
               <div className="gsp-form-header">
@@ -748,7 +750,7 @@ export default function GlobalSettingsPage() {
                   <Palette size={20} />
                 </div>
                 <div>
-                  <h2 className="gsp-form-title">Platform Appearance & Theme Palettes</h2>
+                  <h2 className="gsp-form-title">Theme Appearance</h2>
                   <p className="gsp-form-subtitle">
                     Customize your platform color theme palette and toggle between Dark and Light mode.
                   </p>
@@ -789,38 +791,17 @@ export default function GlobalSettingsPage() {
                 </div>
               </div>
 
-              {/* Palette Selection Grid */}
+              {/* Admin-style theme colour picker */}
               <div className="gsp-palette-picker-section">
-                <label className="gsp-field-label">Active Theme Palette Accent:</label>
-                <div className="gsp-palettes-grid">
-                  {THEME_OPTIONS.map((opt) => {
-                    const isSelected = (palette || "olive") === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`gsp-palette-tile ${isSelected ? "is-selected" : ""}`}
-                        onClick={() => {
-                          setPalette(opt.id);
-                          showToast(`Applied ${opt.name} theme palette.`);
-                        }}
-                      >
-                        <div className="gsp-swatch-row">
-                          {opt.swatches.map((color, i) => (
-                            <span
-                              key={i}
-                              className="gsp-swatch-circle"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                        <div className="gsp-palette-name-row">
-                          <span>{opt.name}</span>
-                          {isSelected && <Check size={14} className="gsp-palette-check" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+                <label className="gsp-field-label">Active Theme</label>
+                <div className="gsp-active-theme-row">
+                  <div className="gsp-active-theme-summary">
+                    <span className="gsp-active-theme-swatch" style={{ backgroundColor: palette === "custom" ? customColor : THEME_OPTIONS.find((option) => option.id === palette)?.swatches?.[0] || "#647900" }} />
+                    <strong>{palette === "custom" ? "Custom" : THEME_OPTIONS.find((option) => option.id === palette)?.name || "Current Olive"}</strong>
+                  </div>
+                  <button type="button" className="gsp-mode-toggle-btn" onClick={() => setThemePickerOpen(true)}>
+                    <Palette size={15} /> Pick a theme colour
+                  </button>
                 </div>
               </div>
 
@@ -1077,6 +1058,12 @@ export default function GlobalSettingsPage() {
           )}
         </main>
       </div>
+      <ThemePalettePicker
+        open={themePickerOpen}
+        onOpenChange={setThemePickerOpen}
+        hideTrigger={true}
+        isAdmin={true}
+      />
     </div>
   );
 }

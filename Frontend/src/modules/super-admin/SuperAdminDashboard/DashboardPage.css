@@ -4,9 +4,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 16px 22px 24px;
+  padding: 16px 22px 8px;
   background: #f8fafc;
-  min-height: calc(100vh - 64px);
+  min-height: 0;
   color: var(--cms-text, #1e293b);
   box-sizing: border-box;
 }
@@ -267,6 +267,11 @@
 .sad-kpi-badge.down {
   background: #fee2e2;
   color: #dc2626;
+}
+
+.sad-kpi-badge.neutral {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .sad-kpi-sparkline {

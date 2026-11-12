@@ -1,3 +1,4 @@
+import { SkeletonRow, SkeletonTable } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
@@ -36,7 +37,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getExamDuties } from "@/services/examinationService.js";
 import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
-import { Modal, Toast, Pagination } from "@/components/common/Ui.jsx";
+import { useExamCellTab, getModuleState, saveModuleState } from "../statePersistence.js";
+import { Modal, Toast, Pagination } from "@/shared/components/Ui.jsx";
 import {
   d,
   unwrap,
@@ -387,35 +389,74 @@ export default function HallAllocation({ initialTab = "rooms" }) {
   const navExamId = location?.state?.examId ? String(location.state.examId) : "";
 
   // Tab State: "rooms" | "duties"
-  const [activeTab, setActiveTab] = useState(() => {
-    return location?.state?.activeTab || initialTab || "rooms";
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "hall_allocation",
+    defaultTab: "rooms",
+    initialProp: location?.state?.activeTab || initialTab,
+    tabAliases: {
+      "rooms": "rooms",
+      "room": "rooms",
+      "hall-allocation": "rooms",
+      "allocation": "rooms",
+      "duties": "duties",
+      "invigilation": "duties",
+      "invigilation-duties": "duties",
+    },
   });
+
+  const savedHallState = useMemo(() => getModuleState("hall_allocation", {}), []);
 
   const { selectedCampusId } = useCampusContext();
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
 
   const [exams, setExams] = useState([]);
-  const [examId, setExamId] = useState(navExamId);
+  const [examId, setExamId] = useState(() => navExamId || savedHallState?.examId || "");
   const [schedules, setSchedules] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [schedulingContext, setSchedulingContext] = useState(null);
 
   // Filters for Rooms tab
-  const [dateFilter, setDateFilter] = useState("");
-  const [sessionFilter, setSessionFilter] = useState("");
-  const [roomFilter, setRoomFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [dateFilter, setDateFilter] = useState(() => savedHallState?.dateFilter || "");
+  const [sessionFilter, setSessionFilter] = useState(() => savedHallState?.sessionFilter || "");
+  const [roomFilter, setRoomFilter] = useState(() => savedHallState?.roomFilter || "");
+  const [searchTerm, setSearchTerm] = useState(() => savedHallState?.searchTerm || "");
 
   // Invigilation Duties state
   const [duties, setDuties] = useState([]);
   const [loadingDuties, setLoadingDuties] = useState(false);
-  const [dutyStaffFilter, setDutyStaffFilter] = useState("all");
-  const [dutyStatusFilter, setDutyStatusFilter] = useState("all");
-  const [dutySearch, setDutySearch] = useState("");
-  const [dutyViewMode, setDutyViewMode] = useState("table"); // 'table' | 'cards'
+  const [dutyStaffFilter, setDutyStaffFilter] = useState(() => savedHallState?.dutyStaffFilter || "all");
+  const [dutyStatusFilter, setDutyStatusFilter] = useState(() => savedHallState?.dutyStatusFilter || "all");
+  const [dutySearch, setDutySearch] = useState(() => savedHallState?.dutySearch || "");
+  const [dutyViewMode, setDutyViewMode] = useState(() => savedHallState?.dutyViewMode || "table"); // 'table' | 'cards'
   const [selectedDutyForModal, setSelectedDutyForModal] = useState(null);
-  const [dutyPage, setDutyPage] = useState(1);
+  const [dutyPage, setDutyPage] = useState(() => savedHallState?.dutyPage || 1);
+
+  useEffect(() => {
+    saveModuleState("hall_allocation", {
+      examId,
+      dateFilter,
+      sessionFilter,
+      roomFilter,
+      searchTerm,
+      dutyStaffFilter,
+      dutyStatusFilter,
+      dutySearch,
+      dutyViewMode,
+      dutyPage,
+    });
+  }, [
+    examId,
+    dateFilter,
+    sessionFilter,
+    roomFilter,
+    searchTerm,
+    dutyStaffFilter,
+    dutyStatusFilter,
+    dutySearch,
+    dutyViewMode,
+    dutyPage,
+  ]);
   const DUTIES_PER_PAGE = 10;
 
   // UI state
@@ -450,10 +491,10 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         params.boardId = selectedBoardId;
       }
       if (false) {
-        params.staffId = dutyStaffFilter;
+        // staff filter applied client-side
       }
       if (false) {
-        params.status = dutyStatusFilter;
+        // status filter applied client-side
       }
       if (selectedCampusId) {
         params.campusId = selectedCampusId;
@@ -594,7 +635,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Invigilation Duties");
     const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Invigilation_Duties_${dateStr}.xlsx`);
+    try {
+      XLSX.writeFile(wb, `Invigilation_Duties_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export duties Excel:", err);
+      showToast("Failed to export Excel file. Please try again.", "error");
+      return;
+    }
     showToast("Invigilation duties exported to Excel!", "success");
   };
 
@@ -631,9 +678,9 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         }));
 
         // Fallback to campus-level exams if strict filters yielded empty
-        if (list.length === 0 && selectedCampusId) {
+        if (list.length === 0) {
           apiClient
-            .get("/api/v1/examinations", { params: { campusId: selectedCampusId } })
+            .get("/api/v1/examinations", { params: selectedCampusId ? { campusId: selectedCampusId } : {} })
             .then((fallbackRes) => {
               if (!active) return;
               const fbRaw = unwrap(fallbackRes);
@@ -726,23 +773,23 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         if (mapped.length > 0) {
           setRooms(mapped);
         } else {
-          setRooms([
-            { id: "1", roomId: "1", roomNumber: "Hall-101", name: "Examination Hall A", capacity: 60, floor: "1st Floor" },
-            { id: "2", roomId: "2", roomNumber: "Hall-102", name: "Examination Hall B", capacity: 60, floor: "1st Floor" },
-            { id: "3", roomId: "3", roomNumber: "Room-201", name: "Lecture Hall 1", capacity: 45, floor: "2nd Floor" },
-            { id: "4", roomId: "4", roomNumber: "Room-202", name: "Lecture Hall 2", capacity: 45, floor: "2nd Floor" },
-            { id: "5", roomId: "5", roomNumber: "Auditorium-1", name: "Auditorium Hall", capacity: 120, floor: "Ground Floor" },
-          ]);
+          setRooms([]);
+
+
+
+
+
+
         }
       } catch {
         if (active) {
-          setRooms([
-            { id: "1", roomId: "1", roomNumber: "Hall-101", name: "Examination Hall A", capacity: 60, floor: "1st Floor" },
-            { id: "2", roomId: "2", roomNumber: "Hall-102", name: "Examination Hall B", capacity: 60, floor: "1st Floor" },
-            { id: "3", roomId: "3", roomNumber: "Room-201", name: "Lecture Hall 1", capacity: 45, floor: "2nd Floor" },
-            { id: "4", roomId: "4", roomNumber: "Room-202", name: "Lecture Hall 2", capacity: 45, floor: "2nd Floor" },
-            { id: "5", roomId: "5", roomNumber: "Auditorium-1", name: "Auditorium Hall", capacity: 120, floor: "Ground Floor" },
-          ]);
+          setRooms([]);
+
+
+
+
+
+
         }
       }
     };
@@ -777,13 +824,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         setFaculty(mapped);
       } catch {
         if (!active) return;
-        setFaculty([
-          { id: "1", name: "Dr. K. Srinivas", designation: "Professor", department: "Mathematics" },
-          { id: "2", name: "Mrs. P. Lakshmi", designation: "Associate Professor", department: "Physics" },
-          { id: "3", name: "Mr. M. Ramesh", designation: "Assistant Professor", department: "Chemistry" },
-          { id: "4", name: "Dr. S. Varma", designation: "Professor", department: "Computer Science" },
-          { id: "5", name: "Mrs. T. Anitha", designation: "Senior Lecturer", department: "English" },
-        ]);
+        setFaculty([]);
+
+
+
+
+
+
       }
     };
 
@@ -809,6 +856,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           apiClient.get(`/api/v1/examinations/${id}/schedules`, { params: { campusId: selectedCampusId } }).catch(() => null),
           apiClient.get(`/api/v1/examinations/${id}/scheduling-context`, { params: { campusId: selectedCampusId } }).catch(() => null),
         ]);
+
 
         let loadedSchedules = schRes ? unwrap(schRes) : [];
         const ctx = ctxRes?.data?.data ?? ctxRes?.data ?? null;
@@ -981,7 +1029,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
       currentExam?.totalCandidates ||
       currentExam?.studentCount ||
       detectedStrength ||
-      25
+      0
     );
     const availableRoomsCount = rooms.length;
     let allocatedSlots = 0;
@@ -1034,7 +1082,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
 
     setAllocating(true);
     try {
-      const candidateStrength = metrics.totalStudents || 25;
+      const defaultCandidateStrength = Number(metrics.totalStudents || currentExam?.totalCandidates || 0);
       const sortedRooms = [...rooms].sort((a, b) => Number(b.capacity || 40) - Number(a.capacity || 40));
       const activeFaculty = [...faculty].filter((f) => f.isActive !== false);
 
@@ -1053,7 +1101,9 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         const bookedFaculty = facultyBookingMap.get(slotKey) || new Set();
 
         // Find available room with capacity >= candidateStrength and no time conflict
-        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= candidateStrength);
+        const slotCandidates = Number(sch.candidateCount || sch.candidatesCount || sch.allocatedStudents || defaultCandidateStrength || 0);
+        const requiredCap = slotCandidates > 0 ? slotCandidates : 1;
+        let assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId)) && Number(r.capacity || 40) >= requiredCap);
         if (!assignedRoom) {
           // If no single room has sufficient capacity, pick largest available room without conflict
           assignedRoom = sortedRooms.find((r) => !bookedRooms.has(normalizeId(r.id || r.roomId))) || sortedRooms[index % sortedRooms.length];
@@ -1076,15 +1126,15 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           facultyBookingMap.set(slotKey, bookedFaculty);
         }
 
-        const roomCap = Number(assignedRoom?.capacity || candidateStrength);
-        const allocatedCount = Math.min(candidateStrength, roomCap);
+        const roomCap = Number(assignedRoom?.capacity || (slotCandidates > 0 ? slotCandidates : 40));
+        const allocatedCount = slotCandidates > 0 ? Math.min(slotCandidates, roomCap) : roomCap;
 
-        if (roomCap < candidateStrength) {
+        if (slotCandidates > 0 && roomCap < slotCandidates) {
           capacityShortages.push({
             subject: sch.subjectName,
             room: assignedRoom?.roomNumber || `Hall-${chosenRoomId}`,
             capacity: roomCap,
-            needed: candidateStrength,
+            needed: slotCandidates,
           });
         }
 
@@ -1135,6 +1185,10 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           invigilatorName: sch.invigilatorName,
           examMode: sch.mode || sch.examMode || "Written",
           maxMarks: Number(sch.totalMarks || sch.maxMarks || 100),
+          passingMarks: Number(sch.passingMarks ?? 35),
+          patternName: sch.patternName || "",
+          groupId: sch.groupId ? Number(sch.groupId) : null,
+          includedSubjectIds: Array.isArray(sch.includedSubjectIds) ? sch.includedSubjectIds : [],
           candidateCount: sch.allocatedStudents,
           candidatesCount: sch.allocatedStudents,
           capacity: sch.capacity,
@@ -1287,6 +1341,10 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         invigilatorName: facObj?.name,
         examMode: editSlot.mode || editSlot.examMode || "Written",
         maxMarks: Number(editSlot.totalMarks || editSlot.maxMarks || 100),
+        passingMarks: Number(editSlot.passingMarks ?? 35),
+        patternName: editSlot.patternName || "",
+        groupId: editSlot.groupId ? Number(editSlot.groupId) : null,
+        includedSubjectIds: Array.isArray(editSlot.includedSubjectIds) ? editSlot.includedSubjectIds : [],
         candidateCount: selectedRoomId ? candCount : 0,
         candidatesCount: selectedRoomId ? candCount : 0,
         capacity: roomCap,
@@ -1355,7 +1413,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
     XLSX.utils.book_append_sheet(wb, ws, "Hall Allocation");
     const examLabel = currentExam?.name ? currentExam.name.replace(/\s+/g, "_") : "Report";
     const dateStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    try {
+      XLSX.writeFile(wb, `Hall_Allocation_${examLabel}_${dateStr}.xlsx`);
+    } catch (err) {
+      console.error("Failed to export Excel:", err);
+      showToast("Failed to export Excel. Please try again.", "error");
+      return;
+    }
     showToast("Hall allocation chart exported to Excel!", "success");
   };
 
@@ -1687,14 +1751,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
               </thead>
               <tbody>
                 {loadingSchedules ? (
-                  <tr>
-                    <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px" }}>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "var(--cms-muted)" }}>
-                        <RefreshCw size={16} className="cms-spin" />
-                        <span>Loading examination timetable and hall allocations...</span>
-                      </div>
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : filteredRows.length === 0 ? (
                   <tr>
                     <td colSpan="9" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
@@ -1811,15 +1868,13 @@ export default function HallAllocation({ initialTab = "rooms" }) {
             </table>
           </div>
 
-          {filteredRows.length > 0 && (
-            <Pagination
+          <Pagination
               currentPage={slotPage}
               totalRecords={filteredRows.length}
               pageSize={SLOTS_PAGE_SIZE}
               onPageChange={setSlotPage}
-              unit="slots"
+              unit="records"
             />
-          )}
         </section>
       </>
     )}
@@ -2021,10 +2076,7 @@ export default function HallAllocation({ initialTab = "rooms" }) {
         {/* 3. DUTIES LIST (Table or Cards) */}
         <section className="hall-table-card">
           {loadingDuties ? (
-            <div style={{ textAlign: "center", padding: "48px 0" }}>
-              <RefreshCw size={24} className="cms-spin" style={{ color: "var(--cms-primary, #15803d)", marginBottom: "8px" }} />
-              <p style={{ margin: 0, fontSize: "13px", color: "var(--cms-muted, #64748b)" }}>Loading invigilation duties...</p>
-            </div>
+            <SkeletonTable columns={6} rows={5} />
           ) : filteredDuties.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px" }}>
               <ShieldAlert size={36} style={{ color: "var(--cms-muted, #94a3b8)", marginBottom: "10px" }} />
@@ -2210,17 +2262,15 @@ export default function HallAllocation({ initialTab = "rooms" }) {
           )}
 
           {/* Duties Pagination */}
-          {filteredDuties.length > DUTIES_PER_PAGE && (
-            <div style={{ padding: "0 16px 16px" }}>
+          <div style={{ padding: "0 16px 16px" }}>
               <Pagination
                 currentPage={dutyPage}
                 totalRecords={filteredDuties.length}
                 pageSize={DUTIES_PER_PAGE}
                 onPageChange={setDutyPage}
-                unit="duties"
+                unit="records"
               />
             </div>
-          )}
         </section>
       </div>
     )}
