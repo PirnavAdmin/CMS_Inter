@@ -716,6 +716,28 @@ const reconcileRosterWithMarks = (
 };
 
 const calculateEvaluationStatistics = (workspace) => {
+  const hasAuthoritativeTotal =
+    workspace?.totalStudents !== undefined &&
+    workspace?.totalStudents !== null &&
+    Number(workspace.totalStudents) > 0;
+  const hasAuthoritativeAvg =
+    workspace?.averageMarks !== undefined &&
+    workspace?.averageMarks !== null;
+
+  if (hasAuthoritativeTotal && hasAuthoritativeAvg) {
+    return {
+      studentsCount: Number(workspace.totalStudents),
+      average: String(workspace.averageMarks),
+      highest:
+        workspace.highestMarks !== undefined && workspace.highestMarks !== null
+          ? String(workspace.highestMarks)
+          : (workspace.highest ?? "—"),
+      lowest:
+        workspace.lowestMarks !== undefined && workspace.lowestMarks !== null
+          ? String(workspace.lowestMarks)
+          : (workspace.lowest ?? "—"),
+    };
+  }
   if (!workspace?.rows?.length) {
     const totalCount = Number(workspace?.totalStudents ?? workspace?.studentsCount ?? 0);
     const avg =
@@ -737,12 +759,19 @@ const calculateEvaluationStatistics = (workspace) => {
       lowest: low,
     };
   }
-  const values = workspace.rows
+  const activeRows = (workspace.rows || []).filter((row) => {
+    if (row.absent) return true;
+    if (row.markId) return true;
+    const val = workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total;
+    return val !== "" && val !== null && val !== undefined;
+  });
+  const targetRows = activeRows.length > 0 ? activeRows : workspace.rows;
+  const values = targetRows
     .filter((row) => !row.absent && (row.total !== "" || row.obtainedMarks !== ""))
     .map((row) => Number(workspace.mode === "OBJECTIVE" ? row.obtainedMarks : row.total))
     .filter(Number.isFinite);
   return {
-    studentsCount: workspace.rows.length,
+    studentsCount: Number(workspace?.totalStudents || targetRows.length),
     average: values.length
       ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)
       : workspace?.averageMarks !== undefined && workspace?.averageMarks !== null
@@ -2054,8 +2083,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             examinationId: examId,
             sectionId: sectionId,
             subjectId: config.subjectId,
-            facultyId: config.facultyId || ev?.facultyId || "1",
-            faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
+            facultyId: ev?.facultyId || config.facultyId || "1",
+            faculty: { name: ev?.facultyName || config.facultyName || "Assigned Faculty", code: ev?.facultyCode || config.facultyCode || "", employeeCode: ev?.facultyCode || config.facultyCode || "" },
+            facultyName: ev?.facultyName || config.facultyName || "Assigned Faculty",
+            facultyCode: ev?.facultyCode || config.facultyCode || "",
             subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
             status: evalStatus,
             mode: config.mode,
@@ -2407,8 +2438,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               examinationId: entryExamId,
               sectionId: entry.filters.section,
               subjectId: config.subjectId,
-              facultyId: config.facultyId || existing.facultyId || "1",
-              faculty: { name: config.facultyName || existing.faculty?.name || "Assigned Faculty", employeeCode: "" },
+              facultyId: existing.facultyId || config.facultyId || "1",
+              faculty: { name: existing.faculty?.name || existing.facultyName || config.facultyName || "Assigned Faculty", code: existing.faculty?.code || existing.facultyCode || config.facultyCode || "", employeeCode: existing.faculty?.employeeCode || existing.facultyCode || config.facultyCode || "" },
+              facultyName: existing.faculty?.name || existing.facultyName || config.facultyName || "Assigned Faculty",
+              facultyCode: existing.faculty?.code || existing.facultyCode || config.facultyCode || "",
               subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
               status: evalStatus,
               mode: config.mode,
@@ -2418,8 +2451,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
               theoryMax: config.theoryMax,
               passPercentage: config.passPercentage,
               rejectionReason: existing.rejectionReason || currentWs?.rejectionReason || "",
-              totalStudents: loadedRows.length,
-              studentsCount: loadedRows.length,
+              totalStudents: existing.totalStudents || currentWs?.totalStudents || config?.totalStudents || loadedRows.length,
+              studentsCount: existing.studentsCount || existing.totalStudents || currentWs?.studentsCount || currentWs?.totalStudents || config?.totalStudents || loadedRows.length,
               rows: loadedRows,
               dirty: false,
               validationErrors: {},
@@ -3528,8 +3561,10 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
           examinationId: evalState.filters.exam,
           sectionId: evalState.filters.section,
           subjectId: config.subjectId,
-          facultyId: config.facultyId || ev?.facultyId || "1",
-          faculty: { name: config.facultyName || ev?.facultyName || "Assigned Faculty", employeeCode: ev?.facultyCode || "" },
+          facultyId: ev?.facultyId || config.facultyId || "1",
+          faculty: { name: ev?.facultyName || config.facultyName || "Assigned Faculty", code: ev?.facultyCode || config.facultyCode || "", employeeCode: ev?.facultyCode || config.facultyCode || "" },
+          facultyName: ev?.facultyName || config.facultyName || "Assigned Faculty",
+          facultyCode: ev?.facultyCode || config.facultyCode || "",
           subject: { id: config.subjectId, name: config.subjectName, code: config.subjectCode },
           status: evalStatus,
           mode: config.mode,
@@ -3581,7 +3616,45 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
 
         const statusStr = String(ev.status || ev.statusCode || "").trim().toUpperCase() || "APPROVED";
 
-        if (!evalMap[key] || evalMap[key].status === "NOT STARTED") {
+        if (evalMap[key]) {
+          if (ev.facultyName) {
+            evalMap[key].facultyName = ev.facultyName;
+            evalMap[key].facultyCode = ev.facultyCode || evalMap[key].facultyCode || "";
+            evalMap[key].facultyId = ev.facultyId || evalMap[key].facultyId;
+            evalMap[key].faculty = {
+              name: ev.facultyName,
+              code: ev.facultyCode || evalMap[key].faculty?.code || "",
+              employeeCode: ev.facultyCode || evalMap[key].faculty?.employeeCode || "",
+            };
+          }
+          if (statusStr && statusStr !== "NOT STARTED") {
+            evalMap[key].status = statusStr;
+          }
+          if (ev.totalStudents !== undefined && ev.totalStudents !== null && Number(ev.totalStudents) > 0) {
+            evalMap[key].totalStudents = Number(ev.totalStudents);
+            evalMap[key].studentsCount = Number(ev.totalStudents);
+          }
+          if (ev.averageMarks !== undefined && ev.averageMarks !== null) {
+            evalMap[key].averageMarks = ev.averageMarks;
+            evalMap[key].average = String(ev.averageMarks);
+          }
+          if (ev.highestMarks !== undefined && ev.highestMarks !== null) {
+            evalMap[key].highestMarks = ev.highestMarks;
+            evalMap[key].highest = String(ev.highestMarks);
+          }
+          if (ev.lowestMarks !== undefined && ev.lowestMarks !== null) {
+            evalMap[key].lowestMarks = ev.lowestMarks;
+            evalMap[key].lowest = String(ev.lowestMarks);
+          }
+          if (ev.presentStudents !== undefined && ev.presentStudents !== null) {
+            evalMap[key].presentStudents = Number(ev.presentStudents);
+          }
+          if (ev.absentStudents !== undefined && ev.absentStudents !== null) {
+            evalMap[key].absentStudents = Number(ev.absentStudents);
+          }
+        } else {
+
+
           evalMap[key] = {
             ...(evalMap[key] || {}),
             evaluationId: ev.evaluationId || `${evSubId}_${evalState.filters.section}_${evalState.filters.exam}`,
@@ -3589,7 +3662,9 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
             sectionId: evalState.filters.section,
             subjectId: evSubId,
             facultyId: ev.facultyId || "1",
-            faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+            faculty: { name: ev.facultyName || "Assigned Faculty", code: ev.facultyCode || "", employeeCode: ev.facultyCode || "" },
+            facultyName: ev.facultyName || "Assigned Faculty",
+            facultyCode: ev.facultyCode || "",
             subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
             status: statusStr,
             mode: ev.mode || "REGULAR",
@@ -4368,7 +4443,21 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                           : `/api/v1/evaluations/${evalId}/students`;
                         try {
                           const res = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
-                          markItems = res.data?.students || res.data?.marksList || [];
+                          const resPayload = res.data?.data !== undefined ? res.data.data : res.data;
+                          markItems = resPayload?.students || resPayload?.marksList || [];
+                          if (resPayload?.facultyName) {
+                            targetItem = {
+                              ...targetItem,
+                              facultyId: resPayload.facultyId || targetItem.facultyId,
+                              facultyName: resPayload.facultyName,
+                              facultyCode: resPayload.facultyCode || targetItem.facultyCode,
+                              faculty: {
+                                name: resPayload.facultyName,
+                                code: resPayload.facultyCode || targetItem.faculty?.code || "",
+                                employeeCode: resPayload.facultyCode || targetItem.faculty?.employeeCode || "",
+                              },
+                            };
+                          }
                         } catch {
                           // If evaluation endpoint records not ready, load from marks table
                           const marksRes = await apiClient.get(
@@ -4402,16 +4491,16 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                         targetItem = {
                           ...item,
                           rows,
-                          totalStudents: rows.length,
-                          studentsCount: rows.length,
+                          totalStudents: item.totalStudents || rows.length,
+                          studentsCount: item.studentsCount || item.totalStudents || rows.length,
                         };
                         setWorkspaces((all) => ({
                           ...all,
                           [key]: {
                             ...all[key],
                             rows,
-                            totalStudents: rows.length,
-                            studentsCount: rows.length,
+                            totalStudents: item.totalStudents || rows.length,
+                            studentsCount: item.studentsCount || item.totalStudents || rows.length,
                           },
                         }));
                       } catch (err) {
@@ -4468,8 +4557,8 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
                   />
                 ) : (
                   <section className="cms-card cms-main-card">
-                    <div className="cms-eval-table-toolbar">
-                      <div className="cms-eval-toolbar-left">
+                    <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+              
                         <div className="cms-subtab-pill-group">
                           <button
                             type="button"
@@ -5053,8 +5142,8 @@ function EvaluationList({
 
   return (
     <section className="cms-card cms-main-card">
-      <div className="cms-eval-table-toolbar">
-        <div className="cms-eval-toolbar-left">
+      <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+
           {setSubTab && (
             <div className="cms-subtab-pill-group">
               <button
@@ -5098,7 +5187,7 @@ function EvaluationList({
           <SearchBox
             value={search}
             onChange={setSearch}
-            placeholder="Search subject, faculty, status..."
+            placeholder="Search records..."
           />
         </div>
       </div>
@@ -5113,19 +5202,19 @@ function EvaluationList({
                 <small className="cms-row-subtitle">{item.subject?.code}</small>
               </td>
               <td>
-                <div>{item.faculty?.name || "—"}</div>
-                {(item.faculty?.code || item.facultyId) ? (
+                <div>{item.faculty?.name || item.facultyName || "—"}</div>
+                {(item.faculty?.code || item.faculty?.employeeCode || item.facultyCode || item.facultyId) ? (
                   <small className="cms-row-subtitle">
-                    {item.faculty?.code || `EMP-${item.facultyId}`}
+                    {item.faculty?.code || item.faculty?.employeeCode || item.facultyCode || (item.facultyId ? (String(item.facultyId).startsWith("EMP") ? String(item.facultyId) : `EMP-${item.facultyId}`) : "")}
                   </small>
                 ) : null}
               </td>
-              <td className="cms-cell-center">{item.studentsCount}</td>
+              <td className="cms-cell-center">{item.totalStudents || item.studentsCount}</td>
               <td className="cms-cell-center">
-                {item.average} / {item.maxMarks}
+                {(item.averageMarks !== undefined && item.averageMarks !== null ? item.averageMarks : item.average)} / {item.maxMarks}
               </td>
-              <td className="cms-cell-center">{item.highest}</td>
-              <td className="cms-cell-center">{item.lowest}</td>
+              <td className="cms-cell-center">{item.highestMarks !== undefined && item.highestMarks !== null ? item.highestMarks : item.highest}</td>
+              <td className="cms-cell-center">{item.lowestMarks !== undefined && item.lowestMarks !== null ? item.lowestMarks : item.lowest}</td>
               <td className="cms-cell-center">
                 <Badge status={item.status} />
               </td>
@@ -5272,8 +5361,8 @@ function StudentList({
   const shown = rows.slice((page - 1) * currentLimit, page * currentLimit);
   return (
     <section className="cms-card cms-main-card">
-      <div className="cms-eval-table-toolbar">
-        <div className="cms-eval-toolbar-left">
+      <div className="cms-eval-table-toolbar"><div className="cms-eval-toolbar-left">
+
           {setSubTab && (
             <div className="cms-subtab-pill-group">
               <button
@@ -5693,13 +5782,15 @@ const Num = ({ value, max, disabled, onChange, title = "Marks input" }) => {
   );
 };
 
-const SearchBox = ({ value, onChange }) => (
+const SearchBox = ({ value, onChange, placeholder = "Search records..." }) => (
   <div className="cms-search-wrap">
     <input
       className="cms-search-input cms-search-input-plain"
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      placeholder="Search records..."
+      placeholder={placeholder}
+      title={placeholder}
+      aria-label={placeholder}
     />
   </div>
 );

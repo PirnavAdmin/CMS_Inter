@@ -317,9 +317,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _repository.PunchOutAsync(facultyId, request, clientIp, userId);
         }
 
-        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate)
+        public async Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate, int? year = null, int? month = null)
         {
-            return await _repository.GetMyAttendanceHistoryAsync(facultyId, period, targetDate);
+            return await _repository.GetMyAttendanceHistoryAsync(facultyId, period, targetDate, year, month);
         }
 
         public async Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId)
@@ -327,9 +327,14 @@ namespace CollegeManagement.API.Services.Implementations
             return await _repository.SubmitRegularizationAsync(facultyId, request, userId);
         }
 
-        public async Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId)
+        public async Task<(int RegularizationId, string RequestType, string OriginalStatus, int? CampusId)> SubmitRegularizationWithDetailsAsync(int facultyId, SubmitRegularizationRequest request, int? userId)
         {
-            return await _repository.GetRegularizationsAsync(status, departmentId);
+            return await _repository.SubmitRegularizationWithDetailsAsync(facultyId, request, userId);
+        }
+
+        public async Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId, int? campusId = null, string? requestType = null, string? search = null)
+        {
+            return await _repository.GetRegularizationsAsync(status, departmentId, campusId, requestType, search);
         }
 
         public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)
@@ -340,6 +345,11 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<int> ResolveStaffIdByUserIdAsync(int userId)
         {
             return await _repository.ResolveStaffIdByUserIdAsync(userId);
+        }
+
+        public async Task<string?> ResolveStaffRoleNameAsync(int staffId)
+        {
+            return await _repository.ResolveStaffRoleNameAsync(staffId);
         }
 
         #endregion

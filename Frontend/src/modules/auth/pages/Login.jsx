@@ -10,7 +10,8 @@ import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
 import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
-import { isSuperAdminRole, loginPreview, previewEmail, previewEnabled } from "@/modules/super-admin/superAdminSession.js";
+import { isSuperAdminRole } from "@/modules/super-admin/superAdminSession.js";
+import { isStaffPortalUnlocked } from "@/modules/faculty/profileCompletion.js";
 
 const fields = [
   {
@@ -97,16 +98,6 @@ export default function Login() {
     const password = String(submitted.get("password") || values.password || "").trim();
     if (!emailOrMobile || !password) {
       validate();
-      return;
-    }
-
-    if (previewEnabled && emailOrMobile.toLowerCase() === previewEmail) {
-      setBusy(true);
-      try {
-        await loginPreview(emailOrMobile, password);
-        navigate("/super-admin/dashboard", { replace: true });
-      } catch (failure) { setError(failure.message); }
-      finally { setBusy(false); }
       return;
     }
 
@@ -225,11 +216,7 @@ export default function Login() {
         navigate("/non-teaching-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         const pStatus = result?.user?.profileStatus;
-        const statusClean = String(pStatus || "").toLowerCase();
-        const isCompleted =
-          statusClean === "completed" ||
-          statusClean === "approved" ||
-          (result?.user?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
+        const isCompleted = isStaffPortalUnlocked(pStatus, result?.user?.isOnboarded === true);
 
         if (!isCompleted) {
           navigate("/faculty-dashboard/profile", { replace: true });
@@ -333,7 +320,6 @@ export default function Login() {
           </button>
         </fieldset>
       </form>
-      {previewEnabled ? <Link to="/super-admin/preview-login">Super Admin · Development preview</Link> : null}
     </AuthLayout>
   );
 }

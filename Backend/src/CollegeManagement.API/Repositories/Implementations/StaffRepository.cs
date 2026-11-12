@@ -378,7 +378,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int pageNumber = queryParams.PageNumber < 1 ? 1 : queryParams.PageNumber;
             int pageSize = queryParams.PageSize < 1 ? 5 : queryParams.PageSize;
 
-            if (!queryParams.CampusId.HasValue || queryParams.CampusId.Value <= 0)
+            if ((!queryParams.CampusId.HasValue || queryParams.CampusId.Value <= 0) && !queryParams.IsDriver.HasValue)
+            {
             {
                 try
                 {
@@ -426,6 +427,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     // Fallback to EF Core LINQ query if SP is missing or fails
                 }
+            }
             }
 
             var query = _context.Staffs
@@ -512,6 +514,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.CampusId == cid ||
                     s.TransferredFromCampusId == cid ||
                     s.StaffCampusAssignments.Any(a => a.CampusId == cid));
+            }
+
+            // 4.2 IsDriver filter
+            if (queryParams.IsDriver.HasValue)
+            {
+                query = query.Where(s => s.IsDriver == queryParams.IsDriver.Value);
             }
 
             // 5. Staff Type filter
@@ -1067,6 +1075,24 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             _context.Staffs.Update(staff);
             await _context.SaveChangesAsync();
+        }
+
+                public async Task<string?> GetOfferLetterPathAsync(int id)
+        {
+            var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
+            return staff?.OfferLetterPath;
+        }
+
+        public async Task UpdateOfferLetterPathAsync(int id, string offerLetterPath)
+        {
+            var cleanPath = offerLetterPath?.Trim() ?? string.Empty;
+            var staff = await _context.Staffs.FindAsync(id);
+            if (staff != null)
+            {
+                staff.OfferLetterPath = cleanPath;
+                staff.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task UpdatePhotoPathAsync(int id, string photoPath)

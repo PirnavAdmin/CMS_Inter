@@ -116,6 +116,11 @@ namespace CollegeManagement.API.Validators.StaffValidators
                 .LessThanOrEqualTo(DateTime.UtcNow.AddDays(1))
                 .WithMessage("Attendance date cannot be in the future.");
 
+            RuleFor(x => x.RequestType)
+                .MaximumLength(50)
+                .When(x => !string.IsNullOrWhiteSpace(x.RequestType))
+                .WithMessage("Request type cannot exceed 50 characters.");
+
             RuleFor(x => x.Reason)
                 .NotEmpty()
                 .WithMessage("Reason for regularization is required.")

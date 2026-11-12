@@ -37,6 +37,7 @@ import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage
 import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
 // Code-split Settings & Admin configurations for bundle optimization
 const SettingsPage = lazy(() => import("@/modules/admin/AdminSettings/SettingsPage.jsx"));
+import PaymentGatewayConfigPage from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 const LOPConfigurationPage = lazy(() => import("@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx"));
 const CampusImagesConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx"));
 const RolesPermissionsPage = lazy(() => import("@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx"));
@@ -97,6 +98,7 @@ import {
   HostelAttendanceRegister,
   HostelReports,
 } from "@/modules/admin/AdminHostel/index.js";
+const WardenWorkspacePage = lazy(() => import("@/modules/warden/WardenWorkspacePage.jsx"));
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -184,6 +186,10 @@ export default function AppRoutes() {
         <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
         <Route path="/warden-dashboard/profile" element={<HostelDashboard />} />
         <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/my-attendance" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="attendance" /></Suspense>} />
+        <Route path="/warden-dashboard/my-leaves" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="leaves" /></Suspense>} />
+        <Route path="/warden-dashboard/holidays" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="holidays" /></Suspense>} />
+        <Route path="/warden-dashboard/expenses" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="expenses" /></Suspense>} />
         <Route path="/warden-dashboard/*" element={<HostelDashboard />} />
 
         {/* Legacy /warden Aliases redirect to /warden-dashboard */}
@@ -201,6 +207,10 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>
+        <Route path="/dashboard/settings/payment-gateway" element={<Suspense fallback={<SettingsFallback />}><PaymentGatewayConfigPage /></Suspense>} />
       </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>

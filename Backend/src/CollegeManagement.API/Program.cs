@@ -28,6 +28,7 @@ using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
+using CollegeManagement.API.Settings;
 using CollegeManagement.API.Services.Implementations.Reimbursement;
 using CollegeManagement.API.Services.Interfaces.Inventory;
 using CollegeManagement.API.Services.Implementations.Inventory;
@@ -278,6 +279,8 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
+builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
+builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
 #endregion
 
 #region Services
@@ -310,6 +313,12 @@ builder.Services.AddScoped<IStaffTransferService, StaffTransferService>();
 builder.Services.AddScoped<IStaffExperienceService, StaffExperienceService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
+builder.Services.Configure<PaymentGatewaySettings>(builder.Configuration.GetSection("PaymentGateway"));
+builder.Services.AddSingleton<CollegeManagement.API.Helpers.AppUrlResolver>();
+builder.Services.AddScoped<IPaymentGatewayService, PaymentGatewayService>();
+builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentLedgerService, PaymentLedgerService>();
+builder.Services.AddScoped<IFeeReceiptPdfService, FeeReceiptPdfService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -394,8 +403,13 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
+builder.Services.AddHttpClient("RazorpayAssets", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
 #endregion
 
 #region Email Configuration
@@ -1150,6 +1164,156 @@ catch (Exception ex)
 {
     app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
 }
+
+    // Align Omnichannel Payment Gateway tables (PaymentGatewayTransactions, FeePaymentAllocations, PaymentGatewayConfigs)
+    try
+    {
+        using var pgScope = app.Services.CreateScope();
+        var pgDb = pgScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentGatewayTransactions` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `StudentId` INT NOT NULL,
+                `StudentFeeId` INT NOT NULL,
+                `FeeInstallmentId` INT NULL,
+                `FeeInstallmentIdsJson` VARCHAR(500) NULL,
+                `OrderId` VARCHAR(100) NOT NULL,
+                `GatewayPaymentId` VARCHAR(100) NULL,
+                `UtrNumber` VARCHAR(50) NULL,
+                `BankName` VARCHAR(200) NULL,
+                `Amount` DECIMAL(18,2) NOT NULL,
+                `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
+                `PaymentMethod` VARCHAR(50) NOT NULL DEFAULT 'UPI_QR',
+                `Status` VARCHAR(30) NOT NULL DEFAULT 'Created',
+                `IdempotencyKey` VARCHAR(256) NULL,
+                `RequestPayloadHash` VARCHAR(128) NULL,
+                `RowVersion` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+                `ReceiptNumber` VARCHAR(50) NULL,
+                `FeePaymentId` INT NULL,
+                `CollectedByUserId` INT NULL,
+                `FailureReason` VARCHAR(500) NULL,
+                `Remarks` VARCHAR(500) NULL,
+                `UpiUri` VARCHAR(1000) NULL,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `SettledAt` DATETIME(6) NULL,
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UK_PaymentGateway_OrderId` (`OrderId`),
+                KEY `IX_PaymentGateway_IdempotencyKey` (`IdempotencyKey`),
+                KEY `IX_PaymentGateway_PayloadHash` (`RequestPayloadHash`),
+                KEY `IX_PaymentGateway_UtrNumber` (`UtrNumber`),
+                KEY `IX_PaymentGateway_Status` (`Status`),
+                KEY `IX_PaymentGateway_StudentFeeId` (`StudentFeeId`),
+                KEY `IX_PaymentGateway_StudentId` (`StudentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        var pgColExists = await pgDb.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+            WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayTransactions' AND column_name = 'FeeInstallmentIdsJson'").FirstOrDefaultAsync();
+        if (pgColExists == 0)
+        {
+            await pgDb.Database.ExecuteSqlRawAsync("ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `FeeInstallmentIdsJson` VARCHAR(500) NULL AFTER `FeeInstallmentId`;");
+        }
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `FeePaymentAllocations` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `FeePaymentId` INT NOT NULL,
+                `FeeInstallmentId` INT NOT NULL,
+                `AllocatedAmount` DECIMAL(18,2) NOT NULL,
+                `AllocationDate` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                KEY `IX_FeePaymentAllocations_PaymentId` (`FeePaymentId`),
+                KEY `IX_FeePaymentAllocations_InstallmentId` (`FeeInstallmentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentGatewayConfigs` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NULL,
+                `BankName` VARCHAR(200) NULL,
+                `AccountHolderName` VARCHAR(200) NULL,
+                `AccountNumber` VARCHAR(50) NULL,
+                `IfscCode` VARCHAR(20) NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT '',
+                `PayeeName` VARCHAR(200) NOT NULL DEFAULT '',
+                `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
+                `Mcc` VARCHAR(10) NOT NULL DEFAULT '8220',
+                `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 0,
+                `Provider` VARCHAR(50) NOT NULL DEFAULT 'Razorpay',
+                `IsLiveMode` TINYINT(1) NOT NULL DEFAULT 0,
+                `RazorpayKeyId` VARCHAR(100) NULL,
+                `RazorpayKeySecret` VARCHAR(200) NULL,
+                `RazorpayWebhookSecret` VARCHAR(200) NULL,
+                `AutoCapture` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 0,
+                `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 0,
+                `PollingIntervalMs` INT NOT NULL DEFAULT 1200,
+                `MonitoringTimeoutSeconds` INT NOT NULL DEFAULT 600,
+                `BaseAppUrl` VARCHAR(255) NULL,
+                `FrontendPort` INT NOT NULL DEFAULT 5173,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_PaymentGatewayConfigs_CampusId` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+        var extraPgColumns = new (string ColName, string AlterSql)[]
+        {
+            ("GatewayQrCodeId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `GatewayQrCodeId` VARCHAR(100) NULL AFTER `OrderId`;"),
+            ("CampusId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `CampusId` INT NULL AFTER `StudentFeeId`;"),
+            ("ExpiresAt", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ExpiresAt` DATETIME(6) NULL AFTER `SettledAt`;"),
+            ("LastGatewaySyncAtUtc", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `LastGatewaySyncAtUtc` DATETIME(6) NULL AFTER `ExpiresAt`;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayTransactions' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `PaymentGatewayTransactionId` INT NULL,
+                `FeePaymentId` INT NULL,
+                `StudentId` INT NULL,
+                `CampusId` INT NULL,
+                `AcademicYearId` INT NULL,
+                `EntryType` VARCHAR(30) NOT NULL DEFAULT 'Credit',
+                `Amount` DECIMAL(18,2) NOT NULL,
+                `StudentName` VARCHAR(200) NOT NULL,
+                `AdmissionNo` VARCHAR(100) NOT NULL DEFAULT '',
+                `Course` VARCHAR(200) NOT NULL DEFAULT '',
+                `PaymentMethod` VARCHAR(50) NOT NULL,
+                `ReferenceNumber` VARCHAR(150) NOT NULL DEFAULT '',
+                `ReceiptNumber` VARCHAR(50) NOT NULL DEFAULT '',
+                `Status` VARCHAR(30) NOT NULL DEFAULT 'Captured',
+                `Remarks` VARCHAR(500) NULL,
+                `PaymentDateUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                KEY `IX_PaymentLedgerEntries_TxnId` (`PaymentGatewayTransactionId`),
+                KEY `IX_PaymentLedgerEntries_Campus_Created` (`CampusId`, `CreatedAt`),
+                KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
+                KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+    }
+    catch (Exception pgEx)
+    {
+        app.Logger.LogWarning(pgEx, "Failed to align PaymentGateway database tables on startup.");
+    }
 
     app.Run();
 }

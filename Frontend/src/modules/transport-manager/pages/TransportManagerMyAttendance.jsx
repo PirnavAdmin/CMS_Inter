@@ -20,6 +20,7 @@ import "@/modules/admin/AdminSections/SectionManagementPage.css";
 import { Skeleton } from "@/shared/components/Ui.jsx";
 import { useTransportManagerSafe } from "../TransportManagerContext.jsx";
 import { attendanceService } from "@/api/attendanceService.js";
+import { getApiErrorMessage } from "@/api/apiClient.js";
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -57,18 +58,34 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   return `${hours}h ${mins}m`;
 };
 
+const toInputTime = (value) => {
+  const minutes = parseTimeToMinutes(value);
+  return minutes === null ? "" : `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+};
+
 const normalizeTodayData = (raw) => {
   if (!raw) return null;
+  const inTime = raw.inTime || raw.InTime || null;
+  const outTime = raw.outTime || raw.OutTime || null;
+  const isMissedCheckoutResolved = Boolean(raw.isMissedCheckoutResolved ?? raw.IsMissedCheckoutResolved);
+  const isMissedCheckout = !outTime && !isMissedCheckoutResolved && Boolean(raw.isMissedCheckout ?? raw.IsMissedCheckout);
+  const isCheckOutAllowed = raw.isCheckOutAllowed !== undefined || raw.IsCheckOutAllowed !== undefined
+    ? Boolean(raw.isCheckOutAllowed ?? raw.IsCheckOutAllowed) && !isMissedCheckout
+    : Boolean(inTime && !outTime && !isMissedCheckout);
   return {
-    status: raw.status || raw.Status || "not_punched",
-    inTime: raw.inTime || raw.InTime || null,
-    outTime: raw.outTime || raw.OutTime || null,
+    status: raw.status || raw.Status || "unavailable",
+    inTime,
+    outTime,
     shiftDuration: raw.shiftDuration || raw.ShiftDuration || "--",
-    shiftName: raw.shiftName || raw.ShiftName || "Morning (09:00 AM – 05:00 PM)",
-    shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "09:00 AM",
-    shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "05:00 PM",
+    shiftName: raw.shiftName || raw.ShiftName || "--",
+    shiftStartTime: raw.shiftStartTime || raw.ShiftStartTime || "--",
+    shiftEndTime: raw.shiftEndTime || raw.ShiftEndTime || "--",
+    checkoutCutoffTime: raw.checkoutCutoffTime || raw.CheckoutCutoffTime || "--",
     isLate: Boolean(raw.isLate ?? raw.IsLate),
-    todayStatus: raw.todayStatus || raw.TodayStatus || "Absent",
+    isMissedCheckout,
+    isMissedCheckoutResolved,
+    isCheckOutAllowed,
+    todayStatus: raw.todayStatus || raw.TodayStatus || "--",
     canRegularize: Boolean(raw.canRegularize ?? raw.CanRegularize),
     dateFormatted:
       raw.dateFormatted ||
@@ -79,7 +96,11 @@ const normalizeTodayData = (raw) => {
         day: "numeric",
         year: "numeric",
       }),
+    regularizationId: raw.regularizationId ?? raw.RegularizationId ?? null,
     regularizationState: raw.regularizationState || raw.RegularizationState || null,
+    regularizationType: raw.regularizationType || raw.RegularizationType || null,
+    regularizationReason: raw.regularizationReason || raw.RegularizationReason || null,
+    regularizationAdminRemarks: raw.regularizationAdminRemarks || raw.RegularizationAdminRemarks || null,
   };
 };
 
@@ -100,17 +121,23 @@ export default function TransportManagerMyAttendance() {
   const [loadingToday, setLoadingToday] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [todayError, setTodayError] = useState("");
+  const [historyError, setHistoryError] = useState("");
 
   const [todayData, setTodayData] = useState({
-    status: "not_punched",
+    status: "unavailable",
     inTime: null,
     outTime: null,
-    shiftDuration: "--:--",
-    shiftName: "Morning (09:00 AM – 05:00 PM)",
-    shiftStartTime: "09:00 AM",
-    shiftEndTime: "05:00 PM",
+    shiftDuration: "--",
+    shiftName: "--",
+    shiftStartTime: "--",
+    shiftEndTime: "--",
+    checkoutCutoffTime: "--",
     isLate: false,
-    todayStatus: "Absent",
+    isMissedCheckout: false,
+    isMissedCheckoutResolved: false,
+    isCheckOutAllowed: false,
+    todayStatus: "--",
     canRegularize: false,
     dateFormatted: new Date().toLocaleDateString("en-US", {
       weekday: "short",
@@ -118,20 +145,24 @@ export default function TransportManagerMyAttendance() {
       day: "numeric",
       year: "numeric",
     }),
+    regularizationId: null,
     regularizationState: null,
+    regularizationType: null,
+    regularizationReason: null,
+    regularizationAdminRemarks: null,
   });
 
   const [historyData, setHistoryData] = useState({
     logs: [],
     metrics: {
-      workingDays: "0 Days",
-      workingDaysSub: "Current Period",
-      presentDays: "0 Days",
-      presentDaysSub: "Biometric verified",
-      leaves: "0 Days",
-      leavesSub: "No leaves applied",
-      absentDays: "0 Days",
-      absentDaysSub: "No absences",
+      workingDays: "--",
+      workingDaysSub: "--",
+      presentDays: "--",
+      presentDaysSub: "--",
+      leaves: "--",
+      leavesSub: "--",
+      absentDays: "--",
+      absentDaysSub: "--",
     },
   });
 
@@ -143,8 +174,8 @@ export default function TransportManagerMyAttendance() {
   const [regForm, setRegForm] = useState({
     rawDate: "",
     displayDate: "",
-    requestedInTime: "09:00",
-    requestedOutTime: "17:00",
+    requestedInTime: "",
+    requestedOutTime: "",
     reason: "",
   });
 
@@ -185,17 +216,17 @@ export default function TransportManagerMyAttendance() {
   const fetchTodayStatus = useCallback(async () => {
     try {
       setLoadingToday(true);
+      setTodayError("");
       const res = await attendanceService.getMyTodayStatus();
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (payload) {
-        const normalized = normalizeTodayData(payload);
-        if (normalized) {
-          setTodayData(normalized);
-          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
-        }
+      if (!payload) throw new Error(res?.message || res?.Message || "Today attendance data unavailable.");
+      const normalized = normalizeTodayData(payload);
+      if (normalized) {
+        setTodayData(normalized);
+        syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
       }
     } catch (err) {
-      console.warn("Using initial today attendance state", err);
+      setTodayError(getApiErrorMessage(err) || "Unable to load today's attendance status.");
     } finally {
       setLoadingToday(false);
     }
@@ -206,69 +237,56 @@ export default function TransportManagerMyAttendance() {
     const request = ++historyRequest.current;
     try {
       setLoadingHistory(true);
+      setHistoryError("");
       const res = await attendanceService.getMyAttendanceHistory(period);
       if (request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (payload) {
-        const rawLogs = payload.logs || payload.Logs || [];
-        const rawMetrics = payload.metrics || payload.Metrics || {};
-        setHistoryData({
-          logs: rawLogs.map((l) => ({
-            id: l.id || l.Id,
-            day: l.day || l.Day,
-            date: l.date || l.Date,
-            rawDate: l.rawDate || l.RawDate,
-            shift: l.shift || l.Shift,
-            inTime: l.inTime || l.InTime,
-            outTime: l.outTime || l.OutTime,
-            hours: l.hours || l.Hours,
-            device: l.device || l.Device,
-            status: l.status || l.Status,
-            canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
-            isToday: Boolean(l.isToday ?? l.IsToday),
-            regularizationState: l.regularizationState || l.RegularizationState,
-            holidayName: l.holidayName || l.HolidayName || null,
-          })),
-          metrics: {
-            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "0 Days",
-            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "Current Period",
-            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
-            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "Biometric verified",
-            leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
-            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "No leaves applied",
-            absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
-            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "No absences",
-          },
-        });
-      } else {
-        setHistoryData({
-          logs: [],
-          metrics: {
-            workingDays: "0 Days",
-            workingDaysSub: "Current Period",
-            presentDays: "0 Days",
-            presentDaysSub: "Biometric verified",
-            leaves: "0 Days",
-            leavesSub: "No leaves applied",
-            absentDays: "0 Days",
-            absentDaysSub: "No absences",
-          },
-        });
-      }
+      if (!payload) throw new Error(res?.message || res?.Message || "Attendance history unavailable.");
+      const rawLogs = payload.logs || payload.Logs || [];
+      const rawMetrics = payload.metrics || payload.Metrics || {};
+      setHistoryData({
+        logs: rawLogs.map((l) => ({
+          id: l.id || l.Id,
+          day: l.day || l.Day,
+          date: l.date || l.Date,
+          rawDate: l.rawDate || l.RawDate,
+          shift: l.shift || l.Shift,
+          inTime: l.inTime || l.InTime,
+          outTime: l.outTime || l.OutTime,
+          hours: l.hours || l.Hours,
+          device: l.device || l.Device,
+          status: l.status || l.Status,
+          isMissedCheckout: Boolean(l.isMissedCheckout ?? l.IsMissedCheckout),
+          canRegularize: Boolean(l.canRegularize ?? l.CanRegularize),
+          isToday: Boolean(l.isToday ?? l.IsToday),
+          regularizationState: l.regularizationState || l.RegularizationState,
+          holidayName: l.holidayName || l.HolidayName || null,
+        })),
+        metrics: {
+          workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "--",
+          workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
+          presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "--",
+          presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
+          leaves: rawMetrics.leaves || rawMetrics.Leaves || "--",
+          leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
+          absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "--",
+          absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
+        },
+      });
     } catch (err) {
       if (request !== historyRequest.current) return;
-      console.warn("Could not fetch attendance history", err);
+      setHistoryError(getApiErrorMessage(err) || "Unable to load attendance history.");
       setHistoryData({
         logs: [],
         metrics: {
-          workingDays: "0 Days",
-          workingDaysSub: "Current Period",
-          presentDays: "0 Days",
-          presentDaysSub: "Biometric verified",
-          leaves: "0 Days",
-          leavesSub: "No leaves applied",
-          absentDays: "0 Days",
-          absentDaysSub: "No absences",
+          workingDays: "--",
+          workingDaysSub: "--",
+          presentDays: "--",
+          presentDaysSub: "--",
+          leaves: "--",
+          leavesSub: "--",
+          absentDays: "--",
+          absentDaysSub: "--",
         },
       });
     } finally {
@@ -305,26 +323,10 @@ export default function TransportManagerMyAttendance() {
         notify(res?.message || res?.Message || `Checked In Successfully at ${payload.inTime || payload.InTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        const nowTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-        setTodayData((prev) => ({
-          ...prev,
-          status: "punched_in",
-          inTime: nowTime,
-          todayStatus: "Present",
-        }));
-        syncGlobalPunchState("punched_in", nowTime, null);
-        notify(`Checked In Successfully at ${nowTime}`, "success");
+        notify(res?.message || res?.Message || "Failed to check in.", "error");
       }
     } catch (err) {
-      const nowTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-      setTodayData((prev) => ({
-        ...prev,
-        status: "punched_in",
-        inTime: nowTime,
-        todayStatus: "Present",
-      }));
-      syncGlobalPunchState("punched_in", nowTime, null);
-      notify(`Checked In at ${nowTime}`, "success");
+      notify(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to check in.", "error");
     } finally {
       setActionLoading(false);
     }
@@ -351,38 +353,25 @@ export default function TransportManagerMyAttendance() {
         notify(res?.message || res?.Message || `Punched Out Successfully at ${payload.outTime || payload.OutTime}`, "success");
         fetchHistory(activeFilter);
       } else {
-        const nowTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-        setTodayData((prev) => ({
-          ...prev,
-          status: "punched_out",
-          outTime: nowTime,
-        }));
-        syncGlobalPunchState("punched_out", todayData.inTime, nowTime);
-        notify(`Punched Out Successfully at ${nowTime}`, "success");
+        notify(res?.message || res?.Message || "Failed to punch out.", "error");
       }
     } catch (err) {
-      const nowTime = new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-      setTodayData((prev) => ({
-        ...prev,
-        status: "punched_out",
-        outTime: nowTime,
-      }));
-      syncGlobalPunchState("punched_out", todayData.inTime, nowTime);
-      notify(`Punched Out at ${nowTime}`, "success");
+      notify(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to punch out.", "error");
     } finally {
       setActionLoading(false);
     }
   };
 
   const openRegularizeModal = (log) => {
+    const rawDate = log.rawDate || log.RawDate || new Date().toISOString().split("T")[0];
     setRegForm({
-      rawDate: log.rawDate || log.RawDate || new Date().toISOString().split("T")[0],
+      rawDate,
       displayDate: log.date || log.Date || log.day || "Selected Date",
-      requestedInTime: "09:00",
-      requestedOutTime: "17:00",
+      requestedInTime: toInputTime(log.inTime),
+      requestedOutTime: toInputTime(log.outTime),
       reason: "",
     });
-    setRegularizeDate(log.rawDate || log.RawDate || new Date().toISOString().split("T")[0]);
+    setRegularizeDate(rawDate);
   };
 
   const reportedRegularization = useRef("");
@@ -397,7 +386,7 @@ export default function TransportManagerMyAttendance() {
       return;
     }
     reportedRegularization.current = "";
-    setRegForm({ rawDate: log.rawDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: "09:00", requestedOutTime: "17:00", reason: "" });
+    setRegForm({ rawDate: log.rawDate, displayDate: log.date || log.day || "Selected Date", requestedInTime: toInputTime(log.inTime), requestedOutTime: toInputTime(log.outTime), reason: "" });
   }, [regularizeDate, loadingHistory, historyPeriod, activeFilter, historyData.logs]);
 
   const handleSubmitRegularization = async (e) => {
@@ -424,12 +413,10 @@ export default function TransportManagerMyAttendance() {
         fetchTodayStatus();
         fetchHistory(activeFilter);
       } else {
-        notify("Regularization request recorded successfully.", "success");
-        setRegModalOpen(false);
+        notify(res?.message || res?.Message || "Failed to submit regularization request.", "error");
       }
     } catch (err) {
-      notify("Regularization request recorded successfully.", "success");
-      setRegModalOpen(false);
+      notify(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to submit regularization request.", "error");
     } finally {
       setRegSubmitting(false);
     }
@@ -471,6 +458,13 @@ export default function TransportManagerMyAttendance() {
     <main className="attendance-module">
       {/* Top Sub-Tabs matching Second Reference (Image 2) */}
       <div className="sp-faculty-attendance-page">
+        {(todayError || historyError) && (
+          <div className="sp-att-error-banner" role="alert">
+            <AlertCircle size={16} />
+            <span>{todayError || historyError}</span>
+            <button type="button" onClick={() => { fetchTodayStatus(); fetchHistory(activeFilter); }}>Retry</button>
+          </div>
+        )}
 
         {/* Row 1: Attendance & Shift Summary + Check-In / Check-Out */}
         <div className="sp-attendance-top-grid">
@@ -603,9 +597,9 @@ export default function TransportManagerMyAttendance() {
 
                 <button
                   type="button"
-                  className={`sp-punch-pill-btn checkout ${todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                  className={`sp-punch-pill-btn checkout ${todayData.status === "punched_in" && todayData.isCheckOutAllowed && !todayData.isMissedCheckout && !actionLoading ? "active" : "inactive"
                     }`}
-                  disabled={todayData.status !== "punched_in" || actionLoading}
+                  disabled={todayData.status !== "punched_in" || !todayData.isCheckOutAllowed || todayData.isMissedCheckout || actionLoading}
                   onClick={handlePunchOut}
                 >
                   {actionLoading && todayData.status === "punched_in" ? (
@@ -638,8 +632,8 @@ export default function TransportManagerMyAttendance() {
                 </>
               ) : (
                 <>
-                  <div className="sp-kpi-value">{historyData.metrics?.workingDays || "6 Days"}</div>
-                  <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || "Current Week (Mon–Sat)"}</div>
+                  <div className="sp-kpi-value">{historyData.metrics?.workingDays || "--"}</div>
+                  <div className="sp-kpi-sub">{historyData.metrics?.workingDaysSub || "--"}</div>
                 </>
               )}
             </div>
@@ -659,8 +653,8 @@ export default function TransportManagerMyAttendance() {
                 </>
               ) : (
                 <>
-                  <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || "0 Days"}</div>
-                  <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || "Biometric verified"}</div>
+                  <div className="sp-kpi-value green-val">{historyData.metrics?.presentDays || "--"}</div>
+                  <div className="sp-kpi-sub">{historyData.metrics?.presentDaysSub || "--"}</div>
                 </>
               )}
             </div>
@@ -680,8 +674,8 @@ export default function TransportManagerMyAttendance() {
                 </>
               ) : (
                 <>
-                  <div className="sp-kpi-value">{historyData.metrics?.leaves || "0 Days"}</div>
-                  <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || "No leaves applied"}</div>
+                  <div className="sp-kpi-value">{historyData.metrics?.leaves || "--"}</div>
+                  <div className="sp-kpi-sub">{historyData.metrics?.leavesSub || "--"}</div>
                 </>
               )}
             </div>
@@ -701,8 +695,8 @@ export default function TransportManagerMyAttendance() {
                 </>
               ) : (
                 <>
-                  <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || "0 Days"}</div>
-                  <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || "No absences"}</div>
+                  <div className="sp-kpi-value red-val">{historyData.metrics?.absentDays || "--"}</div>
+                  <div className="sp-kpi-sub">{historyData.metrics?.absentDaysSub || "--"}</div>
                 </>
               )}
             </div>

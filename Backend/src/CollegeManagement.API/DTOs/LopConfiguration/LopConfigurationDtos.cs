@@ -35,6 +35,18 @@ namespace CollegeManagement.API.DTOs.LopConfiguration
 
         [JsonPropertyName("effectiveFrom")]
         public string EffectiveFrom { get; set; } = DateTime.UtcNow.ToString("yyyy-MM");
+
+        [JsonPropertyName("missedCheckoutLopEnabled")]
+        public bool MissedCheckoutLopEnabled { get; set; } = true;
+
+        [JsonPropertyName("allowedMissedCheckouts")]
+        public int AllowedMissedCheckouts { get; set; } = 0;
+
+        [JsonPropertyName("missedCheckoutsPerPenalty")]
+        public int MissedCheckoutsPerPenalty { get; set; } = 1;
+
+        [JsonPropertyName("missedCheckoutPenaltyDays")]
+        public decimal MissedCheckoutPenaltyDays { get; set; } = 0.5m;
     }
 
     public class SaveLopPolicyRequest
@@ -62,6 +74,18 @@ namespace CollegeManagement.API.DTOs.LopConfiguration
 
         [JsonPropertyName("effectiveFrom")]
         public string EffectiveFrom { get; set; } = string.Empty;
+
+        [JsonPropertyName("missedCheckoutLopEnabled")]
+        public bool MissedCheckoutLopEnabled { get; set; } = true;
+
+        [JsonPropertyName("allowedMissedCheckouts")]
+        public int AllowedMissedCheckouts { get; set; } = 0;
+
+        [JsonPropertyName("missedCheckoutsPerPenalty")]
+        public int MissedCheckoutsPerPenalty { get; set; } = 1;
+
+        [JsonPropertyName("missedCheckoutPenaltyDays")]
+        public decimal MissedCheckoutPenaltyDays { get; set; } = 0.5m;
     }
 
     public class LopStaffRecordDto
@@ -179,6 +203,12 @@ namespace CollegeManagement.API.DTOs.LopConfiguration
 
         [JsonPropertyName("lateCount")]
         public int LateCount { get; set; }
+
+        [JsonPropertyName("missedCheckoutCount")]
+        public int MissedCheckoutCount { get; set; }
+
+        [JsonPropertyName("absentCount")]
+        public int AbsentCount { get; set; }
 
         [JsonPropertyName("lopDays")]
         public decimal LopDays { get; set; }

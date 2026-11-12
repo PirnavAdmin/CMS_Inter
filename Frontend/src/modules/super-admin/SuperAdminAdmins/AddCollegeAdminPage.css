@@ -1,0 +1,1057 @@
+/* ==========================================================================
+   ADD COLLEGE ADMIN WIZARD - PIRNAV DESIGN SYSTEM
+   Interactive, modern UI matching project theme (#1e4529, #16a34a)
+   ========================================================================== */
+
+.aca-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px 12px 60px;
+  animation: acaFadeIn 0.25s ease-out;
+}
+
+@keyframes acaFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── BREADCRUMB ── */
+.aca-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+}
+
+.aca-breadcrumb-link {
+  color: var(--cms-muted, #64748b);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.aca-breadcrumb-link:hover {
+  color: var(--cms-primary, #1e4529);
+}
+
+.aca-breadcrumb-home {
+  color: var(--cms-primary, #1e4529);
+  display: inline-flex;
+  align-items: center;
+}
+
+.aca-breadcrumb-sep {
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.aca-breadcrumb-current {
+  color: var(--cms-text, #1e293b);
+  font-weight: 700;
+}
+
+/* ── HEADER ── */
+.aca-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+
+.aca-header-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 10px rgba(30, 69, 41, 0.08);
+  flex-shrink: 0;
+}
+
+.aca-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--cms-text, #1e293b);
+  line-height: 1.2;
+}
+
+.aca-subtitle {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  color: var(--cms-muted, #64748b);
+  font-weight: 500;
+}
+
+/* ── 3-STEP STEPPER HEADER ── */
+.aca-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 14px 22px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+}
+
+.aca-step-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-muted, #64748b);
+  transition: all 0.15s ease;
+}
+
+.aca-step-node:hover:not(:disabled) {
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-step-node.is-active {
+  color: var(--cms-primary, #1e4529);
+}
+
+.aca-step-node.is-done {
+  color: #15803d;
+}
+
+.aca-step-circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  font-weight: 800;
+  background: #f1f5f9;
+  color: var(--cms-muted, #64748b);
+  border: 1.5px solid #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.aca-step-node.is-active .aca-step-circle {
+  background: var(--cms-primary, #1e4529);
+  color: #ffffff;
+  border-color: var(--cms-primary, #1e4529);
+  box-shadow: 0 0 0 4px rgba(30, 69, 41, 0.14);
+}
+
+.aca-step-node.is-done .aca-step-circle {
+  background: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+}
+
+.aca-step-line {
+  flex: 1;
+  max-width: 60px;
+  height: 2px;
+  background: #e2e8f0;
+  transition: background-color 0.2s ease;
+}
+
+.aca-step-line.is-done {
+  background: #16a34a;
+}
+
+/* ── 2-COLUMN WIZARD LAYOUT ── */
+.aca-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .aca-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Main Form Card */
+.aca-main-card {
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 24px 26px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.aca-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 16px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--cms-border, #e5e7eb);
+}
+
+.aca-card-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.aca-card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-card-subtitle {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+/* ── INTERACTIVE FORM FIELDS ── */
+.aca-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 16px;
+}
+
+@media (max-width: 640px) {
+  .aca-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.aca-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aca-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.aca-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aca-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aca-req {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+/* Input Row Container (Integrated icon + input) */
+.aca-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: #ffffff;
+  border: 1.5px solid var(--cms-border, #cbd5e1);
+  border-radius: 10px;
+  transition: all 0.18s ease;
+  min-height: 44px;
+}
+
+.aca-input-row:focus-within {
+  border-color: var(--cms-primary, #1e4529);
+  box-shadow: 0 0 0 3.5px rgba(30, 69, 41, 0.1);
+  background: #ffffff;
+}
+
+.aca-input-row.has-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.aca-input-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.aca-input-row:focus-within .aca-input-icon {
+  color: var(--cms-primary, #1e4529);
+}
+
+.aca-input-row input,
+.aca-input-row select {
+  border: none;
+  background: transparent;
+  outline: none;
+  width: 100%;
+  height: 42px;
+  font-size: 13px;
+  color: var(--cms-text, #1e293b);
+  font-weight: 500;
+}
+
+.aca-input-row select {
+  cursor: pointer;
+}
+
+.aca-input-row input::placeholder {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+/* Country Flag / Phone Prefix */
+.aca-phone-prefix {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  padding-right: 8px;
+  border-right: 1px solid #e2e8f0;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Eye Toggle Button */
+.aca-pw-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--cms-muted, #94a3b8);
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.aca-pw-toggle-btn:hover {
+  color: var(--cms-text, #1e293b);
+  background: #f1f5f9;
+}
+
+/* Generate Password Pill */
+.aca-gen-pwd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.aca-gen-pwd-pill:hover {
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  border-color: var(--cms-primary, #1e4529);
+}
+
+/* Small Tag/Badge */
+.aca-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.aca-tag-success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.aca-tag-info {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+/* Quick Selected College Info Banner */
+.aca-college-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-top: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #15803d;
+}
+
+.aca-college-banner strong {
+  font-weight: 800;
+  color: #14532d;
+}
+
+/* ── SUBCARDS (Access & Status, Login & Security) ── */
+.aca-subcard {
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: #f9fbf8;
+  border: 1px solid color-mix(in srgb, var(--cms-primary, #1e4529) 16%, var(--cms-border));
+  border-radius: 12px;
+}
+
+.aca-subcard-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.aca-subcard-icon {
+  color: var(--cms-primary, #1e4529);
+}
+
+.aca-subcard-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-subcard-sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+.aca-toggles-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .aca-toggles-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.aca-toggle-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.aca-ios-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  position: relative;
+  transition: background-color 0.22s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.aca-ios-toggle.is-on {
+  background: #16a34a;
+}
+
+.aca-ios-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.aca-ios-toggle.is-on .aca-ios-knob {
+  transform: translateX(20px);
+}
+
+.aca-toggle-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.aca-toggle-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-toggle-desc {
+  font-size: 11px;
+  color: var(--cms-muted, #64748b);
+  line-height: 1.35;
+  margin-top: 1px;
+}
+
+/* ── STEP 2: RADIO CARDS ── */
+.aca-radio-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.aca-radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--cms-border, #e2e8f0);
+  border-radius: 11px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aca-radio-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.aca-radio-card.is-selected {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.aca-radio-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all 0.15s ease;
+}
+
+.aca-radio-card.is-selected .aca-radio-circle {
+  border-color: #16a34a;
+}
+
+.aca-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #16a34a;
+}
+
+.aca-radio-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.aca-radio-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-rec-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #15803d;
+  margin-left: 6px;
+}
+
+.aca-radio-desc {
+  font-size: 11.5px;
+  color: var(--cms-muted, #64748b);
+  margin-top: 2px;
+}
+
+.aca-callout-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-size: 12px;
+  color: #15803d;
+  line-height: 1.45;
+  margin-top: 8px;
+}
+
+.aca-callout-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #16a34a;
+}
+
+/* ── STEP 3: REVIEW & CONFIRM ── */
+.aca-review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 640px) {
+  .aca-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.aca-rev-box {
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.aca-rev-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.aca-rev-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-rev-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.aca-rev-edit-btn:hover {
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  border-color: var(--cms-primary, #1e4529);
+}
+
+.aca-rev-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.aca-rev-item {
+  display: grid;
+  grid-template-columns: 130px 10px 1fr;
+  align-items: start;
+  font-size: 12.5px;
+}
+
+.aca-rev-label {
+  color: var(--cms-muted, #64748b);
+  font-weight: 500;
+}
+
+.aca-rev-colon {
+  color: var(--cms-muted, #94a3b8);
+}
+
+.aca-rev-val {
+  color: var(--cms-text, #1e293b);
+  font-weight: 700;
+  word-break: break-word;
+}
+
+/* ── RIGHT ASIDE PANEL: ACCOUNT SUMMARY (Interactive Live Preview) ── */
+.aca-aside-card {
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 22px 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  position: sticky;
+  top: 20px;
+}
+
+.aca-aside-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--cms-border, #e5e7eb);
+}
+
+.aca-aside-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.aca-aside-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-aside-sub {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--cms-muted, #64748b);
+}
+
+/* Progress completion tracker */
+.aca-progress-wrap {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.aca-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  margin-bottom: 6px;
+}
+
+.aca-progress-track {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.aca-progress-bar {
+  height: 100%;
+  background: #16a34a;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.aca-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.aca-summary-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.aca-summary-icon {
+  color: #7c3aed;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.aca-summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.aca-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.aca-summary-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #1e293b);
+  word-break: break-word;
+}
+
+.aca-summary-val.is-placeholder {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.aca-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.aca-status-badge.is-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.aca-status-badge.is-inactive {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── FOOTER BUTTONS ── */
+.aca-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cms-border, #e5e7eb);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.aca-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aca-btn-cancel {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aca-btn-cancel:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.aca-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.32);
+  transition: all 0.18s ease;
+}
+
+.aca-btn-primary:hover:not(:disabled) {
+  background: #15803d;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.42);
+  transform: translateY(-1px);
+}
+
+.aca-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.aca-btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #334155);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aca-btn-back:hover {
+  background: #f8fafc;
+  color: var(--cms-primary, #1e4529);
+  border-color: var(--cms-primary, #1e4529);
+}
+
+/* ── SUCCESS CELEBRATION STATE ── */
+.aca-success-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 24px 30px;
+}
+
+.aca-success-badge-wrap {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 22px rgba(22, 163, 74, 0.42);
+  margin-bottom: 22px;
+  animation: acaPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes acaPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.aca-success-title {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 800;
+  color: var(--cms-text, #1e293b);
+}
+
+.aca-success-subtitle {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--cms-muted, #64748b);
+  max-width: 520px;
+  line-height: 1.5;
+}
+
+.aca-success-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 28px;
+  margin: 26px 0 18px;
+  flex-wrap: wrap;
+}
+
+.aca-success-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.aca-success-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #15803d;
+  max-width: 540px;
+  margin-bottom: 30px;
+}
+
+.aca-success-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DARK MODE ADAPTATIONS FOR ADD COLLEGE ADMIN WIZARD
+   ══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] .aca-page {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-form-card,
+[data-theme="dark"] .aca-step-indicator-card,
+[data-theme="dark"] .aca-preview-sidebar,
+[data-theme="dark"] .aca-success-card,
+[data-theme="dark"] .aca-success-summary-card {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-input,
+[data-theme="dark"] .aca-select {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-title,
+[data-theme="dark"] .aca-step-title,
+[data-theme="dark"] .aca-label {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .aca-subtitle,
+[data-theme="dark"] .aca-step-desc {
+  color: var(--cms-muted);
+}

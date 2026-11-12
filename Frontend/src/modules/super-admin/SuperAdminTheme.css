@@ -1,0 +1,1040 @@
+/* Shared theme contract for super-admin pages. Keep component surfaces and
+   controls tied to the active application theme; status colors stay local. */
+.sa-shell {
+  --sa-surface: var(--cms-surface);
+  --sa-surface-raised: var(--cms-surface);
+  --sa-surface-muted: var(--cms-subtle, var(--cms-bg));
+  --sa-text: var(--cms-text);
+  --sa-muted: var(--cms-muted);
+  --sa-border: var(--cms-border);
+  --sa-hover: var(--cms-hover);
+  --sa-primary: var(--cms-primary);
+  --sa-primary-hover: var(--cms-primary-hover, var(--cms-primary-dark, var(--cms-primary)));
+  --sa-primary-soft: var(--cms-primary-soft, var(--cms-subtle));
+  --sa-primary-border: var(--cms-primary-border, var(--cms-border));
+}
+
+.sa-shell :is(
+  .rcf-page, .sa-dashboard-page, .plans-page, .cap-page, .csp-page, .rnp-page,
+  .sal-page-container, .pip-page-container, .gsp-page, .mpp-page,
+  .gmp-page, .cmp-page, .acp-page, .cap-page-container, .sac-page
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell :is(
+  .rcf-card, .rcf-stepper-bar, .rcf-aside, .rcf-aside-box, .rcf-plan-card,
+  .rcf-module-item, .rcf-review-section, .rcf-footer,
+  .sad-kpi-card, .sad-card, .sad-chart-card, .sad-bottom-card,
+  .sad-table-card, .sad-panel, .sad-empty-placeholder,
+  .cap-kpi-card, .cap-toolbar, .cap-table-card, .cap-filter-panel, .cap-actions-popover,
+  .cap-drawer, .cap-drawer-card, .cap-admin-card, .cap-footer,
+  .csp-kpi-card, .csp-toolbar, .csp-table-card, .csp-footer,
+  .csp-drawer, .csp-actions-popover, .csp-key-actions-container,
+  .rnp-kpi-card, .rnp-toolbar, .rnp-table-card, .rnp-footer, .rnp-drawer,
+  .rnp-filter-card, .rnp-card, .rnp-more-popover, .rnp-empty-state,
+  .rnp-search-input, .rnp-select, .rnp-icon-btn, .rnp-rows-select,
+  .rnp-page-btn, .rnp-view-toggle,
+  .rnp-key-actions-container,
+  .spp-plan-card, .spp-table-card, .spp-matrix-card, .spp-feature-category-card,
+  .sal-header-card, .sal-filter-card, .sal-filters-bar, .sal-table-wrap, .sal-modal-card,
+  .pip-filters-card, .pip-table-card, .pip-modal-card,
+  .gsp-card, .gsp-section-card, .gsp-header-card, .gsp-nav-card, .gsp-form-card,
+  .gsp-series-preview-card, .gsp-theme-mode-card, .gsp-toggle-row,
+  .gsp-preset-pill, .gsp-palette-tile, .gsp-mode-toggle-btn, .gsp-btn-reset,
+  .gsp-preview-copy-btn,
+  .mpp-card, .mpp-header-card, .mpp-profile-card, .mpp-info-card,
+  .mpp-security-card, .mpp-prefs-card,
+  .sa-notif-popover, .sanp-popover-card, .sanp-list,
+  .cap-page-container .sa-table-card, .sa-detail-drawer, .sa-drawer,
+  .sa-page .sa-panel
+) {
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(
+  .rcf-card, .rcf-stepper-bar, .rcf-aside, .rcf-aside-box, .rcf-plan-card,
+  .rcf-module-item, .rcf-review-section, .rcf-footer,
+  .sad-kpi-card, .sad-card, .sad-chart-card, .sad-bottom-card,
+  .sad-table-card, .sad-panel, .sad-empty-placeholder,
+  .cap-kpi-card, .cap-toolbar, .cap-table-card, .cap-filter-panel,
+  .cap-actions-popover, .cap-drawer, .cap-drawer-card, .cap-admin-card, .cap-footer,
+  .csp-kpi-card, .csp-toolbar, .csp-table-card, .csp-footer, .csp-drawer,
+  .csp-actions-popover, .csp-key-actions-container, .rnp-kpi-card, .rnp-toolbar,
+  .rnp-table-card, .rnp-footer, .rnp-drawer, .rnp-filter-card, .rnp-card,
+  .rnp-more-popover, .rnp-empty-state, .rnp-search-input, .rnp-select,
+  .rnp-icon-btn, .rnp-rows-select, .rnp-page-btn, .rnp-view-toggle,
+  .rnp-key-actions-container,
+  .spp-plan-card, .spp-table-card, .spp-matrix-card,
+  .spp-feature-category-card, .sal-header-card, .sal-filter-card,
+  .sal-filters-bar, .sal-table-wrap, .sal-modal-card,
+  .pip-filters-card, .pip-table-card, .pip-modal-card, .gsp-card,
+  .gsp-section-card, .gsp-header-card, .gsp-nav-card, .gsp-form-card,
+  .gsp-series-preview-card, .gsp-theme-mode-card, .gsp-toggle-row,
+  .gsp-preset-pill, .gsp-palette-tile, .gsp-mode-toggle-btn, .gsp-btn-reset,
+  .gsp-preview-copy-btn,
+  .mpp-card, .mpp-header-card, .mpp-profile-card, .mpp-info-card,
+  .mpp-security-card, .mpp-prefs-card,
+  .sa-notif-popover, .sanp-popover-card, .sanp-list
+) { background-color: var(--sa-surface); }
+
+/* Data tables ship their own page CSS. Set the theme at row level too because
+   some browsers and table styles paint cell backgrounds independently. */
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table, .spp-list-table,
+  .spp-compare-table, .sal-table, .pip-table) tbody tr,
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table, .spp-list-table,
+  .spp-compare-table, .sal-table, .pip-table) tbody td {
+  background-color: var(--sa-surface);
+  color: var(--sa-text);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table, .spp-list-table,
+  .spp-compare-table, .sal-table, .pip-table) thead th {
+  background-color: var(--sa-surface-muted);
+  color: var(--sa-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table, .spp-list-table,
+  .spp-compare-table, .sal-table, .pip-table) tbody tr:hover,
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table, .spp-list-table,
+  .spp-compare-table, .sal-table, .pip-table) tbody tr:hover td {
+  background-color: var(--sa-hover);
+}
+
+.sa-shell :is(.rnp-empty-state, .cap-empty-state, .csp-empty-state,
+  .sad-empty-state, .spp-empty-state, .sal-empty-state, .pip-empty-state) {
+  color: var(--sa-muted);
+}
+
+.sa-shell :is(.rnp-empty-state, .cap-empty-state, .csp-empty-state,
+  .sad-empty-state, .spp-empty-state, .sal-empty-state, .pip-empty-state) :is(h2, h3, strong) {
+  color: var(--sa-text);
+}
+
+.sa-shell .rnp-empty-state p { color: var(--sa-muted); }
+
+/* Keep legacy page rules from repainting table cells after the shared theme. */
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table,
+  .spp-list-table, .spp-compare-table, .sal-table, .pip-table) tbody td {
+  background: var(--sa-surface);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table,
+  .spp-list-table, .spp-compare-table, .sal-table, .pip-table) tbody tr:hover td {
+  background: var(--sa-hover);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-table, .cap-table, .csp-table, .sad-table,
+  .spp-list-table, .spp-compare-table, .sal-table, .pip-table) thead th {
+  background: var(--sa-surface-muted);
+  color: var(--sa-muted);
+}
+
+.sa-shell :is(.sad-chart-card, .sad-bottom-card) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+}
+
+.sa-shell :is(.sad-card-title, .sad-bottom-card :is(a, strong), .sad-activity-text) {
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.sad-activity-time, .sad-bottom-card small, .sad-kpi-title) {
+  color: var(--sa-muted);
+}
+
+.sa-shell :is(.sad-empty-placeholder, .sad-bottom-card li) {
+  background: var(--sa-surface-muted);
+  color: var(--sa-muted);
+}
+
+.sa-shell .sad-empty-placeholder :is(strong, span, p) { color: var(--sa-muted); }
+
+.sa-shell .sad-empty-placeholder :is(h2, h3) { color: var(--sa-text); }
+
+.sa-shell :is(.sad-item-row, .sad-donut-legend-item) {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.sad-item-title, .sad-donut-legend-name, .sad-donut-center-num) {
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.sad-item-sub, .sad-donut-legend-val, .sad-donut-center-label) {
+  color: var(--sa-muted);
+}
+
+.sa-shell :is(.sa-dashboard-page, .plans-page) {
+  background: var(--cms-bg);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(
+  .rcf-input, .rcf-select, .rcf-textarea, .cap-search-input, .cap-select,
+  .cap-rows-select, .cap-page-btn, .cap-modal-input, .cap-drawer-action-btn,
+  .csp-search-input, .csp-select, .rnp-search-input, .rnp-select,
+  .csp-rows-select, .csp-page-btn,
+  .sal-search-input, .sal-select, .sal-date-input, .pip-search-input,
+  .sal-rpp-select, .pip-rows-select,
+  .pip-select, .pip-date-input, .gsp-input, .gsp-select, .gsp-textarea,
+  .mpp-input, .sa-form input, .sa-form select, .sa-form textarea
+) {
+  background-color: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(
+  .rcf-page-title, .rcf-card-title, .rcf-label, .sad-title, .cap-title,
+  .csp-title, .rnp-title, .spp-title, .sal-header-title, .pip-header-title,
+  .gsp-title, .mpp-page-title, .sa-page-head h1
+) { color: var(--sa-text); }
+
+.sa-shell :is(
+  .rcf-page-subtitle, .rcf-card-subtitle, .sad-subtitle, .cap-subtitle,
+  .csp-subtitle, .rnp-subtitle, .spp-subtitle, .sal-header-desc,
+  .pip-header-subtitle, .gsp-subtitle, .mpp-page-desc, .sa-page-head p,
+  .sa-muted
+) { color: var(--sa-muted); }
+
+.sa-shell :is(input, select, textarea)::placeholder { color: var(--sa-muted); }
+
+.sa-shell :is(.sa-table-card .cms-table, .sa-table-card .cms-table tbody tr,
+  .sa-table-card .cms-table tbody td) {
+  background-color: var(--sa-surface);
+  color: var(--sa-text);
+  border-color: var(--sa-border);
+}
+
+.sa-shell .sa-table-card .cms-table th {
+  background: var(--sa-surface-muted);
+  color: var(--sa-muted);
+}
+
+.sa-shell .sa-section-head,
+.sa-shell .sa-pagination {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell :is(.cap-drawer-section, .cap-drawer-card, .csp-drawer-section,
+  .rnp-drawer-section, .sa-profile-dropdown) {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.rcf-stepper-bar, .csp-view-switcher, .cap-view-switcher,
+  .rnp-view-toggle, .spp-view-switcher, .sanp-tab-pills, .gsp-tab-list) {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell :is(.rcf-step-label, .rcf-step-number, .csp-view-btn,
+  .cap-view-btn, .rnp-view-btn, .spp-view-btn, .sanp-tab-pill,
+  .gsp-tab-btn, .sa-pagination-info-left) { color: var(--sa-muted); }
+
+.sa-shell :is(.rcf-step-label.is-active, .csp-view-btn.is-active,
+  .cap-view-btn.is-active, .rnp-view-btn.is-active, .spp-view-btn.active,
+  .sanp-tab-pill.active, .gsp-tab-btn.active) {
+  background: var(--sa-surface);
+  color: var(--sa-text);
+  border-color: var(--sa-border);
+}
+
+.sa-shell :is(
+  .sa-profile-dropdown, .sa-actions-menu, .cap-actions-popover, .csp-actions-popover,
+  .rnp-more-popover, .spp-popover-menu, .sal-export-menu, .pip-export-menu,
+  .csp-filter-panel, .rnp-filter-panel, .sa-user-modal .cms-modal-card
+) {
+  background-color: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.sanp-popover-card, .sanp-arrow) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell :is(.sanp-title, .sanp-item-title, .sanp-item-message,
+  .sanp-empty-title, .sanp-select, .sanp-search-input) { color: var(--sa-text); }
+
+.sa-shell :is(.sanp-subtitle, .sanp-item-time, .sanp-empty-desc) { color: var(--sa-muted); }
+
+.sa-shell :is(.sanp-item, .sanp-filters-bar, .sanp-tab-pills) {
+  background-color: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell .sanp-item.unread { background-color: var(--cms-primary-soft); }
+
+.sa-shell :is(.sanp-select, .sanp-search-input) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+}
+
+.sa-shell :is(
+  .sa-dropdown-user-name, .sa-dropdown-item, .sa-popover-item,
+  .cap-popover-item, .csp-popover-item, .rnp-popover-item, .spp-popover-item
+) { color: var(--sa-text); }
+
+.sa-shell :is(.sa-dropdown-item, .sa-popover-item, .cap-popover-item,
+  .csp-popover-item, .rnp-popover-item, .spp-popover-item):hover {
+  background-color: var(--sa-hover);
+}
+
+.sa-shell :is(.rcf-card, .cap-toolbar, .cap-table-card, .csp-toolbar,
+  .csp-table-card, .rnp-toolbar, .rnp-table-card, .spp-plan-card,
+  .spp-table-card, .sad-card, .sad-panel) :is(h2, h3, strong) {
+  color: inherit;
+}
+
+/* Autofill must follow the same theme as the field underneath it. */
+.sa-shell input:-webkit-autofill,
+.sa-shell input:-webkit-autofill:hover,
+.sa-shell input:-webkit-autofill:focus,
+.sa-shell textarea:-webkit-autofill,
+.sa-shell select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--sa-surface) inset;
+  -webkit-text-fill-color: var(--sa-text);
+  caret-color: var(--sa-text);
+}
+
+/* Primary controls and selected states must use the shell's live palette.
+   Keep semantic status badges (paid, active, pending, overdue) page-colored. */
+.sa-shell[data-dashboard-palette] :is(
+  .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
+  .csp-page-btn.is-active, .cap-page-btn.is-active, .rnp-page-btn.is-active,
+  .sanp-tab-pill.active, .spp-v3-billing button.active, .spp-v3-create,
+  .spp-v3-selected, .spp-tab-btn.is-active, .spp-btn-create,
+  .rnp-btn-primary, .aca-btn-primary, .cap-radio-chip.is-active, .cap-drawer-action-btn.primary,
+  .csp-plan-option-card.is-selected, .mpp-theme-btn.active
+) {
+  background: var(--sa-primary);
+  border-color: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
+  .csp-page-btn.is-active, .cap-page-btn.is-active, .rnp-page-btn.is-active,
+  .sanp-tab-pill.active, .spp-v3-billing button.active, .spp-v3-create,
+  .spp-tab-btn.is-active, .spp-btn-create, .rnp-btn-primary, .aca-btn-primary,
+  .cap-radio-chip.is-active, .cap-drawer-action-btn.primary, .mpp-theme-btn.active
+):hover:not(:disabled) {
+  background: var(--sa-primary-hover);
+  border-color: var(--sa-primary-hover);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rcf-page, .sa-dashboard-page, .plans-page,
+  .cap-page, .csp-page, .rnp-page, .sal-page-container, .pip-page-container,
+  .gsp-page, .mpp-page, .aca-page, .renewals-page, .gmp-page, .cmp-page,
+  .acp-page, .cap-page-container, .sac-page) {
+  background: var(--cms-bg);
+  color: var(--sa-text);
+}
+
+/* Keep page roots transparent to the active theme; card surfaces are styled separately. */
+.sa-shell[data-dashboard-palette] .sa-content {
+  background: var(--cms-bg);
+}
+
+/* Match the Admin content gutter (18px) without stacking each page's own gutter. */
+.sa-shell .sa-content {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.sa-shell .sa-content > :is(
+  .rcf-page, .sa-dashboard-page, .plans-page, .cap-page, .csp-page,
+  .rnp-page, .sal-page-container, .pip-page-container, .gsp-page,
+  .mpp-page, .aca-page, .renewals-page, .gmp-page, .cmp-page,
+  .acp-page, .cap-page-container, .sac-page
+) {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Page roots sit inside the content wrapper, so avoid a second top inset. */
+.sa-shell .sa-content > :is(
+  .rcf-page, .sa-dashboard-page, .plans-page, .cap-page, .csp-page,
+  .rnp-page, .sal-page-container, .pip-page-container, .gsp-page,
+  .mpp-page, .aca-page, .renewals-page, .gmp-page, .cmp-page,
+  .acp-page, .cap-page-container, .sac-page
+) {
+  padding-top: 0;
+}
+
+/* Hide decorative KPI sparkline curves consistently across Super Admin pages. */
+.sa-shell :is(.sad-kpi-sparkline, .cap-sparkline-wrap, .csp-sparkline-wrap) {
+  display: none;
+}
+
+.sa-shell[data-dashboard-palette] :is(.sa-dashboard-page, .plans-page, .renewals-page) {
+  background: var(--cms-bg);
+}
+
+/* Renewals uses older page-level light surfaces and text colors. Keep its
+   analytics and timeline content readable in every Super Admin theme. */
+.sa-shell[data-dashboard-palette] :is(
+  .rnp-analytics-card, .rnp-legend-item, .rnp-timeline-item
+) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .rnp-analytics-title, .rnp-donut-center-num, .rnp-legend-name,
+  .rnp-timeline-label, .rnp-kpi-content small, .rnp-kpi-content strong
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .rnp-analytics-sub, .rnp-donut-center-label, .rnp-legend-stats
+) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-legend-item, .rnp-timeline-item):hover {
+  background: var(--sa-hover);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .rnp-timeline-bar-bg {
+  background: var(--sa-border);
+}
+
+/* Keep the search and all three filters in one aligned toolbar row when the
+   available width supports it; wrap the whole group cleanly on smaller screens. */
+.sa-shell[data-dashboard-palette] .rnp-toolbar-left {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.sa-shell[data-dashboard-palette] .rnp-search-box {
+  flex: 1 1 320px;
+  min-width: 220px;
+}
+
+.sa-shell[data-dashboard-palette] .rnp-filter-group {
+  flex-wrap: nowrap;
+}
+
+.sa-shell[data-dashboard-palette] .rnp-select-wrap,
+.sa-shell[data-dashboard-palette] .rnp-select {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .sa-shell[data-dashboard-palette] .rnp-toolbar-left,
+  .sa-shell[data-dashboard-palette] .rnp-filter-group {
+    flex-wrap: wrap;
+  }
+}
+
+.sa-shell[data-dashboard-palette] :is(.aca-stepper, .aca-main-card,
+  .aca-subcard, .aca-radio-card, .aca-rev-box, .aca-callout-info,
+  .aca-college-banner, .aca-gen-pwd-pill, .aca-review-section) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.aca-input-row input, .aca-input-row select,
+  .aca-input-row textarea, .aca-input, .aca-select) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .aca-ios-toggle.is-on {
+  background: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .csp-kpi-card.is-selected-kpi, .aca-radio-card.is-selected,
+  .csp-plan-option-card.is-selected, .cap-radio-chip.is-active
+) {
+  border-color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(.csp-filter-btn.is-active, .csp-filter-btn.has-filter) {
+  background: var(--sa-primary-soft);
+  border-color: var(--sa-primary-border);
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(.csp-kpi-card.is-selected-kpi, .aca-radio-card.is-selected,
+  .csp-plan-option-card.is-selected) {
+  background: var(--sa-primary-soft);
+}
+
+.sa-shell[data-dashboard-palette] .aca-radio-card.is-selected .aca-radio-circle {
+  border-color: var(--sa-primary);
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(.spp-v3-plan-card.recommended, .spp-v3-selected) {
+  border-color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-plan-card header {
+  background: var(--sa-primary-soft);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-recommended {
+  background: linear-gradient(120deg, var(--sa-primary-soft), var(--sa-surface));
+  border-color: var(--sa-primary-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.spp-v3-users,
+  .spp-v3-slider-title > strong, .spp-v3-comparison header > div) {
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-recommend-label {
+  background: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+/* Legacy KPI rules used fixed dark text, which became unreadable on dark cards. */
+.sa-shell[data-dashboard-palette] :is(
+  .rnp-kpi-content small, .cap-kpi-label, .csp-kpi-label,
+  .sad-kpi-title, .sad-activity-time, .sad-bottom-card small
+) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .rnp-kpi-content strong, .cap-kpi-num, .csp-kpi-num, .sad-kpi-value
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.rnp-page-title, .cap-title, .sad-page-title) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.spp-v3-users, .spp-v3-slider-title > strong) {
+  background: var(--sa-primary-soft);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-slider input { accent-color: var(--sa-primary); }
+
+.sa-shell[data-dashboard-palette] .mpp-avatar-circle { background: var(--sa-primary); }
+
+.sa-shell[data-dashboard-palette] .spp-v3-icon {
+  color: var(--sa-primary);
+  background: var(--sa-primary-soft);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-header-icon-wrap, .pip-doc-icon, .pip-college-icon,
+  .pip-invoice-link, .pip-modal-title-wrap svg
+) { color: var(--sa-primary); }
+
+.sa-shell[data-dashboard-palette] :is(.pip-header-icon-wrap, .pip-search-box:focus-within) {
+  border-color: var(--sa-primary-border);
+}
+
+.sa-shell[data-dashboard-palette] .pip-page-container { background: var(--cms-bg); }
+
+.sa-shell[data-dashboard-palette] :is(.pip-search-box:focus-within, .pip-select:focus, .pip-select:hover) {
+  outline-color: var(--sa-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--sa-primary) 16%, transparent);
+}
+
+.sa-shell[data-dashboard-palette] .pip-header-card {
+  background: linear-gradient(135deg, var(--sa-surface) 0%, var(--sa-primary-soft) 100%);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-page-container, .pip-header-card, .pip-header-icon-wrap, .pip-filters-card, .pip-table-card,
+  .pip-modal-card, .pip-modal-footer, .pip-invoice-paper, .pip-search-box,
+  .pip-select, .pip-date-group, .pip-action-icon-btn, .pip-page-nav-btn,
+  .pip-page-num-btn, .pip-pagination-bar
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-page-container, .pip-header-card, .pip-header-icon-wrap, .pip-filters-card, .pip-table-card,
+  .pip-modal-card, .pip-modal-footer, .pip-invoice-paper, .pip-search-box,
+  .pip-select, .pip-date-group, .pip-action-icon-btn, .pip-page-nav-btn,
+  .pip-page-num-btn, .pip-pagination-bar
+) {
+  background-color: var(--sa-surface);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .pip-page-container {
+  background: var(--cms-bg);
+}
+
+.sa-shell[data-dashboard-palette] :is(.pip-header-title, .pip-bc-active,
+  .pip-college-cell, .pip-cell-amount, .pip-modal-title, .pip-invoice-val,
+  .pip-invoice-id, .pip-modal-header h3) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.pip-header-subtitle, .pip-breadcrumb,
+  .pip-bc-sep, .pip-table td, .pip-cell-date, .pip-method-cell,
+  .pip-pagination-info, .pip-date-label, .pip-date-input, .pip-select) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] .pip-table th {
+  background: var(--sa-surface-muted);
+  color: var(--sa-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .pip-table tbody td {
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .pip-table tbody tr:hover td {
+  background: var(--sa-hover);
+}
+
+.sa-shell[data-dashboard-palette] :is(.pip-modal-header, .pip-modal-footer,
+  .pip-invoice-paper, .pip-invoice-breakdown, .pip-invoice-top-row) {
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.pip-invoice-paper, .pip-modal-footer) {
+  background: var(--sa-surface-muted);
+}
+
+/* My Profile contains fixed dark text and light controls from its standalone
+   stylesheet. Keep profile content, preference controls, and dialogs readable
+   against whichever Super Admin theme is active. */
+.sa-shell[data-dashboard-palette] .mpp-page {
+  background: var(--cms-bg);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-header-card, .mpp-profile-card, .mpp-info-card,
+  .mpp-security-card, .mpp-prefs-card, .mpp-modal,
+  .mpp-photo-menu button, .mpp-photo-change
+) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-header-card {
+  background: linear-gradient(135deg, var(--sa-surface), var(--cms-bg));
+}
+
+.sa-shell[data-dashboard-palette] .mpp-profile-wash {
+  background: linear-gradient(180deg, var(--sa-primary-soft), var(--sa-surface));
+}
+
+.sa-shell[data-dashboard-palette] .mpp-modal-header {
+  background: linear-gradient(135deg, var(--sa-surface), var(--cms-bg));
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.mpp-modal-title, .mpp-modal-sub) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-modal-close {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-modal-close:hover {
+  background: var(--sa-hover);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-photo-preview:not(.is-large) {
+  background: var(--sa-primary-soft);
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(.mpp-photo-help, .mpp-photo-menu button, .mpp-photo-change) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.mpp-photo-menu button:hover:not(:disabled), .mpp-photo-change:hover) {
+  background: var(--sa-hover);
+  border-color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-photo-menu button.is-danger {
+  color: var(--cms-danger, #b42318);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-page-title, .mpp-profile-name, .mpp-info-title,
+  .mpp-section-title, .mpp-info-value, .mpp-session-val,
+  .mpp-modal-title, .mpp-field-label, .mpp-sec-label, .mpp-pref-label
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-page-desc, .mpp-breadcrumb, .mpp-field-label,
+  .mpp-user-email, .mpp-sec-icon, .mpp-sec-arrow,
+  .mpp-pref-icon, .mpp-pref-arrow, .mpp-input-icon,
+  .mpp-modal-sub, .mpp-loading
+) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-info-header, .mpp-info-row, .mpp-section-header,
+  .mpp-security-row, .mpp-pref-row, .mpp-modal-header,
+  .mpp-modal-footer
+) {
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(.mpp-security-row, .mpp-pref-row):hover {
+  background: var(--sa-hover);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-lang-select, .mpp-theme-btn, .mpp-edit-profile-btn,
+  .mpp-input, .mpp-btn-cancel
+) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .mpp-lang-select:focus, .mpp-theme-btn:hover,
+  .mpp-edit-profile-btn:hover, .mpp-input:focus,
+  .mpp-btn-cancel:hover
+) {
+  background: var(--sa-hover);
+  border-color: var(--sa-primary);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-theme-btn.active {
+  background: var(--sa-primary);
+  border-color: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-btn-save {
+  background: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-btn-save:not(:disabled):hover {
+  background: var(--sa-primary-hover);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-settings-summary {
+  padding: 14px 16px;
+  border: 1px solid var(--sa-border);
+  border-radius: 10px;
+  background: var(--sa-surface-muted);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-settings-summary p {
+  margin: 6px 0 0;
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-pref-row-button {
+  font: inherit;
+  text-align: left;
+  color: var(--sa-text);
+  cursor: pointer;
+}
+
+.sa-shell[data-dashboard-palette] .mpp-pref-row-button:hover {
+  background: var(--sa-hover);
+}
+
+.sa-shell[data-dashboard-palette] :is(.mpp-info-icon, .mpp-row-icon,
+  .mpp-section-icon, .mpp-pref-icon, .mpp-bc-active) {
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .mpp-session-count {
+  background: var(--sa-surface-muted);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .pip-empty-state { color: var(--sa-muted); }
+
+.sa-shell[data-dashboard-palette] .pip-empty-title { color: var(--sa-text); }
+
+.sa-shell[data-dashboard-palette] :is(.pip-empty-desc, .pip-invoice-label,
+  .pip-breakdown-row, .pip-modal-close-btn) { color: var(--sa-muted); }
+
+.sa-shell[data-dashboard-palette] .pip-action-icon-btn:hover,
+.sa-shell[data-dashboard-palette] .pip-page-nav-btn:hover:not(:disabled),
+.sa-shell[data-dashboard-palette] .pip-page-num-btn:hover {
+  background: var(--sa-primary-soft);
+  border-color: var(--sa-primary);
+  color: var(--sa-primary);
+}
+
+/* Keep primary actions and selected controls on the active palette. This
+   scoped pass comes after the legacy page rules so those pages cannot retain
+   their original green, blue, or purple accent. Semantic status badges are
+   intentionally excluded. */
+.sa-shell[data-dashboard-palette] :is(
+  .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
+  .csp-export-btn, .csp-assign-btn, .csp-page-btn.is-active, .csp-drawer-tab.is-active,
+  .cap-page-btn.is-active, .cap-drawer-tab.is-active,
+  .rnp-btn-export, .rnp-btn-primary, .rnp-page-btn.is-active,
+  .sal-tab-btn.active, .sal-btn-export, .sal-page-num-btn.active,
+  .gsp-tab-btn.active, .gsp-btn-primary, .gsp-save-btn,
+  .spp-tab-btn.is-active, .spp-btn-create, .spp-v3-create,
+  .spp-v3-billing button.active, .spp-v3-selected,
+  .aca-btn-primary, .mpp-theme-btn.active,
+  .cap-radio-chip.is-active, .cap-drawer-action-btn.primary,
+  .csp-plan-option-card.is-selected, .csp-filter-btn.is-active,
+  .csp-filter-btn.has-filter, .cap-filter-btn.is-active,
+  .cap-preset-pill.is-active, .csp-preset-pill.is-active,
+  .rnp-view-btn.is-active, .cap-view-btn.is-active, .csp-view-btn.is-active,
+  .spp-view-btn.active, .gsp-preset-pill.is-active
+) {
+  background: var(--sa-primary);
+  border-color: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-tab-btn.active, .pip-btn-export, .csp-export-btn, .csp-assign-btn,
+  .rnp-btn-export, .rnp-btn-primary, .sal-tab-btn.active,
+  .sal-btn-export, .gsp-tab-btn.active, .gsp-btn-primary,
+  .gsp-save-btn, .spp-tab-btn.is-active, .spp-btn-create,
+  .spp-v3-create, .spp-v3-billing button.active, .aca-btn-primary
+):hover:not(:disabled) {
+  background: var(--sa-primary-hover);
+  border-color: var(--sa-primary-hover);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
+  .csp-export-btn, .csp-page-btn.is-active, .csp-drawer-tab.is-active,
+  .cap-page-btn.is-active, .cap-drawer-tab.is-active,
+  .rnp-btn-export, .rnp-btn-primary, .rnp-page-btn.is-active,
+  .sal-tab-btn.active, .sal-btn-export, .sal-page-num-btn.active,
+  .gsp-tab-btn.active, .gsp-btn-primary, .gsp-save-btn,
+  .spp-tab-btn.is-active, .spp-btn-create, .spp-v3-create,
+  .spp-v3-billing button.active, .spp-v3-selected, .aca-btn-primary
+) {
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--sa-primary) 22%, transparent);
+}
+
+/* Page accents: headings, active navigation within a page, and selected
+   cards follow the same palette as the shell. */
+.sa-shell[data-dashboard-palette] :is(
+  .pip-header-icon-wrap, .pip-doc-icon, .pip-college-icon,
+  .pip-invoice-link, .sal-tab-btn.active svg,
+  .gsp-tab-btn.active .gsp-tab-icon, .mpp-bc-active,
+  .sad-header-icon, .sad-eyebrow, .spp-v3-icon,
+  .spp-v3-users, .spp-v3-slider-title > strong
+) {
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-header-icon-wrap, .sad-header-icon, .spp-v3-icon,
+  .spp-v3-plan-card header, .spp-v3-recommended,
+  .cap-radio-chip.is-active, .csp-plan-option-card.is-selected
+) {
+  background-color: var(--sa-primary-soft);
+  border-color: var(--sa-primary-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-search-box:focus-within, .pip-select:focus,
+  .pip-select:hover, .sal-search-input:focus, .sal-select:focus,
+  .gsp-input:focus, .gsp-select:focus, .gsp-textarea:focus,
+  .mpp-input:focus, .spp-v3-form input:focus, .spp-v3-form select:focus
+) {
+  border-color: var(--sa-primary);
+  outline-color: var(--sa-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sa-primary) 16%, transparent);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-table th, .sal-table th, .spp-v3-comparison thead th:not(:first-child)
+) {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .pip-header-card, .pip-filters-card, .pip-table-card,
+  .pip-modal-card, .pip-invoice-paper, .spp-v3-slider,
+  .spp-v3-comparison, .spp-v3-plan-card, .spp-v3-billing,
+  .sal-header-card, .sal-filter-card, .sal-filters-bar, .sal-table-wrap
+) {
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+/* Audit Logs page surfaces and content use legacy colors in its page CSS.
+   Bind the whole page to the active Super Admin theme while keeping action
+   badges semantically colored. */
+.sa-shell[data-dashboard-palette] .sal-header-card {
+  background: linear-gradient(135deg, var(--sa-surface), var(--cms-bg));
+}
+
+.sa-shell[data-dashboard-palette] .sal-title-icon {
+  background: var(--sa-primary-soft);
+  border-color: var(--sa-primary-border);
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-filter-card, .sal-filters-bar, .sal-table-wrap) {
+  background: var(--sa-surface);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .sal-search-input, .sal-date-box, .sal-select, .sal-rpp-select,
+  .sal-btn-export, .sal-btn-reset, .sal-page-nav-btn, .sal-page-num-btn
+) {
+  background-color: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-search-input, .sal-select):focus {
+  background-color: var(--sa-surface);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-search-icon, .sal-select-arrow,
+  .sal-date-sub, .sal-td-num, .sal-rpp-label, .sal-pagination-info) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-module-cell, .sal-all-colleges-badge,
+  .sal-college-name, .sal-datetime-pill, .sal-details-text) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-user-role, .sal-header-desc,
+  .sal-empty-desc, .sal-pagination-info, .sal-rpp-label) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(.sal-user-avatar, .sal-tab-btn:not(.active)) {
+  background: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .sal-tab-btn:not(.active):hover,
+.sa-shell[data-dashboard-palette] :is(.sal-btn-export, .sal-btn-reset,
+  .sal-page-nav-btn, .sal-page-num-btn):hover:not(:disabled):not(.active) {
+  background: var(--sa-hover);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .sal-table thead tr {
+  background: var(--sa-surface-muted);
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .sal-tr {
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] .sal-tr:hover {
+  background: var(--sa-hover);
+}
+
+.sa-shell[data-dashboard-palette] .sal-title-icon,
+.sa-shell[data-dashboard-palette] .sal-cal-icon,
+.sa-shell[data-dashboard-palette] .sal-module-icon,
+.sa-shell[data-dashboard-palette] .sal-all-colleges-badge svg {
+  color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-plan-card.recommended {
+  border-color: var(--sa-primary);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--sa-primary) 18%, transparent);
+}
+
+/* Normalize floating panels and detail modals to the active theme palette. */
+.sa-shell[data-dashboard-palette] :is(
+  .cap-more-popover, .csp-more-popover, .rnp-more-popover,
+  .spp-v3-popover, .spp-popover, .sal-export-menu, .pip-export-menu,
+  .cap-drawer-header, .cap-drawer-tabs, .cap-drawer-section, .cap-drawer-card,
+  .csp-drawer-header, .csp-drawer-tabs, .csp-drawer-card,
+  .rnp-drawer-header, .rnp-drawer-card,
+  .mpp-modal, .mpp-modal-header, .mpp-modal-body,
+  .pip-modal-card, .pip-modal-header, .pip-modal-body,
+  .sa-detail-drawer, .sa-drawer
+) {
+  background-color: var(--sa-surface);
+  border-color: var(--sa-border);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .cap-popover-name, .cap-popover-email, .csp-popover-name, .csp-popover-sub,
+  .rnp-popover-name, .rnp-popover-email, .spp-v3-popover button,
+  .spp-popover-item, .cap-drawer-header, .cap-drawer-tab,
+  .csp-drawer-header, .csp-drawer-tab, .rnp-drawer-header,
+  .mpp-modal-title, .mpp-modal-sub, .pip-modal-title, .pip-modal-close-btn
+) {
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .cap-popover-divider, .csp-popover-divider, .rnp-popover-divider,
+  .cap-drawer-profile, .cap-drawer-section, .csp-drawer-card, .rnp-drawer-card,
+  .mpp-modal-footer, .pip-modal-footer
+) {
+  border-color: var(--sa-border);
+}
+
+.sa-shell[data-dashboard-palette] :is(
+  .cap-drawer-tab, .csp-drawer-tab, .rnp-drawer-tab
+):not(.is-active) {
+  color: var(--sa-muted);
+}
+
+.sa-shell[data-dashboard-palette] :is(.cap-drawer-tab.is-active, .csp-drawer-tab.is-active, .rnp-drawer-tab.is-active) {
+  color: var(--sa-primary);
+  border-bottom-color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .sa-drawer-tab:hover {
+  background: var(--sa-hover);
+  color: var(--sa-text);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-slider input,
+.sa-shell[data-dashboard-palette] input[type="checkbox"],
+.sa-shell[data-dashboard-palette] input[type="radio"] {
+  accent-color: var(--sa-primary);
+}
+
+.sa-shell[data-dashboard-palette] .pip-page-container,
+.sa-shell[data-dashboard-palette] .spp-v3 {
+  background: var(--cms-bg);
+  color: var(--sa-text);
+}

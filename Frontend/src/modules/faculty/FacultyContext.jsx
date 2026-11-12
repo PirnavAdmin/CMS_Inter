@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useMemo,
 import { useLocation, useNavigate } from "react-router-dom";
 // No mock data
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { calculateStaffProfileCompletion, isStaffPortalUnlocked } from "./profileCompletion.js";
 import * as staffApi from "@/api/staffApi.js";
 import { attendanceService } from "@/api/attendanceService.js";
 
@@ -57,46 +58,22 @@ export const getStaffStorageKey = (profileOrAuth) => {
 
 export const persistStaffProfile = (data) => {
   try {
-    const key = getStaffStorageKey(data);
-    if (key) {
-      localStorage.setItem(key, JSON.stringify(data));
-      if (data?.photoUrl) {
-        localStorage.setItem(`${key}_photo`, data.photoUrl);
-      }
-    }
-    localStorage.setItem("staff_profile_data", JSON.stringify(data));
-    if (data?.photoUrl) {
-      localStorage.setItem("staff_profile_photo", data.photoUrl);
-    } else if (data && data.photoUrl === "") {
-      localStorage.removeItem("staff_profile_photo");
-      if (key) localStorage.removeItem(`${key}_photo`);
-    }
+    const authUser = getAuthUser();
+    if (authUser && data) {
+      const compPct = calculateStaffProfileCompletion(data);
+      const pStatus = data.profileStatus || authUser.profileStatus;
+      const isCompleted = isStaffPortalUnlocked(pStatus, authUser.isOnboarded === true);
 
-    // Synchronize photo and onboarding status with auth user in localStorage and sessionStorage so reloads retain it
-    try {
-      const authUser = getAuthUser();
-      if (authUser) {
-        const compPct = Number(data?.profileCompletion || data?.profileCompletionPercentage || authUser.profileCompletionPercentage || 0);
-        const pStatus = data?.profileStatus || authUser.profileStatus;
-        const statusClean = String(pStatus || "").toLowerCase();
-        const isCompleted =
-          statusClean === "completed" ||
-          statusClean === "approved" ||
-          (authUser.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
-
-        const updatedAuth = {
-          ...authUser,
-          ...(data?.photoUrl ? { photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl } : {}),
-          ...(pStatus ? { profileStatus: pStatus } : {}),
-          ...(compPct ? { profileCompletionPercentage: compPct } : {}),
-          isOnboarded: isCompleted,
-        };
-        if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updatedAuth));
-        if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updatedAuth));
-        if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(updatedAuth));
-        if (sessionStorage.getItem("auth_user")) sessionStorage.setItem("auth_user", JSON.stringify(updatedAuth));
-      }
-    } catch {}
+      const updatedAuth = {
+        ...authUser,
+        ...(data.photoUrl ? { photoUrl: data.photoUrl, photoPath: data.photoUrl, profilePhoto: data.photoUrl } : {}),
+        ...(pStatus ? { profileStatus: pStatus } : {}),
+        ...(compPct ? { profileCompletionPercentage: compPct } : {}),
+        isOnboarded: isCompleted,
+      };
+      if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(updatedAuth));
+      if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(updatedAuth));
+    }
   } catch {}
 };
 
@@ -111,104 +88,40 @@ const getInitialProfileData = () => {
       branch: "", accountType: "", houseNumber: "", street: "", city: "", district: "",
       state: "", pin: "", country: "", uanNumber: "", pfNumber: "", experience: [], documents: []
     };
-    let mergedUser = { ...baseUser };
+    if (!authUser) return baseUser;
 
-    if (authUser) {
-      const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
-      const firstName = authUser.firstName || nameParts[0] || baseUser.firstName;
-      const lastName = authUser.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(" ") : baseUser.lastName);
-      const fullName = authUser.fullName || authUser.name || `${firstName} ${lastName}`.trim();
+    const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
+    const firstName = authUser.firstName || nameParts[0] || baseUser.firstName;
+    const lastName = authUser.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(" ") : baseUser.lastName);
+    const fullName = authUser.fullName || authUser.name || `${firstName} ${lastName}`.trim();
 
-      mergedUser = {
-        ...baseUser,
-        ...authUser,
-        id: authUser.staffId || authUser.id || baseUser.id,
-        employeeId: authUser.employeeId || authUser.empId || baseUser.employeeId,
-        fullName: fullName || baseUser.fullName,
-        firstName: firstName || baseUser.firstName,
-        lastName: lastName || baseUser.lastName,
-        email: authUser.email || baseUser.email,
-        role: authUser.role || "Faculty",
-        designation: authUser.designation || baseUser.designation,
-        department: authUser.department || baseUser.department,
-        mobile: authUser.mobile || authUser.phone || baseUser.mobile,
-      };
-    }
-
-    const key = getStaffStorageKey(mergedUser);
-    if (key) {
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        mergedUser = {
-          ...mergedUser,
-          ...parsed,
-          ...(authUser?.department ? { department: authUser.department } : {}),
-          ...(authUser?.designation ? { designation: authUser.designation } : {}),
-          ...(authUser?.role ? { role: authUser.role } : {}),
-          ...(authUser?.employeeId ? { employeeId: authUser.employeeId } : {}),
-          ...(authUser?.campusId ? { campusId: authUser.campusId } : {}),
-          ...(authUser?.boardId ? { boardId: authUser.boardId } : {}),
-          ...(Array.isArray(authUser?.allocatedSubjects) && authUser.allocatedSubjects.length > 0
-            ? { allocatedSubjects: authUser.allocatedSubjects, subjects: authUser.allocatedSubjects }
-            : {}),
-        };
-      }
-    }
-
-    try {
-      const genericSaved = localStorage.getItem("staff_profile_data");
-      if (genericSaved) {
-        const parsedGeneric = JSON.parse(genericSaved);
-        if (
-          !authUser ||
-          String(parsedGeneric.id) === String(mergedUser.id) ||
-          parsedGeneric.email === mergedUser.email ||
-          parsedGeneric.employeeId === mergedUser.employeeId
-        ) {
-          mergedUser = {
-            ...mergedUser,
-            ...parsedGeneric,
-            ...(authUser?.department ? { department: authUser.department } : {}),
-            ...(authUser?.designation ? { designation: authUser.designation } : {}),
-            ...(authUser?.role ? { role: authUser.role } : {}),
-            ...(authUser?.employeeId ? { employeeId: authUser.employeeId } : {}),
-            ...(authUser?.campusId ? { campusId: authUser.campusId } : {}),
-            ...(authUser?.boardId ? { boardId: authUser.boardId } : {}),
-            ...(Array.isArray(authUser?.allocatedSubjects) && authUser.allocatedSubjects.length > 0
-              ? { allocatedSubjects: authUser.allocatedSubjects, subjects: authUser.allocatedSubjects }
-              : {}),
-          };
-        }
-      }
-    } catch {}
-
-    const serverPhoto = mergedUser.photoPath || mergedUser.profilePhoto || mergedUser.photoUrl;
-    if (serverPhoto && !String(serverPhoto).startsWith("data:")) {
-      mergedUser.photoUrl = serverPhoto;
-    } else {
-      const userKey = getStaffStorageKey(mergedUser);
-      const cachedUserPhoto = userKey ? localStorage.getItem(`${userKey}_photo`) : null;
-      const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedUserPhoto;
-      if (savedPhoto) {
-        mergedUser.photoUrl = savedPhoto;
-      }
-    }
-
-    return mergedUser;
-
+    return {
+      ...baseUser,
+      ...authUser,
+      id: authUser.staffId || authUser.id || baseUser.id,
+      employeeId: authUser.employeeId || authUser.empId || baseUser.employeeId,
+      fullName: fullName || baseUser.fullName,
+      firstName: firstName || baseUser.firstName,
+      lastName: lastName || baseUser.lastName,
+      email: authUser.email || baseUser.email,
+      role: authUser.role || "Faculty",
+      designation: authUser.designation || baseUser.designation,
+      department: authUser.department || baseUser.department,
+      mobile: authUser.mobile || authUser.phone || baseUser.mobile,
+      photoUrl: authUser.photoUrl || authUser.photoPath || authUser.profilePhoto || "",
+      _isDetailedLoaded: false,
+    };
   } catch {
     return {};
   }
 };
 
-const getInitialPunchState = () => {
-  try {
-    const saved = localStorage.getItem("staff_punch_state");
-    if (saved) return JSON.parse(saved);
-  } catch {}
-  return { isPunchedIn: false, inTime: null, outTime: null, hoursWorked: "--" };
-};
+const getInitialPunchState = () => ({
+  isPunchedIn: false,
+  inTime: null,
+  outTime: null,
+  hoursWorked: "--",
+});
 
 export const pathToModule = {
   "": "dashboard",
@@ -258,13 +171,21 @@ export function FacultyProvider({ children }) {
 
   // Profile Data State
   const [profileData, setProfileData] = useState(getInitialProfileData);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(() => Boolean(getAuthUser()));
+  const hasLoadedProfileRef = useRef(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileStep, setProfileStep] = useState(1);
 
   // Synchronize profile data with authenticated user and fetch full staff record if available
   const fetchStaffProfileSafe = useCallback(() => {
     const authUser = getAuthUser();
-    if (!authUser) return;
+    if (!authUser) {
+      setIsLoadingProfile(false);
+      return;
+    }
+    if (!hasLoadedProfileRef.current) {
+      setIsLoadingProfile(true);
+    }
 
     const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
     const firstName = authUser.firstName || nameParts[0] || "";
@@ -305,80 +226,97 @@ export function FacultyProvider({ children }) {
         const apiStaff = res?.data?.data || res?.data;
         if (apiStaff && typeof apiStaff === "object") {
           setProfileData((current) => {
+            const expArray = Array.isArray(apiStaff.experienceList)
+              ? apiStaff.experienceList
+              : (Array.isArray(apiStaff.experience)
+                  ? apiStaff.experience
+                  : (typeof apiStaff.experienceJson === "string" ? JSON.parse(apiStaff.experienceJson || "[]") : []));
+
+            const docsArray = Array.isArray(apiStaff.documentsList)
+              ? apiStaff.documentsList
+              : (Array.isArray(apiStaff.documents)
+                  ? apiStaff.documents
+                  : (typeof apiStaff.documentsJson === "string" ? JSON.parse(apiStaff.documentsJson || "[]") : []));
+
+            const eduArray = Array.isArray(apiStaff.educationList)
+              ? apiStaff.educationList
+              : (Array.isArray(apiStaff.education)
+                  ? apiStaff.education
+                  : (typeof apiStaff.educationJson === "string" ? JSON.parse(apiStaff.educationJson || "[]") : []));
+
+            const pStatus = apiStaff.profileStatus || current.profileStatus;
+            const currentAuth = getAuthUser();
+            const isCompleted = isStaffPortalUnlocked(pStatus, currentAuth?.isOnboarded === true);
+
+            const serverPhoto =
+              (apiStaff.photoPath && String(apiStaff.photoPath).trim()) ||
+              (apiStaff.profilePhoto && String(apiStaff.profilePhoto).trim().startsWith("/") ? apiStaff.profilePhoto : null) ||
+              (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null) ||
+              current.photoUrl;
+
             const updated = {
               ...current,
               ...apiStaff,
+              experience: expArray,
+              experienceList: expArray,
+              documents: docsArray,
+              documentsList: docsArray,
+              education: eduArray,
+              educationList: eduArray,
+              dob: apiStaff.dateOfBirth ? String(apiStaff.dateOfBirth).split("T")[0] : (current.dob || ""),
+              dateOfBirth: apiStaff.dateOfBirth || current.dateOfBirth,
+              pan: apiStaff.panNumber || apiStaff.pan || current.pan || "",
+              panNumber: apiStaff.panNumber || apiStaff.pan || current.panNumber || "",
+              aadhaar: apiStaff.aadhaar || current.aadhaar || "",
+              houseNumber: apiStaff.houseNumber || current.houseNumber || "",
+              street: apiStaff.street || current.street || "",
+              currentAddress: apiStaff.currentAddress || current.currentAddress || "",
+              permanentAddress: apiStaff.permanentAddress || current.permanentAddress || "",
+              city: apiStaff.city || current.city || "",
+              district: apiStaff.district || current.district || "",
+              state: apiStaff.state || current.state || "",
+              pin: apiStaff.pincode || apiStaff.pin || current.pin || "",
+              pincode: apiStaff.pincode || apiStaff.pin || current.pincode || "",
+              bankName: apiStaff.bankName || apiStaff.bankDetails?.bankName || current.bankName || "",
+              accountHolder: apiStaff.accountHolderName || apiStaff.accountHolder || current.accountHolder || "",
+              accountHolderName: apiStaff.accountHolderName || apiStaff.accountHolder || current.accountHolderName || "",
+              accountNumber: apiStaff.accountNumber || apiStaff.bankDetails?.accountNumber || current.accountNumber || "",
+              ifsc: apiStaff.ifscCode || apiStaff.ifsc || current.ifsc || "",
+              ifscCode: apiStaff.ifscCode || apiStaff.ifsc || current.ifscCode || "",
+              branch: apiStaff.branch || apiStaff.bankDetails?.branch || current.branch || "",
+              accountType: apiStaff.accountType || apiStaff.bankDetails?.accountType || current.accountType || "",
+              uanNumber: apiStaff.uanNumber || apiStaff.pfNumber || apiStaff.bankDetails?.uanNumber || apiStaff.bankDetails?.pfNumber || current.uanNumber || "",
+              pfNumber: apiStaff.pfNumber || apiStaff.uanNumber || apiStaff.bankDetails?.pfNumber || apiStaff.bankDetails?.uanNumber || current.pfNumber || "",
               department: apiStaff.department || apiStaff.departmentName || current.department,
               designation: apiStaff.designation || apiStaff.designationName || current.designation,
               allocatedSubjects: apiStaff.allocatedSubjects || apiStaff.subjects || current.allocatedSubjects || [],
               subjects: apiStaff.allocatedSubjects || apiStaff.subjects || current.subjects || [],
+              photoUrl: serverPhoto,
+              profileStatus: pStatus,
+              isOnboarded: isCompleted,
+              _isDetailedLoaded: true,
             };
-            const staffKey = getStaffStorageKey(updated);
-            const cachedStaffPhoto = staffKey ? localStorage.getItem(`${staffKey}_photo`) : null;
-            const savedPhoto = localStorage.getItem("staff_profile_photo") || cachedStaffPhoto;
 
-            // Prioritize backend persistent static file path from DB, avoiding 401 controller routes
-            const serverPhoto =
-              (apiStaff.photoPath && String(apiStaff.photoPath).trim()) ||
-              (apiStaff.profilePhoto && String(apiStaff.profilePhoto).trim().startsWith("/") ? apiStaff.profilePhoto : null) ||
-              (apiStaff.photoUrl && !String(apiStaff.photoUrl).includes("/api/v1/staff/photo/") ? apiStaff.photoUrl : null);
+            const unifiedPct = calculateStaffProfileCompletion(updated);
+            updated.profileCompletionPercentage = unifiedPct;
+            updated.profileCompletion = unifiedPct;
 
-            const activePhoto =
-              (savedPhoto && savedPhoto.startsWith("data:"))
-                ? savedPhoto
-                : (serverPhoto || current.photoUrl || savedPhoto || (apiStaff.photoPath ? apiStaff.photoPath : ""));
-
-            if (activePhoto) {
-              updated.photoUrl = activePhoto;
-              try {
-                localStorage.setItem("staff_profile_photo", activePhoto);
-                if (staffKey) {
-                  localStorage.setItem(`${staffKey}_photo`, activePhoto);
-                }
-              } catch {}
-            }
             if (apiStaff.firstName || apiStaff.lastName) {
               updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
             }
 
-            const pStatus = apiStaff.profileStatus || updated.profileStatus;
-            const compPct = Number(apiStaff.profileCompletionPercentage || updated.profileCompletion || updated.profileCompletionPercentage || 0);
-            const statusClean = String(pStatus || "").toLowerCase();
-            const currentAuth = getAuthUser();
-            const isCompleted =
-              statusClean === "completed" ||
-              statusClean === "approved" ||
-              (currentAuth?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
-
-            // Immediately persist updated staff record to local storage so refreshes and reloads stay synchronized
             persistStaffProfile(updated);
-
-            try {
-              if (currentAuth) {
-                const upAuth = {
-                  ...currentAuth,
-                  department: updated.department,
-                  designation: updated.designation,
-                  allocatedSubjects: updated.allocatedSubjects,
-                  subjects: updated.subjects,
-                  campusId: apiStaff.campusId || currentAuth.campusId,
-                  boardId: apiStaff.boardId || currentAuth.boardId,
-                  profileStatus: pStatus,
-                  isOnboarded: isCompleted,
-                  profileCompletionPercentage: compPct,
-                };
-                if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(upAuth));
-                if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(upAuth));
-                if (localStorage.getItem("auth_user")) localStorage.setItem("auth_user", JSON.stringify(upAuth));
-              }
-            } catch {}
-
             return updated;
           });
         }
       })
       .catch((err) => {
         console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
+        setProfileData((current) => ({ ...current, _isDetailedLoaded: true }));
+      })
+      .finally(() => {
+        hasLoadedProfileRef.current = true;
+        setIsLoadingProfile(false);
       });
   }, []);
 
@@ -397,22 +335,6 @@ export function FacultyProvider({ children }) {
       window.removeEventListener("staff-records-updated", handleSync);
     };
   }, [fetchStaffProfileSafe]);
-
-  // Sync profile updates across tabs and storage events
-  useEffect(() => {
-    const handleStorage = (e) => {
-      if (e.key === "staff_profile_photo" && e.newValue) {
-        setProfileData((prev) => ({ ...prev, photoUrl: e.newValue }));
-      } else if (e.key === "staff_profile_data" && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setProfileData((prev) => ({ ...prev, ...parsed }));
-        } catch {}
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
 
   // Biometric Punch State
   const [punchState, setPunchState] = useState(getInitialPunchState);
@@ -436,9 +358,6 @@ export function FacultyProvider({ children }) {
             hoursWorked: inTime ? calculateDurationStr(inTime, outTime, isPunched) : "--",
           };
           setPunchState(next);
-          try {
-            localStorage.setItem("staff_punch_state", JSON.stringify(next));
-          } catch {}
         }
       })
       .catch((err) => {
@@ -452,12 +371,10 @@ export function FacultyProvider({ children }) {
     if (!punchState.isPunchedIn) {
       const next = { isPunchedIn: true, inTime: timeStr, outTime: null, hoursWorked: "Just punched in" };
       setPunchState(next);
-      localStorage.setItem("staff_punch_state", JSON.stringify(next));
       notify(`Punched IN successfully at ${timeStr}`);
     } else {
       const next = { ...punchState, isPunchedIn: false, outTime: timeStr };
       setPunchState(next);
-      localStorage.setItem("staff_punch_state", JSON.stringify(next));
       notify(`Punched OUT successfully at ${timeStr}`);
     }
   };
@@ -507,6 +424,7 @@ export function FacultyProvider({ children }) {
     () => ({
       profileData,
       setProfileData,
+      isLoadingProfile,
       persistStaffProfile,
       isEditingProfile,
       setIsEditingProfile,
@@ -535,6 +453,7 @@ export function FacultyProvider({ children }) {
     }),
     [
       profileData,
+      isLoadingProfile,
       isEditingProfile,
       profileStep,
       punchState,

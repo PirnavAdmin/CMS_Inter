@@ -496,43 +496,51 @@ BEGIN
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
     END IF;
 
-    -- Present, Absent & Half-Day counts from actual attendance records
+    -- Marked Students & Present, Half-Day, Absent counts (supports Morning/Afternoon sessions AND legacy/bulk attendance where Session IS NULL/0, excluding Holidays)
     SELECT 
         COUNT(DISTINCT dailyAtt.StudentId),
         COALESCE(SUM(CASE 
-            WHEN (MorningStatus = 1 AND AfternoonStatus = 1) 
-              OR (MorningStatus = 1 AND AfternoonStatus IS NULL) 
-              OR (MorningStatus IS NULL AND AfternoonStatus = 1) THEN 1 
+            WHEN (EffMorning = 1 AND EffAfternoon = 1) 
+              OR (EffMorning = 1 AND EffAfternoon IS NULL) 
+              OR (EffMorning IS NULL AND EffAfternoon = 1) THEN 1 
             ELSE 0 
         END), 0),
         COALESCE(SUM(CASE 
-            WHEN (MorningStatus = 2 AND AfternoonStatus = 2) 
-              OR (MorningStatus = 2 AND AfternoonStatus IS NULL) 
-              OR (MorningStatus IS NULL AND AfternoonStatus = 2) THEN 1 
+            WHEN (EffMorning IN (2,6) AND EffAfternoon IN (2,6)) 
+              OR (EffMorning IN (2,6) AND EffAfternoon IS NULL) 
+              OR (EffMorning IS NULL AND EffAfternoon IN (2,6)) THEN 1 
             ELSE 0 
         END), 0),
         COALESCE(SUM(CASE 
-            WHEN ((MorningStatus = 1 AND AfternoonStatus = 2) 
-              OR (MorningStatus = 2 AND AfternoonStatus = 1) 
-              OR MorningStatus IN (3,4) 
-              OR AfternoonStatus IN (3,4)) THEN 1 
+            WHEN ((EffMorning = 1 AND EffAfternoon IN (2,6)) 
+              OR (EffMorning IN (2,6) AND EffAfternoon = 1) 
+              OR EffMorning IN (3,4) 
+              OR EffAfternoon IN (3,4)) THEN 1 
             ELSE 0 
         END), 0)
     INTO v_MarkedStudents, v_Present, v_Absent, v_HalfDay
     FROM (
         SELECT 
-            s.StudentId,
-            MAX(CASE WHEN a.Session = 1 THEN a.Status ELSE NULL END) AS MorningStatus,
-            MAX(CASE WHEN a.Session = 2 THEN a.Status ELSE NULL END) AS AfternoonStatus
-        FROM `Students` s
-        INNER JOIN `Attendances` a ON a.StudentId = s.StudentId 
-                                  AND DATE(a.AttendanceDate) = v_TargetDate 
-                                  AND (a.IsActive = 1 OR a.IsActive IS NULL)
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-          AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
-          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
-          AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
-        GROUP BY s.StudentId
+            StudentId,
+            CASE WHEN MorningStatus IS NOT NULL OR AfternoonStatus IS NOT NULL THEN MorningStatus ELSE FallbackStatus END AS EffMorning,
+            CASE WHEN MorningStatus IS NOT NULL OR AfternoonStatus IS NOT NULL THEN AfternoonStatus ELSE FallbackStatus END AS EffAfternoon
+        FROM (
+            SELECT 
+                s.StudentId,
+                MAX(CASE WHEN a.Session = 1 THEN a.Status ELSE NULL END) AS MorningStatus,
+                MAX(CASE WHEN a.Session = 2 THEN a.Status ELSE NULL END) AS AfternoonStatus,
+                MAX(CASE WHEN a.Session IS NULL OR a.Session = 0 THEN a.Status ELSE NULL END) AS FallbackStatus
+            FROM `Students` s
+            INNER JOIN `Attendances` a ON a.StudentId = s.StudentId 
+                                      AND DATE(a.AttendanceDate) = v_TargetDate 
+                                      AND (a.IsActive = 1 OR a.IsActive IS NULL)
+                                      AND a.Status IN (1, 2, 3, 4, 6)
+            WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+              AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+              AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
+              AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
+            GROUP BY s.StudentId
+        ) AS rawAtt
     ) AS dailyAtt;
 
     -- Latest attendance marked time
@@ -541,6 +549,7 @@ BEGIN
     INNER JOIN `Students` s ON a.StudentId = s.StudentId
     WHERE DATE(a.AttendanceDate) = v_TargetDate
       AND (a.IsActive = 1 OR a.IsActive IS NULL)
+      AND a.Status IN (1, 2, 3, 4, 6)
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId);
@@ -551,6 +560,7 @@ BEGIN
         SET v_HalfDayPct = ROUND((v_HalfDay * 100.0) / v_TotalStudents, 1);
         SET v_AttPct = ROUND(((v_Present + 0.5 * v_HalfDay) * 100.0) / v_TotalStudents, 1);
     ELSE
+        SET v_Absent = 0;
         SET v_PresentPct = 0.0;
         SET v_AbsentPct = 0.0;
         SET v_HalfDayPct = 0.0;
@@ -561,12 +571,20 @@ BEGIN
     SELECT 
         v_View AS ViewBy,
         v_TotalStudents AS TotalStudents,
+        v_TotalStudents AS Total,
+        v_TotalStudents AS TotalCount,
         v_MarkedStudents AS MarkedStudents,
+        v_MarkedStudents AS MarkedCount,
         v_Present AS Present,
+        v_Present AS PresentCount,
         v_Absent AS Absent,
+        v_Absent AS AbsentCount,
         v_HalfDay AS HalfDay,
+        v_HalfDay AS HalfDayCount,
         v_HalfDay AS Late,
+        v_HalfDay AS LateCount,
         v_AttPct AS AttendancePercentage,
+        v_AttPct AS Percentage,
         v_PresentPct AS PresentPercentage,
         v_AbsentPct AS AbsentPercentage,
         v_HalfDayPct AS HalfDayPercentage,
@@ -653,28 +671,37 @@ BEGIN
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR st.CampusId IS NULL)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
     SET v_TotalStaff = v_TeachingCount + v_NonTeachingCount;
 
-    -- Actual marked attendance and leaves
+    -- Actual marked attendance and leaves (deduplicated per FacultyId, supporting Leave status 4 & 6, excluding Holiday status 5)
     SELECT 
-        COUNT(DISTINCT CASE WHEN att.Status IS NOT NULL OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN att.Status = 1 OR att.Status = 'Present' OR att.Status = '1' THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN att.Status = 2 OR att.Status = 'Absent' OR att.Status = '2' THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN att.Status = 3 OR att.Status = 'Late' OR att.Status = '3' THEN st.Id END),
-        COUNT(DISTINCT CASE WHEN att.Status = 4 OR att.Status = 'Leave' OR att.Status = '4' OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN LOWER(CAST(att.Status AS CHAR)) IN ('1', '2', '3', '4', '6', 'present', 'absent', 'late', 'leave', 'halfday') OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN LOWER(CAST(att.Status AS CHAR)) IN ('1', 'present') THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN LOWER(CAST(att.Status AS CHAR)) IN ('2', 'absent') THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN LOWER(CAST(att.Status AS CHAR)) IN ('3', 'late') THEN st.Id END),
+        COUNT(DISTINCT CASE WHEN LOWER(CAST(att.Status AS CHAR)) IN ('4', '6', 'leave', 'halfday') OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END),
         MAX(att.UpdatedAt)
     INTO v_MarkedStaff, v_Present, v_Absent, v_Late, v_OnLeave, v_LatestAttTime
     FROM `Staff` st
     LEFT JOIN (
-        SELECT sa2.FacultyId, sa2.Status, COALESCE(sa2.UpdatedAt, sa2.CreatedAt) AS UpdatedAt
-        FROM `StaffAttendances` sa2
-        JOIN `StaffAttendanceSessions` sas2 ON sa2.StaffSessionId = sas2.StaffSessionId
-        WHERE DATE(sas2.AttendanceDate) = v_TargetDate
-          AND (sa2.IsActive = 1 OR sa2.IsActive IS NULL)
-          AND (sas2.IsActive = 1 OR sas2.IsActive IS NULL)
+        SELECT sa_dedup.FacultyId, sa_dedup.Status, sa_dedup.UpdatedAt
+        FROM (
+            SELECT 
+                sa2.FacultyId,
+                sa2.Status,
+                COALESCE(sa2.UpdatedAt, sa2.CreatedAt) AS UpdatedAt,
+                ROW_NUMBER() OVER (PARTITION BY sa2.FacultyId ORDER BY sa2.StaffAttendanceId DESC) AS rn
+            FROM `StaffAttendances` sa2
+            INNER JOIN `StaffAttendanceSessions` sas2 ON sa2.StaffSessionId = sas2.StaffSessionId
+            WHERE DATE(sas2.AttendanceDate) = v_TargetDate
+              AND (sa2.IsActive = 1 OR sa2.IsActive IS NULL)
+              AND (sas2.IsActive = 1 OR sas2.IsActive IS NULL)
+              AND (p_CampusId IS NULL OR p_CampusId = 0 OR sas2.CampusId = p_CampusId OR sas2.CampusId = 0 OR sas2.CampusId IS NULL)
+        ) sa_dedup
+        WHERE sa_dedup.rn = 1
     ) att ON st.Id = att.FacultyId
     LEFT JOIN `StaffLeaveRequests` slr ON (
         slr.StaffId = st.Id 
@@ -684,7 +711,7 @@ BEGIN
     )
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR st.CampusId IS NULL)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
     IF v_TotalStaff > 0 AND v_MarkedStaff > 0 THEN
@@ -705,12 +732,21 @@ BEGIN
     SELECT 
         v_StaffType AS StaffType,
         v_TotalStaff AS TotalStaff,
+        v_TotalStaff AS Total,
+        v_TotalStaff AS TotalCount,
         v_MarkedStaff AS MarkedStaff,
+        v_MarkedStaff AS MarkedCount,
         v_Present AS Present,
+        v_Present AS PresentCount,
         v_Absent AS Absent,
+        v_Absent AS AbsentCount,
         v_Late AS Late,
+        v_Late AS LateCount,
         v_OnLeave AS OnLeave,
+        v_OnLeave AS OnLeaveCount,
+        v_OnLeave AS LeaveCount,
         v_AttendancePct AS AttendancePercentage,
+        v_AttendancePct AS Percentage,
         v_PresentPct AS PresentPercentage,
         v_AbsentPct AS AbsentPercentage,
         v_LatePct AS LatePercentage,

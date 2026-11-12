@@ -20,6 +20,9 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
         [Required]
         public DateTime AttendanceDate { get; set; }
 
+        [MaxLength(50)]
+        public string? RequestType { get; set; }
+
         public string? RequestedInTime { get; set; }
 
         public string? RequestedOutTime { get; set; }

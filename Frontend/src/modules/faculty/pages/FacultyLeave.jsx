@@ -66,16 +66,6 @@ export default function FacultyLeave() {
         }
       } catch { }
     }
-    try {
-      const saved = localStorage.getItem("staff_profile_data");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const s = Number(parsed?.staffId || parsed?.id);
-        if (s > 0 && parsed?.role !== "Admin" && parsed?.role !== "Super Admin") {
-          return s;
-        }
-      }
-    } catch { }
     const a = getAuthUser();
     const id = Number(
       profileData?.staffId ||
@@ -87,7 +77,7 @@ export default function FacultyLeave() {
       profileData?.facultyId ||
       a?.facultyId
     );
-    return id > 0 ? id : 1108;
+    return id > 0 ? id : null;
   }, [profileData]);
 
   const effectiveDepartmentId = useMemo(() => {
@@ -153,9 +143,11 @@ export default function FacultyLeave() {
         try {
           histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
         } catch {
-          histRes = await apiClient.get(
-            `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
-          );
+          if (effectiveStaffId) {
+            histRes = await apiClient.get(
+              `/api/v1/staff-attendance/leave/history/staff/${effectiveStaffId}`
+            );
+          }
         }
         const histData = histRes?.data?.data || histRes?.data?.Data;
         if (histData) {

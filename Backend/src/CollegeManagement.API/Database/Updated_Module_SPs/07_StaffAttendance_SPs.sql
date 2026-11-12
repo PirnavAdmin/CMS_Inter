@@ -12,54 +12,57 @@ DELIMITER $$
 -- -------------------------------------------------------------------------------------
 -- 1. sp_LoadStaffAttendance
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_LoadStaffAttendance$$
-CREATE PROCEDURE sp_LoadStaffAttendance(
-    IN p_AttendanceDate DATETIME,
-    IN p_StaffType TINYINT,       -- 1 = Teaching, 2 = Non-Teaching, NULL = All
-    IN p_DepartmentId INT,        -- NULL or 0 = All
-    IN p_BoardId INT,             -- NULL or 0 = All
-    IN p_FacultyId INT,           -- NULL or 0 = Specific staff
-    IN p_Status TINYINT,          -- NULL = All statuses
-    IN p_CampusId INT             -- NULL or 0 = All campuses
+DROP PROCEDURE IF EXISTS `sp_LoadStaffAttendance`$$
+CREATE PROCEDURE `sp_LoadStaffAttendance`(
+    IN p_AttendanceDate DATE,
+    IN p_StaffType TINYINT,
+    IN p_DepartmentId INT,
+    IN p_BoardId INT,
+    IN p_FacultyId INT,
+    IN p_Status TINYINT,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_TargetDate DATE;
     DECLARE v_NextDate DATE;
+    DECLARE v_IstToday DATE;
+    DECLARE v_IstNow TIME;
     DECLARE v_IsHoliday INT DEFAULT 0;
 
-    SET v_TargetDate = DATE(p_AttendanceDate);
+    SET v_TargetDate = COALESCE(p_AttendanceDate, DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 330 MINUTE)));
     SET v_NextDate = DATE_ADD(v_TargetDate, INTERVAL 1 DAY);
+    SET v_IstToday = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 330 MINUTE));
+    SET v_IstNow = TIME(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 330 MINUTE));
 
-    -- Check if target date is an official holiday for staff
-    SELECT COUNT(1) INTO v_IsHoliday
-    FROM `Holidays` h
-    WHERE h.IsDeleted = 0
-      AND h.Status = 'Active'
-      AND v_TargetDate >= DATE(h.StartDate)
-      AND v_TargetDate <= DATE(h.EndDate)
-      AND (h.AppliesTo = 'All Students & Staff' OR h.AppliesTo = 'Staff Only')
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR h.CampusId = p_CampusId);
+    SELECT COUNT(*) INTO v_IsHoliday
+    FROM `Holidays`
+    WHERE IsDeleted = 0 
+      AND Status = 'Active'
+      AND v_TargetDate >= DATE(StartDate) 
+      AND v_TargetDate <= DATE(EndDate)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = 0 OR CampusId = p_CampusId)
+      AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only' OR AppliesTo IS NULL);
 
-    -- Main query with index seeks and clean left joins
     SELECT 
+        sa.StaffAttendanceId,
         s.Id AS FacultyId,
-        COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
+        COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%'), 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         s.DepartmentId,
         COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         COALESCE(des.Name, NULLIF(s.Designation, ''), 'Staff') AS DesignationName,
         CASE 
-            WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 
+            WHEN LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%') THEN 2 
             ELSE 1 
         END AS StaffType,
         CASE 
             WHEN sa.StaffAttendanceId IS NOT NULL THEN sa.Status
-            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN 6  -- Leave
-            WHEN v_IsHoliday > 0 THEN 5              -- Holiday
+            WHEN lr.StaffLeaveRequestId IS NOT NULL THEN 6
+            WHEN v_IsHoliday > 0 THEN 5
             ELSE NULL
         END AS Status,
         CASE 
-            WHEN sa.StaffAttendanceId IS NOT NULL OR lr.StaffLeaveRequestId IS NOT NULL OR v_IsHoliday > 0 THEN 1 
+            WHEN sa.StaffAttendanceId IS NOT NULL THEN 1 
             ELSE 0 
         END AS IsAttendanceMarked,
         sa.InTime,
@@ -79,39 +82,68 @@ BEGIN
         CASE 
             WHEN tc.Id IS NOT NULL AND sa.OutTime IS NOT NULL AND sa.OutTime < tc.EarlyCheckoutThreshold THEN 1
             ELSE 0
-        END AS IsEarlyCheckout
-    FROM `Staffs` s
+        END AS IsEarlyCheckout,
+        COALESCE(sa.IsMissedCheckoutResolved, 0) AS IsMissedCheckoutResolved,
+        CASE
+            WHEN sa.StaffAttendanceId IS NOT NULL
+                 AND sa.InTime IS NOT NULL
+                 AND sa.OutTime IS NULL
+                 AND COALESCE(sa.IsMissedCheckoutResolved, 0) = 0
+                 AND NOT EXISTS (
+                     SELECT 1 FROM `StaffAttendanceRegularizations` reg
+                     WHERE (reg.FacultyId = s.Id OR reg.StaffId = s.Id)
+                       AND DATE(reg.AttendanceDate) = v_TargetDate
+                       AND LOWER(COALESCE(reg.RequestType, '')) LIKE '%missed%'
+                       AND LOWER(reg.Status) = 'approved'
+                 )
+                 AND (
+                     v_TargetDate < v_IstToday
+                     OR (v_TargetDate = v_IstToday AND v_IstNow > ADDTIME(COALESCE(tc.WorkEndTime, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')), SEC_TO_TIME(COALESCE(tc.GracePeriodMinutes, 15) * 60)))
+                 )
+            THEN 1
+            ELSE 0
+        END AS IsMissedCheckout,
+        sa.UpdatedByUserId,
+        sa.UpdatedByRole
+    FROM `Staff` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     LEFT JOIN `Designations` des ON s.DesignationId = des.Id
-    LEFT JOIN `StaffAttendanceSessions` sas ON sas.AttendanceDate >= v_TargetDate 
-                                          AND sas.AttendanceDate < v_NextDate
-                                          AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas.CampusId = p_CampusId)
-                                          AND (p_StaffType IS NULL OR p_StaffType <= 0 OR sas.StaffType = p_StaffType)
-    LEFT JOIN `StaffAttendances` sa ON sa.StaffSessionId = sas.StaffSessionId 
-                                   AND sa.FacultyId = s.Id 
-                                   AND sa.IsActive = 1
+    LEFT JOIN (
+        SELECT 
+            sa_inner.*,
+            ROW_NUMBER() OVER (PARTITION BY sa_inner.FacultyId ORDER BY sa_inner.StaffAttendanceId DESC) AS rn
+        FROM `StaffAttendances` sa_inner
+        INNER JOIN `StaffAttendanceSessions` sas_inner ON sa_inner.StaffSessionId = sas_inner.StaffSessionId
+        WHERE sas_inner.AttendanceDate >= v_TargetDate 
+          AND sas_inner.AttendanceDate < v_NextDate
+          AND sa_inner.IsActive = 1
+          AND sas_inner.IsActive = 1
+          AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas_inner.CampusId = p_CampusId OR sas_inner.CampusId = 0 OR sas_inner.CampusId IS NULL)
+          AND (p_StaffType IS NULL OR p_StaffType <= 0 OR sas_inner.StaffType = p_StaffType)
+    ) sa ON sa.FacultyId = s.Id AND sa.rn = 1
     LEFT JOIN `StaffLeaveRequests` lr ON lr.StaffId = s.Id 
                                      AND lr.IsActive = 1 
-                                     AND lr.Status = 2  -- Approved
+                                     AND lr.Status = 2
                                      AND v_TargetDate >= DATE(lr.StartDate) 
                                      AND v_TargetDate <= DATE(lr.EndDate)
     LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
         SELECT tc2.Id 
         FROM `AttendanceTimingConfigs` tc2 
         WHERE tc2.IsActive = 1 
-          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 ELSE 1 END)
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = CASE WHEN LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%') THEN 2 ELSE 1 END)
           AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
         ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
         LIMIT 1
     )
     WHERE s.IsDeleted = 0
+      AND (s.Status = 'Active' OR s.Status IS NULL)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR s.BoardId = p_BoardId OR s.BoardId IS NULL OR s.BoardId = 0)
       AND (p_DepartmentId IS NULL OR p_DepartmentId <= 0 OR s.DepartmentId = p_DepartmentId)
       AND (p_FacultyId IS NULL OR p_FacultyId <= 0 OR s.Id = p_FacultyId)
       AND (p_StaffType IS NULL OR p_StaffType <= 0 
-           OR (p_StaffType = 1 AND (s.StaffType IS NULL OR LOWER(s.StaffType) = 'teaching'))
-           OR (p_StaffType = 2 AND s.StaffType IS NOT NULL AND LOWER(s.StaffType) != 'teaching'))
+           OR (p_StaffType = 1 AND (s.StaffType = 'Teaching' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) LIKE '%teach%' AND LOWER(s.StaffType) NOT LIKE '%non%') OR s.StaffType IS NULL OR s.StaffType = ''))
+           OR (p_StaffType = 2 AND (LOWER(s.StaffType) LIKE '%non%' OR (s.StaffType IS NOT NULL AND LOWER(s.StaffType) NOT LIKE '%teach%'))))
       AND (p_Status IS NULL OR p_Status <= 0 
            OR (p_Status = 1 AND sa.Status = 1)
            OR (p_Status = 2 AND (sa.Status = 2 OR (sa.StaffAttendanceId IS NULL AND lr.StaffLeaveRequestId IS NULL AND v_IsHoliday = 0)))
@@ -186,8 +218,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 3. sp_SaveStaffAttendanceEntry
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_SaveStaffAttendanceEntry$$
-CREATE PROCEDURE sp_SaveStaffAttendanceEntry(
+DROP PROCEDURE IF EXISTS `sp_SaveStaffAttendanceEntry`$$
+CREATE PROCEDURE `sp_SaveStaffAttendanceEntry`(
     IN p_StaffSessionId INT,
     IN p_FacultyId INT,
     IN p_Status TINYINT,
@@ -206,6 +238,7 @@ BEGIN
     FROM `StaffAttendances`
     WHERE StaffSessionId = p_StaffSessionId
       AND FacultyId = p_FacultyId
+      AND IsActive = 1
     LIMIT 1;
 
     IF v_AttendanceId > 0 THEN
@@ -217,17 +250,19 @@ BEGIN
             DeviceId = COALESCE(p_DeviceId, DeviceId),
             IpAddress = COALESCE(p_IpAddress, IpAddress),
             Remarks = p_Remarks,
+            UpdatedByUserId = p_CreatedByUserId,
+            UpdatedByRole = CASE WHEN p_DeviceId LIKE '%Regularization%' THEN 'Regularization' ELSE 'Admin' END,
             UpdatedAt = UTC_TIMESTAMP()
         WHERE StaffAttendanceId = v_AttendanceId;
     ELSE
         INSERT INTO `StaffAttendances` (
             StaffSessionId, FacultyId, Status, InTime, OutTime,
             VerificationMethod, DeviceId, IpAddress, Remarks,
-            IsActive, CreatedByUserId, CreatedAt
+            IsActive, CreatedByUserId, UpdatedByUserId, UpdatedByRole, CreatedAt
         ) VALUES (
             p_StaffSessionId, p_FacultyId, p_Status, p_InTime, p_OutTime,
             p_VerificationMethod, p_DeviceId, p_IpAddress, p_Remarks,
-            1, p_CreatedByUserId, UTC_TIMESTAMP()
+            1, p_CreatedByUserId, p_CreatedByUserId, 'Admin', UTC_TIMESTAMP()
         );
     END IF;
 END$$
@@ -236,8 +271,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 4. sp_UpdateStaffAttendanceSingle
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_UpdateStaffAttendanceSingle$$
-CREATE PROCEDURE sp_UpdateStaffAttendanceSingle(
+DROP PROCEDURE IF EXISTS `sp_UpdateStaffAttendanceSingle`$$
+CREATE PROCEDURE `sp_UpdateStaffAttendanceSingle`(
     IN p_FacultyId INT,
     IN p_AttendanceDate DATETIME,
     IN p_StaffType TINYINT,
@@ -252,46 +287,38 @@ CREATE PROCEDURE sp_UpdateStaffAttendanceSingle(
 BEGIN
     DECLARE v_TargetDate DATE;
     DECLARE v_SessionId INT DEFAULT 0;
+    DECLARE v_AttendanceId INT DEFAULT 0;
     DECLARE v_OldStatus TINYINT DEFAULT NULL;
     DECLARE v_UserFullName VARCHAR(150) DEFAULT NULL;
 
     SET v_TargetDate = DATE(p_AttendanceDate);
 
-    -- Find session
-    SELECT StaffSessionId INTO v_SessionId
-    FROM `StaffAttendanceSessions`
-    WHERE DATE(AttendanceDate) = v_TargetDate
-      AND StaffType = p_StaffType
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId)
+    SELECT sa.StaffAttendanceId, sa.StaffSessionId, sa.Status
+    INTO v_AttendanceId, v_SessionId, v_OldStatus
+    FROM `StaffAttendances` sa
+    INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+    WHERE sa.FacultyId = p_FacultyId
+      AND DATE(sas.AttendanceDate) = v_TargetDate
+      AND sa.IsActive = 1
+      AND sas.IsActive = 1
+    ORDER BY sa.StaffAttendanceId DESC
     LIMIT 1;
 
-    IF v_SessionId <= 0 THEN
-        INSERT INTO `StaffAttendanceSessions` (
-            AttendanceDate, CampusId, DepartmentId, StaffType,
-            TotalStaffCount, PresentCount, AbsentCount, LateCount, LeaveCount,
-            IsLocked, Remarks, IsActive, CreatedByUserId, CreatedAt
-        ) VALUES (
-            p_AttendanceDate, 
-            IF(p_CampusId > 0, p_CampusId, NULL),
-            IF(p_DepartmentId > 0, p_DepartmentId, NULL),
-            p_StaffType, 1, 0, 0, 0, 0, 0, NULL, 1, p_CurrentUserId, UTC_TIMESTAMP()
-        );
-        SET v_SessionId = LAST_INSERT_ID();
+    IF v_AttendanceId <= 0 OR v_SessionId <= 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only existing staff attendance records can be edited by Admin. Missing punches or absences must be submitted through Regularization.';
     END IF;
 
-    -- Check old status
-    SELECT Status INTO v_OldStatus
-    FROM `StaffAttendances`
-    WHERE StaffSessionId = v_SessionId AND FacultyId = p_FacultyId
-    LIMIT 1;
+    -- Admin edit updates existing record without fabricating OutTime or silently resolving missed checkout.
+    UPDATE `StaffAttendances`
+    SET Status = p_Status,
+        InTime = COALESCE(p_InTime, InTime),
+        OutTime = CASE WHEN p_OutTime IS NOT NULL THEN p_OutTime ELSE OutTime END,
+        Remarks = COALESCE(NULLIF(TRIM(p_Remarks), ''), Remarks),
+        UpdatedByUserId = p_CurrentUserId,
+        UpdatedByRole = 'Admin',
+        UpdatedAt = UTC_TIMESTAMP()
+    WHERE StaffAttendanceId = v_AttendanceId;
 
-    -- Upsert attendance record
-    CALL sp_SaveStaffAttendanceEntry(
-        v_SessionId, p_FacultyId, p_Status, p_InTime, p_OutTime,
-        1, 'Web Portal Admin', NULL, p_Remarks, p_CurrentUserId
-    );
-
-    -- Recalculate session aggregates
     UPDATE `StaffAttendanceSessions`
     SET PresentCount = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 1),
         AbsentCount  = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 2),
@@ -300,20 +327,19 @@ BEGIN
         UpdatedAt    = UTC_TIMESTAMP()
     WHERE StaffSessionId = v_SessionId;
 
-    -- Audit trail
     IF p_CurrentUserId IS NOT NULL AND p_CurrentUserId > 0 THEN
         SELECT FullName INTO v_UserFullName FROM `Users` WHERE UserId = p_CurrentUserId LIMIT 1;
     END IF;
 
-    INSERT INTO `AttendanceAuditHistories` (
+    INSERT INTO `AttendanceAuditHistory` (
         EntityType, EntityId, FacultyId, StudentId, AttendanceDate,
         Session, OldStatus, NewStatus, Action, ModifiedByUserId,
         ModifiedByUserName, CreatedAt, Description
     ) VALUES (
-        'Staff', p_FacultyId, p_FacultyId, NULL, p_AttendanceDate,
-        0, v_OldStatus, p_Status, IF(v_OldStatus IS NULL, 'Created', 'Updated'),
+        'Staff', v_AttendanceId, p_FacultyId, NULL, p_AttendanceDate,
+        0, v_OldStatus, p_Status, 'AdminEdit',
         p_CurrentUserId, v_UserFullName, UTC_TIMESTAMP(),
-        COALESCE(p_Remarks, IF(v_OldStatus IS NULL, 'Created via Admin UI', 'Updated via Admin UI'))
+        COALESCE(NULLIF(TRIM(p_Remarks), ''), 'Edited existing attendance record via Admin UI')
     );
 
     SELECT 1 AS Success;
@@ -323,8 +349,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 5. sp_GetStaffAttendanceDetails
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffAttendanceDetails$$
-CREATE PROCEDURE sp_GetStaffAttendanceDetails(
+DROP PROCEDURE IF EXISTS `sp_GetStaffAttendanceDetails`$$
+CREATE PROCEDURE `sp_GetStaffAttendanceDetails`(
     IN p_FacultyId INT,
     IN p_AttendanceDate DATETIME,
     IN p_CampusId INT
@@ -350,7 +376,6 @@ BEGIN
         sa.VerificationMethod,
         sa.DeviceId,
         sa.Remarks,
-        -- Monthly aggregated stats for this faculty member
         (SELECT COUNT(1) FROM `StaffAttendances` a 
          JOIN `StaffAttendanceSessions` sess ON a.StaffSessionId = sess.StaffSessionId
          WHERE a.FacultyId = s.Id AND a.IsActive = 1 AND a.Status = 1 
@@ -363,10 +388,10 @@ BEGIN
          JOIN `StaffAttendanceSessions` sess ON a.StaffSessionId = sess.StaffSessionId
          WHERE a.FacultyId = s.Id AND a.IsActive = 1 AND a.Status = 3 
            AND DATE(sess.AttendanceDate) >= v_MonthStart AND DATE(sess.AttendanceDate) <= v_MonthEnd) AS MonthLateCount
-    FROM `Staffs` s
+    FROM `Staff` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     LEFT JOIN `Designations` des ON s.DesignationId = des.Id
-    LEFT JOIN `StaffAttendanceSessions` sas ON DATE(sas.AttendanceDate) = v_TargetDate
+    LEFT JOIN `StaffAttendanceSessions` sas ON DATE(sas.AttendanceDate) = v_TargetDate AND sas.IsActive = 1
     LEFT JOIN `StaffAttendances` sa ON sa.StaffSessionId = sas.StaffSessionId AND sa.FacultyId = s.Id AND sa.IsActive = 1
     WHERE s.Id = p_FacultyId
       AND s.IsDeleted = 0
@@ -378,8 +403,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 6. sp_GetStaffMonthlyAttendanceReport
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffMonthlyAttendanceReport$$
-CREATE PROCEDURE sp_GetStaffMonthlyAttendanceReport(
+DROP PROCEDURE IF EXISTS `sp_GetStaffMonthlyAttendanceReport`$$
+CREATE PROCEDURE `sp_GetStaffMonthlyAttendanceReport`(
     IN p_Month INT,
     IN p_Year INT,
     IN p_StaffType TINYINT,
@@ -395,13 +420,12 @@ BEGIN
     SET v_MonthStart = STR_TO_DATE(CONCAT(p_Year, '-', LPAD(p_Month, 2, '00'), '-01'), '%Y-%m-%d');
     SET v_MonthEnd = LAST_DAY(v_MonthStart);
 
-    -- Result Set 1: Filtered Staff List
     SELECT 
         s.Id AS FacultyId,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT(IF(p_StaffType = 2 OR LOWER(s.StaffType) LIKE '%non%', 'NTS', 'FAC'), LPAD(s.Id, 3, '0'))) AS EmployeeId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         COALESCE(d.DepartmentName, 'General') AS DepartmentName
-    FROM `Staffs` s
+    FROM `Staff` s
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
     WHERE s.IsDeleted = 0
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
@@ -413,22 +437,22 @@ BEGIN
            OR (p_StaffType = 2 AND s.StaffType IS NOT NULL AND LOWER(s.StaffType) != 'teaching'))
     ORDER BY s.FirstName ASC;
 
-    -- Result Set 2: Attendances for the Month
     SELECT 
         sa.FacultyId,
         DAY(sas.AttendanceDate) AS DayNumber,
         sa.Status,
         sa.InTime,
-        sa.OutTime
+        sa.OutTime,
+        COALESCE(sa.IsMissedCheckoutResolved, 0) AS IsMissedCheckoutResolved
     FROM `StaffAttendances` sa
     JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
     WHERE sas.AttendanceDate >= v_MonthStart 
       AND sas.AttendanceDate <= v_MonthEnd
       AND sa.IsActive = 1
+      AND sas.IsActive = 1
       AND (p_StaffType IS NULL OR p_StaffType <= 0 OR sas.StaffType = p_StaffType)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas.CampusId = p_CampusId);
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR sas.CampusId = p_CampusId OR sas.CampusId = 0 OR sas.CampusId IS NULL);
 
-    -- Result Set 3: Official Holidays in Month
     SELECT 
         HolidayName,
         DATE(StartDate) AS StartDate,
@@ -439,15 +463,15 @@ BEGIN
       AND StartDate <= v_MonthEnd 
       AND EndDate >= v_MonthStart
       AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only')
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId);
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId OR CampusId = 0 OR CampusId IS NULL);
 END$$
 
 
 -- -------------------------------------------------------------------------------------
 -- 7. sp_GetStaffTodayAttendance
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffTodayAttendance$$
-CREATE PROCEDURE sp_GetStaffTodayAttendance(
+DROP PROCEDURE IF EXISTS `sp_GetStaffTodayAttendance`$$
+CREATE PROCEDURE `sp_GetStaffTodayAttendance`(
     IN p_FacultyId INT,
     IN p_TargetDate DATETIME,
     IN p_CampusId INT
@@ -459,26 +483,29 @@ BEGIN
     SET v_TargetDate = DATE(p_TargetDate);
     SET v_NextDate = DATE_ADD(v_TargetDate, INTERVAL 1 DAY);
 
-    -- Result Set 1: Staff Details & Effective Shift Timing
     SELECT 
         s.Id AS FacultyId,
         s.CampusId,
         s.DepartmentId,
-        CASE WHEN LOWER(s.StaffType) LIKE '%non%' THEN 2 ELSE 1 END AS StaffType,
+        CASE WHEN LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%' THEN 2 ELSE 1 END AS StaffType,
         COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
-        COALESCE(tc.WorkEndTime, '16:30:00') AS WorkEndTime,
-        COALESCE(tc.LateThreshold, '09:15:00') AS LateThreshold,
-        COALESCE(tc.EarlyCheckoutThreshold, '16:30:00') AS EarlyCheckoutThreshold,
+        COALESCE(tc.WorkEndTime, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')) AS WorkEndTime,
+        COALESCE(tc.LateThreshold, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '08:45:00', '09:15:00')) AS LateThreshold,
+        COALESCE(tc.EarlyCheckoutThreshold, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')) AS EarlyCheckoutThreshold,
         COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
-    FROM `Staffs` s
-    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1 
-                                         AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
-                                         AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+    FROM `Staff` s
+    LEFT JOIN `AttendanceTimingConfigs` tc ON tc.Id = (
+        SELECT tc2.Id
+        FROM `AttendanceTimingConfigs` tc2
+        WHERE tc2.IsActive = 1
+          AND (tc2.StaffType IS NULL OR tc2.StaffType = IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', 2, 1))
+          AND (tc2.DepartmentId IS NULL OR tc2.DepartmentId = s.DepartmentId)
+        ORDER BY (tc2.DepartmentId IS NOT NULL) DESC, (tc2.StaffType IS NOT NULL) DESC, tc2.Id DESC
+        LIMIT 1
+    )
     WHERE s.Id = p_FacultyId AND s.IsDeleted = 0
-    ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
     LIMIT 1;
 
-    -- Result Set 2: Today's Attendance Record
     SELECT 
         sa.StaffAttendanceId,
         sa.Status,
@@ -486,7 +513,11 @@ BEGIN
         sa.OutTime,
         sa.VerificationMethod,
         sa.DeviceId,
-        sa.Remarks
+        sa.Remarks,
+        sa.IsMissedCheckoutResolved,
+        sa.CreatedByUserId,
+        sa.UpdatedByUserId,
+        sa.UpdatedByRole
     FROM `StaffAttendances` sa
     JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
     WHERE sa.FacultyId = p_FacultyId
@@ -496,24 +527,21 @@ BEGIN
     ORDER BY sa.StaffAttendanceId DESC
     LIMIT 1;
 
-    -- Result Set 3: Official Holiday Check
     SELECT COUNT(1) AS IsHoliday, MAX(HolidayName) AS HolidayName
     FROM `Holidays`
     WHERE IsDeleted = 0 AND Status = 'Active'
       AND v_TargetDate >= DATE(StartDate) AND v_TargetDate <= DATE(EndDate)
       AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only');
 
-    -- Result Set 4: Approved Leave Check
     SELECT COUNT(1) AS IsLeave, MAX(Reason) AS LeaveReason
     FROM `StaffLeaveRequests`
     WHERE StaffId = p_FacultyId AND IsActive = 1 AND Status = 2
       AND v_TargetDate >= DATE(StartDate) AND v_TargetDate <= DATE(EndDate);
 
-    -- Result Set 5: Regularization Request Check
-    SELECT RegularizationId, Status, RequestedInTime, RequestedOutTime
+    SELECT RegularizationId, Status, RequestType, Reason, AdminRemarks, RequestedInTime, RequestedOutTime, CreatedAt, ReviewedAt
     FROM `StaffAttendanceRegularizations`
     WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
-      AND AttendanceDate >= v_TargetDate AND AttendanceDate < v_NextDate
+      AND DATE(AttendanceDate) = v_TargetDate
     ORDER BY RegularizationId DESC
     LIMIT 1;
 END$$
@@ -522,10 +550,10 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 8. sp_PunchStaffAttendance
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_PunchStaffAttendance$$
-CREATE PROCEDURE sp_PunchStaffAttendance(
+DROP PROCEDURE IF EXISTS `sp_PunchStaffAttendance`$$
+CREATE PROCEDURE `sp_PunchStaffAttendance`(
     IN p_FacultyId INT,
-    IN p_PunchType VARCHAR(10),     -- 'IN' or 'OUT'
+    IN p_PunchType VARCHAR(10),
     IN p_PunchTime TIME,
     IN p_VerificationMethod TINYINT,
     IN p_DeviceId VARCHAR(100),
@@ -541,43 +569,44 @@ BEGIN
     DECLARE v_DepartmentId INT DEFAULT NULL;
     DECLARE v_SessionId INT DEFAULT 0;
     DECLARE v_AttendanceId INT DEFAULT 0;
+    DECLARE v_ExistingIn TIME DEFAULT NULL;
+    DECLARE v_ExistingOut TIME DEFAULT NULL;
     DECLARE v_LateThreshold TIME DEFAULT '09:15:00';
-    DECLARE v_EarlyThreshold TIME DEFAULT '16:30:00';
+    DECLARE v_EarlyThreshold TIME DEFAULT '15:20:00';
     DECLARE v_GraceMins INT DEFAULT 15;
     DECLARE v_Status TINYINT DEFAULT 1;
 
-    SET v_TargetDate = CURRENT_DATE();
+    -- Use IST (+05:30) date consistently with .NET API server
+    SET v_TargetDate = DATE(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 330 MINUTE));
     SET v_NextDate = DATE_ADD(v_TargetDate, INTERVAL 1 DAY);
 
-    -- Resolve Staff
     SELECT 
-        IF(LOWER(StaffType) LIKE '%non%', 2, 1),
+        IF(LOWER(COALESCE(StaffType, 'Teaching')) LIKE '%non%', 2, 1),
         DepartmentId,
-        COALESCE(p_CampusId, CampusId, 1)
+        COALESCE(NULLIF(p_CampusId, 0), CampusId, 1)
     INTO v_StaffType, v_DepartmentId, p_CampusId
-    FROM `Staffs`
+    FROM `Staff`
     WHERE Id = p_FacultyId AND IsDeleted = 0
     LIMIT 1;
 
-    -- Resolve Timing Config
     SELECT 
-        COALESCE(LateThreshold, '09:15:00'),
-        COALESCE(EarlyCheckoutThreshold, '16:30:00'),
-        COALESCE(GracePeriodMinutes, 15)
+        COALESCE(tc.LateThreshold, IF(v_StaffType = 2, '08:45:00', '09:15:00')),
+        COALESCE(tc.EarlyCheckoutThreshold, IF(v_StaffType = 2, '17:30:00', '15:20:00')),
+        COALESCE(tc.GracePeriodMinutes, 15)
     INTO v_LateThreshold, v_EarlyThreshold, v_GraceMins
-    FROM `AttendanceTimingConfigs`
-    WHERE IsActive = 1
-      AND (StaffType IS NULL OR StaffType = v_StaffType)
-      AND (DepartmentId IS NULL OR DepartmentId = v_DepartmentId)
-    ORDER BY (DepartmentId IS NOT NULL) DESC, (StaffType IS NOT NULL) DESC
+    FROM `AttendanceTimingConfigs` tc
+    WHERE tc.IsActive = 1
+      AND (tc.StaffType IS NULL OR tc.StaffType = v_StaffType)
+      AND (tc.DepartmentId IS NULL OR tc.DepartmentId = v_DepartmentId)
+    ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC, tc.Id DESC
     LIMIT 1;
 
-    -- Atomic Find or Create Session Header
     SELECT StaffSessionId INTO v_SessionId
     FROM `StaffAttendanceSessions`
-    WHERE AttendanceDate >= v_TargetDate AND AttendanceDate < v_NextDate
+    WHERE DATE(AttendanceDate) = v_TargetDate
       AND StaffType = v_StaffType
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId OR CampusId = 0 OR CampusId IS NULL)
+      AND IsActive = 1
     LIMIT 1;
 
     IF v_SessionId <= 0 THEN
@@ -586,29 +615,23 @@ BEGIN
             TotalStaffCount, PresentCount, AbsentCount, LateCount, LeaveCount,
             IsLocked, Remarks, IsActive, CreatedByUserId, CreatedAt
         ) VALUES (
-            NOW(), p_CampusId, v_DepartmentId, v_StaffType,
-            1, 0, 0, 0, 0, 0, 'Auto-created by punch system', 1, p_UserId, UTC_TIMESTAMP()
+            v_TargetDate, COALESCE(NULLIF(p_CampusId, 0), 1), v_DepartmentId, v_StaffType,
+            1, 0, 0, 0, 0, 0, 'Auto-created by self check-in', 1, p_UserId, UTC_TIMESTAMP()
         );
         SET v_SessionId = LAST_INSERT_ID();
     END IF;
 
-    -- Find Attendance Record
-    SELECT StaffAttendanceId INTO v_AttendanceId
+    SELECT StaffAttendanceId, InTime, OutTime INTO v_AttendanceId, v_ExistingIn, v_ExistingOut
     FROM `StaffAttendances`
     WHERE StaffSessionId = v_SessionId AND FacultyId = p_FacultyId AND IsActive = 1
     LIMIT 1;
 
     IF UPPER(p_PunchType) = 'IN' THEN
-        IF v_AttendanceId > 0 THEN
-            -- Check if already punched in
-            IF (SELECT InTime FROM `StaffAttendances` WHERE StaffAttendanceId = v_AttendanceId) IS NOT NULL THEN
-                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Already checked in for today.';
-            END IF;
-        END IF;
+        SET v_Status = IF(p_PunchTime > v_LateThreshold, 3, 1);
 
-        SET v_Status = IF(p_PunchTime > v_LateThreshold, 3, 1); -- 3 = Late, 1 = Present
-
-        IF v_AttendanceId > 0 THEN
+        IF v_AttendanceId > 0 AND v_ExistingIn IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You have already checked in for today.';
+        ELSEIF v_AttendanceId > 0 THEN
             UPDATE `StaffAttendances`
             SET InTime = p_PunchTime,
                 Status = v_Status,
@@ -616,35 +639,44 @@ BEGIN
                 DeviceId = COALESCE(p_DeviceId, DeviceId),
                 IpAddress = COALESCE(p_IpAddress, IpAddress),
                 Remarks = COALESCE(p_Remarks, Remarks),
+                IsMissedCheckoutResolved = 0,
+                CreatedByUserId = IF(p_UserId > 0, p_UserId, CreatedByUserId),
+                UpdatedByRole = 'Self',
                 UpdatedAt = UTC_TIMESTAMP()
             WHERE StaffAttendanceId = v_AttendanceId;
         ELSE
             INSERT INTO `StaffAttendances` (
                 StaffSessionId, FacultyId, Status, InTime, OutTime,
                 VerificationMethod, DeviceId, IpAddress, Remarks,
-                IsActive, CreatedByUserId, CreatedAt
+                IsActive, IsMissedCheckoutResolved, CreatedByUserId, UpdatedByRole, CreatedAt
             ) VALUES (
                 v_SessionId, p_FacultyId, v_Status, p_PunchTime, NULL,
                 p_VerificationMethod, p_DeviceId, p_IpAddress, p_Remarks,
-                1, p_UserId, UTC_TIMESTAMP()
+                1, 0, p_UserId, 'Self', UTC_TIMESTAMP()
             );
         END IF;
 
     ELSEIF UPPER(p_PunchType) = 'OUT' THEN
-        IF v_AttendanceId <= 0 OR (SELECT InTime FROM `StaffAttendances` WHERE StaffAttendanceId = v_AttendanceId) IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You must check in before checking out.';
+        IF v_AttendanceId <= 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Cannot check out before checking in for today.';
+        ELSEIF v_ExistingOut IS NOT NULL THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'You have already checked out for today.';
+        ELSE
+            UPDATE `StaffAttendances`
+            SET OutTime = p_PunchTime,
+                Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), IF(p_PunchTime < v_EarlyThreshold, 'Early checkout logged', 'Check-Out')),
+                UpdatedAt = UTC_TIMESTAMP()
+            WHERE StaffAttendanceId = v_AttendanceId;
         END IF;
-
-        IF (SELECT OutTime FROM `StaffAttendances` WHERE StaffAttendanceId = v_AttendanceId) IS NOT NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Already checked out for today.';
-        END IF;
-
-        UPDATE `StaffAttendances`
-        SET OutTime = p_PunchTime,
-            Remarks = CONCAT_WS(' | ', Remarks, IF(p_PunchTime < v_EarlyThreshold, 'Early checkout logged', 'Check-Out')),
-            UpdatedAt = UTC_TIMESTAMP()
-        WHERE StaffAttendanceId = v_AttendanceId;
     END IF;
+
+    UPDATE `StaffAttendanceSessions`
+    SET PresentCount = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 1),
+        AbsentCount  = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 2),
+        LateCount    = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 3),
+        LeaveCount   = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status IN (4, 6)),
+        UpdatedAt    = UTC_TIMESTAMP()
+    WHERE StaffSessionId = v_SessionId;
 
     SELECT 1 AS Success;
 END$$
@@ -653,8 +685,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 9. sp_SubmitStaffRegularization
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_SubmitStaffRegularization$$
-CREATE PROCEDURE sp_SubmitStaffRegularization(
+DROP PROCEDURE IF EXISTS `sp_SubmitStaffRegularization`$$
+CREATE PROCEDURE `sp_SubmitStaffRegularization`(
     IN p_FacultyId INT,
     IN p_AttendanceDate DATETIME,
     IN p_RequestedInTime TIME,
@@ -664,130 +696,321 @@ CREATE PROCEDURE sp_SubmitStaffRegularization(
 )
 BEGIN
     DECLARE v_TargetDate DATE;
-    DECLARE v_RegId INT DEFAULT 0;
+    DECLARE v_ExistingPending INT DEFAULT 0;
+    DECLARE v_ExistingApproved INT DEFAULT 0;
+    DECLARE v_AttId INT DEFAULT NULL;
+    DECLARE v_OrigStatus TINYINT DEFAULT NULL;
+    DECLARE v_OrigStatusText VARCHAR(50) DEFAULT 'Absent';
+    DECLARE v_OrigIn TIME DEFAULT NULL;
+    DECLARE v_OrigOut TIME DEFAULT NULL;
+    DECLARE v_ReqType VARCHAR(50) DEFAULT 'Late Attendance';
 
     SET v_TargetDate = DATE(p_AttendanceDate);
 
-    SELECT RegularizationId INTO v_RegId
+    SELECT COUNT(1) INTO v_ExistingPending
     FROM `StaffAttendanceRegularizations`
     WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
       AND DATE(AttendanceDate) = v_TargetDate
-    LIMIT 1;
+      AND Status = 'Pending';
 
-    IF v_RegId > 0 THEN
-        IF (SELECT Status FROM `StaffAttendanceRegularizations` WHERE RegularizationId = v_RegId) = 'Approved' THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance for this date has already been regularized and approved.';
-        END IF;
-
-        UPDATE `StaffAttendanceRegularizations`
-        SET RequestedInTime = p_RequestedInTime,
-            RequestedOutTime = p_RequestedOutTime,
-            Reason = p_Reason,
-            Status = 'Pending',
-            UpdatedAt = UTC_TIMESTAMP()
-        WHERE RegularizationId = v_RegId;
-    ELSE
-        INSERT INTO `StaffAttendanceRegularizations` (
-            FacultyId, StaffId, AttendanceDate, RequestedInTime, RequestedOutTime,
-            Reason, Status, CreatedAt
-        ) VALUES (
-            p_FacultyId, p_FacultyId, p_AttendanceDate, p_RequestedInTime, p_RequestedOutTime,
-            p_Reason, 'Pending', UTC_TIMESTAMP()
-        );
+    IF v_ExistingPending > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'A pending regularization request already exists for this date.';
     END IF;
 
-    SELECT 1 AS Success;
+    SELECT COUNT(1) INTO v_ExistingApproved
+    FROM `StaffAttendanceRegularizations`
+    WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
+      AND DATE(AttendanceDate) = v_TargetDate
+      AND Status = 'Approved';
+
+    IF v_ExistingApproved > 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attendance for this date has already been regularized and approved.';
+    END IF;
+
+    SELECT sa.StaffAttendanceId, sa.Status, sa.InTime, sa.OutTime
+    INTO v_AttId, v_OrigStatus, v_OrigIn, v_OrigOut
+    FROM `StaffAttendances` sa
+    INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+    WHERE sa.FacultyId = p_FacultyId
+      AND DATE(sas.AttendanceDate) = v_TargetDate
+      AND sa.IsActive = 1
+      AND sas.IsActive = 1
+    ORDER BY sa.StaffAttendanceId DESC
+    LIMIT 1;
+
+    IF v_OrigStatus = 3 THEN
+        SET v_OrigStatusText = 'Late';
+        SET v_ReqType = 'Late Attendance';
+    ELSEIF v_OrigStatus = 1 AND v_OrigIn IS NOT NULL AND v_OrigOut IS NULL THEN
+        SET v_OrigStatusText = 'Missed Checkout';
+        SET v_ReqType = 'Missed Checkout';
+    ELSEIF v_OrigStatus = 1 THEN
+        SET v_OrigStatusText = 'Present';
+        SET v_ReqType = IF(v_OrigOut IS NULL AND v_OrigIn IS NOT NULL, 'Missed Checkout', 'Other');
+    ELSEIF v_OrigStatus = 2 OR v_AttId IS NULL THEN
+        SET v_OrigStatusText = 'Absent';
+        SET v_ReqType = 'Absent';
+    ELSE
+        SET v_OrigStatusText = 'Other';
+    END IF;
+
+    INSERT INTO `StaffAttendanceRegularizations` (
+        FacultyId, StaffId, StaffAttendanceId, AttendanceDate, RequestType,
+        OriginalAttendanceStatus, OriginalStatusCode, OriginalInTime, OriginalOutTime,
+        RequestedInTime, RequestedOutTime, Reason, Status, CreatedAt
+    ) VALUES (
+        p_FacultyId, p_FacultyId, v_AttId, v_TargetDate, v_ReqType,
+        v_OrigStatusText, v_OrigStatus, v_OrigIn, v_OrigOut,
+        p_RequestedInTime, p_RequestedOutTime, p_Reason, 'Pending', UTC_TIMESTAMP()
+    );
+
+    SELECT LAST_INSERT_ID() AS RegularizationId;
 END$$
 
 
 -- -------------------------------------------------------------------------------------
 -- 10. sp_GetStaffRegularizations
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffRegularizations$$
-CREATE PROCEDURE sp_GetStaffRegularizations(
-    IN p_Status VARCHAR(50),
+DROP PROCEDURE IF EXISTS `sp_GetStaffRegularizations`$$
+CREATE PROCEDURE `sp_GetStaffRegularizations`(
+    IN p_Status VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_DepartmentId INT,
-    IN p_CampusId INT
+    IN p_CampusId INT,
+    IN p_RequestType VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+    IN p_Search VARCHAR(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
 )
 BEGIN
     SELECT 
         r.RegularizationId,
         r.FacultyId,
-        r.StaffId,
+        COALESCE(r.StaffId, r.FacultyId) AS StaffId,
+        r.StaffAttendanceId,
         TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
         COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) AS EmployeeId,
+        s.DepartmentId,
         COALESCE(d.DepartmentName, 'General') AS DepartmentName,
         r.AttendanceDate,
-        r.RequestedInTime,
-        r.RequestedOutTime,
+        COALESCE(r.RequestType, 'Late Attendance') AS RequestType,
+        r.OriginalAttendanceStatus,
+        r.OriginalStatusCode,
+        TIME_FORMAT(r.OriginalInTime, '%H:%i:%s') AS OriginalInTime,
+        TIME_FORMAT(r.OriginalOutTime, '%H:%i:%s') AS OriginalOutTime,
+        TIME_FORMAT(r.RequestedInTime, '%H:%i:%s') AS RequestedInTime,
+        TIME_FORMAT(r.RequestedOutTime, '%H:%i:%s') AS RequestedOutTime,
         r.Reason,
         r.Status,
         r.AdminRemarks,
+        r.ReviewedByUserId,
+        COALESCE(r.ReviewedByAdminName, rev.FullName) AS ReviewedByAdminName,
         r.ReviewedAt,
-        r.CreatedAt
+        r.CreatedAt,
+        r.UpdatedAt
     FROM `StaffAttendanceRegularizations` r
-    LEFT JOIN `Staffs` s ON COALESCE(r.StaffId, r.FacultyId) = s.Id
+    LEFT JOIN `Staff` s ON COALESCE(r.StaffId, r.FacultyId) = s.Id
     LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
+    LEFT JOIN `Users` rev ON r.ReviewedByUserId = rev.UserId
     WHERE (p_Status IS NULL OR p_Status = '' OR LOWER(r.Status) = LOWER(p_Status))
       AND (p_DepartmentId IS NULL OR p_DepartmentId <= 0 OR s.DepartmentId = p_DepartmentId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId)
-    ORDER BY r.CreatedAt DESC;
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR s.CampusId = p_CampusId OR s.CampusId IS NULL)
+      AND (p_RequestType IS NULL OR p_RequestType = '' OR LOWER(COALESCE(r.RequestType, 'Late Attendance')) = LOWER(p_RequestType))
+      AND (
+          p_Search IS NULL OR TRIM(p_Search) = ''
+          OR CAST(r.RegularizationId AS CHAR) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR TRIM(CONCAT(COALESCE(s.FirstName, ''), ' ', COALESCE(s.LastName, ''))) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(d.DepartmentName, 'General') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.RequestType, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.Reason, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+          OR COALESCE(r.AdminRemarks, '') LIKE CONCAT('%', TRIM(p_Search), '%')
+      )
+    ORDER BY r.CreatedAt DESC, r.RegularizationId DESC;
 END$$
 
 
 -- -------------------------------------------------------------------------------------
 -- 11. sp_ReviewStaffRegularization
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_ReviewStaffRegularization$$
-CREATE PROCEDURE sp_ReviewStaffRegularization(
+DROP PROCEDURE IF EXISTS `sp_ReviewStaffRegularization`$$
+CREATE PROCEDURE `sp_ReviewStaffRegularization`(
     IN p_RegularizationId INT,
-    IN p_Status VARCHAR(50),      -- 'Approved' or 'Rejected'
+    IN p_Status VARCHAR(50),
     IN p_AdminRemarks VARCHAR(500),
     IN p_ReviewerUserId INT
 )
 BEGIN
     DECLARE v_FacultyId INT DEFAULT 0;
-    DECLARE v_AttDate DATETIME;
-    DECLARE v_ReqIn TIME;
-    DECLARE v_ReqOut TIME;
+    DECLARE v_AttId INT DEFAULT NULL;
+    DECLARE v_AttDate DATE;
+    DECLARE v_ReqType VARCHAR(50) DEFAULT 'Late Attendance';
+    DECLARE v_CurrentStatus VARCHAR(50) DEFAULT NULL;
+    DECLARE v_ReqIn TIME DEFAULT NULL;
+    DECLARE v_ReqOut TIME DEFAULT NULL;
     DECLARE v_Reason VARCHAR(500);
+    DECLARE v_ReviewerName VARCHAR(150) DEFAULT NULL;
+    DECLARE v_StaffType TINYINT DEFAULT 1;
+    DECLARE v_DeptId INT DEFAULT NULL;
+    DECLARE v_CampusId INT DEFAULT 1;
+    DECLARE v_SessionId INT DEFAULT 0;
+    DECLARE v_OldStatus TINYINT DEFAULT NULL;
+
+    START TRANSACTION;
 
     SELECT 
         COALESCE(StaffId, FacultyId, 0),
-        AttendanceDate,
+        StaffAttendanceId,
+        DATE(AttendanceDate),
+        COALESCE(RequestType, 'Late Attendance'),
+        Status,
         RequestedInTime,
         RequestedOutTime,
         Reason
-    INTO v_FacultyId, v_AttDate, v_ReqIn, v_ReqOut, v_Reason
+    INTO v_FacultyId, v_AttId, v_AttDate, v_ReqType, v_CurrentStatus, v_ReqIn, v_ReqOut, v_Reason
     FROM `StaffAttendanceRegularizations`
-    WHERE RegularizationId = p_RegularizationId;
+    WHERE RegularizationId = p_RegularizationId
+    FOR UPDATE;
 
     IF v_FacultyId <= 0 THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Regularization record not found.';
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Regularization request not found.';
+    END IF;
+
+    IF LOWER(COALESCE(v_CurrentStatus, '')) != 'pending' THEN
+        ROLLBACK;
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This regularization request has already been processed.';
+    END IF;
+
+    IF p_ReviewerUserId IS NOT NULL AND p_ReviewerUserId > 0 THEN
+        SELECT FullName INTO v_ReviewerName FROM `Users` WHERE UserId = p_ReviewerUserId LIMIT 1;
+    END IF;
+
+    SELECT 
+        IF(LOWER(COALESCE(StaffType, 'Teaching')) LIKE '%non%', 2, 1),
+        DepartmentId,
+        COALESCE(CampusId, 1)
+    INTO v_StaffType, v_DeptId, v_CampusId
+    FROM `Staff`
+    WHERE Id = v_FacultyId
+    LIMIT 1;
+
+    -- Locate original attendance record if not already linked
+    IF v_AttId IS NULL THEN
+        SELECT sa.StaffAttendanceId, sa.StaffSessionId, sa.Status
+        INTO v_AttId, v_SessionId, v_OldStatus
+        FROM `StaffAttendances` sa
+        INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+        WHERE sa.FacultyId = v_FacultyId
+          AND DATE(sas.AttendanceDate) = v_AttDate
+          AND sa.IsActive = 1
+          AND sas.IsActive = 1
+        ORDER BY sa.StaffAttendanceId DESC
+        LIMIT 1;
+    ELSE
+        SELECT sa.StaffSessionId, sa.Status
+        INTO v_SessionId, v_OldStatus
+        FROM `StaffAttendances` sa
+        WHERE sa.StaffAttendanceId = v_AttId AND sa.IsActive = 1
+        LIMIT 1;
     END IF;
 
     UPDATE `StaffAttendanceRegularizations`
     SET Status = p_Status,
+        StaffAttendanceId = COALESCE(StaffAttendanceId, v_AttId),
         AdminRemarks = p_AdminRemarks,
         ReviewedByUserId = p_ReviewerUserId,
+        ReviewedByAdminName = v_ReviewerName,
         ReviewedAt = UTC_TIMESTAMP(),
         UpdatedAt = UTC_TIMESTAMP()
     WHERE RegularizationId = p_RegularizationId;
 
-    -- If approved, update underlying staff attendance record
     IF LOWER(p_Status) = 'approved' THEN
-        CALL sp_UpdateStaffAttendanceSingle(
-            v_FacultyId,
-            v_AttDate,
-            1, -- default teaching or staff type
-            1, -- Present (status = 1)
-            COALESCE(v_ReqIn, '09:00:00'),
-            COALESCE(v_ReqOut, '16:30:00'),
-            CONCAT('Regularized: ', COALESCE(v_Reason, 'Approved')),
-            NULL, NULL, p_ReviewerUserId
+        IF (LOWER(v_ReqType) LIKE '%missed%' OR LOWER(v_ReqType) LIKE '%late%') AND (v_AttId IS NULL OR v_AttId <= 0) THEN
+            ROLLBACK;
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Original attendance record does not exist for this date.';
+        END IF;
+
+        IF LOWER(v_ReqType) LIKE '%missed%' THEN
+            -- Missed Checkout approved: resolve missed checkout WITHOUT generating any fake OutTime
+            UPDATE `StaffAttendances`
+            SET IsMissedCheckoutResolved = 1,
+                Status = IF(Status IN (2), 1, Status),
+                Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Missed Checkout Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                UpdatedByUserId = p_ReviewerUserId,
+                UpdatedByRole = 'Regularization',
+                UpdatedAt = UTC_TIMESTAMP()
+            WHERE StaffAttendanceId = v_AttId;
+        ELSEIF LOWER(v_ReqType) LIKE '%late%' THEN
+            -- Late Attendance approved: change Late -> Present preserving actual punch times
+            UPDATE `StaffAttendances`
+            SET Status = 1,
+                Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Late Attendance Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                UpdatedByUserId = p_ReviewerUserId,
+                UpdatedByRole = 'Regularization',
+                UpdatedAt = UTC_TIMESTAMP()
+            WHERE StaffAttendanceId = v_AttId;
+        ELSE
+            -- Absent / Missing Punch regularization on that specific AttendanceDate
+            IF v_AttId IS NOT NULL AND v_AttId > 0 THEN
+                UPDATE `StaffAttendances`
+                SET Status = 1,
+                    InTime = COALESCE(InTime, v_ReqIn),
+                    OutTime = COALESCE(OutTime, v_ReqOut),
+                    Remarks = CONCAT_WS(' | ', NULLIF(Remarks, ''), CONCAT('Regularized: ', COALESCE(p_AdminRemarks, v_Reason))),
+                    UpdatedByUserId = p_ReviewerUserId,
+                    UpdatedByRole = 'Regularization',
+                    UpdatedAt = UTC_TIMESTAMP()
+                WHERE StaffAttendanceId = v_AttId;
+            ELSE
+                SELECT StaffSessionId INTO v_SessionId
+                FROM `StaffAttendanceSessions`
+                WHERE DATE(AttendanceDate) = v_AttDate AND StaffType = v_StaffType AND IsActive = 1
+                LIMIT 1;
+                IF v_SessionId IS NULL OR v_SessionId <= 0 THEN
+                    INSERT INTO `StaffAttendanceSessions`
+                    (AttendanceDate, CampusId, DepartmentId, StaffType, TotalStaffCount, PresentCount, AbsentCount, LateCount, LeaveCount, IsLocked, Remarks, IsActive, CreatedByUserId, CreatedAt)
+                    VALUES (v_AttDate, v_CampusId, v_DeptId, v_StaffType, 1, 1, 0, 0, 0, 0, 'Created via regularization approval', 1, p_ReviewerUserId, UTC_TIMESTAMP());
+                    SET v_SessionId = LAST_INSERT_ID();
+                END IF;
+                INSERT INTO `StaffAttendances`
+                (StaffSessionId, FacultyId, Status, InTime, OutTime, VerificationMethod, DeviceId, Remarks, IsActive, CreatedByUserId, UpdatedByUserId, UpdatedByRole, CreatedAt)
+                VALUES (v_SessionId, v_FacultyId, 1, v_ReqIn, v_ReqOut, 1, 'Regularization', CONCAT('Regularized: ', COALESCE(p_AdminRemarks, v_Reason)), 1, p_ReviewerUserId, p_ReviewerUserId, 'Regularization', UTC_TIMESTAMP());
+                SET v_AttId = LAST_INSERT_ID();
+            END IF;
+        END IF;
+
+        IF v_SessionId IS NOT NULL AND v_SessionId > 0 THEN
+            UPDATE `StaffAttendanceSessions`
+            SET PresentCount = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 1),
+                AbsentCount  = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 2),
+                LateCount    = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status = 3),
+                LeaveCount   = (SELECT COUNT(1) FROM `StaffAttendances` WHERE StaffSessionId = v_SessionId AND IsActive = 1 AND Status IN (4, 6)),
+                UpdatedAt    = UTC_TIMESTAMP()
+            WHERE StaffSessionId = v_SessionId;
+        END IF;
+
+        INSERT INTO `AttendanceAuditHistory` (
+            EntityType, EntityId, FacultyId, StudentId, AttendanceDate,
+            Session, OldStatus, NewStatus, Action, ModifiedByUserId,
+            ModifiedByUserName, CreatedAt, Description
+        ) VALUES (
+            'Staff', COALESCE(v_AttId, p_RegularizationId), v_FacultyId, NULL, v_AttDate,
+            0, v_OldStatus, 1, 'RegularizationApproved',
+            p_ReviewerUserId, v_ReviewerName, UTC_TIMESTAMP(),
+            CONCAT(v_ReqType, ' Approved: ', COALESCE(p_AdminRemarks, v_Reason))
+        );
+    ELSE
+        INSERT INTO `AttendanceAuditHistory` (
+            EntityType, EntityId, FacultyId, StudentId, AttendanceDate,
+            Session, OldStatus, NewStatus, Action, ModifiedByUserId,
+            ModifiedByUserName, CreatedAt, Description
+        ) VALUES (
+            'Staff', COALESCE(v_AttId, p_RegularizationId), v_FacultyId, NULL, v_AttDate,
+            0, v_OldStatus, v_OldStatus, 'RegularizationRejected',
+            p_ReviewerUserId, v_ReviewerName, UTC_TIMESTAMP(),
+            CONCAT(v_ReqType, ' Rejected: ', COALESCE(p_AdminRemarks, 'No remarks'))
         );
     END IF;
 
+    COMMIT;
     SELECT 1 AS Success;
 END$$
 
@@ -795,8 +1018,8 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 12. sp_ResolveStaffByUserId
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_ResolveStaffByUserId$$
-CREATE PROCEDURE sp_ResolveStaffByUserId(
+DROP PROCEDURE IF EXISTS `sp_ResolveStaffByUserId`$$
+CREATE PROCEDURE `sp_ResolveStaffByUserId`(
     IN p_UserId INT
 )
 BEGIN
@@ -806,8 +1029,8 @@ BEGIN
         s.DepartmentId,
         s.StaffType
     FROM `Users` u
-    LEFT JOIN `Staffs` s ON (u.StaffId IS NOT NULL AND u.StaffId = s.Id)
-                        OR (u.Email IS NOT NULL AND u.Email = s.Email AND s.IsDeleted = 0)
+    LEFT JOIN `Staff` s ON (u.StaffId IS NOT NULL AND u.StaffId = s.Id)
+                       OR (u.Email IS NOT NULL AND u.Email = s.Email AND s.IsDeleted = 0)
     WHERE u.UserId = p_UserId
     LIMIT 1;
 END$$
@@ -890,7 +1113,7 @@ END$$
 -- -------------------------------------------------------------------------------------
 -- 15. sp_GetStaffAttendanceHistory
 -- -------------------------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS sp_GetStaffAttendanceHistory$
+DROP PROCEDURE IF EXISTS `sp_GetStaffAttendanceHistory`$$
 CREATE PROCEDURE sp_GetStaffAttendanceHistory(
     IN p_FacultyId INT,
     IN p_StartDate DATE,
@@ -958,6 +1181,6 @@ BEGIN
     FROM `StaffAttendanceRegularizations`
     WHERE (FacultyId = p_FacultyId OR StaffId = p_FacultyId)
       AND AttendanceDate >= p_StartDate AND AttendanceDate <= p_EndDate;
-END$
+END$$
 
 DELIMITER ;

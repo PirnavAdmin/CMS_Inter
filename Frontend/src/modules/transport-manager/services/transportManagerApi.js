@@ -62,9 +62,8 @@ export const getPickupPoints = async (params = {}) => {
 
 export const getAttendants = async (params = {}) => {
   try {
-    // Keep the same endpoint as Admin Transport and follow the backend's
-    // pagination metadata so the manager receives the full attendant list.
-    const res = await getAllTransportPages(apiClient, apiEndpoints.transport.attendants, params);
+    // This lookup returns the selectable attendant rows directly; it is not a paged master response.
+    const res = await apiClient.get(apiEndpoints.transport.lookups.attendants, { params });
     return extractList(res.data);
   } catch (error) {
     console.warn("Transport attendants fetch failed:", error);

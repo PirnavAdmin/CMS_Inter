@@ -318,7 +318,6 @@ const validate = (form) => {
   if (form.fatherEmail.trim() && !emailPattern.test(form.fatherEmail.trim())) errors.fatherEmail = "Enter a valid father email address.";
   if (form.motherEmail.trim() && !emailPattern.test(form.motherEmail.trim())) errors.motherEmail = "Enter a valid mother email address.";
   if (form.parentGuardianEmail.trim() && !emailPattern.test(form.parentGuardianEmail.trim())) errors.parentGuardianEmail = "Enter a valid guardian email address.";
-  if (form.previousYearOfPassing && (!/^\d{4}$/.test(form.previousYearOfPassing) || Number(form.previousYearOfPassing) > new Date().getFullYear())) errors.previousYearOfPassing = "Enter a valid passing year.";
   if (form.previousPercentage && (Number(form.previousPercentage) < 0 || Number(form.previousPercentage) > 100)) errors.previousPercentage = "Percentage must be between 0 and 100.";
   return errors;
 };
@@ -655,7 +654,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
         ? { busType: form.busType, routeId: numberOrZero(form.busRoute), pickupPointId: numberOrZero(form.pickupPoint) }
         : {}),
       ...(form.studentType === "Residential" ? { hostelId: Number.isInteger(Number(form.hostelBlock)) && Number(form.hostelBlock) > 0 ? Number(form.hostelBlock) : null, hostelBlock: allocationLookups.hostelBlocks.find((block) => block.value === String(form.hostelBlock))?.name || form.hostelBlockName || null, hostelRoom: form.hostelRoomName || form.hostelRoom } : {}),
-      previousSchool: form.previousSchool.trim(), previousHallTicketNumber: form.previousHallTicketNumber.trim(), previousBoard: form.previousBoard.trim(), previousYearOfPassing: numberOrZero(form.previousYearOfPassing), previousPercentage: numberOrZero(form.previousPercentage), studentCategory: form.studentCategory.trim(), scholarshipStatus: form.scholarshipStatus.trim(), scholarshipAmount: numberOrZero(form.scholarshipAmount),
+      previousSchool: form.previousSchool.trim(), previousHallTicketNumber: form.previousHallTicketNumber.trim(), previousBoard: form.previousBoard.trim(), previousYearOfPassing: form.previousYearOfPassing.trim() ? Number(form.previousYearOfPassing) : null, previousPercentage: numberOrZero(form.previousPercentage), studentCategory: form.studentCategory.trim(), scholarshipStatus: form.scholarshipStatus.trim(), scholarshipAmount: numberOrZero(form.scholarshipAmount),
       fatherName: form.fatherName.trim(), fatherOccupation: form.fatherOccupation.trim(), fatherMobile: form.fatherMobile.trim(), fatherEmail: optionalEmail(form.fatherEmail), motherName: form.motherName.trim(), motherOccupation: form.motherOccupation.trim(), motherMobile: form.motherMobile.trim(), motherEmail: optionalEmail(form.motherEmail), guardianName: form.guardianName.trim(), guardianMobile: form.guardianMobile.trim(), parentGuardianEmail: optionalEmail(form.parentGuardianEmail), annualIncome: numberOrZero(form.annualIncome), remarks: form.remarks.trim(),
     };
     if (import.meta.env.DEV) console.info("Student profile update payload:", payload);
@@ -737,4 +736,3 @@ function AllocationSelectField({ label, value, onChange, onBlur, error, options,
   const hasSelectedOption = options.some((option) => String(typeof option === "string" ? option : option.value) === selected);
   return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label} <span className="req">*</span></span><select value={selected} onChange={onChange}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected} disabled={Boolean(unavailableLabel)}>{unavailableLabel || selected}</option> : null}{options.map((option) => { const optionValue = typeof option === "string" ? option : option.value; const optionLabel = typeof option === "string" ? option : option.label; return <option key={optionValue} value={optionValue}>{optionLabel}</option>; })}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
 }
-

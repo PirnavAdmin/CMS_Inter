@@ -37,7 +37,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { attendanceService } from "@/api/attendanceService.js";
-import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { getAuthToken, getAuthUser } from "@/modules/auth/authStorage.js";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
 import nonTeachingStaffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
@@ -114,7 +114,7 @@ function resolveFacultyId(profile, auth) {
       return Number(c);
     }
   }
-  return 6;
+  return null;
 }
 
 function getLectureStatus(startTimeStr, endTimeStr) {
@@ -318,6 +318,7 @@ function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick, l
 
 // Module-level cache for Faculty Dashboard to retain loaded cards across module navigation
 const facultyDashboardCache = {
+  authToken: null,
   facultyId: null,
   timetableSlots: null,
   sectionAttendanceMap: null,
@@ -336,6 +337,7 @@ const DASHBOARD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
 export default function FacultyDashboardHome() {
   const { profileData, punchState, setPunchState, setActiveModule, notify } = useFaculty();
   const authUser = getAuthUser();
+  const currentAuthToken = getAuthToken();
   const { selectedCampus, selectedCampusId } = useCampusContext?.() || {};
   const { selectedBoard, selectedAcademicYear, selectedAcademicYearId } = useAcademicContext?.() || {};
 
@@ -346,8 +348,12 @@ export default function FacultyDashboardHome() {
   const facultyId = useMemo(() => resolveFacultyId(profileData, authUser), [profileData, authUser]);
 
   const isCacheValid = Boolean(
+    currentAuthToken &&
+    facultyDashboardCache.authToken === currentAuthToken &&
     facultyDashboardCache.facultyId === facultyId &&
     facultyDashboardCache.timetableSlots !== null &&
+    facultyDashboardCache.sectionAttendanceMap !== null &&
+    facultyDashboardCache.myAttMetrics !== null &&
     (Date.now() - facultyDashboardCache.timestamp < DASHBOARD_CACHE_TTL_MS)
   );
 
@@ -472,9 +478,9 @@ export default function FacultyDashboardHome() {
           status: "not_punched",
           inTime: null,
           outTime: null,
-          shiftStartTime: "09:00 AM",
-          shiftEndTime: "03:20 PM",
-          shiftName: "Morning (09:00 AM – 03:20 PM)",
+          shiftStartTime: "--",
+          shiftEndTime: "--",
+          shiftName: "--",
         }
   );
   const [myAttMetrics, setMyAttMetrics] = useState(() =>
@@ -486,12 +492,16 @@ export default function FacultyDashboardHome() {
           leaves: 0,
           holidays: 0,
           absentDays: 0,
-          leaveBalance: 15,
+          leaveBalance: 0,
           monthLabel: "",
-          rate: 100,
+          rate: 0,
         }
   );
   const myAttSeq = useRef(0);
+  const myAttHasCompletedRef = useRef(Boolean(isCacheValid && facultyDashboardCache.myAttMetrics));
+  const selfUpdatingPunchRef = useRef(false);
+  const punchStateRef = useRef(punchState);
+  punchStateRef.current = punchState;
 
   const fetchMyAttendanceData = useCallback(async () => {
     const seq = ++myAttSeq.current;
@@ -507,28 +517,39 @@ export default function FacultyDashboardHome() {
         return null;
       });
 
-      // Fast non-blocking leave balance fetch via self-service endpoint
       const leavePromise = attendanceService.getMyLeaveHistory().catch(() => null);
 
-      const [todayRes, histRes, leaveRes] = await Promise.all([
+      let [todayRes, histRes, leaveRes] = await Promise.all([
         todayPromise,
         historyPromise,
-        Promise.race([
-          leavePromise,
-          new Promise((resolve) => setTimeout(() => resolve(null), 500)),
-        ]),
+        leavePromise,
       ]);
+
+      // Retry once if today/history failed transiently on login burst
+      if ((!todayRes || !histRes) && myAttSeq.current === seq) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        if (myAttSeq.current !== seq) return;
+        const [retryToday, retryHist] = await Promise.all([
+          todayRes ? Promise.resolve(todayRes) : attendanceService.getMyTodayStatus().catch(() => null),
+          histRes ? Promise.resolve(histRes) : attendanceService.getMyAttendanceHistory("month").catch(() => null),
+        ]);
+        todayRes = retryToday;
+        histRes = retryHist;
+      }
 
       if (myAttSeq.current !== seq) return;
 
-      // Process Today status
+      const histPayload = histRes?.data || histRes?.Data || (histRes?.status ? histRes : null);
+      const rawMetrics = histPayload?.metrics || histPayload?.Metrics || {};
+      const rawLogs = Array.isArray(histPayload?.logs || histPayload?.Logs) ? (histPayload?.logs || histPayload?.Logs) : [];
+
       let normalizedToday = {
         status: "not_punched",
         inTime: null,
         outTime: null,
-        shiftStartTime: "09:00 AM",
-        shiftEndTime: "03:20 PM",
-        shiftName: "Morning (09:00 AM – 03:20 PM)",
+        shiftStartTime: "--",
+        shiftEndTime: "--",
+        shiftName: "--",
       };
 
       const todayPayload = todayRes?.data || todayRes?.Data || (todayRes?.status ? todayRes : null);
@@ -537,9 +558,10 @@ export default function FacultyDashboardHome() {
           status: todayPayload.status || todayPayload.Status || "not_punched",
           inTime: todayPayload.inTime || todayPayload.InTime || null,
           outTime: todayPayload.outTime || todayPayload.OutTime || null,
-          shiftStartTime: todayPayload.shiftStartTime || todayPayload.ShiftStartTime || "09:00 AM",
-          shiftEndTime: todayPayload.shiftEndTime || todayPayload.ShiftEndTime || "04:30 PM",
-          shiftName: todayPayload.shiftName || todayPayload.ShiftName || "Morning (09:00 AM – 04:30 PM)",
+          isMissedCheckout: Boolean(todayPayload.isMissedCheckout ?? todayPayload.IsMissedCheckout),
+          shiftStartTime: todayPayload.shiftStartTime || todayPayload.ShiftStartTime || "--",
+          shiftEndTime: todayPayload.shiftEndTime || todayPayload.ShiftEndTime || "--",
+          shiftName: todayPayload.shiftName || todayPayload.ShiftName || "--",
         };
         setMyAttToday(normalizedToday);
 
@@ -548,42 +570,41 @@ export default function FacultyDashboardHome() {
           const hoursWorked = normalizedToday.inTime
             ? calculateDurationStr(normalizedToday.inTime, normalizedToday.outTime, isPunched)
             : "--";
-          setPunchState({
-            isPunchedIn: isPunched,
-            inTime: normalizedToday.inTime,
-            outTime: normalizedToday.outTime,
-            hoursWorked: hoursWorked,
+          setPunchState((prev) => {
+            if (
+              prev &&
+              Boolean(prev.isPunchedIn) === isPunched &&
+              prev.inTime === normalizedToday.inTime &&
+              prev.outTime === normalizedToday.outTime
+            ) {
+              return prev;
+            }
+            selfUpdatingPunchRef.current = true;
+            return {
+              isPunchedIn: isPunched,
+              inTime: normalizedToday.inTime,
+              outTime: normalizedToday.outTime,
+              hoursWorked: hoursWorked,
+            };
           });
         }
+      } else {
+        setMyAttToday(normalizedToday);
       }
-
-      // Process Monthly History & Analytics Metrics
-      const histPayload = histRes?.data || histRes?.Data || (histRes?.status ? histRes : null);
-      const rawMetrics = histPayload?.metrics || histPayload?.Metrics || {};
-      const rawLogs = histPayload?.logs || histPayload?.Logs || [];
 
       const workingDays = parseInt(rawMetrics.workingDays || rawMetrics.WorkingDays, 10) || 0;
       const presentDays = parseInt(rawMetrics.presentDays || rawMetrics.PresentDays, 10) || 0;
       const leaves = parseInt(rawMetrics.leaves || rawMetrics.Leaves, 10) || 0;
       const absentDays = parseInt(rawMetrics.absentDays || rawMetrics.AbsentDays, 10) || 0;
 
-      let holidays = 0;
-      if (Array.isArray(rawLogs) && rawLogs.length > 0) {
-        holidays = rawLogs.filter((l) => {
-          const st = (l.status || l.Status || "").toLowerCase();
-          return st.includes("holiday") || st.includes("off") || st.includes("sunday") || Boolean(l.holidayName || l.HolidayName);
-        }).length;
-      } else {
-        const now = new Date();
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        let sundays = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-          if (new Date(now.getFullYear(), now.getMonth(), d).getDay() === 0) sundays++;
-        }
-        holidays = sundays;
-      }
+      const holidays = rawLogs.length > 0
+        ? rawLogs.filter((l) => {
+            const st = String(l?.status ?? l?.Status ?? "").toLowerCase();
+            return st.includes("holiday") || st.includes("off") || st.includes("sunday") || Boolean(l?.holidayName || l?.HolidayName);
+          }).length
+        : (parseInt(rawMetrics.holidays ?? rawMetrics.Holidays, 10) || 0);
 
-      let monthLabel = rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "";
+      let monthLabel = String(rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "");
       if (monthLabel) {
         monthLabel = monthLabel.replace(/\s*Total\s*$/i, "").trim();
       }
@@ -591,24 +612,31 @@ export default function FacultyDashboardHome() {
         monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
       }
 
-      let rate = 100;
-      const elapsedDays = presentDays + leaves + absentDays;
-      if (elapsedDays > 0) {
-        rate = Math.round((presentDays / elapsedDays) * 1000) / 10;
-      } else if (workingDays > 0) {
-        rate = Math.round((presentDays / workingDays) * 1000) / 10;
-      }
+      const apiRateRaw = rawMetrics.attendancePercentage ?? rawMetrics.AttendancePercentage;
+      const apiRateParsed =
+        apiRateRaw !== undefined && apiRateRaw !== null && apiRateRaw !== ""
+          ? Number(apiRateRaw)
+          : NaN;
+      const rate = Number.isFinite(apiRateParsed)
+        ? Math.min(100, Math.max(0, Math.round(apiRateParsed * 10) / 10))
+        : workingDays > 0
+        ? Math.min(100, Math.round((presentDays / workingDays) * 1000) / 10)
+        : 0;
 
-      let leaveBalance = 15;
+      let leaveBalance = 0;
       const leaveData = leaveRes?.data?.data || leaveRes?.data?.Data || leaveRes?.data || leaveRes?.Data;
-      if (leaveData?.balance?.remaining != null) {
-        leaveBalance = Number(leaveData.balance.remaining);
-      } else if (leaveData?.balance?.totalAvailable != null) {
-        leaveBalance = Number(leaveData.balance.totalAvailable);
-      } else if (leaveData?.balance?.total != null) {
-        leaveBalance = Math.max(0, Number(leaveData.balance.total) - (Number(leaveData.balance.used) || 0));
-      } else if (leaveData?.remaining != null) {
-        leaveBalance = Number(leaveData.remaining);
+      const balObj = leaveData?.balance || leaveData?.Balance;
+      if ((balObj?.remaining ?? balObj?.Remaining) != null) {
+        leaveBalance = Number(balObj.remaining ?? balObj.Remaining);
+      } else if ((balObj?.totalAvailable ?? balObj?.TotalAvailable) != null) {
+        leaveBalance = Number(balObj.totalAvailable ?? balObj.TotalAvailable);
+      } else if ((balObj?.total ?? balObj?.Total) != null) {
+        leaveBalance = Math.max(
+          0,
+          Number(balObj.total ?? balObj.Total) - (Number(balObj.used ?? balObj.Used) || 0)
+        );
+      } else if ((leaveData?.remaining ?? leaveData?.Remaining) != null) {
+        leaveBalance = Number(leaveData.remaining ?? leaveData.Remaining);
       }
 
       const metricsObj = {
@@ -622,8 +650,14 @@ export default function FacultyDashboardHome() {
         rate,
       };
       setMyAttMetrics(metricsObj);
-      facultyDashboardCache.myAttToday = normalizedToday;
-      facultyDashboardCache.myAttMetrics = metricsObj;
+      myAttHasCompletedRef.current = true;
+
+      if (todayPayload || histPayload) {
+        facultyDashboardCache.myAttToday = normalizedToday;
+        facultyDashboardCache.myAttMetrics = metricsObj;
+      } else {
+        facultyDashboardCache.myAttMetrics = null;
+      }
     } catch (err) {
       console.warn("Failed to load my attendance data for dashboard:", err);
     } finally {
@@ -658,10 +692,15 @@ export default function FacultyDashboardHome() {
     });
   }, [punchState]);
 
-  // Background refresh of monthly attendance metrics when staff punches in
+  // Background refresh of monthly attendance metrics only on genuine subsequent punch-in transitions
   const prevPunchedInRef = useRef(punchState?.isPunchedIn);
   useEffect(() => {
-    if (punchState?.isPunchedIn && !prevPunchedInRef.current) {
+    if (selfUpdatingPunchRef.current) {
+      selfUpdatingPunchRef.current = false;
+      prevPunchedInRef.current = punchState?.isPunchedIn;
+      return;
+    }
+    if (myAttHasCompletedRef.current && punchState?.isPunchedIn && !prevPunchedInRef.current) {
       fetchMyAttendanceData();
     }
     prevPunchedInRef.current = punchState?.isPunchedIn;
@@ -794,6 +833,7 @@ export default function FacultyDashboardHome() {
 
       setTimetableSlots(data);
       facultyDashboardCache.timetableSlots = data;
+      facultyDashboardCache.authToken = getAuthToken();
       facultyDashboardCache.facultyId = facultyId;
       facultyDashboardCache.timestamp = Date.now();
       facultyDashboardCache.lastUpdated = formattedTimestamp();
@@ -889,67 +929,108 @@ export default function FacultyDashboardHome() {
       return;
     }
     setAttendanceLoading(true);
-    const todayIso = new Date().toISOString().split("T")[0];
+    const nowDate = new Date();
+    const todayIso = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+
+    const fetchOneSection = async (sec) => {
+      const params = {
+        sectionId: sec.sectionId,
+        date: todayIso,
+        attendanceDate: todayIso,
+      };
+
+      const unwrapList = (res) => {
+        const payload = res?.data?.data ?? res?.data?.Data ?? res?.data ?? [];
+        return Array.isArray(payload) ? payload : (payload?.items ?? payload?.Items ?? payload?.records ?? []);
+      };
+
+      let [attRes, rosterRes] = await Promise.all([
+        apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null),
+        apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null),
+      ]);
+
+      if (!attRes) {
+        attRes = await apiClient.get("/api/v1/attendance/students", { params }).catch(() => null);
+      }
+
+      if (!attRes || !rosterRes) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const [retryAtt, retryRoster] = await Promise.all([
+          attRes
+            ? Promise.resolve(attRes)
+            : apiClient.get("/api/v1/attendance/admin/students", { params })
+                .catch(() => apiClient.get("/api/v1/attendance/students", { params }))
+                .catch(() => null),
+          rosterRes
+            ? Promise.resolve(rosterRes)
+            : apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null),
+        ]);
+        attRes = retryAtt;
+        rosterRes = retryRoster;
+      }
+
+      const attList = attRes ? unwrapList(attRes) : [];
+      const rosterList = rosterRes ? unwrapList(rosterRes) : [];
+
+      const genderById = new Map();
+      let rosterBoys = 0;
+      let rosterGirls = 0;
+      rosterList.forEach((r) => {
+        const sid = r.studentId ?? r.StudentId ?? r.id ?? r.Id;
+        const g = String(r.gender || r.Gender || r.sex || "").toLowerCase();
+        if (sid != null && g) genderById.set(String(sid), g);
+        if (g.startsWith("m")) rosterBoys++;
+        else if (g.startsWith("f")) rosterGirls++;
+      });
+
+      const studentList = attList.length ? attList : rosterList;
+
+      let present = 0;
+      let absent = 0;
+      let halfDay = 0;
+      let boys = 0;
+      let girls = 0;
+
+      studentList.forEach((s) => {
+        const sid = s.studentId ?? s.StudentId ?? s.id ?? s.Id;
+        const g = String(s.gender || s.Gender || s.sex || (sid != null ? genderById.get(String(sid)) : "") || "").toLowerCase();
+        if (g.startsWith("m")) boys++;
+        else if (g.startsWith("f")) girls++;
+
+        const status = evaluateStudentAttendance(s);
+        if (status === "Half-day") {
+          halfDay++;
+        } else if (status === "Present") {
+          present++;
+        } else if (status === "Absent") {
+          absent++;
+        }
+      });
+
+      const total = Math.max(studentList.length, rosterList.length);
+      const finalBoys = boys || rosterBoys || (total > 0 ? Math.round(total * 0.55) : 0);
+      const finalGirls = girls || rosterGirls || (total > 0 ? Math.max(0, total - finalBoys) : 0);
+      const percentage = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 0;
+
+      return {
+        sectionId: sec.sectionId,
+        sectionName: sec.sectionName,
+        total,
+        present,
+        absent,
+        halfDay,
+        boys: finalBoys,
+        girls: finalGirls,
+        percentage,
+        _hasAttendance: Boolean(attRes),
+      };
+    };
 
     try {
       const results = await Promise.all(
         sectionsToUse.map(async (sec) => {
           try {
-            const params = {
-              sectionId: sec.sectionId,
-              date: todayIso,
-              attendanceDate: todayIso,
-            };
-
-            // Query today's attendance records and section roster in parallel for instant data availability
-            const [attRes, rosterRes] = await Promise.all([
-              apiClient.get("/api/v1/attendance/admin/students", { params }).catch(() => null),
-              apiClient.get(`/api/v1/students/section/${sec.sectionId}`).catch(() => null),
-            ]);
-
-            const attPayload = attRes?.data?.data ?? attRes?.data?.Data ?? attRes?.data ?? [];
-            const attList = Array.isArray(attPayload) ? attPayload : (attPayload?.items ?? attPayload?.Items ?? attPayload?.records ?? []);
-
-            const rosterPayload = rosterRes?.data?.data ?? rosterRes?.data?.Data ?? rosterRes?.data ?? [];
-            const rosterList = Array.isArray(rosterPayload) ? rosterPayload : (rosterPayload?.items ?? rosterPayload?.Items ?? rosterPayload?.records ?? []);
-
-            let studentList = attList.length ? attList : rosterList;
-
-            let present = 0;
-            let absent = 0;
-            let halfDay = 0;
-            let boys = 0;
-            let girls = 0;
-
-            studentList.forEach((s) => {
-              const g = String(s.gender || s.sex || "").toLowerCase();
-              if (g.startsWith("m")) boys++;
-              else if (g.startsWith("f")) girls++;
-
-              const status = evaluateStudentAttendance(s);
-              if (status === "Half-day") {
-                halfDay++;
-              } else if (status === "Present") {
-                present++;
-              } else if (status === "Absent") {
-                absent++;
-              }
-            });
-
-            const total = studentList.length;
-            const percentage = total > 0 ? Number(((present / total) * 100).toFixed(1)) : 0;
-
-            return {
-              sectionId: sec.sectionId,
-              sectionName: sec.sectionName,
-              total,
-              present,
-              absent,
-              halfDay,
-              boys: boys || Math.round(total * 0.55),
-              girls: girls || (total - Math.round(total * 0.55)),
-              percentage,
-            };
+            return await fetchOneSection(sec);
           } catch (secErr) {
             console.warn(`Could not load attendance for section ${sec.sectionId}:`, secErr);
             return {
@@ -962,19 +1043,26 @@ export default function FacultyDashboardHome() {
               boys: 0,
               girls: 0,
               percentage: 0,
+              _hasAttendance: false,
             };
           }
         })
       );
 
+      const allFetched = results.length > 0 && results.every((r) => r && r._hasAttendance);
       const map = {};
       results.forEach((r) => {
         if (r) {
-          map[r.sectionId] = r;
+          const { _hasAttendance, ...clean } = r;
+          map[clean.sectionId] = clean;
         }
       });
       setSectionAttendanceMap(map);
-      facultyDashboardCache.sectionAttendanceMap = map;
+      if (allFetched) {
+        facultyDashboardCache.sectionAttendanceMap = map;
+      } else {
+        facultyDashboardCache.sectionAttendanceMap = null;
+      }
     } catch (err) {
       console.warn("Failed to fetch section attendance in faculty dashboard:", err);
     } finally {
@@ -1283,12 +1371,12 @@ export default function FacultyDashboardHome() {
     },
     {
       label: "Marks Evaluation",
-      value: String(liveMarksEvals.length > 0 ? liveMarksEvals.length : 1),
-      badge: liveMarksEvals.length > 0 ? "LIVE" : "ACTIVE",
-      subtext: liveMarksEvals[0]?.examName || liveMarksEvals[0]?.subjectName || "Unit Test / Term Exams",
+      value: String(liveMarksEvals.length),
+      badge: liveMarksEvals.length > 0 ? "LIVE" : "NONE",
+      subtext: liveMarksEvals[0]?.examName || liveMarksEvals[0]?.subjectName || "No evaluations assigned",
       tone: "orange",
       icon: createExamIcon,
-      tooltip: `${liveMarksEvals.length || 1} examination marks evaluations`,
+      tooltip: `${liveMarksEvals.length} examination marks evaluations`,
       onClick: () => setActiveModule("marks"),
     },
     {
@@ -1311,7 +1399,7 @@ export default function FacultyDashboardHome() {
       <div className="dashboard-header-bar">
         <div className="dashboard-greeting-wrap">
           <h1 className="dashboard-greeting-title">
-            <span className="dashboard-greeting-emoji">{greeting.icon}</span> {greeting.message}, {profileData?.firstName || "Dr. Ananya"}!
+            <span className="dashboard-greeting-emoji">{greeting.icon}</span> {greeting.message}, {profileData?.firstName || "Faculty"}!
           </h1>
           <p className="dashboard-greeting-sub">
             Here's what's happening with your classes and teaching schedule today.
@@ -1830,7 +1918,7 @@ export default function FacultyDashboardHome() {
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
                       <strong>{myAttMetrics.rate}%</strong>
-                      <span>Punctual</span>
+                      <span>Attendance</span>
                     </div>
                   </div>
 
@@ -1847,7 +1935,7 @@ export default function FacultyDashboardHome() {
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
-                        <span className="dot" style={{ background: "#94a3b8" }} /> Holidays ({myAttMetrics.holidays} Days)
+                        <span className="dot" style={{ background: "#94a3b8" }} /> Holidays ({myAttMetrics.holidays} {myAttMetrics.holidays === 1 ? "Day" : "Days"})
                       </span>
                     </div>
                     {myAttMetrics.absentDays > 0 && (
@@ -1872,7 +1960,7 @@ export default function FacultyDashboardHome() {
                       title="Click to view My Attendance"
                     >
                       <small>Working</small>
-                      <strong>{myAttMetrics.workingDays} Days</strong>
+                      <strong>{myAttMetrics.workingDays} {myAttMetrics.workingDays === 1 ? "Day" : "Days"}</strong>
                     </div>
                     <div
                       className="staff-chip text-present"
@@ -1883,7 +1971,7 @@ export default function FacultyDashboardHome() {
                       title="Click to view My Attendance"
                     >
                       <small>Present</small>
-                      <strong>{myAttMetrics.presentDays} Days</strong>
+                      <strong>{myAttMetrics.presentDays} {myAttMetrics.presentDays === 1 ? "Day" : "Days"}</strong>
                     </div>
                     <div
                       className="staff-chip text-late"
@@ -1905,7 +1993,7 @@ export default function FacultyDashboardHome() {
                       title="Click to view My Attendance"
                     >
                       <small>Holidays</small>
-                      <strong>{myAttMetrics.holidays} Days</strong>
+                      <strong>{myAttMetrics.holidays} {myAttMetrics.holidays === 1 ? "Day" : "Days"}</strong>
                     </div>
                     <div
                       className="staff-chip text-leave"
@@ -1916,7 +2004,7 @@ export default function FacultyDashboardHome() {
                       title="Click to view My Attendance"
                     >
                       <small>Balance</small>
-                      <strong>{myAttMetrics.leaveBalance} Days</strong>
+                      <strong>{myAttMetrics.leaveBalance} {myAttMetrics.leaveBalance === 1 ? "Day" : "Days"}</strong>
                     </div>
                   </div>
                   <div className="dashboard-staff-split-note">

@@ -29,77 +29,21 @@ import {
   FileSignature,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
+import {
+  calculateStaffProfileCompletion,
+  isStaffPortalUnlocked,
+  FACULTY_INDIAN_BANKS,
+  getBankFieldConstraints,
+  validateAllBankFields,
+} from "../profileCompletion.js";
 import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
-import { facultyMockData } from "../data/facultyMockData.js";
 import apiClient from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
 import TransparentAvatar from "@/shared/components/TransparentAvatar.jsx";
+import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonInput } from "@/shared/components/Ui.jsx";
 import "../styles/FacultyProfile.css";
 
-const PIN_LOOKUP = {
-  "522": { district: "Guntur", state: "Andhra Pradesh", country: "India" },
-  "520": { district: "NTR (Krishna)", state: "Andhra Pradesh", country: "India" },
-  "521": { district: "Krishna", state: "Andhra Pradesh", country: "India" },
-  "523": { district: "Prakasam", state: "Andhra Pradesh", country: "India" },
-  "524": { district: "SPSR Nellore", state: "Andhra Pradesh", country: "India" },
-  "517": { district: "Tirupati / Chittoor", state: "Andhra Pradesh", country: "India" },
-  "518": { district: "Kurnool", state: "Andhra Pradesh", country: "India" },
-  "515": { district: "Anantapur", state: "Andhra Pradesh", country: "India" },
-  "516": { district: "YSR Kadapa", state: "Andhra Pradesh", country: "India" },
-  "530": { district: "Visakhapatnam", state: "Andhra Pradesh", country: "India" },
-  "531": { district: "Anakapalli", state: "Andhra Pradesh", country: "India" },
-  "532": { district: "Srikakulam", state: "Andhra Pradesh", country: "India" },
-  "533": { district: "Kakinada / East Godavari", state: "Andhra Pradesh", country: "India" },
-  "534": { district: "Eluru / West Godavari", state: "Andhra Pradesh", country: "India" },
-  "535": { district: "Vizianagaram", state: "Andhra Pradesh", country: "India" },
-  "500": { district: "Hyderabad", state: "Telangana", country: "India" },
-  "501": { district: "Ranga Reddy", state: "Telangana", country: "India" },
-  "502": { district: "Sangareddy / Medak", state: "Telangana", country: "India" },
-  "505": { district: "Karimnagar", state: "Telangana", country: "India" },
-  "506": { district: "Warangal", state: "Telangana", country: "India" },
-  "560": { district: "Bengaluru", state: "Karnataka", country: "India" },
-  "600": { district: "Chennai", state: "Tamil Nadu", country: "India" },
-  "110": { district: "New Delhi", state: "Delhi", country: "India" },
-  "400": { district: "Mumbai", state: "Maharashtra", country: "India" },
-};
-
-
-export const INDIAN_BANKS = [
-  "State Bank of India",
-  "HDFC Bank",
-  "ICICI Bank",
-  "Punjab National Bank",
-  "Bank of Baroda",
-  "Canara Bank",
-  "Union Bank of India",
-  "Axis Bank",
-  "Kotak Mahindra Bank",
-  "IndusInd Bank",
-  "Bank of India",
-  "Central Bank of India",
-  "Indian Bank",
-  "Indian Overseas Bank",
-  "UCO Bank",
-  "Bank of Maharashtra",
-  "Punjab & Sind Bank",
-  "Federal Bank",
-  "IDBI Bank",
-  "YES Bank",
-  "South Indian Bank",
-  "Karur Vysya Bank",
-  "City Union Bank",
-  "Bandhan Bank",
-  "RBL Bank",
-  "AU Small Finance Bank",
-  "Equitas Small Finance Bank",
-  "Ujjivan Small Finance Bank",
-  "Jana Small Finance Bank",
-  "Andhra Pragathi Grameena Bank",
-  "Chaitanya Godavari Grameena Bank",
-  "Telangana Grameena Bank",
-  "Andhra Pradesh Grameena Vikas Bank",
-  "Other Banks"
-];
+export const INDIAN_BANKS = FACULTY_INDIAN_BANKS;
 
 export const PROFILE_STEPS = [
   { id: 1, title: "Personal Info", subtitle: "Personal Information" },
@@ -294,6 +238,7 @@ export default function FacultyProfile() {
   const {
     profileData,
     setProfileData,
+    isLoadingProfile,
     persistStaffProfile,
     isEditingProfile,
     setIsEditingProfile,
@@ -307,6 +252,113 @@ export default function FacultyProfile() {
   const [isSavingStep, setIsSavingStep] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
+  const [pincodeAreas, setPincodeAreas] = useState([]);
+  const [pinError, setPinError] = useState("");
+  const [editPinError, setEditPinError] = useState("");
+  const [bankErrors, setBankErrors] = useState({});
+  const [editBankErrors, setEditBankErrors] = useState({});
+  const pinLookupSeqRef = useRef(0);
+  const lastAutoAreaRef = useRef("");
+
+  const bankConstraints = useMemo(
+    () => getBankFieldConstraints(profileData?.bankName),
+    [profileData?.bankName]
+  );
+
+  const resolveStaffId = (data = {}, auth = getAuthUser() || {}) => {
+    const candidates = [data?.id, data?.facultyId, data?.staffId, auth?.staffId, auth?.id];
+    return (
+      candidates.find((v) => {
+        if (v === null || v === undefined) return false;
+        const s = String(v).trim();
+        return s !== "" && s !== "0" && !/^(undefined|null)$/i.test(s);
+      }) || null
+    );
+  };
+
+  const toObjectArray = (primary, secondary, fallback = []) => {
+    if (Array.isArray(primary)) return primary;
+    if (Array.isArray(secondary)) return secondary;
+    return Array.isArray(fallback) ? fallback : [];
+  };
+
+  const extractBackendErrorMsg = (err, fallback) => {
+    const data = err?.response?.data;
+    if (data?.errors && typeof data.errors === "object") {
+      const msgs = Object.values(data.errors).flat().filter(Boolean);
+      if (msgs.length > 0) return msgs.join(" ");
+    }
+    if (
+      data?.details &&
+      typeof data.details === "string" &&
+      (!data?.message || data.message === "An unexpected server error occurred.")
+    ) {
+      return data.details;
+    }
+    return data?.message || data?.Message || data?.details || data?.title || err?.message || fallback;
+  };
+
+  const applyBankChange = (patch) => {
+    setProfileData((prev) => {
+      const next = { ...prev, ...patch };
+      setBankErrors(validateAllBankFields(next));
+      return next;
+    });
+  };
+
+  const applyEditBankChange = (patch) => {
+    setEditBank((prev) => {
+      const next = { ...prev, ...patch };
+      setEditBankErrors(validateAllBankFields(next));
+      return next;
+    });
+  };
+
+  const lookupPincodeFromApi = async (pin, applyResult, setErrorFn) => {
+    if (!pin || pin.length < 6) {
+      setErrorFn("");
+      return;
+    }
+    if (!/^[1-9][0-9]{5}$/.test(pin)) {
+      setErrorFn("Pincode must be 6 digits and cannot start with 0.");
+      setPincodeAreas([]);
+      return;
+    }
+    const seq = ++pinLookupSeqRef.current;
+    setIsFetchingPin(true);
+    setErrorFn("");
+    try {
+      const res = await apiClient.get(apiEndpoints.location.byPincode(pin), { skipGlobalLoader: true });
+      if (pinLookupSeqRef.current !== seq) return;
+      const loc = res?.data?.data || res?.data || {};
+      const foundFlag = loc.found ?? loc.Found;
+      if (foundFlag === false) {
+        setErrorFn("No address details found for this pincode.");
+        setPincodeAreas([]);
+        return;
+      }
+      const areas = Array.isArray(loc.areas || loc.Areas) ? (loc.areas || loc.Areas) : [];
+      setPincodeAreas(areas);
+      const nextArea = areas[0] || "";
+      applyResult({
+        country: loc.country || loc.Country || "India",
+        state: loc.state || loc.State || "",
+        district: loc.district || loc.District || "",
+        city: loc.city || loc.City || loc.district || loc.District || "",
+        areas,
+        suggestedArea: nextArea,
+      });
+      lastAutoAreaRef.current = nextArea;
+    } catch (err) {
+      if (pinLookupSeqRef.current !== seq) return;
+      setPincodeAreas([]);
+      setErrorFn(extractBackendErrorMsg(err, "No address details found for this pincode."));
+    } finally {
+      if (pinLookupSeqRef.current === seq) {
+        setIsFetchingPin(false);
+      }
+    }
+  };
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showPendingApprovalModal, setShowPendingApprovalModal] = useState(false);
   const [isDownloadingOfferLetter, setIsDownloadingOfferLetter] = useState(false);
@@ -315,6 +367,11 @@ export default function FacultyProfile() {
   const [editPersonal, setEditPersonal] = useState({});
   const [editBank, setEditBank] = useState({});
   const [editAddress, setEditAddress] = useState({});
+
+  const editBankConstraints = useMemo(
+    () => getBankFieldConstraints(editBank?.bankName),
+    [editBank?.bankName]
+  );
 
   const isCurrentStepFilled = useMemo(() => {
     switch (profileStep) {
@@ -393,17 +450,13 @@ export default function FacultyProfile() {
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
   const activePhotoUrl = useMemo(() => {
-    const staffId = profileData?.id || profileData?.facultyId;
-    const cachedStaffPhoto = typeof window !== "undefined" && staffId ? localStorage.getItem(`staff_profile_${staffId}_photo`) : null;
     return (
       profileData?.photoUrl ||
       profileData?.photoPath ||
       profileData?.profilePhoto ||
-      cachedStaffPhoto ||
-      (typeof window !== "undefined" ? localStorage.getItem("staff_profile_photo") : null) ||
       null
     );
-  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.profilePhoto, profileData?.id, profileData?.facultyId]);
+  }, [profileData?.photoUrl, profileData?.photoPath, profileData?.profilePhoto]);
 
   useEffect(() => {
     setPhotoLoadError(false);
@@ -515,12 +568,6 @@ export default function FacultyProfile() {
       avatarRef.current.value = "";
     }
     if (typeof window !== "undefined") {
-      localStorage.removeItem("staff_profile_photo");
-      if (staffTargetId) {
-        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
-        // await syncAllSectionsToBackend(staffTargetId, profileData);
-        localStorage.removeItem(`staff_profile_${staffTargetId}_photo`);
-      }
       window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: "" } }));
     }
     setPhotoLoadError(false);
@@ -669,7 +716,7 @@ export default function FacultyProfile() {
               uploadRes?.data?.PhotoUrl ||
               uploadRes?.data?.profilePhoto;
 
-            const finalPhotoUrl = serverPath || `/uploads/staff-photos/photo_staff_${staffTargetId}.jpg`;
+            const finalPhotoUrl = serverPath || `/api/v1/staff/photo/${staffTargetId}`;
 
             setProfileData((prev) => {
               const updated = { ...prev, photoUrl: finalPhotoUrl, photoPath: finalPhotoUrl, profilePhoto: finalPhotoUrl };
@@ -678,14 +725,12 @@ export default function FacultyProfile() {
             });
 
             if (typeof window !== "undefined") {
-              localStorage.setItem("staff_profile_photo", finalPhotoUrl);
-              localStorage.setItem(`staff_profile_${staffTargetId}_photo`, finalPhotoUrl);
               window.dispatchEvent(new CustomEvent("cms-staff-photo-updated", { detail: { photoUrl: finalPhotoUrl } }));
             }
             notify("Profile photo cropped and saved to server successfully!");
           } catch (e) {
             console.error("Photo upload to backend failed:", e);
-            notify("Photo uploaded locally, but sync with server failed. Please try saving again.", "warning");
+            notify(extractBackendErrorMsg(e, "Failed to upload photo to server. Please try again."), "error");
           }
         }
       }, "image/jpeg", 0.92);
@@ -700,56 +745,10 @@ export default function FacultyProfile() {
 
   };
 
-  const hasVal = (val) => {
-    if (val === null || val === undefined) return false;
-    if (typeof val === "string") return val.trim().length > 0;
-    if (typeof val === "number") return true;
-    if (Array.isArray(val)) return val.length > 0;
-    if (typeof val === "object") return Object.keys(val).length > 0;
-    return Boolean(val);
-  };
-
-  const profileCompletion = useMemo(() => {
-    const checklist = [
-      hasVal(profileData.firstName),
-      hasVal(profileData.lastName),
-      hasVal(profileData.dob),
-      hasVal(profileData.gender),
-      hasVal(profileData.maritalStatus),
-      hasVal(profileData.mobile),
-      hasVal(profileData.email),
-      hasVal(profileData.aadhaar),
-      hasVal(profileData.pan),
-      hasVal(profileData.department),
-      hasVal(profileData.designation),
-      hasVal(profileData.dateOfJoining),
-      hasVal(profileData.bloodGroup),
-      hasVal(profileData.photoUrl),
-
-      hasVal(profileData.bankName),
-      hasVal(profileData.accountHolder),
-      hasVal(profileData.accountNumber),
-      hasVal(profileData.ifsc),
-      hasVal(profileData.branch),
-      hasVal(profileData.accountType),
-      hasVal(profileData.uanNumber || profileData.pfNumber),
-
-      hasVal(profileData.houseNumber || profileData.address),
-      hasVal(profileData.street || profileData.streetArea),
-      hasVal(profileData.city || profileData.cityVillage),
-      hasVal(profileData.pin || profileData.pincode),
-      hasVal(profileData.district),
-      hasVal(profileData.state),
-
-      hasVal(profileData.experience),
-      hasVal(profileData.documents),
-    ];
-
-    const filledCount = checklist.filter(Boolean).length;
-    const calculated = Math.min(100, Math.round((filledCount / checklist.length) * 100));
-    const authUser = getAuthUser();
-    return Math.max(calculated, Number(profileData.profileCompletionPercentage || profileData.profileCompletion || authUser?.profileCompletionPercentage || 0));
-  }, [profileData]);
+  const profileCompletion = useMemo(
+    () => calculateStaffProfileCompletion(profileData),
+    [profileData]
+  );
 
   const handleDownloadProfile = async () => {
     try {
@@ -972,9 +971,10 @@ export default function FacultyProfile() {
       });
 
       // SECTION 4: Professional Academic Experience
+      const pdfExpList = toObjectArray(profileData.experience, profileData.experienceList);
       const expRows =
-        profileData.experience && profileData.experience.length > 0
-          ? profileData.experience.map((e, idx) => [
+        pdfExpList.length > 0
+          ? pdfExpList.map((e, idx) => [
             { content: String(idx + 1), styles: { halign: "center" } },
             e.institution || "—",
             e.designation || "—",
@@ -1124,11 +1124,17 @@ export default function FacultyProfile() {
       3: [
         ["houseNumber", "House number"],
         ["street", "Street / area"],
+        ["city", "City / village"],
+        ["pin", "Pincode"],
+        ["district", "District"],
+        ["state", "State"],
       ],
     };
     const fallbacks = {
       houseNumber: "address",
       street: "streetArea",
+      city: "cityVillage",
+      pin: "pincode",
       dob: "dateOfBirth",
       dateOfJoining: "joiningDate",
       mobile: "phone",
@@ -1145,18 +1151,45 @@ export default function FacultyProfile() {
       notify(`Complete the required fields: ${missing.join(", ")}.`, "error");
       return false;
     }
+
+    if (profileStep === 2) {
+      const bErrors = validateAllBankFields(profileData);
+      setBankErrors(bErrors);
+      const firstBankError = Object.values(bErrors)[0];
+      if (firstBankError) {
+        notify(firstBankError, "error");
+        return false;
+      }
+    }
+
+    if (profileStep === 3) {
+      const pinVal = String(profileData.pin || profileData.pincode || "").trim();
+      if (pinVal && !/^[1-9][0-9]{5}$/.test(pinVal)) {
+        const msg = "Pincode must be exactly 6 digits and cannot start with 0.";
+        setPinError(msg);
+        notify(msg, "error");
+        return false;
+      }
+    }
+
     return true;
   };
 
   const getFormattedDraftPayload = (data) => {
-    const docsMap = {};
-    (data.documents || []).forEach((d, idx) => {
-      const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
-      const v = String(d?.url || d?.name || "uploaded").trim();
-      if (k) docsMap[k] = v;
-    });
+    const docsList = toObjectArray(data?.documents, data?.documentsList)
+      .filter((d) => d && typeof d === "object" && (d.type || d.name || d.url))
+      .map((d, idx) => ({
+        id: String(d.id || idx + 1),
+        type: String(d.type || "Document").trim(),
+        name: String(d.name || d.title || d.type || "Document").trim(),
+        size: String(d.size || "Unknown"),
+        url: String(d.url || "").startsWith("blob:") ? "" : String(d.url || "").trim(),
+        format: String(d.format || "").trim(),
+      }));
 
-    const expItems = (data.experience || []).map((e) => ({
+    const expItems = toObjectArray(data?.experience, data?.experienceList)
+      .filter((e) => e && typeof e === "object")
+      .map((e) => ({
       id: e.id,
       organization: e.institution || e.organization || e.institutionName || "",
       institution: e.institution || e.organization || e.institutionName || "",
@@ -1219,91 +1252,87 @@ export default function FacultyProfile() {
       alternateMobile: data.alternateMobile || "",
     };
 
-    return { personal, bank, address, experience: expItems, documents: docsMap };
+    return { personal, bank, address, experience: expItems, documents: docsList };
   };
 
   const syncAllSectionsToBackend = async (targetStaffId, currentData) => {
-    if (!targetStaffId) return;
+    if (!targetStaffId) return null;
     const { personal, bank, address, experience, documents } = getFormattedDraftPayload(currentData);
 
-    const saveSection = async (sectionName, payload) => {
-      try {
-        const res = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
-          sectionName,
-          ...payload,
-        });
-        const d = res?.data?.data || res?.data;
-        if (d && typeof d === "object" && (d.profileCompletionPercentage !== undefined || d.profileCompletion !== undefined)) {
-          const comp = d.profileCompletionPercentage ?? d.profileCompletion;
-          setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
-        }
-      } catch (err) {
-        console.warn(`Draft save error for section ${sectionName}:`, err);
-      }
+    const hasBank = Boolean(bank.accountNumber || bank.ifscCode || bank.bankName);
+    const hasAddress = Boolean(address.houseNumber || address.street || address.city || address.pincode || address.state);
+    const draftPayload = {
+      sectionName: "All",
+      personal,
+      Personal: personal,
+      ...(hasBank ? { bank, Bank: bank } : {}),
+      ...(hasAddress ? { address, Address: address } : {}),
+      ...(experience.length > 0 ? { experience, Experience: experience } : {}),
+      ...(documents.length > 0 ? { documents, Documents: documents } : {}),
     };
 
-    await saveSection("Personal", { personal, Personal: personal });
-    if (bank.accountNumber || bank.ifscCode || bank.bankName) {
-      await saveSection("Bank", { bank, Bank: bank });
-    }
-    if (address.houseNumber || address.street || address.city || address.pincode) {
-      await saveSection("Address", { address, Address: address });
-    }
-    if (experience.length > 0) {
-      await saveSection("Experience", { experience, Experience: experience });
-    }
-    if (Object.keys(documents).length > 0 || (currentData.documents && currentData.documents.length > 0)) {
-      await saveSection("Documents", { documents, Documents: documents });
-    }
-
-    // Composite full draft to saveProfileDraft
-    try {
-      const resComposite = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
-        sectionName: "All",
-        personal,
-        Personal: personal,
-        bank,
-        Bank: bank,
-        address,
-        Address: address,
-        experience,
-        Experience: experience,
-        documents,
-        Documents: documents,
+    const resComposite = await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), draftPayload);
+    const compData = resComposite?.data?.data || resComposite?.data;
+    if (compData && typeof compData === "object") {
+      const comp = compData.profileCompletionPercentage ?? compData.profileCompletion;
+      setProfileData((prev) => {
+        const updated = {
+          ...prev,
+          ...(comp !== undefined ? { profileCompletionPercentage: comp, profileCompletion: comp } : {}),
+          ...(compData.profileStatus ? { profileStatus: compData.profileStatus } : {}),
+        };
+        persistStaffProfile(updated);
+        return updated;
       });
-      const compData = resComposite?.data?.data || resComposite?.data;
-      if (compData && typeof compData === "object" && (compData.profileCompletionPercentage !== undefined || compData.profileCompletion !== undefined)) {
-        const comp = compData.profileCompletionPercentage ?? compData.profileCompletion;
-        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
-      }
-    } catch (e) {
-      console.warn("Composite draft save warning:", e);
     }
+    return compData;
+  };
 
-    // Direct Staff entity update via PUT /api/v1/staff/{id} to persist all sections directly to DB
-    try {
-      const staffUpdatePayload = {
-        ...currentData,
-        ...personal,
-        ...bank,
-        ...address,
-        dateOfBirth: currentData.dob || currentData.dateOfBirth || null,
-        joiningDate: currentData.dateOfJoining || currentData.joiningDate || null,
-        dateOfJoining: currentData.dateOfJoining || currentData.joiningDate || null,
-        documents,
-        experience: experience.length * 1.0,
-        photoPath: currentData.photoPath || currentData.photoUrl || "",
-        profileCompletionPercentage: Math.max(profileCompletion, Number(currentData.profileCompletionPercentage || 0)),
-      };
-      const putRes = await apiClient.put(apiEndpoints.faculty.update(targetStaffId), staffUpdatePayload);
-      const putData = putRes?.data?.data || putRes?.data;
-      if (putData && typeof putData === "object" && (putData.profileCompletionPercentage !== undefined || putData.profileCompletion !== undefined)) {
-        const comp = putData.profileCompletionPercentage ?? putData.profileCompletion;
-        setProfileData((prev) => ({ ...prev, profileCompletionPercentage: comp, profileCompletion: comp }));
-      }
-    } catch (e) {
-      console.warn("Staff PUT update warning:", e);
+  const handleRemoveExperienceRecord = async (expId) => {
+    const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+    const updated = safeExperience.filter((item) => item.id !== expId);
+    const updatedProfile = { ...profileData, experience: updated };
+    const nextPct = calculateStaffProfileCompletion(updatedProfile);
+    const syncedProfile = { ...updatedProfile, profileCompletionPercentage: nextPct, profileCompletion: nextPct };
+    setProfileData(syncedProfile);
+    persistStaffProfile(syncedProfile);
+    if (targetStaffId) {
+      await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+        sectionName: "Experience",
+        experience: updated,
+        Experience: updated,
+      }).catch(() => {});
     }
+    notify("Experience record removed.");
+  };
+
+  const handleRemoveDocumentRecord = async (docItem) => {
+    const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+    const updated = safeDocuments.filter((item) => item.id !== docItem.id);
+    const updatedProfile = { ...profileData, documents: updated };
+    const nextPct = calculateStaffProfileCompletion(updatedProfile);
+    const syncedProfile = { ...updatedProfile, profileCompletionPercentage: nextPct, profileCompletion: nextPct };
+    setProfileData(syncedProfile);
+    persistStaffProfile(syncedProfile);
+    if (targetStaffId) {
+      let deleted = false;
+      if (docItem?.type) {
+        try {
+          await apiClient.delete(apiEndpoints.faculty.deleteDocument(targetStaffId, docItem.type));
+          deleted = true;
+        } catch {
+          deleted = false;
+        }
+      }
+      if (!deleted) {
+        await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
+          sectionName: "Documents",
+          documents: updated,
+          Documents: updated,
+        }).catch(() => {});
+      }
+    }
+    notify("Document removed.");
   };
 
   const handleSaveAndNext = async () => {
@@ -1343,18 +1372,18 @@ export default function FacultyProfile() {
         case 2:
           sectionName = "Bank";
           payload.Bank = {
-            bankName: profileData.bankName,
-            accountHolderName: profileData.accountHolder || profileData.accountHolderName,
-            accountHolder: profileData.accountHolder || profileData.accountHolderName,
-            accountNumber: profileData.accountNumber,
-            ifscCode: profileData.ifsc || profileData.ifscCode,
-            ifsc: profileData.ifsc || profileData.ifscCode,
-            branch: profileData.branch || profileData.branchName,
-            branchName: profileData.branch || profileData.branchName,
-            accountType: profileData.accountType || "Savings",
-            panNumber: profileData.pan || profileData.panNumber,
-            pfNumber: profileData.pfNumber || profileData.uanNumber,
-            uanNumber: profileData.uanNumber || profileData.pfNumber,
+            bankName: profileData.bankName || "",
+            accountHolderName: profileData.accountHolder || profileData.accountHolderName || "",
+            accountHolder: profileData.accountHolder || profileData.accountHolderName || "",
+            accountNumber: profileData.accountNumber || "",
+            ifscCode: (profileData.ifsc || profileData.ifscCode || "").toUpperCase(),
+            ifsc: (profileData.ifsc || profileData.ifscCode || "").toUpperCase(),
+            branch: profileData.branch || profileData.branchName || "",
+            branchName: profileData.branch || profileData.branchName || "",
+            accountType: profileData.accountType || "Savings Account",
+            panNumber: profileData.pan || profileData.panNumber || "",
+            pfNumber: profileData.pfNumber || profileData.uanNumber || "",
+            uanNumber: profileData.uanNumber || profileData.pfNumber || "",
           };
           break;
         case 3:
@@ -1375,7 +1404,9 @@ export default function FacultyProfile() {
           break;
         case 4:
           sectionName = "Experience";
-          payload.Experience = (profileData.experience || []).map((e) => ({
+          payload.Experience = toObjectArray(profileData.experience, profileData.experienceList)
+            .filter((e) => e && typeof e === "object")
+            .map((e) => ({
             id: e.id,
             institution: e.institution || e.organization || e.institutionName || "",
             organization: e.institution || e.organization || e.institutionName || "",
@@ -1411,12 +1442,16 @@ export default function FacultyProfile() {
       if (payload.Address) payload.address = payload.Address;
       if (payload.Experience) payload.experience = payload.Experience;
       if (payload.Documents) {
-        payload.documents = {};
-        (profileData.documents || []).forEach((d, idx) => {
-          const k = String(d?.type || d?.name || `Document_${idx + 1}`).trim();
-          const v = String(d?.url || d?.name || "uploaded").trim();
-          if (k) payload.documents[k] = v;
-        });
+        payload.documents = toObjectArray(profileData.documents, profileData.documentsList)
+          .filter((d) => d && typeof d === "object")
+          .map((d, idx) => ({
+            id: String(d.id || idx + 1),
+            name: d.name || d.title || "Document",
+            type: d.type || "Document",
+            format: d.format || "",
+            size: d.size || "Unknown",
+            url: d.url || "",
+          }));
       }
 
       if (sectionName && targetStaffId) {
@@ -1428,9 +1463,21 @@ export default function FacultyProfile() {
           const savedData = res?.data?.data || res?.data;
           if (savedData && typeof savedData === "object") {
             setProfileData((prev) => {
+              const nextExp = toObjectArray(savedData.experienceList, savedData.experience, prev.experience);
+              const nextDocs = toObjectArray(savedData.documentsList, savedData.documents, prev.documents);
+              const nextEdu = toObjectArray(savedData.educationList, savedData.education, prev.education);
               const updated = {
                 ...prev,
                 ...savedData,
+                experience: nextExp,
+                experienceList: nextExp,
+                documents: nextDocs,
+                documentsList: nextDocs,
+                education: nextEdu,
+                educationList: nextEdu,
+                dob: savedData.dateOfBirth ? String(savedData.dateOfBirth).split("T")[0] : prev.dob,
+                pan: savedData.panNumber || savedData.pan || prev.pan,
+                pin: savedData.pincode || savedData.pin || prev.pin,
                 houseNumber: savedData.houseNumber || prev.houseNumber,
                 street: savedData.street || prev.street,
                 bankName: savedData.bankName || savedData.bankDetails?.bankName || prev.bankName,
@@ -1446,7 +1493,7 @@ export default function FacultyProfile() {
           }
         } catch (e) {
           console.error("Failed to save profile section to database:", e);
-          const errorMsg = e?.response?.data?.message || e?.response?.data?.Message || e?.message || "Failed to save section data to database.";
+          const errorMsg = extractBackendErrorMsg(e, "Failed to save section data to database.");
           notify(`Save failed: ${errorMsg}`, "error");
           // Prevent navigation when save fails as mandated
           return;
@@ -1478,44 +1525,57 @@ export default function FacultyProfile() {
 
     try {
       const authUser = getAuthUser() || {};
-      const staffTargetId = profileData.id || profileData.facultyId || profileData.staffId || authUser.staffId || authUser.id;
-      let res = null;
-      if (staffTargetId) {
-        // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
-        await syncAllSectionsToBackend(staffTargetId, profileData);
-        res = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
-        const sData = res?.data?.data || res?.data || {};
-        if (sData.profileCompletionPercentage) {
-          profileData.profileCompletionPercentage = sData.profileCompletionPercentage;
-        }
+      const staffTargetId = resolveStaffId(profileData, authUser);
+      if (!staffTargetId) {
+        notify("Unable to resolve staff ID for submission. Please refresh and sign in again.", "error");
+        setIsSavingProfile(false);
+        return;
       }
-      const newStatus = res?.data?.profileStatus || res?.data?.data?.profileStatus || "PendingApproval";
-      const isCompleted = String(newStatus).toLowerCase() === "completed" || String(newStatus).toLowerCase() === "approved";
+      const wasOfferLetterAlreadyIssued = ["completed", "approved"].includes(
+        String(profileData?.profileStatus || "").trim().toLowerCase()
+      );
+
+      // Step 1: Sync all sections to backend database first so server recalculates completion >= 50%
+      await syncAllSectionsToBackend(staffTargetId, profileData);
+      const res = await apiClient.post(apiEndpoints.faculty.submitProfile(staffTargetId));
+      const sData = res?.data?.data || res?.data || {};
+      const newStatus = sData.profileStatus || res?.data?.profileStatus || "PendingApproval";
+      const serverPct = sData.profileCompletionPercentage ?? sData.profileCompletion ?? profileCompletion;
+      const hasOfferLetter =
+        String(newStatus).toLowerCase() === "completed" ||
+        String(newStatus).toLowerCase() === "approved";
+      const isNewlyDispatched =
+        sData.offerLetterDispatchedNow !== undefined
+          ? Boolean(sData.offerLetterDispatchedNow)
+          : (hasOfferLetter && !wasOfferLetterAlreadyIssued);
+      const isUnlocked = isStaffPortalUnlocked(newStatus, true);
 
       const updated = {
         ...profileData,
         profileStatus: newStatus,
-        status: isCompleted ? "Active" : profileData.status,
-        isOnboarded: isCompleted,
+        profileCompletionPercentage: serverPct,
+        profileCompletion: serverPct,
+        status: isUnlocked ? "Active" : profileData.status,
+        isOnboarded: isUnlocked,
       };
       setProfileData(updated);
       persistStaffProfile(updated);
-      try {
-        localStorage.setItem("staff_profile_submitted", "true");
-      } catch { }
+      window.dispatchEvent(new Event("cms-staff-updated"));
       setIsSavingProfile(false);
       setIsEditingProfile(false);
 
-      if (!isCompleted) {
+      if (!hasOfferLetter) {
         setShowPendingApprovalModal(true);
         notify("Profile submitted successfully. Sent to Admin for offer letter approval.");
-      } else {
+      } else if (isNewlyDispatched) {
         setShowSuccessModal(true);
-        notify("Complete staff profile updated and verified successfully!");
+        notify("Official offer letter generated and sent to your registered email!");
+      } else {
+        notify("Profile updated and saved successfully.");
       }
     } catch (e) {
       console.error("Failed to submit profile:", e);
-      const msg = e?.response?.data?.message || e?.response?.data?.Message || "Failed to submit profile to server";
+      const msg = extractBackendErrorMsg(e, "Failed to submit profile to server");
       notify(msg, "error");
       setIsSavingProfile(false);
     }
@@ -1549,6 +1609,84 @@ export default function FacultyProfile() {
       setIsDownloadingOfferLetter(false);
     }
   };
+
+  if (isLoadingProfile) {
+    return (
+      <div aria-busy="true" aria-label="Loading profile">
+        {/* Page Header Skeleton */}
+        <div className="cms-page-head sp-profile-page-head">
+          <div>
+            <Skeleton style={{ width: 150, height: 24, marginBottom: 6 }} />
+            <Skeleton style={{ width: 230, height: 13 }} />
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <Skeleton style={{ width: 165, height: 30, borderRadius: "20px" }} />
+            <SkeletonButton width={135} height={36} />
+            <SkeletonButton width={92} height={36} />
+          </div>
+        </div>
+
+        {/* Identity Strip Skeleton */}
+        <div className="cms-card sp-profile-summary-card">
+          <div className="cms-card-body sp-profile-summary-body">
+            <div className="sp-profile-header-inline">
+              <SkeletonAvatar size={54} />
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <Skeleton style={{ width: 160, height: 18 }} />
+                <Skeleton style={{ width: 210, height: 14 }} />
+                <Skeleton style={{ width: 110, height: 14 }} />
+                <Skeleton style={{ width: 120, height: 14 }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Wizard Stepper Skeleton */}
+        <div className="sp-wizard-stepper">
+          {PROFILE_STEPS.map((step) => (
+            <div key={step.id} className="sp-wizard-step" style={{ cursor: "default" }}>
+              <Skeleton style={{ width: 26, height: 26, borderRadius: "50%" }} />
+              <Skeleton style={{ width: 78, height: 14 }} />
+            </div>
+          ))}
+        </div>
+
+        {/* Step Form Card Skeleton */}
+        <div className="cms-card sp-profile-view-mode">
+          <div className="cms-card-body sp-profile-form-body">
+            <div
+              className="cms-card-head"
+              style={{ padding: "0 0 16px 0", borderBottom: "1px solid var(--cms-border)", marginBottom: 18 }}
+            >
+              <Skeleton style={{ width: 180, height: 18 }} />
+              <Skeleton style={{ width: 82, height: 22, borderRadius: 12 }} />
+            </div>
+            <div className="cms-form-grid cols-3 sp-profile-form-grid">
+              {Array.from({ length: 9 }).map((_, idx) => (
+                <div key={idx} className="cms-field">
+                  <Skeleton style={{ width: 110, height: 12, marginBottom: 6 }} />
+                  <SkeletonInput height={38} />
+                </div>
+              ))}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 24,
+                paddingTop: 18,
+                borderTop: "1px solid var(--cms-border)",
+              }}
+            >
+              <div />
+              <SkeletonButton width={130} height={38} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -1819,8 +1957,8 @@ export default function FacultyProfile() {
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
               onClick={() => {
                 if (isEditingProfile) {
-                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, profileData);
+                  const targetStaffId = resolveStaffId(profileData);
+                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, profileData).catch(() => {});
                 }
                 setProfileStep(step.id);
               }}
@@ -1912,7 +2050,7 @@ export default function FacultyProfile() {
                     Gender <span className="req">*</span>
                   </label>
                   <SelectInput
-                    value={profileData.gender || "Male"}
+                    value={profileData.gender || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData((prev) => ({ ...prev, gender: e.target.value }))}
                     placeholder="Select Gender"
@@ -2072,76 +2210,117 @@ export default function FacultyProfile() {
               <div className="cms-form-grid cols-3 sp-profile-form-grid">
                 {/* Row 1 */}
                 <div className="cms-field">
-                  <label>Bank Name</label>
+                  <label>
+                    Bank Name <span className="req">*</span>
+                  </label>
                   <SearchSelectInput
                     label="Bank Name"
                     placeholder="Search or select bank..."
-                    options={[
-                      "State Bank of India",
-                      "HDFC Bank",
-                      "ICICI Bank",
-                      "Axis Bank",
-                      "Canara Bank",
-                      "Union Bank of India",
-                      "Punjab National Bank",
-                      "Bank of Baroda",
-                      "Kotak Mahindra Bank",
-                      "Other",
-                    ]}
+                    options={INDIAN_BANKS}
                     value={profileData.bankName || ""}
                     disabled={!isEditingProfile}
-                    onChange={(val) => setProfileData({ ...profileData, bankName: val })}
+                    onChange={(val) => applyBankChange({ bankName: val })}
                   />
+                  {bankErrors.bankName && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.bankName}
+                    </small>
+                  )}
                 </div>
                 <div className="cms-field">
-                  <label>Account Holder Name</label>
+                  <label>
+                    Account Holder Name <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
                     value={profileData.accountHolder || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, accountHolder: e.target.value })}
+                    style={bankErrors.accountHolder ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                    onChange={(e) => applyBankChange({ accountHolder: e.target.value })}
                     placeholder="Enter account holder name"
                   />
+                  {bankErrors.accountHolder && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.accountHolder}
+                    </small>
+                  )}
                 </div>
                 <div className="cms-field">
-                  <label>Account Number</label>
+                  <label>
+                    Account Number <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={bankConstraints.maxLen}
                     value={profileData.accountNumber || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, accountNumber: e.target.value })}
-                    placeholder="Enter account number"
+                    style={bankErrors.accountNumber ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                    onChange={(e) => applyBankChange({ accountNumber: e.target.value.trim() })}
+                    placeholder={
+                      bankConstraints.isKnownBank
+                        ? `Enter ${bankConstraints.minLen === bankConstraints.maxLen ? bankConstraints.minLen : `${bankConstraints.minLen}-${bankConstraints.maxLen}`}-digit account number`
+                        : "Enter account number (9-18 digits)"
+                    }
                   />
+                  {bankErrors.accountNumber && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.accountNumber}
+                    </small>
+                  )}
                 </div>
 
                 {/* Row 2 */}
                 <div className="cms-field">
-                  <label>IFSC Code</label>
+                  <label>
+                    IFSC Code <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
                     maxLength={11}
                     value={profileData.ifsc || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, ifsc: e.target.value.toUpperCase() })}
-                    placeholder="Enter IFSC code (e.g. SBIN0001234)"
+                    style={bankErrors.ifsc ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                    onChange={(e) =>
+                      applyBankChange({
+                        ifsc: e.target.value.toUpperCase().replace(/\s+/g, ""),
+                        ifscCode: e.target.value.toUpperCase().replace(/\s+/g, ""),
+                      })
+                    }
+                    placeholder={`Enter IFSC code (e.g. ${bankConstraints.sampleIfsc})`}
                   />
+                  {bankErrors.ifsc && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.ifsc}
+                    </small>
+                  )}
                 </div>
                 <div className="cms-field">
-                  <label>Branch Name</label>
+                  <label>
+                    Branch Name <span className="req">*</span>
+                  </label>
                   <input
                     type="text"
                     value={profileData.branch || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, branch: e.target.value })}
+                    style={bankErrors.branch ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                    onChange={(e) => applyBankChange({ branch: e.target.value })}
                     placeholder="Enter branch name"
                   />
+                  {bankErrors.branch && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.branch}
+                    </small>
+                  )}
                 </div>
                 <div className="cms-field">
-                  <label>Account Type</label>
+                  <label>
+                    Account Type <span className="req">*</span>
+                  </label>
                   <SelectInput
                     value={profileData.accountType || ""}
                     disabled={!isEditingProfile}
-                    onChange={(e) => setProfileData({ ...profileData, accountType: e.target.value })}
+                    onChange={(e) => applyBankChange({ accountType: e.target.value })}
                     placeholder="Select Account Type"
                     options={["Salary Account", "Savings Account", "Current Account"]}
                   />
@@ -2152,13 +2331,24 @@ export default function FacultyProfile() {
                   <label>PF Number / UAN</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    maxLength={12}
                     value={profileData.uanNumber || profileData.pfNumber || ""}
                     disabled={!isEditingProfile}
+                    style={bankErrors.uanNumber ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
                     onChange={(e) =>
-                      setProfileData({ ...profileData, uanNumber: e.target.value, pfNumber: e.target.value })
+                      applyBankChange({
+                        uanNumber: e.target.value.trim(),
+                        pfNumber: e.target.value.trim(),
+                      })
                     }
-                    placeholder="Enter PF / UAN number"
+                    placeholder="Enter 12-digit UAN number"
                   />
+                  {bankErrors.uanNumber && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {bankErrors.uanNumber}
+                    </small>
+                  )}
                 </div>
               </div>
             </div>
@@ -2194,11 +2384,19 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
+                    list={pincodeAreas.length > 0 ? "sp-pincode-areas-list" : undefined}
                     value={profileData.street || ""}
                     disabled={!isEditingProfile}
                     onChange={(e) => setProfileData({ ...profileData, street: e.target.value })}
                     placeholder="Enter street / locality"
                   />
+                  {pincodeAreas.length > 0 && (
+                    <datalist id="sp-pincode-areas-list">
+                      {pincodeAreas.map((area) => (
+                        <option key={area} value={area} />
+                      ))}
+                    </datalist>
+                  )}
                 </div>
                 <div className="cms-field">
                   <label>
@@ -2227,22 +2425,51 @@ export default function FacultyProfile() {
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     maxLength={6}
                     value={profileData.pin || profileData.pincode || ""}
                     disabled={!isEditingProfile}
+                    style={pinError ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
                     onChange={(e) => {
                       const pin = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      const prefix3 = pin.slice(0, 3);
-                      const lookup = PIN_LOOKUP[prefix3];
                       setProfileData((prev) => ({
                         ...prev,
                         pin,
                         pincode: pin,
-                        ...(lookup ? { district: lookup.district, state: lookup.state, country: lookup.country } : {})
                       }));
+                      if (pin.length === 6) {
+                        lookupPincodeFromApi(
+                          pin,
+                          ({ country, state, district, city, suggestedArea }) => {
+                            setProfileData((prev) => {
+                              const currentStreet = String(prev.street || "").trim();
+                              const shouldFillArea =
+                                suggestedArea && (!currentStreet || currentStreet === lastAutoAreaRef.current);
+                              return {
+                                ...prev,
+                                country: country || prev.country || "India",
+                                state: state || prev.state,
+                                district: district || prev.district,
+                                city: city || prev.city,
+                                cityVillage: city || prev.cityVillage,
+                                ...(shouldFillArea ? { street: suggestedArea, streetArea: suggestedArea } : {}),
+                              };
+                            });
+                          },
+                          setPinError
+                        );
+                      } else {
+                        setPinError("");
+                        setPincodeAreas([]);
+                      }
                     }}
                     placeholder="Enter 6-digit PIN code"
                   />
+                  {pinError && (
+                    <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                      {pinError}
+                    </small>
+                  )}
                 </div>
                 <div className="cms-field">
                   <label>
@@ -2479,16 +2706,7 @@ export default function FacultyProfile() {
                                 type="button"
                                 className="cms-action-btn"
                                 style={{ color: "var(--cms-red)" }}
-                                onClick={() => {
-                                  const updated = safeExperience.filter((item) => item.id !== x.id);
-                                  setProfileData({ ...profileData, experience: updated });
-                                  persistStaffProfile({ ...profileData, experience: updated });
-                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
-   
-   
-                                  notify("Experience record removed.");
-                                }}
+                                onClick={() => handleRemoveExperienceRecord(x.id)}
                                 title="Delete Experience"
                               >
                                 <Trash2 size={13} />
@@ -2597,40 +2815,34 @@ export default function FacultyProfile() {
                           }
 
                           try {
-                            try {
-                              const formData = new FormData();
-                              formData.append("file", newDoc.file);
-                              formData.append("documentType", newDoc.type);
-                              if (profileData.id) {
-                                await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
-                                  headers: { "Content-Type": "multipart/form-data" },
-                                });
-                              }
-                            } catch (err) {
-                              console.warn("Server upload notice (saving locally):", err);
-                            }
-
-                            const docRecord = {
-                              id: `doc-${Date.now()}`,
-                              name: newDoc.title.trim() || newDoc.type,
-                              type: newDoc.type,
-                              format: (newDoc.file.name || "FILE").split(".").pop().toUpperCase(),
-                              size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
-                              date: new Date().toISOString().split("T")[0],
-                              status: "Uploaded",
-                              url: URL.createObjectURL(newDoc.file),
+                            const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
+                            const docType = newDoc.type || "Other Document";
+                            const formData = new FormData();
+                            formData.append("file", newDoc.file);
+                            formData.append("documentType", docType);
+                            const upRes = await apiClient.post(apiEndpoints.faculty.uploadDocument(targetStaffId), formData, {
+                              headers: { "Content-Type": "multipart/form-data" },
+                            });
+                            const upData = upRes?.data?.data || upRes?.data;
+                            const serverDocs = Array.isArray(upData?.documentsList || upData?.documents)
+                              ? (upData.documentsList || upData.documents)
+                              : safeDocuments;
+                            const updatedProfile = {
+                              ...profileData,
+                              documents: serverDocs,
+                              documentsList: serverDocs,
+                              ...(upData?.profileCompletionPercentage !== undefined ? { profileCompletionPercentage: upData.profileCompletionPercentage, profileCompletion: upData.profileCompletionPercentage } : {}),
+                              ...(upData?.profileStatus ? { profileStatus: upData.profileStatus } : {}),
                             };
-                            const updatedDocs = [...safeDocuments, docRecord];
-                            setProfileData({ ...profileData, documents: updatedDocs });
-                            persistStaffProfile({ ...profileData, documents: updatedDocs });
-                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
+                            setProfileData(updatedProfile);
+                            persistStaffProfile(updatedProfile);
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                             if (docFileRef.current) docFileRef.current.value = "";
-                            notify("Document uploaded successfully!");
+                            notify("Document uploaded and saved successfully!");
                           } catch (e) {
-                            console.error(e);
-                            notify("Failed to process document.", "error");
+                            console.error("Document upload failed:", e);
+                            const msg = e?.response?.data?.message || e?.response?.data?.Message || e?.message || "Failed to upload document.";
+                            notify(msg, "error");
                           }
                         }}
                       >
@@ -2706,14 +2918,7 @@ export default function FacultyProfile() {
                                   type="button"
                                   className="cms-action-btn"
                                   style={{ color: "var(--cms-red)" }}
-                                  onClick={() => {
-                                    const updated = safeDocuments.filter((item) => item.id !== d.id);
-                                    setProfileData({ ...profileData, documents: updated });
-                                    persistStaffProfile({ ...profileData, documents: updated });
-                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
-                                    notify("Document removed.");
-                                  }}
+                                  onClick={() => handleRemoveDocumentRecord(d)}
                                   title="Delete Document"
                                 >
                                   <Trash2 size={13} />
@@ -2854,8 +3059,8 @@ export default function FacultyProfile() {
                             };
                             setProfileData(updated);
                             persistStaffProfile(updated);
+                            const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                             try {
-                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                               if (targetStaffId) {
                                 await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
                                   sectionName: "Personal",
@@ -2867,13 +3072,13 @@ export default function FacultyProfile() {
                                     aadhaar: editPersonal.aadhaar,
                                     panNumber: editPersonal.pan,
                                     pan: editPersonal.pan,
-                                    dateOfBirth: editPersonal.dob,
+                                    dateOfBirth: editPersonal.dob || null,
                                   },
                                 });
                               }
                             } catch {}
                             setEditingSection(null);
-                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            if (targetStaffId) await syncAllSectionsToBackend(targetStaffId, updated).catch(() => {});
                             notify("Personal details updated successfully.");
                           }}
                         >
@@ -3050,7 +3255,7 @@ export default function FacultyProfile() {
                         type="button"
                         className="sp-preview-edit-pill"
                         onClick={() => {
-                          setEditBank({
+                          const initBank = {
                             accountHolder: profileData.accountHolder || "",
                             bankName: profileData.bankName || "",
                             accountNumber: profileData.accountNumber || "",
@@ -3058,7 +3263,9 @@ export default function FacultyProfile() {
                             ifsc: profileData.ifsc || "",
                             branch: profileData.branch || "",
                             uanNumber: profileData.uanNumber || profileData.pfNumber || "",
-                          });
+                          };
+                          setEditBank(initBank);
+                          setEditBankErrors(validateAllBankFields(initBank));
                           setEditingSection("bank");
                         }}
                       >
@@ -3070,7 +3277,10 @@ export default function FacultyProfile() {
                           type="button"
                           className="sp-preview-edit-pill"
                           style={{ background: "#f1f5f9", color: "#475569" }}
-                          onClick={() => setEditingSection(null)}
+                          onClick={() => {
+                            setEditBankErrors({});
+                            setEditingSection(null);
+                          }}
                         >
                           Cancel
                         </button>
@@ -3079,8 +3289,15 @@ export default function FacultyProfile() {
                           className="sp-preview-edit-pill"
                           style={{ background: "var(--cms-primary, #355e3b)", color: "#ffffff" }}
                           onClick={async () => {
-                            if (!editBank.accountNumber || !editBank.ifsc) {
-                              notify("Please fill in Account Number and IFSC Code.", "error");
+                            if (!editBank.bankName || !editBank.accountNumber || !editBank.ifsc) {
+                              notify("Please fill in Bank Name, Account Number, and IFSC Code.", "error");
+                              return;
+                            }
+                            const errors = validateAllBankFields(editBank);
+                            setEditBankErrors(errors);
+                            const firstErr = Object.values(errors)[0];
+                            if (firstErr) {
+                              notify(firstErr, "error");
                               return;
                             }
                             const updated = {
@@ -3090,34 +3307,40 @@ export default function FacultyProfile() {
                               accountNumber: editBank.accountNumber,
                               accountType: editBank.accountType,
                               ifsc: editBank.ifsc,
+                              ifscCode: editBank.ifsc,
                               branch: editBank.branch,
                               uanNumber: editBank.uanNumber,
                               pfNumber: editBank.uanNumber,
                             };
-                            setProfileData(updated);
-                            persistStaffProfile(updated);
+                            const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                             try {
-                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                               if (targetStaffId) {
                                 await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
                                   sectionName: "Bank",
                                   Bank: {
-                                    accountHolderName: editBank.accountHolder,
-                                    accountHolder: editBank.accountHolder,
-                                    bankName: editBank.bankName,
-                                    accountNumber: editBank.accountNumber,
-                                    accountType: editBank.accountType,
-                                    ifscCode: editBank.ifsc,
-                                    ifsc: editBank.ifsc,
-                                    branch: editBank.branch,
-                                    uanNumber: editBank.uanNumber,
-                                    pfNumber: editBank.uanNumber,
+                                    accountHolderName: editBank.accountHolder || "",
+                                    accountHolder: editBank.accountHolder || "",
+                                    bankName: editBank.bankName || "",
+                                    accountNumber: editBank.accountNumber || "",
+                                    accountType: editBank.accountType || "Salary Account",
+                                    ifscCode: (editBank.ifsc || "").toUpperCase(),
+                                    ifsc: (editBank.ifsc || "").toUpperCase(),
+                                    branch: editBank.branch || "",
+                                    panNumber: updated.pan || updated.panNumber || "",
+                                    uanNumber: editBank.uanNumber || "",
+                                    pfNumber: editBank.uanNumber || "",
                                   },
                                 });
                               }
-                            } catch {}
+                            } catch (err) {
+                              notify(extractBackendErrorMsg(err, "Failed to save bank details."), "error");
+                              return;
+                            }
+                            setProfileData(updated);
+                            persistStaffProfile(updated);
+                            setEditBankErrors({});
                             setEditingSection(null);
-                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            if (targetStaffId) await syncAllSectionsToBackend(targetStaffId, updated).catch(() => {});
                             notify("Bank details updated successfully.");
                           }}
                         >
@@ -3133,13 +3356,21 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">ACCOUNT HOLDER NAME</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.accountHolder || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountHolder: e.target.value }))}
-                          placeholder="Account holder name"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            className="sp-inline-input"
+                            style={editBankErrors.accountHolder ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.accountHolder || ""}
+                            onChange={(e) => applyEditBankChange({ accountHolder: e.target.value })}
+                            placeholder="Account holder name"
+                          />
+                          {editBankErrors.accountHolder && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.accountHolder}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.accountHolder || "—"
                       )}
@@ -3149,13 +3380,27 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">BANK NAME</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.bankName || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, bankName: e.target.value }))}
-                          placeholder="Bank name"
-                        />
+                        <>
+                          <select
+                            className="sp-inline-select"
+                            style={editBankErrors.bankName ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.bankName || ""}
+                            onChange={(e) => applyEditBankChange({ bankName: e.target.value })}
+                          >
+                            <option value="">Select Bank</option>
+                            {editBank.bankName && !INDIAN_BANKS.includes(editBank.bankName) && (
+                              <option value={editBank.bankName}>{editBank.bankName}</option>
+                            )}
+                            {INDIAN_BANKS.map((bank) => (
+                              <option key={bank} value={bank}>{bank}</option>
+                            ))}
+                          </select>
+                          {editBankErrors.bankName && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.bankName}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.bankName || "—"
                       )}
@@ -3165,13 +3410,27 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">ACCOUNT NUMBER</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.accountNumber || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountNumber: e.target.value }))}
-                          placeholder="Account number"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={editBankConstraints.maxLen}
+                            className="sp-inline-input"
+                            style={editBankErrors.accountNumber ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.accountNumber || ""}
+                            onChange={(e) => applyEditBankChange({ accountNumber: e.target.value.trim() })}
+                            placeholder={
+                              editBankConstraints.isKnownBank
+                                ? `${editBankConstraints.minLen === editBankConstraints.maxLen ? editBankConstraints.minLen : `${editBankConstraints.minLen}-${editBankConstraints.maxLen}`} digits`
+                                : "Account number"
+                            }
+                          />
+                          {editBankErrors.accountNumber && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.accountNumber}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.accountNumber ? `••••••${String(profileData.accountNumber).slice(-4)}` : "—"
                       )}
@@ -3184,7 +3443,7 @@ export default function FacultyProfile() {
                         <select
                           className="sp-inline-select"
                           value={editBank.accountType || "Salary Account"}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, accountType: e.target.value }))}
+                          onChange={(e) => applyEditBankChange({ accountType: e.target.value })}
                         >
                           {["Salary Account", "Savings Account", "Current Account"].map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
@@ -3197,13 +3456,22 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">IFSC CODE</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.ifsc || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, ifsc: e.target.value.toUpperCase() }))}
-                          placeholder="IFSC code"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            maxLength={11}
+                            className="sp-inline-input"
+                            style={editBankErrors.ifsc ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.ifsc || ""}
+                            onChange={(e) => applyEditBankChange({ ifsc: e.target.value.toUpperCase().replace(/\s+/g, "") })}
+                            placeholder={editBankConstraints.sampleIfsc}
+                          />
+                          {editBankErrors.ifsc && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.ifsc}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.ifsc || "—"
                       )}
@@ -3213,13 +3481,21 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">BRANCH NAME</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.branch || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, branch: e.target.value }))}
-                          placeholder="Branch name"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            className="sp-inline-input"
+                            style={editBankErrors.branch ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.branch || ""}
+                            onChange={(e) => applyEditBankChange({ branch: e.target.value })}
+                            placeholder="Branch name"
+                          />
+                          {editBankErrors.branch && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.branch}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.branch || "—"
                       )}
@@ -3229,13 +3505,23 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">PF NUMBER / UAN</div>
                     <div className="sp-preview-value">
                       {editingSection === "bank" ? (
-                        <input
-                          type="text"
-                          className="sp-inline-input"
-                          value={editBank.uanNumber || ""}
-                          onChange={(e) => setEditBank((prev) => ({ ...prev, uanNumber: e.target.value }))}
-                          placeholder="PF / UAN number"
-                        />
+                        <>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={12}
+                            className="sp-inline-input"
+                            style={editBankErrors.uanNumber ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
+                            value={editBank.uanNumber || ""}
+                            onChange={(e) => applyEditBankChange({ uanNumber: e.target.value.trim() })}
+                            placeholder="12-digit UAN number"
+                          />
+                          {editBankErrors.uanNumber && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editBankErrors.uanNumber}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.uanNumber || profileData.pfNumber || "—"
                       )}
@@ -3283,6 +3569,13 @@ export default function FacultyProfile() {
                           className="sp-preview-edit-pill"
                           style={{ background: "var(--cms-primary, #355e3b)", color: "#ffffff" }}
                           onClick={async () => {
+                            const pinVal = String(editAddress.pin || "").trim();
+                            if (pinVal && !/^[1-9][0-9]{5}$/.test(pinVal)) {
+                              const msg = "Pincode must be exactly 6 digits and cannot start with 0.";
+                              setEditPinError(msg);
+                              notify(msg, "error");
+                              return;
+                            }
                             const updated = {
                               ...profileData,
                               houseNumber: editAddress.houseNumber,
@@ -3297,10 +3590,8 @@ export default function FacultyProfile() {
                               state: editAddress.state,
                               country: editAddress.country,
                             };
-                            setProfileData(updated);
-                            persistStaffProfile(updated);
+                            const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                             try {
-                              const targetStaffId = updated.id || updated.staffId || updated.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
                               if (targetStaffId) {
                                 await apiClient.post(apiEndpoints.faculty.saveProfileDraft(targetStaffId), {
                                   sectionName: "Address",
@@ -3317,9 +3608,15 @@ export default function FacultyProfile() {
                                   },
                                 });
                               }
-                            } catch {}
+                            } catch (err) {
+                              notify(extractBackendErrorMsg(err, "Failed to save address."), "error");
+                              return;
+                            }
+                            setProfileData(updated);
+                            persistStaffProfile(updated);
+                            setEditPinError("");
                             setEditingSection(null);
-                            if (targetStaffId) syncAllSectionsToBackend(targetStaffId, updated);
+                            if (targetStaffId) await syncAllSectionsToBackend(targetStaffId, updated).catch(() => {});
                             notify("Address updated successfully.");
                           }}
                         >
@@ -3383,24 +3680,43 @@ export default function FacultyProfile() {
                     <div className="sp-preview-label">PINCODE</div>
                     <div className="sp-preview-value">
                       {editingSection === "address" ? (
-                        <input
-                          type="text"
-                          maxLength={6}
-                          className="sp-inline-input"
-                          value={editAddress.pin || ""}
+                        <>
+                          <input
+                            type="text"
+                            maxLength={6}
+                            className="sp-inline-input"
+                            value={editAddress.pin || ""}
+                            style={editPinError ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
                           onChange={(e) => {
                             const pVal = e.target.value.replace(/\D/g, "").slice(0, 6);
-                            setEditAddress((prev) => {
-                              const up = { ...prev, pin: pVal };
-                              if (pVal.length >= 3 && PIN_LOOKUP[pVal.slice(0, 3)]) {
-                                up.district = PIN_LOOKUP[pVal.slice(0, 3)].district;
-                                up.state = PIN_LOOKUP[pVal.slice(0, 3)].state;
-                              }
-                              return up;
-                            });
+                            setEditAddress((prev) => ({ ...prev, pin: pVal }));
+                            if (pVal.length === 6) {
+                              lookupPincodeFromApi(
+                                pVal,
+                                ({ country, state, district, city, suggestedArea }) => {
+                                  setEditAddress((prev) => ({
+                                    ...prev,
+                                    country: country || prev.country || "India",
+                                    state: state || prev.state,
+                                    district: district || prev.district,
+                                    city: city || prev.city,
+                                    street: prev.street?.trim() ? prev.street : (suggestedArea || prev.street),
+                                  }));
+                                },
+                                setEditPinError
+                              );
+                            } else {
+                              setEditPinError("");
+                            }
                           }}
                           placeholder="6-digit PIN"
                         />
+                          {editPinError && (
+                            <small style={{ color: "var(--cms-red, #dc2626)", fontSize: 11, fontWeight: 600, marginTop: 4, display: "block" }}>
+                              {editPinError}
+                            </small>
+                          )}
+                        </>
                       ) : (
                         profileData.pin || profileData.pincode || "—"
                       )}
@@ -3543,8 +3859,8 @@ export default function FacultyProfile() {
                         setProfileData({ ...profileData, experience: updated });
                         persistStaffProfile({ ...profileData, experience: updated });
                         setNewExp({ institution: "", designation: "", fromDate: "", toDate: "", subjectsTeached: "", totalExp: "" });
-                        const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
+                        const targetStaffId = resolveStaffId(profileData);
+                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated }).catch(() => {});
                         notify("Experience added.");
                       }}
                     >
@@ -3576,14 +3892,7 @@ export default function FacultyProfile() {
                             type="button"
                             className="cms-action-btn"
                             style={{ color: "var(--cms-red)" }}
-                            onClick={() => {
-                              const updated = safeExperience.filter((item) => item.id !== exp.id);
-                              setProfileData({ ...profileData, experience: updated });
-                              persistStaffProfile({ ...profileData, experience: updated });
-                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                                  if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, experience: updated });
-                              notify("Experience record removed.");
-                            }}
+                            onClick={() => handleRemoveExperienceRecord(exp.id)}
                             title="Delete Experience"
                           >
                             <Trash2 size={13} /> Delete
@@ -3684,28 +3993,44 @@ export default function FacultyProfile() {
                       type="button"
                       className="cms-btn cms-btn-primary"
                       style={{ fontSize: 13, padding: "7px 16px" }}
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newDoc.file) {
                           notify("Please select a file to upload.", "error");
                           return;
                         }
-                        const docRecord = {
-                          id: Date.now(),
-                          name: newDoc.title || newDoc.file.name,
-                          type: newDoc.type || "Aadhaar Card Copy",
-                          size: `${(newDoc.file.size / (1024 * 1024)).toFixed(1)} MB`,
-                          date: new Date().toISOString().split("T")[0],
-                          status: "Uploaded",
-                          url: URL.createObjectURL(newDoc.file),
-                        };
-                        const updatedDocs = [...safeDocuments, docRecord];
-                        setProfileData({ ...profileData, documents: updatedDocs });
-                        persistStaffProfile({ ...profileData, documents: updatedDocs });
                         const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                        if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updatedDocs });
-                        setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
-                        if (docFileRef.current) docFileRef.current.value = "";
-                        notify("Document uploaded successfully!");
+                        if (!targetStaffId) {
+                          notify("Staff record not resolved. Please reload.", "error");
+                          return;
+                        }
+                        try {
+                          const docType = newDoc.type || "Aadhaar Card Copy";
+                          const formData = new FormData();
+                          formData.append("file", newDoc.file);
+                          formData.append("documentType", docType);
+                          const upRes = await apiClient.post(apiEndpoints.faculty.uploadDocument(targetStaffId), formData, {
+                            headers: { "Content-Type": "multipart/form-data" },
+                          });
+                          const upData = upRes?.data?.data || upRes?.data;
+                          const serverDocs = Array.isArray(upData?.documentsList || upData?.documents)
+                            ? (upData.documentsList || upData.documents)
+                            : safeDocuments;
+                          const updatedProfile = {
+                            ...profileData,
+                            documents: serverDocs,
+                            documentsList: serverDocs,
+                            ...(upData?.profileCompletionPercentage !== undefined ? { profileCompletionPercentage: upData.profileCompletionPercentage, profileCompletion: upData.profileCompletionPercentage } : {}),
+                            ...(upData?.profileStatus ? { profileStatus: upData.profileStatus } : {}),
+                          };
+                          setProfileData(updatedProfile);
+                          persistStaffProfile(updatedProfile);
+                          setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
+                          if (docFileRef.current) docFileRef.current.value = "";
+                          notify("Document uploaded successfully!");
+                        } catch (e) {
+                          const msg = e?.response?.data?.message || e?.response?.data?.Message || e?.message || "Failed to upload document.";
+                          notify(msg, "error");
+                        }
                       }}
                     >
                       + Upload Document
@@ -3736,14 +4061,7 @@ export default function FacultyProfile() {
                             type="button"
                             className="cms-action-btn"
                             style={{ color: "var(--cms-red)" }}
-                            onClick={() => {
-                              const updated = safeDocuments.filter((item) => item.id !== doc.id);
-                              setProfileData({ ...profileData, documents: updated });
-                              persistStaffProfile({ ...profileData, documents: updated });
-                                  const targetStaffId = profileData.id || profileData.staffId || profileData.facultyId || getAuthUser()?.staffId || getAuthUser()?.id;
-                              if (targetStaffId) syncAllSectionsToBackend(targetStaffId, { ...profileData, documents: updated });
-                              notify("Document removed.");
-                            }}
+                            onClick={() => handleRemoveDocumentRecord(doc)}
                             title="Delete Document"
                           >
                             <Trash2 size={13} /> Delete
@@ -3895,7 +4213,7 @@ export default function FacultyProfile() {
             </div>
 
             <p style={{ margin: "0 0 24px", fontSize: "14px", color: "#475569", lineHeight: 1.6 }}>
-              Your official appointment and offer letter has been generated from the institutional template and sent to your registered email: <strong style={{ color: "#0f172a" }}>{profileData?.email || getAuthUser()?.email || "xyz@gmail.com"}</strong>.
+              Your official appointment and offer letter has been generated from the institutional template and sent to your registered email: <strong style={{ color: "#0f172a" }}>{profileData?.email || getAuthUser()?.email || "your registered email"}</strong>.
               <br /><br />
               Please relogin to access your complete Staff Portal with your assigned classes, subjects, and timetable.
             </p>
@@ -4011,9 +4329,12 @@ export default function FacultyProfile() {
                 border: "none",
                 cursor: "pointer"
               }}
-              onClick={() => setShowPendingApprovalModal(false)}
+              onClick={() => {
+                clearAuthSession();
+                window.location.href = "/login";
+              }}
             >
-              Acknowledge &amp; Return to Profile
+              Go to Login &amp; Access Portal
             </button>
           </div>
         </div>

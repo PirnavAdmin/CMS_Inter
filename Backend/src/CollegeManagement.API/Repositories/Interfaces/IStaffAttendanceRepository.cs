@@ -25,13 +25,15 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date);
         Task<MyAttendanceTodayResponse> PunchInAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId);
         Task<MyAttendanceTodayResponse> PunchOutAsync(int facultyId, StaffPunchRequest request, string? clientIp, int? userId);
-        Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate);
+        Task<MyAttendanceHistoryResponse> GetMyAttendanceHistoryAsync(int facultyId, string period, DateTime? targetDate, int? year = null, int? month = null);
         Task<bool> SubmitRegularizationAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
-        Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId);
+        Task<(int RegularizationId, string RequestType, string OriginalStatus, int? CampusId)> SubmitRegularizationWithDetailsAsync(int facultyId, SubmitRegularizationRequest request, int? userId);
+        Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId, int? campusId = null, string? requestType = null, string? search = null);
         Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId);
 
         // Helper & Overview contracts
         Task<int> ResolveStaffIdByUserIdAsync(int userId);
+        Task<string?> ResolveStaffRoleNameAsync(int staffId);
         Task<YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId, int? campusId = null);
         Task<StaffImportLookupContext> GetStaffImportContextAsync(int? campusId = null);
     }

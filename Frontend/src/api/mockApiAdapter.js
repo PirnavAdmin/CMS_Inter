@@ -2696,20 +2696,6 @@ export function handleMockApiRequest(config) {
       });
     }
 
-    if (sub === "staff-attendance-today") {
-      return ok(config, {
-        success: true,
-        data: {
-          total: 70,
-          present: 65,
-          absent: 3,
-          late: 2,
-          onLeave: 2,
-          percentage: 95.7,
-        },
-      });
-    }
-
     if (sub === "upcoming-holidays") {
       return ok(config, {
         success: true,
@@ -5260,113 +5246,6 @@ export function handleMockApiRequest(config) {
         monthlyRecords,
       },
     });
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 36. STAFF ATTENDANCE & PUNCH RECORDS (/api/v1/staff-attendance/*)
-  // ──────────────────────────────────────────────────────────────────────────
-  if (path === "/api/v1/staff-attendance/load" && method === "post") {
-    const reqDate = body?.attendanceDate || body?.date || new Date().toISOString().slice(0, 10);
-    let list = (mockStore.staffAttendance || []).map((s) => ({
-      ...s,
-      attendanceDate: reqDate,
-      date: reqDate,
-    }));
-    return ok(config, { success: true, data: list, items: list });
-  }
-
-  if (path === "/api/v1/staff-attendance/update" && method === "put") {
-    const staffId = body?.facultyId || body?.staffId;
-    const match = (mockStore.staffAttendance || []).find((s) => String(s.facultyId || s.staffId) === String(staffId));
-    if (match) {
-      if (body?.inTime) match.inTime = body.inTime;
-      if (body?.outTime) match.outTime = body.outTime;
-      if (body?.status !== undefined) {
-        match.status = body.status;
-        match.statusLabel = body.status === 1 ? "Present" : body.status === 2 ? "Late" : "Absent";
-      }
-      if (body?.remarks !== undefined) match.remarks = body.remarks;
-      mockStore.save("staff_attendance");
-    }
-    return ok(config, { success: true, message: "Staff attendance updated successfully", data: match });
-  }
-
-
-  const staffDetailsMatch = path.match(/^\/api\/v1\/staff-attendance\/staff\/([^/]+)\/details$/);
-  if (staffDetailsMatch) {
-    const sId = staffDetailsMatch[1];
-    const match = (mockStore.staffAttendance || []).find((s) => String(s.facultyId || s.staffId) === String(sId)) || mockStore.staffAttendance?.[0];
-    return ok(config, { success: true, data: match });
-  }
-
-  const staffOverviewMatch = path.match(/^\/api\/v1\/staff-attendance\/staff\/([^/]+)\/yearly-overview$/);
-  if (staffOverviewMatch) {
-    return ok(config, {
-      success: true,
-      data: {
-        totalWorkingDays: 240,
-        presentDays: 232,
-        totalPresent: 232,
-        leavesTaken: 6,
-        totalLeave: 6,
-        lateDays: 2,
-        totalLate: 2,
-        percentage: 96.6,
-        overallAttendancePercentage: 96.6,
-      },
-    });
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 37. ATTENDANCE TIMING CONFIGURATION (/api/v1/attendance-timing-config/*)
-  // ──────────────────────────────────────────────────────────────────────────
-  if (path === "/api/v1/attendance-timing-config") {
-    if (method === "get") {
-      return ok(config, {
-        success: true,
-        data: mockStore.attendanceTimingConfigs || [],
-        items: mockStore.attendanceTimingConfigs || [],
-      });
-    }
-    if (method === "post") {
-      const newId = Date.now();
-      const newConfig = {
-        id: newId,
-        attendanceTimingConfigId: newId,
-        ...body,
-        status: body?.isActive ? "Active" : "Inactive",
-      };
-      mockStore.attendanceTimingConfigs.push(newConfig);
-      mockStore.save("attendance_timing_configs");
-      return ok(config, { success: true, message: "Attendance timing configuration created successfully", data: newConfig });
-    }
-  }
-
-  if (path === "/api/v1/attendance-timing-config/effective") {
-    const effective = (mockStore.attendanceTimingConfigs || []).find((c) => c.isActive) || mockStore.attendanceTimingConfigs?.[0];
-    return ok(config, { success: true, data: effective });
-  }
-
-  const timingConfigIdMatch = path.match(/^\/api\/v1\/attendance-timing-config\/([^/]+)$/);
-  if (timingConfigIdMatch) {
-    const cfgId = timingConfigIdMatch[1];
-    if (method === "get") {
-      const match = (mockStore.attendanceTimingConfigs || []).find((c) => String(c.id || c.attendanceTimingConfigId) === String(cfgId));
-      return ok(config, { success: true, data: match });
-    }
-    if (method === "put") {
-      const idx = (mockStore.attendanceTimingConfigs || []).findIndex((c) => String(c.id || c.attendanceTimingConfigId) === String(cfgId));
-      if (idx >= 0) {
-        mockStore.attendanceTimingConfigs[idx] = { ...mockStore.attendanceTimingConfigs[idx], ...body };
-        mockStore.save("attendance_timing_configs");
-      }
-      return ok(config, { success: true, message: "Timing configuration updated successfully", data: mockStore.attendanceTimingConfigs[idx] });
-    }
-    if (method === "delete") {
-      mockStore.attendanceTimingConfigs = (mockStore.attendanceTimingConfigs || []).filter((c) => String(c.id || c.attendanceTimingConfigId) !== String(cfgId));
-      mockStore.save("attendance_timing_configs");
-      return ok(config, { success: true, message: "Timing configuration deleted successfully" });
-    }
   }
 
   // ──────────────────────────────────────────────────────────────────────────

@@ -37,7 +37,7 @@ const parseTimeToMinutes = (timeStr) => {
 };
 
 const formatMinutesTo12h = (totalMins) => {
-  if (totalMins === null || totalMins === undefined || isNaN(totalMins)) return "04:30 PM";
+  if (totalMins === null || totalMins === undefined || isNaN(totalMins)) return "--";
   let h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
   const ampm = h >= 12 ? "PM" : "AM";
@@ -81,68 +81,51 @@ const calculateDurationStr = (inTime, outTime, isActive = false) => {
   return `${hours}h ${mins}m`;
 };
 
+const getIstTodayIso = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
 const normalizeTodayData = (raw, timing) => {
   if (!raw) return null;
   const inTime = raw.inTime || raw.InTime || null;
   const outTime = raw.outTime || raw.OutTime || null;
   const rawStatus = raw.status || raw.Status || "not_punched";
-  const rawTodayStatus = raw.todayStatus || raw.TodayStatus || (inTime ? "Present" : "Absent");
+  const isLate = Boolean(raw.isLate ?? raw.IsLate);
+  const isMissedCheckoutResolved = Boolean(raw.isMissedCheckoutResolved ?? raw.IsMissedCheckoutResolved);
+  const regState = raw.regularizationState || raw.RegularizationState || null;
 
-  const shiftStartTime = raw.shiftStartTime || raw.ShiftStartTime || (timing?.workStartTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workStartTime)) : "09:00 AM");
-  const shiftEndTime = raw.shiftEndTime || raw.ShiftEndTime || (timing?.workEndTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workEndTime)) : "04:30 PM");
-  const shiftName = raw.shiftName || raw.ShiftName || `Morning (${shiftStartTime} – ${shiftEndTime})`;
+  const shiftStartTime = raw.shiftStartTime || raw.ShiftStartTime || (timing?.workStartTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workStartTime)) : "--");
+  const shiftEndTime = raw.shiftEndTime || raw.ShiftEndTime || (timing?.workEndTime ? formatMinutesTo12h(parseTimeToMinutes(timing.workEndTime)) : "--");
+  const shiftName = raw.shiftName || raw.ShiftName || (shiftStartTime !== "--" ? `Shift (${shiftStartTime} – ${shiftEndTime})` : "--");
 
-  const inMins = parseTimeToMinutes(inTime);
-  const outMins = parseTimeToMinutes(outTime);
-  const lateThreshMins = parseTimeToMinutes(timing?.lateThreshold || "09:15") || (9 * 60 + 15);
-  const isLate = Boolean(raw.isLate ?? raw.IsLate) || (inMins !== null && inMins > lateThreshMins);
-
-  const shiftEndMins = parseTimeToMinutes(shiftEndTime) || (16 * 60 + 30);
-  const graceMins = Number(timing?.gracePeriodMinutes ?? 15);
-  const checkoutCutoffMins = shiftEndMins + graceMins;
-
-  const markedByAdmin = Boolean(
-    raw.markedByAdmin ??
-    raw.MarkedByAdmin ??
-    raw.markedBy === "Admin" ??
-    raw.MarkedBy === "Admin" ??
-    (typeof raw.remarks === "string" && raw.remarks.toLowerCase().includes("admin") && !raw.remarks.toLowerCase().includes("driver portal")) ??
-    (typeof raw.deviceId === "string" && raw.deviceId.toLowerCase().includes("admin") && !raw.deviceId.toLowerCase().includes("driver-portal"))
-  );
-
-  let status = rawStatus;
-  let todayStatus = markedByAdmin ? "Present | Marked by Admin" : rawTodayStatus;
-
+  const shiftEndMins = parseTimeToMinutes(shiftEndTime);
+  const rawGrace = raw.gracePeriodMinutes ?? raw.GracePeriodMinutes ?? timing?.gracePeriodMinutes;
+  const graceMins = rawGrace !== null && rawGrace !== undefined ? Number(rawGrace) : null;
+  const checkoutCutoffMins = shiftEndMins !== null && graceMins !== null ? shiftEndMins + graceMins : null;
   const now = new Date();
   const nowMins = now.getHours() * 60 + now.getMinutes();
 
+  const backendMissed = Boolean(raw.isMissedCheckout ?? raw.IsMissedCheckout);
+  const cutoffExpired = Boolean(inTime && !outTime && checkoutCutoffMins !== null && nowMins > checkoutCutoffMins);
+  const isMissedCheckout = !outTime && !isMissedCheckoutResolved && (backendMissed || rawStatus === "missed_checkout" || cutoffExpired);
+  const isCheckOutAllowed = raw.isCheckOutAllowed !== undefined || raw.IsCheckOutAllowed !== undefined
+    ? Boolean(raw.isCheckOutAllowed ?? raw.IsCheckOutAllowed) && !isMissedCheckout
+    : (Boolean(inTime && !outTime) && !isMissedCheckout);
+
+  const markedByAdmin = Boolean(raw.markedByAdmin ?? raw.MarkedByAdmin);
+  let status = rawStatus;
   if (outTime) {
-    if (rawStatus === "missed_checkout" || (outMins !== null && outMins > checkoutCutoffMins)) {
-      status = "missed_checkout";
-      todayStatus = "Missed Checkout";
-    } else {
-      status = "punched_out";
-      todayStatus = isLate ? "Late" : (rawTodayStatus === "Absent" ? "Present" : rawTodayStatus);
-    }
+    status = "punched_out";
+  } else if (isMissedCheckout) {
+    status = "missed_checkout";
   } else if (inTime) {
-    if (nowMins > checkoutCutoffMins) {
-      status = "missed_checkout";
-      todayStatus = "Missed Checkout";
-    } else {
-      status = "punched_in";
-      todayStatus = isLate ? "Late" : "Present";
-    }
+    status = "punched_in";
   }
 
-  const regState = raw.regularizationState || raw.RegularizationState || null;
-  if (regState?.toLowerCase() === "approved") {
-    todayStatus = "Present";
-  }
+  const rawTodayStatus = raw.todayStatus || raw.TodayStatus || (inTime ? (isLate ? "Late" : "Present") : "Not Punched In");
+  const todayStatus = rawTodayStatus;
 
-  const canRegularize = Boolean(raw.canRegularize ?? raw.CanRegularize) || (
-    (todayStatus === "Late" || todayStatus === "Missed Checkout" || todayStatus === "Absent" || todayStatus === "Half Day")
-    && (!regState || regState.toLowerCase() !== "approved")
-  );
+  const canRegularize = raw.canRegularize !== undefined || raw.CanRegularize !== undefined
+    ? Boolean(raw.canRegularize ?? raw.CanRegularize)
+    : ((isLate || isMissedCheckout || todayStatus === "Absent") && !regState);
 
   return {
     status,
@@ -152,13 +135,22 @@ const normalizeTodayData = (raw, timing) => {
     shiftName,
     shiftStartTime,
     shiftEndTime,
+    checkoutCutoffTime: raw.checkoutCutoffTime || raw.CheckoutCutoffTime || (checkoutCutoffMins !== null ? formatMinutesTo12h(checkoutCutoffMins) : "--"),
     isLate,
+    isMissedCheckout,
+    isMissedCheckoutResolved,
+    isCheckOutAllowed,
     todayStatus,
     canRegularize,
     dateFormatted: raw.dateFormatted || raw.DateFormatted || new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationId: raw.regularizationId ?? raw.RegularizationId ?? null,
     regularizationState: regState,
+    regularizationType: raw.regularizationType || raw.RegularizationType || null,
+    regularizationReason: raw.regularizationReason || raw.RegularizationReason || null,
+    regularizationAdminRemarks: raw.regularizationAdminRemarks || raw.RegularizationAdminRemarks || null,
+    reviewedAt: raw.reviewedAt || raw.ReviewedAt || null,
     markedByAdmin,
-    markedBy: markedByAdmin ? "Admin" : (raw.markedBy || raw.MarkedBy || null),
+    markedBy: raw.markedBy || raw.MarkedBy || null,
   };
 };
 
@@ -167,8 +159,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   const { pathname } = useLocation();
   const urlRouting = adminRouting || pathname.startsWith("/faculty-dashboard/my-attendance");
   const regularizeDate = urlRouting ? routeParams.get("regularize") || "" : "";
+  const highlightedRegId = routeParams.get("regId") || "";
   const rangeParam = routeParams.get("range");
-  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : "week";
+  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : (highlightedRegId ? "month" : "week");
+  const highlightedRowRef = useRef(null);
   const restoredRegularization = useRef("");
   const historyRequest = useRef(0);
   const [historyRange, setHistoryRange] = useState("");
@@ -184,14 +178,14 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     return () => clearInterval(timer);
   }, []);
 
-  // Attendance Timing Configuration State (Default to Teaching faculty shift: 09:00 AM – 04:30 PM, Late after 09:15 AM, 15m Cutoff 04:45 PM)
+  // Attendance Timing Configuration State (populated strictly from backend settings)
   const [timingConfig, setTimingConfig] = useState({
-    workStartTime: "09:00",
-    workEndTime: "16:30",
-    lateThreshold: "09:15",
-    earlyCheckoutThreshold: "16:30",
-    gracePeriodMinutes: 15,
-    minWorkingHours: 7,
+    workStartTime: "",
+    workEndTime: "",
+    lateThreshold: "",
+    earlyCheckoutThreshold: "",
+    gracePeriodMinutes: null,
+    minWorkingHours: null,
   });
 
   // Load timing configuration from admin settings
@@ -204,17 +198,17 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           const cfg = configs.find((c) => c.staffType === 1 || c.staffType === "Teaching") || configs[0];
           if (cfg && isMounted) {
             setTimingConfig({
-              workStartTime: cfg.workStartTime || "09:00",
-              workEndTime: cfg.workEndTime || "16:30",
-              lateThreshold: cfg.lateThreshold || "09:15",
-              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "16:30",
-              gracePeriodMinutes: cfg.gracePeriodMinutes ?? 15,
-              minWorkingHours: cfg.minWorkingHours ?? 7,
+              workStartTime: cfg.workStartTime || "",
+              workEndTime: cfg.workEndTime || "",
+              lateThreshold: cfg.lateThreshold || "",
+              earlyCheckoutThreshold: cfg.earlyCheckoutThreshold || "",
+              gracePeriodMinutes: cfg.gracePeriodMinutes ?? null,
+              minWorkingHours: cfg.minWorkingHours ?? null,
             });
           }
         }
       } catch (err) {
-        console.warn("Could not load attendance timing config, using defaults", err);
+        console.warn("Could not load attendance timing config:", err);
       }
     };
     loadTiming();
@@ -236,42 +230,53 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     }
   };
 
-  // Loading States
+  // Loading & Error States
   const [loadingToday, setLoadingToday] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [todayError, setTodayError] = useState("");
+  const [historyError, setHistoryError] = useState("");
 
-  // Live Today Status
+  // Live Today Status (populated strictly from backend API)
   const [todayData, setTodayData] = useState({
     status: "not_punched",
     inTime: null,
     outTime: null,
     shiftDuration: "--",
-    shiftName: "Morning (09:00 AM – 04:30 PM)",
-    shiftStartTime: "09:00 AM",
-    shiftEndTime: "04:30 PM",
+    shiftName: "--",
+    shiftStartTime: "--",
+    shiftEndTime: "--",
+    checkoutCutoffTime: "--",
     isLate: false,
-    todayStatus: "Absent",
+    isMissedCheckout: false,
+    isMissedCheckoutResolved: false,
+    isCheckOutAllowed: false,
+    todayStatus: "--",
     canRegularize: false,
     dateFormatted: new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+    regularizationId: null,
     regularizationState: null,
+    regularizationType: null,
+    regularizationReason: null,
+    regularizationAdminRemarks: null,
+    reviewedAt: null,
   });
 
-  // Monthly KPI Summary state (keeps top 4 KPI cards aligned with current month HR metrics)
+  // Monthly KPI Summary state
   const [monthlyMetrics, setMonthlyMetrics] = useState(null);
 
   // Live History & Analytics Metrics
   const [historyData, setHistoryData] = useState({
     logs: [],
     metrics: {
-      workingDays: "6 Days",
-      workingDaysSub: "Current Week (Mon–Sat)",
-      presentDays: "0 Days",
-      presentDaysSub: "Biometric verified",
-      leaves: "0 Days",
-      leavesSub: "No leaves applied",
-      absentDays: "0 Days",
-      absentDaysSub: "No absences",
+      workingDays: "--",
+      workingDaysSub: "--",
+      presentDays: "--",
+      presentDaysSub: "--",
+      leaves: "--",
+      leavesSub: "--",
+      absentDays: "--",
+      absentDaysSub: "--",
     },
   });
 
@@ -294,8 +299,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   const [regForm, setRegForm] = useState({
     rawDate: "",
     displayDate: "",
-    requestedInTime: "09:00",
-    requestedOutTime: "16:30",
+    requestType: "Late Attendance",
+    originalStatus: "--",
+    originalInTime: "--",
+    originalOutTime: "--",
+    requestedInTime: "",
+    requestedOutTime: "",
     reason: "",
   });
 
@@ -332,130 +341,105 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       if (typeof setPunchState === "function") {
         setPunchState(next);
       }
-      try {
-        localStorage.setItem("staff_punch_state", JSON.stringify(next));
-        window.dispatchEvent(new Event("storage"));
-      } catch {}
     },
     []
   );
 
-  // Fetch Today's Attendance Status from Swagger endpoint: /api/v1/staff-attendance/my-today
+  // Fetch Today's Attendance Status from backend API: /api/v1/staff-attendance/my-today
   const fetchTodayStatus = useCallback(async () => {
     try {
       setLoadingToday(true);
+      setTodayError("");
       const res = await attendanceService.getMyTodayStatus();
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (payload) {
-        const normalized = normalizeTodayData(payload, timingConfig);
-        if (normalized) {
-          setTodayData(normalized);
-          syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
-        }
+      if (!payload) throw new Error(res?.message || res?.Message || "Today attendance data unavailable.");
+      const normalized = normalizeTodayData(payload, timingConfig);
+      if (normalized) {
+        setTodayData(normalized);
+        syncGlobalPunchState(normalized.status, normalized.inTime, normalized.outTime);
       }
     } catch (err) {
-      console.warn("Could not load today status from backend, keeping defaults", err);
+      setTodayError(getApiErrorMessage(err) || "Unable to load today's attendance status.");
     } finally {
       setLoadingToday(false);
     }
   }, [syncGlobalPunchState, timingConfig]);
 
-  // Fetch Attendance History for selected filter from Swagger endpoint: /api/v1/staff-attendance/my-history
+  // Fetch Attendance History for selected filter from backend API: /api/v1/staff-attendance/my-history
   const fetchHistory = useCallback(async (period) => {
     const request = ++historyRequest.current;
     if (urlRouting) setHistoryRange("");
     try {
       setLoadingHistory(true);
+      setHistoryError("");
       const res = await attendanceService.getMyAttendanceHistory(period);
       if (urlRouting && request !== historyRequest.current) return;
       const payload = res?.data || res?.Data || (res?.status ? res : null);
-      if (!payload && urlRouting) setHistoryRange("error");
-      if (payload) {
-        if (urlRouting) setHistoryRange(period);
-        const rawLogs = payload.logs || payload.Logs || [];
-        const rawMetrics = payload.metrics || payload.Metrics || {};
+      if (!payload) throw new Error(res?.message || res?.Message || "Attendance history unavailable.");
+      if (urlRouting) setHistoryRange(period);
+      const rawLogs = payload.logs || payload.Logs || [];
+      const rawMetrics = payload.metrics || payload.Metrics || {};
 
-        const processedLogs = rawLogs.map((l) => {
-          const inTime = l.inTime || l.InTime || "--";
-          const outTime = l.outTime || l.OutTime || "--";
-          const rawStatus = l.status || l.Status || "--";
-          const isToday = Boolean(l.isToday ?? l.IsToday);
-          const regState = l.regularizationState || l.RegularizationState || null;
-          const shift = l.shift || l.Shift || "09:00 AM – 03:20 PM";
-          const markedByAdmin = Boolean(
-            l.markedByAdmin ||
-            l.MarkedByAdmin ||
-            l.markedBy === "Admin" ||
-            l.MarkedBy === "Admin" ||
-            String(rawStatus).toLowerCase().includes("admin") ||
-            (typeof l.device === "string" && l.device.toLowerCase().includes("admin")) ||
-            (!isToday && rawStatus === "Present" && (inTime === "--" || !inTime || outTime === "--" || !outTime))
-          );
+      const processedLogs = rawLogs.map((l) => {
+        const inTime = l.inTime || l.InTime || "--";
+        const outTime = l.outTime || l.OutTime || "--";
+        const status = l.status || l.Status || "--";
+        const isToday = Boolean(l.isToday ?? l.IsToday);
+        const isMissedCheckout = Boolean(l.isMissedCheckout ?? l.IsMissedCheckout);
+        const isMissedCheckoutResolved = Boolean(l.isMissedCheckoutResolved ?? l.IsMissedCheckoutResolved);
+        const regState = l.regularizationState || l.RegularizationState || null;
+        const shift = l.shift || l.Shift || "--";
+        const hours = l.hours || l.Hours || ((inTime !== "--" && outTime !== "--") ? calculateDurationStr(inTime, outTime, false) : "--");
+        const canRegularize = l.canRegularize !== undefined || l.CanRegularize !== undefined
+          ? Boolean(l.canRegularize ?? l.CanRegularize)
+          : ((status === "Late" || isMissedCheckout || status === "Absent") && !regState);
 
-          let status = rawStatus;
-          if (regState?.toLowerCase() === "approved") {
-            status = "Present";
-          } else if (markedByAdmin || status.toLowerCase().includes("admin")) {
-            status = "Present (Admin)";
-          }
+        return {
+          id: l.id || l.Id || `log-${l.rawDate || l.RawDate}`,
+          day: l.day || l.Day || "--",
+          date: l.date || l.Date || "--",
+          rawDate: l.rawDate || l.RawDate || "",
+          shift,
+          inTime,
+          outTime,
+          hours,
+          device: l.device || l.Device || "--",
+          status,
+          isMissedCheckout,
+          isMissedCheckoutResolved,
+          markedByAdmin: Boolean(l.markedByAdmin ?? l.MarkedByAdmin),
+          canRegularize,
+          isToday,
+          regularizationId: l.regularizationId ?? l.RegularizationId ?? null,
+          regularizationState: regState,
+          regularizationType: l.regularizationType || l.RegularizationType || null,
+          regularizationReason: l.regularizationReason || l.RegularizationReason || null,
+          regularizationAdminRemarks: l.regularizationAdminRemarks || l.RegularizationAdminRemarks || null,
+          reviewedAt: l.reviewedAt || l.ReviewedAt || null,
+          holidayName: l.holidayName || l.HolidayName || null,
+        };
+      });
 
-          // If marked Present by Admin or Present without check-in/out times:
-          // Fall back to configured shift start & end times
-          let finalInTime = inTime;
-          let finalOutTime = outTime;
-          if (!isToday && (status === "Present (Admin)" || (status === "Present" && (inTime === "--" || markedByAdmin)))) {
-            const shiftParts = String(shift || "").split(/[–-]/).map((s) => s.trim());
-            if (finalInTime === "--" || !finalInTime) finalInTime = shiftParts[0] || "09:00 AM";
-            if (finalOutTime === "--" || !finalOutTime) finalOutTime = shiftParts[1] || "03:20 PM";
-            status = "Present (Admin)";
-          }
-
-          let hours = l.hours || l.Hours || "--";
-          if ((hours === "--" || hours === "0h 0m") && finalInTime !== "--" && finalOutTime !== "--") {
-            hours = calculateDurationStr(finalInTime, finalOutTime, false);
-          }
-
-          const canRegularize = Boolean(l.canRegularize ?? l.CanRegularize) || (
-            (status === "Late" || status === "Missed Checkout" || status === "Absent" || status === "Half Day")
-            && (!regState || regState.toLowerCase() !== "approved")
-          );
-
-          return {
-            id: l.id || l.Id || `log-${l.rawDate || l.RawDate || Math.random()}`,
-            day: l.day || l.Day || "--",
-            date: l.date || l.Date || "--",
-            rawDate: l.rawDate || l.RawDate || "",
-            shift,
-            inTime: finalInTime,
-            outTime: finalOutTime,
-            hours,
-            device: markedByAdmin ? "Admin Entry" : (l.device || l.Device || "--"),
-            status,
-            markedByAdmin,
-            canRegularize,
-            isToday,
-            regularizationState: regState,
-            holidayName: l.holidayName || l.HolidayName || null,
-          };
-        });
-
-        // Use backend metrics directly as returned by Swagger endpoint
-        setHistoryData({
-          logs: processedLogs,
-          metrics: {
-            workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || `${processedLogs.filter((l) => l.status !== "Weekly Off" && l.status !== "Holiday").length} Days`,
-            workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
-            presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || `${processedLogs.filter((l) => l.status === "Present" || l.status === "Late").length} Days`,
-            presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "Biometric / Portal verified",
-            leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
-            leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "No leaves applied",
-            absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
-            absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "No absences",
-          },
-        });
-      }
+      setHistoryData({
+        logs: processedLogs,
+        metrics: {
+          workingDays: rawMetrics.workingDays || rawMetrics.WorkingDays || "0 Days",
+          workingDaysSub: rawMetrics.workingDaysSub || rawMetrics.WorkingDaysSub || "--",
+          presentDays: rawMetrics.presentDays || rawMetrics.PresentDays || "0 Days",
+          presentDaysSub: rawMetrics.presentDaysSub || rawMetrics.PresentDaysSub || "--",
+          leaves: rawMetrics.leaves || rawMetrics.Leaves || "0 Days",
+          leavesSub: rawMetrics.leavesSub || rawMetrics.LeavesSub || "--",
+          absentDays: rawMetrics.absentDays || rawMetrics.AbsentDays || "0 Days",
+          absentDaysSub: rawMetrics.absentDaysSub || rawMetrics.AbsentDaysSub || "--",
+          missedCheckoutDays: rawMetrics.missedCheckoutDays || rawMetrics.MissedCheckoutDays || "0 Days",
+          lopDays: rawMetrics.lopDays || rawMetrics.LopDays || "0 Days",
+          lopDaysSub: rawMetrics.lopDaysSub || rawMetrics.LopDaysSub || "",
+          holidays: rawMetrics.holidays || rawMetrics.Holidays || "0 Days",
+          attendancePercentage: rawMetrics.attendancePercentage ?? rawMetrics.AttendancePercentage ?? 0,
+        },
+      });
     } catch (err) {
-      console.warn("Could not load attendance history from backend", err);
+      setHistoryError(getApiErrorMessage(err) || "Unable to load attendance history.");
       if (urlRouting && request === historyRequest.current) setHistoryRange("error");
     } finally {
       if (!urlRouting || request === historyRequest.current) setLoadingHistory(false);
@@ -490,42 +474,46 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     fetchMonthlyMetrics();
   }, [fetchMonthlyMetrics]);
 
-  // Real-time check if check-out cutoff (shift end + 15 min grace) has passed
   const isMissedCheckout = useMemo(() => {
-    if (todayData.status === "missed_checkout" || todayData.todayStatus === "Missed Checkout") return true;
-    if (todayData.status === "punched_in" && !todayData.outTime) {
-      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM");
-      if (shiftEndMins !== null) {
-        const cutoffMins = shiftEndMins + Number(timingConfig.gracePeriodMinutes || 15);
+    if (todayData.isMissedCheckout && !todayData.isMissedCheckoutResolved) return true;
+    if (todayData.status === "missed_checkout" && !todayData.isMissedCheckoutResolved) return true;
+    if (todayData.inTime && !todayData.outTime && !todayData.isMissedCheckoutResolved) {
+      const directCutoffMins = parseTimeToMinutes(todayData.checkoutCutoffTime);
+      const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime !== "--" ? todayData.shiftEndTime : timingConfig.workEndTime);
+      const cutoffMins = directCutoffMins !== null
+        ? directCutoffMins
+        : (shiftEndMins !== null && timingConfig.gracePeriodMinutes !== null ? shiftEndMins + Number(timingConfig.gracePeriodMinutes) : null);
+      if (cutoffMins !== null) {
         const now = new Date();
-        const nowMins = now.getHours() * 60 + now.getMinutes();
-        return nowMins > cutoffMins;
+        return (now.getHours() * 60 + now.getMinutes()) > cutoffMins;
       }
     }
     return false;
-  }, [todayData.status, todayData.todayStatus, todayData.outTime, todayData.shiftEndTime, timingConfig, shiftUpdateTick]);
+  }, [todayData, timingConfig, shiftUpdateTick]);
 
-  // Shift check-in and check-out window validation
   const isCheckInAllowed = useMemo(() => {
-    if (todayData.markedByAdmin || todayData.status !== "not_punched") return false;
-    const startMins = parseTimeToMinutes(todayData.shiftStartTime || timingConfig.workStartTime || "09:00 AM");
-    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
+    if (todayData.status !== "not_punched" || Boolean(todayError)) return false;
+    const startMins = parseTimeToMinutes(todayData.shiftStartTime !== "--" ? todayData.shiftStartTime : timingConfig.workStartTime);
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime !== "--" ? todayData.shiftEndTime : timingConfig.workEndTime);
     if (startMins === null || endMins === null) return false;
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
     return nowMins >= startMins && nowMins <= endMins;
-  }, [todayData.markedByAdmin, todayData.status, todayData.shiftStartTime, todayData.shiftEndTime, timingConfig.workStartTime, timingConfig.workEndTime, shiftUpdateTick]);
+  }, [todayData.status, todayData.shiftStartTime, todayData.shiftEndTime, timingConfig, todayError, shiftUpdateTick]);
 
   const isCheckOutAllowed = useMemo(() => {
-    if (todayData.markedByAdmin || todayData.status !== "punched_in" || isMissedCheckout) return false;
-    const endMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "03:20 PM");
-    if (endMins === null) return true;
+    if (!todayData.inTime || todayData.outTime || isMissedCheckout || Boolean(todayError)) return false;
+    if (todayData.isCheckOutAllowed === false) return false;
+    const directCutoffMins = parseTimeToMinutes(todayData.checkoutCutoffTime);
+    const endMins = parseTimeToMinutes(todayData.shiftEndTime !== "--" ? todayData.shiftEndTime : timingConfig.workEndTime);
+    const maxMins = directCutoffMins !== null
+      ? directCutoffMins
+      : (endMins !== null && timingConfig.gracePeriodMinutes !== null ? endMins + Number(timingConfig.gracePeriodMinutes) : null);
+    if (endMins === null || maxMins === null) return todayData.isCheckOutAllowed === true;
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
-    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
-    const cutoffMins = endMins + grace;
-    return nowMins >= (endMins - 15) && nowMins <= cutoffMins;
-  }, [todayData.markedByAdmin, todayData.status, isMissedCheckout, todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes, shiftUpdateTick]);
+    return nowMins >= (endMins - 15) && nowMins <= maxMins;
+  }, [todayData, isMissedCheckout, timingConfig, todayError, shiftUpdateTick]);
 
   // Punch In Handler: POST /api/v1/staff-attendance/punch-in
   const handlePunchIn = async () => {
@@ -638,25 +626,49 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
       notify("Attendance record is unavailable or cannot be regularized in this history range.", "error");
       return;
     }
+    const detectedType = log.isMissedCheckout || log.status === "Missed Checkout"
+      ? "Missed Checkout"
+      : log.status === "Late"
+      ? "Late Attendance"
+      : "Absent";
     setRegForm({
       rawDate: regularizeDate,
       displayDate: log.date || log.day || "Selected Date",
-      requestedInTime: toInputTime(log.inTime) || "09:00",
-      requestedOutTime: toInputTime(log.outTime) || (todayData.shiftEndTime ? toInputTime(todayData.shiftEndTime) : "16:30"),
+      requestType: detectedType,
+      originalStatus: log.isMissedCheckout ? `${log.status} (Missed Checkout)` : (log.status || "--"),
+      originalInTime: log.inTime || "--",
+      originalOutTime: log.outTime || "--",
+      requestedInTime: toInputTime(log.inTime) || "",
+      requestedOutTime: detectedType === "Missed Checkout" ? "" : (toInputTime(log.outTime) || ""),
       reason: "",
     });
     restoredRegularization.current = regularizeDate;
     setLocalRegModalOpen(true);
-  }, [urlRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, todayData.shiftEndTime, notify]);
+  }, [urlRouting, regularizeDate, loadingHistory, historyRange, activeFilter, historyData, notify]);
+
+  useEffect(() => {
+    if (highlightedRegId && !loadingHistory && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedRegId, loadingHistory, historyData.logs]);
 
   // Open Regularization Modal for a specific date
   const openRegularizeModal = (log) => {
-    const targetDate = String(log.rawDate || log.RawDate || new Date().toISOString().split("T")[0]).slice(0, 10);
+    const targetDate = String(log.rawDate || log.RawDate || getIstTodayIso()).slice(0, 10);
+    const detectedType = log.isMissedCheckout || log.status === "Missed Checkout"
+      ? "Missed Checkout"
+      : log.status === "Late"
+      ? "Late Attendance"
+      : "Absent";
     setRegForm({
       rawDate: targetDate,
-      displayDate: log.date || log.Date || log.day || "Selected Date",
-      requestedInTime: toInputTime(log.inTime) || "09:00",
-      requestedOutTime: toInputTime(log.outTime) || (todayData.shiftEndTime ? toInputTime(todayData.shiftEndTime) : "16:30"),
+      displayDate: log.date || log.Date || log.day || targetDate,
+      requestType: detectedType,
+      originalStatus: log.isMissedCheckout ? `${log.status || "Present"} (Missed Checkout)` : (log.status || "--"),
+      originalInTime: log.inTime || "--",
+      originalOutTime: log.outTime || "--",
+      requestedInTime: toInputTime(log.inTime) || "",
+      requestedOutTime: detectedType === "Missed Checkout" ? "" : (toInputTime(log.outTime) || ""),
       reason: "",
     });
     setLocalRegModalOpen(true);
@@ -672,17 +684,19 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   // Submit Regularization Form: POST /api/v1/staff-attendance/regularize
   const handleSubmitRegularization = async (e) => {
     e.preventDefault();
-    if (!regForm.reason.trim()) {
-      notify("Please provide a reason for attendance regularization.", "error");
+    if (regForm.reason.trim().length < 5) {
+      notify("Please enter a reason of at least 5 characters for regularization.", "error");
       return;
     }
 
     setRegSubmitting(true);
     try {
+      const isMissed = regForm.requestType === "Missed Checkout";
       const payload = {
         attendanceDate: regForm.rawDate,
+        requestType: regForm.requestType,
         requestedInTime: regForm.requestedInTime ? (regForm.requestedInTime.length === 5 ? `${regForm.requestedInTime}:00` : regForm.requestedInTime) : null,
-        requestedOutTime: regForm.requestedOutTime ? (regForm.requestedOutTime.length === 5 ? `${regForm.requestedOutTime}:00` : regForm.requestedOutTime) : null,
+        requestedOutTime: (!isMissed && regForm.requestedOutTime) ? (regForm.requestedOutTime.length === 5 ? `${regForm.requestedOutTime}:00` : regForm.requestedOutTime) : null,
         reason: regForm.reason.trim(),
       };
 
@@ -693,6 +707,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         closeRegularizeModal();
         fetchTodayStatus();
         fetchHistory(activeFilter);
+        fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
@@ -704,23 +719,26 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     }
   };
 
-  // Formatted check-out cutoff time based on shift end + grace period (04:30 PM + 15m = 04:45 PM)
+  // Formatted check-out cutoff time strictly from backend shift end + grace period
   const formattedCutoffTime = useMemo(() => {
-    const shiftEndMins = parseTimeToMinutes(todayData.shiftEndTime || timingConfig.workEndTime || "04:30 PM") || (16 * 60 + 30);
-    const grace = Number(timingConfig.gracePeriodMinutes ?? 15);
-    const cutoffMins = shiftEndMins + grace;
-    return formatMinutesTo12h(cutoffMins);
-  }, [todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes]);
+    if (todayData.checkoutCutoffTime && todayData.checkoutCutoffTime !== "--") {
+      return todayData.checkoutCutoffTime;
+    }
+    const shiftEndMins = parseTimeToMinutes(
+      todayData.shiftEndTime !== "--" ? todayData.shiftEndTime : timingConfig.workEndTime
+    );
+    if (shiftEndMins === null || timingConfig.gracePeriodMinutes === null || timingConfig.gracePeriodMinutes === undefined) {
+      return "--";
+    }
+    return formatMinutesTo12h(shiftEndMins + Number(timingConfig.gracePeriodMinutes));
+  }, [todayData.checkoutCutoffTime, todayData.shiftEndTime, timingConfig.workEndTime, timingConfig.gracePeriodMinutes]);
 
   const clockWorkingHours = useMemo(() => {
     if (todayData.status === "punched_out" && todayData.inTime && todayData.outTime) {
       return calculateDurationStr(todayData.inTime, todayData.outTime, false);
     }
-    if (todayData.status === "punched_in" && todayData.inTime) {
+    if (todayData.inTime && !todayData.outTime && !isMissedCheckout) {
       return calculateDurationStr(todayData.inTime, null, true);
-    }
-    if (todayData.inTime && isMissedCheckout) {
-      return calculateDurationStr(todayData.inTime, todayData.outTime || todayData.shiftEndTime || "04:30 PM", false);
     }
     return "--:--";
   }, [todayData, shiftUpdateTick, isMissedCheckout]);
@@ -755,6 +773,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
   return (
     <div className="sp-faculty-attendance-page">
+      {(todayError || historyError) && (
+        <div className="sp-att-error-banner" role="alert">
+          <AlertCircle size={16} />
+          <span>{todayError || historyError}</span>
+          <button type="button" onClick={() => { fetchTodayStatus(); fetchHistory(activeFilter); fetchMonthlyMetrics(); }}>Retry</button>
+        </div>
+      )}
       {/* Top Punch & Shift Grid */}
       <div className="sp-attendance-top-grid">
         {/* Left Card: Today's Attendance Summary */}
@@ -770,33 +795,28 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             {/* Check Status Row - Centered in middle */}
             <div className="sp-summary-status-row">
               <span className="sp-summary-label">Check Status:</span>
-              {todayData.markedByAdmin ? (
-                <span className="sp-check-status-badge in" style={{ background: "#ecfdf5", color: "#065f46", borderColor: "#a7f3d0" }}>
-                  <ShieldCheck size={14} style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
-                  Present | Marked by Admin ({todayData.inTime || "Verified"})
-                </span>
-              ) : (
-                <span
-                  className={`sp-check-status-badge ${
-                    todayData.status === "punched_in" && !isMissedCheckout
-                      ? (todayData.isLate ? "late" : "in")
-                      : todayData.status === "punched_out"
-                      ? "completed"
-                      : isMissedCheckout
-                      ? "missed"
-                      : "not-checked"
-                  }`}
-                >
-                  <span className="sp-status-bullet">•</span>
-                  {todayData.status === "punched_in" && !isMissedCheckout
-                    ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
+              <span
+                className={`sp-check-status-badge ${
+                  isMissedCheckout
+                    ? "missed"
                     : todayData.status === "punched_out"
-                    ? `Completed (${todayData.outTime || "--"})`
-                    : isMissedCheckout
-                    ? "Missed Checkout (Cutoff Passed)"
-                    : "Not Checked In"}
-                </span>
-              )}
+                    ? "completed"
+                    : todayData.inTime
+                    ? (todayData.isLate ? "late" : "in")
+                    : "not-checked"
+                }`}
+              >
+                <span className="sp-status-bullet">•</span>
+                {todayData.status === "punched_out"
+                  ? `${todayData.todayStatus || "Present"} · Checked Out (${todayData.outTime || "--"})`
+                  : isMissedCheckout
+                  ? `${todayData.isLate ? "Late" : "Present"} · Missed Checkout (In: ${todayData.inTime || "--"})`
+                  : todayData.isMissedCheckoutResolved
+                  ? "Present · Missed Checkout Regularized"
+                  : todayData.inTime
+                  ? `Checked In (${todayData.inTime})${todayData.isLate ? " (Late)" : ""}`
+                  : (todayData.todayStatus && todayData.todayStatus !== "--" ? todayData.todayStatus : "Not Checked In")}
+              </span>
             </div>
 
             {/* 3 Metric Columns: CHECK IN, CHECK OUT, WORKING HOURS */}
@@ -915,47 +935,19 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                   </div>
                 </div>
 
-                {/* Check Out Panel */}
+                {/* Check Out Panel (Normal Check Out button remains visible; disabled after cutoff) */}
                 <div className="sp-twin-panel checkout-panel">
-              {/* Check Out Button */}
-              {isMissedCheckout ? (
-                <>
-                  <button
-                    type="button"
-                    className="sp-punch-pill-btn checkout missed"
-                    disabled
-                    title="Check-out window (shift end + 15m) has passed. Marked as Missed Checkout."
-                  >
-                    <AlertCircle size={14} />
-                    <span>Missed Checkout</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="sp-missed-regularize-btn"
-                    onClick={() =>
-                      openRegularizeModal({
-                        rawDate: new Date().toISOString().split("T")[0],
-                        date: todayData.dateFormatted,
-                      })
-                    }
-                  >
-                    Regularize Attendance &gt;
-                  </button>
-                  <div className="sp-punch-foot-hint" style={{ color: "#b91c1c" }}>
-                    15m cutoff passed. Apply for regularization.
-                  </div>
-                </>
-              ) : (
-                <>
                   <button
                     type="button"
                     className={`sp-punch-pill-btn checkout ${
-                      isCheckOutAllowed && todayData.status === "punched_in" && !actionLoading ? "active" : "inactive"
+                      isCheckOutAllowed && !isMissedCheckout && todayData.inTime && !todayData.outTime && !actionLoading ? "active" : "inactive"
                     }`}
-                    disabled={!isCheckOutAllowed || todayData.status !== "punched_in" || actionLoading}
+                    disabled={!isCheckOutAllowed || isMissedCheckout || !todayData.inTime || Boolean(todayData.outTime) || actionLoading}
                     onClick={handlePunchOut}
                     title={
-                      !isCheckOutAllowed && todayData.status === "punched_in"
+                      isMissedCheckout
+                        ? `Check-out cutoff (${formattedCutoffTime}) has passed. Use Regularize for Missed Checkout.`
+                        : !isCheckOutAllowed && todayData.inTime && !todayData.outTime
                         ? `Check-out allowed around shift end (${todayData.shiftEndTime} – ${formattedCutoffTime})`
                         : "Click to Check Out"
                     }
@@ -968,19 +960,43 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                     <span>{todayData.status === "punched_out" ? "Checked Out" : "Check Out"}</span>
                   </button>
 
-                  <div
-                    className="sp-punch-foot-hint"
-                    style={{
-                      color: !isCheckOutAllowed && todayData.status === "punched_in" ? "#dc2626" : undefined,
-                      fontWeight: !isCheckOutAllowed && todayData.status === "punched_in" ? 600 : undefined
-                    }}
-                  >
-                    Allowed: 15-minute window after shift end ({todayData.shiftEndTime} – {formattedCutoffTime})
-                    {!isCheckOutAllowed && todayData.status === "punched_in" ? " (Shift In Progress)" : ""}
-                  </div>
-                </>
-              )}
-            </div>
+                  {isMissedCheckout ? (
+                    <>
+                      <div className="sp-punch-foot-hint" style={{ color: "#b91c1c", fontWeight: 600 }}>
+                        Missed Checkout · Window closed after {formattedCutoffTime}.
+                      </div>
+                      {!todayData.regularizationState && (
+                        <button
+                          type="button"
+                          className="sp-missed-regularize-btn"
+                          onClick={() =>
+                            openRegularizeModal({
+                              rawDate: getIstTodayIso(),
+                              date: todayData.dateFormatted,
+                              status: todayData.todayStatus || "Present",
+                              inTime: todayData.inTime || "--",
+                              outTime: "--",
+                              isMissedCheckout: true,
+                            })
+                          }
+                        >
+                          Regularize Missed Checkout &gt;
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <div
+                      className="sp-punch-foot-hint"
+                      style={{
+                        color: !isCheckOutAllowed && todayData.status === "punched_in" ? "#dc2626" : undefined,
+                        fontWeight: !isCheckOutAllowed && todayData.status === "punched_in" ? 600 : undefined
+                      }}
+                    >
+                      Allowed: {todayData.shiftEndTime} – {formattedCutoffTime}
+                      {!isCheckOutAllowed && todayData.status === "punched_in" ? " (Shift In Progress)" : ""}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1003,8 +1019,8 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.workingDays || (monthlyMetrics || historyData.metrics)?.WorkingDays || "0 Days"}</div>
-                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.workingDaysSub || (monthlyMetrics || historyData.metrics)?.WorkingDaysSub || "Current Month (Month-to-Date)"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.workingDays || (monthlyMetrics || historyData.metrics)?.WorkingDays || "--"}</div>
+                <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.workingDaysSub || (monthlyMetrics || historyData.metrics)?.WorkingDaysSub || "--"}</div>
               </>
             )}
           </div>
@@ -1024,7 +1040,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value green-val">{(monthlyMetrics || historyData.metrics)?.presentDays || (monthlyMetrics || historyData.metrics)?.PresentDays || "0 Days"}</div>
+                <div className="sp-kpi-value green-val">{(monthlyMetrics || historyData.metrics)?.presentDays || (monthlyMetrics || historyData.metrics)?.PresentDays || "--"}</div>
                 <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.presentDaysSub || (monthlyMetrics || historyData.metrics)?.PresentDaysSub || "--"}</div>
               </>
             )}
@@ -1045,7 +1061,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </>
             ) : (
               <>
-                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.leaves || (monthlyMetrics || historyData.metrics)?.Leaves || "0 Days"}</div>
+                <div className="sp-kpi-value">{(monthlyMetrics || historyData.metrics)?.leaves || (monthlyMetrics || historyData.metrics)?.Leaves || "--"}</div>
                 <div className="sp-kpi-sub">{(monthlyMetrics || historyData.metrics)?.leavesSub || (monthlyMetrics || historyData.metrics)?.LeavesSub || "--"}</div>
               </>
             )}
@@ -1067,7 +1083,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
             ) : (
               <>
                 <div className="sp-kpi-value red-val">
-                  {(monthlyMetrics || historyData.metrics)?.absentDays || (monthlyMetrics || historyData.metrics)?.AbsentDays || "0 Days"}
+                  {(monthlyMetrics || historyData.metrics)?.absentDays || (monthlyMetrics || historyData.metrics)?.AbsentDays || "--"}
                   {(monthlyMetrics || historyData.metrics)?.lopDays && (monthlyMetrics || historyData.metrics)?.lopDays !== "0 Days" && (
                     <span style={{ fontSize: "11px", marginLeft: "6px", color: "#dc2626", fontWeight: 700 }}>
                       ({(monthlyMetrics || historyData.metrics).lopDays} LOP)
@@ -1187,11 +1203,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                   const status = log.status || log.Status || "--";
                   const canReg = log.canRegularize ?? log.CanRegularize;
                   const regState = log.regularizationState || log.RegularizationState;
+                  const regLower = String(regState || "").toLowerCase();
                   const holidayName = log.holidayName || log.HolidayName;
                   const isUpcoming = status === "-" || status === "--";
+                  const isHighlighted = Boolean(highlightedRegId && log.regularizationId && String(log.regularizationId) === String(highlightedRegId));
 
                   return (
-                    <tr key={id}>
+                    <tr key={id} ref={isHighlighted ? highlightedRowRef : undefined} className={isHighlighted ? "sp-reg-row-highlight" : undefined}>
                       <td>
                         <div className="sp-day-name">{day}</div>
                         <div className="sp-day-date">{date}</div>
@@ -1218,6 +1236,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                             <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
                               {status}
                             </span>
+                            {log.isMissedCheckout && !log.isMissedCheckoutResolved && (
+                              <span className="sp-missed-subbadge">Missed Checkout</span>
+                            )}
+                            {log.isMissedCheckoutResolved && (
+                              <span className="sp-resolved-subbadge">Checkout Regularized</span>
+                            )}
                             {holidayName && (
                               <span className="sp-holiday-name-subtext" title={holidayName}>
                                 {holidayName}
@@ -1227,12 +1251,25 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                         )}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        {regState === "pending" ? (
-                          <span className="sp-reg-badge pending">Pending</span>
-                        ) : regState === "approved" ? (
-                          <span className="sp-reg-badge approved">Approved</span>
-                        ) : regState === "rejected" ? (
-                          <span className="sp-reg-badge rejected">Rejected</span>
+                        {regLower === "pending" || regLower === "approved" || regLower === "rejected" ? (
+                          <div className="sp-reg-action-info">
+                            <span className={`sp-reg-badge ${regLower}`}>
+                              {regLower === "pending" ? "Pending" : regLower === "approved" ? "Approved" : "Rejected"}
+                            </span>
+                            {log.regularizationType && (
+                              <span className="sp-reg-submeta">{log.regularizationType}</span>
+                            )}
+                            {log.regularizationReason && (
+                              <span className="sp-reg-submeta" title={log.regularizationReason}>
+                                Reason: {log.regularizationReason}
+                              </span>
+                            )}
+                            {log.regularizationAdminRemarks && (
+                              <span className="sp-reg-submeta remarks" title={log.regularizationAdminRemarks}>
+                                Admin: {log.regularizationAdminRemarks}
+                              </span>
+                            )}
+                          </div>
                         ) : canReg ? (
                           <button
                             type="button"
@@ -1279,42 +1316,56 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
             <form onSubmit={handleSubmitRegularization}>
               <div className="sp-reg-modal-body">
-                <div className="sp-reg-form-group">
-                  <label className="sp-reg-label">Attendance Date</label>
-                  <input
-                    type="text"
-                    className="sp-reg-input"
-                    value={regForm.displayDate}
-                    disabled
-                  />
-                </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div className="sp-reg-form-group">
-                    <label className="sp-reg-label">Requested In-Time</label>
-                    <input
-                      type="time"
-                      className="sp-reg-input"
-                      value={regForm.requestedInTime}
-                      onChange={(e) => setRegForm({ ...regForm, requestedInTime: e.target.value })}
-                      required
-                    />
+                    <label className="sp-reg-label">Attendance Date</label>
+                    <input type="text" className="sp-reg-input" value={regForm.displayDate} disabled />
                   </div>
-
                   <div className="sp-reg-form-group">
-                    <label className="sp-reg-label">Requested Out-Time</label>
-                    <input
-                      type="time"
+                    <label className="sp-reg-label">Request Type</label>
+                    <select
                       className="sp-reg-input"
-                      value={regForm.requestedOutTime}
-                      onChange={(e) => setRegForm({ ...regForm, requestedOutTime: e.target.value })}
-                      required
-                    />
+                      value={regForm.requestType}
+                      onChange={(e) => setRegForm({ ...regForm, requestType: e.target.value })}
+                    >
+                      <option value="Late Attendance">Late Attendance</option>
+                      <option value="Missed Checkout">Missed Checkout</option>
+                      <option value="Absent">Absent / Missing Punch</option>
+                    </select>
                   </div>
                 </div>
 
+                <div className="sp-reg-orig-summary">
+                  <span>Original Status: <strong>{regForm.originalStatus}</strong></span>
+                  <span>In: <strong>{regForm.originalInTime}</strong></span>
+                  <span>Out: <strong>{regForm.originalOutTime}</strong></span>
+                </div>
+
+                {regForm.requestType !== "Missed Checkout" && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div className="sp-reg-form-group">
+                      <label className="sp-reg-label">Requested In-Time</label>
+                      <input
+                        type="time"
+                        className="sp-reg-input"
+                        value={regForm.requestedInTime}
+                        onChange={(e) => setRegForm({ ...regForm, requestedInTime: e.target.value })}
+                      />
+                    </div>
+                    <div className="sp-reg-form-group">
+                      <label className="sp-reg-label">Requested Out-Time</label>
+                      <input
+                        type="time"
+                        className="sp-reg-input"
+                        value={regForm.requestedOutTime}
+                        onChange={(e) => setRegForm({ ...regForm, requestedOutTime: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="sp-reg-form-group">
-                  <label className="sp-reg-label">Reason / Justification *</label>
+                  <label className="sp-reg-label">Reason / Justification * (min 5 characters)</label>
                   <textarea
                     rows={3}
                     className="sp-reg-textarea"
@@ -1357,7 +1408,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                 <button
                   type="submit"
                   className="sp-reg-submit-btn"
-                  disabled={regSubmitting || !regForm.reason.trim()}
+                  disabled={regSubmitting || regForm.reason.trim().length < 5}
                 >
                   {regSubmitting ? (
                     <Loader2 size={14} className="sp-spin" />

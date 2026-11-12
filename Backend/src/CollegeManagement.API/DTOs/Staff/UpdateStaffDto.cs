@@ -236,6 +236,7 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? ExperienceCertificate { get; set; }
         public string? Resume { get; set; }
         public string? BankProof { get; set; }
+        public bool? IsDriver { get; set; }
         public string? DrivingLicence { get; set; }
         public string? DrivingLicenseNumber { get; set; }
         public string? DrivingLicenseExpiryDate { get; set; }

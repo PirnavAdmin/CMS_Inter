@@ -1219,3 +1219,125 @@
   color: #687791;
 }
 
+.reports-extra-tabs-wrap {
+  margin: 0 20px 18px;
+  padding: 12px 16px;
+  border: 1px solid #dce5f1;
+  border-radius: 12px;
+  background: #f8faff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reports-extra-tabs-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reports-extra-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reports-extra-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.reports-extra-pill:hover:not(.is-active) {
+  border-color: #2758e8;
+  color: #1e40af;
+}
+
+.reports-extra-pill.is-active {
+  border-color: #2758e8;
+  background: #2758e8;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(39, 88, 232, 0.22);
+}
+
+.reports-compliance-section {
+  margin: 0 20px 20px;
+}
+
+.reports-empty-callout {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--cms-muted);
+}
+
+.reports-empty-callout h3 {
+  margin: 8px 0 6px;
+  color: var(--cms-text);
+  font-size: 16px;
+}
+
+.reports-empty-callout p {
+  margin: 0 auto 14px;
+  max-width: 540px;
+  font-size: 13px;
+}
+
+[data-theme="dark"] .reports-compliance-section,
+[data-theme="dark"] .reports-extra-tabs-wrap,
+[data-theme="dark"] .reports-detail-section {
+  border-color: #2B3028;
+  background: #172236;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .reports-compliance-title,
+[data-theme="dark"] .reports-detail-title-group h3 {
+  color: #eef3fb;
+}
+
+[data-theme="dark"] .reports-extra-tabs-label,
+[data-theme="dark"] .reports-detail-title-group p,
+[data-theme="dark"] .reports-detail-footer {
+  color: #9eacc0;
+}
+
+[data-theme="dark"] .reports-extra-pill {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .reports-compliance-card.tone-success {
+  background: rgba(22, 101, 52, 0.2);
+  border-color: rgba(74, 222, 128, 0.35);
+  color: #86efac;
+}
+[data-theme="dark"] .reports-compliance-card.tone-warning {
+  background: rgba(146, 64, 14, 0.22);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fde68a;
+}
+[data-theme="dark"] .reports-compliance-card.tone-danger {
+  background: rgba(153, 27, 27, 0.22);
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+}
+[data-theme="dark"] .reports-compliance-card.tone-blue {
+  background: rgba(30, 64, 175, 0.22);
+  border-color: rgba(96, 165, 250, 0.35);
+  color: #93c5fd;
+}

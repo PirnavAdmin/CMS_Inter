@@ -713,6 +713,8 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("section/{sectionId:int}")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,HOD,Dean,Faculty,Teaching Staff,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         public async Task<IActionResult> GetBySection(int sectionId)
         {
             var students = await _service.GetBySectionAsync(sectionId);

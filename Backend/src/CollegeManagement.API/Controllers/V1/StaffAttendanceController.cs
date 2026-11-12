@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -24,49 +26,57 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStaffAttendanceService _service;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly ILogger<StaffAttendanceController> _logger;
         private readonly INotificationService? _notificationService;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
             CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            ILogger<StaffAttendanceController>? logger = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _notificationService = notificationService;
+            _logger = logger ?? NullLogger<StaffAttendanceController>.Instance;
         }
 
         /// <summary>
         /// Loads staff members for specified Date, Department, and StaffType (Teaching / Non-Teaching).
         /// </summary>
         [HttpPost("load")]
+        [CollegeManagement.API.Filters.RequirePermission("staff-attendance", "view")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         public async Task<IActionResult> LoadStaff([FromBody] LoadStaffAttendanceRequest request)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to load college-wide staff attendance." });
+            }
             var result = await _service.LoadStaffAttendanceAsync(request);
             return Ok(new { Status = true, Message = "Staff list loaded successfully.", Data = result });
         }
 
         /// <summary>
-        /// Bulk saves/submits staff attendance records.
+        /// Restricted: unrestricted bulk attendance creation for staff is disabled.
+        /// Admins may edit individual existing attendance records or review regularization requests.
         /// </summary>
         [HttpPost("bulk")]
         [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
-        [ProducesResponseType(StatusCodes.Status200OK)]
-        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> BulkSave([FromBody] BulkSaveStaffAttendanceRequest request)
+        public IActionResult BulkSave([FromBody] BulkSaveStaffAttendanceRequest request)
         {
-            var userId = GetCurrentUserId();
-            var count = await _service.BulkSaveStaffAttendanceAsync(request, userId);
-            return Ok(new { Status = true, Message = $"Staff attendance saved successfully for {count} members.", Data = count });
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                Status = false,
+                Message = "Unrestricted bulk attendance marking is disabled for staff. Admins can only edit existing records or review regularization requests."
+            });
         }
 
         /// <summary>
-        /// Updates a single staff attendance record.
+        /// Updates an existing staff attendance record without fabricating missing checkouts or bypassing regularization.
         /// </summary>
         [HttpPut("update")]
         [Authorize(Roles = "Admin,Super Admin,Principal,College Admin")]
@@ -77,8 +87,15 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> UpdateStaffAttendance([FromBody] UpdateStaffAttendanceRequest request)
         {
             var userId = GetCurrentUserId();
-            await _service.UpdateStaffAttendanceAsync(request, userId);
-            return Ok(new { Status = true, Message = "Staff attendance updated successfully.", Data = true });
+            try
+            {
+                await _service.UpdateStaffAttendanceAsync(request, userId);
+                return Ok(new { Status = true, Message = "Staff attendance updated successfully.", Data = true });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Status = false, Message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -116,6 +133,15 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffMonthlyReportGridGet([FromQuery] StaffMonthlyReportRequest request)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                var callerStaffId = await ResolveStaffIdAsync();
+                if (request.FacultyId.HasValue && request.FacultyId.Value != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to view other staff attendance reports." });
+                }
+                request.FacultyId = callerStaffId;
+            }
             var result = await _service.GetStaffMonthlyReportGridAsync(request);
             return Ok(new { Status = true, Message = "Staff monthly report grid generated successfully.", Data = result });
         }
@@ -124,10 +150,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates Staff Monthly Calendar Matrix Grid Report via POST body.
         /// </summary>
         [HttpPost("monthly-report")]
+        [CollegeManagement.API.Filters.RequirePermission("staff-attendance", "view")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetStaffMonthlyReportGrid([FromBody] StaffMonthlyReportRequest request)
         {
+            if (!IsCurrentUserAdmin())
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to generate college-wide staff monthly reports." });
+            }
             var result = await _service.GetStaffMonthlyReportGridAsync(request);
             return Ok(new { Status = true, Message = "Staff monthly report grid generated successfully.", Data = result });
         }
@@ -243,7 +274,46 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User?.IsInRole("Admin") == true || User?.IsInRole("Super Admin") == true || User?.IsInRole("College Admin") == true;
+            return User?.IsInRole("Admin") == true
+                || User?.IsInRole("Super Admin") == true
+                || User?.IsInRole("Principal") == true
+                || User?.IsInRole("College Admin") == true;
+        }
+
+        private static string BuildStaffAttendanceActionUrl(string? roleName, int? regularizationId = null, DateTime? attendanceDate = null)
+        {
+            var r = (roleName ?? string.Empty).Trim().ToLowerInvariant();
+            string basePath;
+            bool hasExistingQuery = false;
+
+            if (r.Contains("accountant") || r.Contains("finance") || r.Contains("cashier"))
+                basePath = "/accountant-dashboard/my-attendance";
+            else if (r.Contains("exam"))
+                basePath = "/exam-cell-dashboard/check-in-out";
+            else if (r.Contains("transport"))
+                basePath = "/transport-manager/my-attendance";
+            else if (r.Contains("driver") || r.Contains("attendant"))
+                basePath = "/driver/attendance";
+            else if (r.Contains("non-teaching") || r.Contains("nonteaching"))
+                basePath = "/non-teaching-dashboard/attendance";
+            else if (r.Contains("warden"))
+                basePath = "/warden-dashboard";
+            else if (r.Contains("admin") || r.Contains("principal"))
+            {
+                basePath = "/dashboard/attendance/staff?tab=my-attendance";
+                hasExistingQuery = true;
+            }
+            else
+                basePath = "/faculty-dashboard/my-attendance";
+
+            var queryParts = new List<string>();
+            if (regularizationId.HasValue && regularizationId.Value > 0)
+                queryParts.Add($"regId={regularizationId.Value}");
+            if (attendanceDate.HasValue)
+                queryParts.Add($"date={attendanceDate.Value:yyyy-MM-dd}");
+
+            if (queryParts.Count == 0) return basePath;
+            return basePath + (hasExistingQuery ? "&" : "?") + string.Join("&", queryParts);
         }
 
         private async Task<int> ResolveStaffIdAsync()
@@ -302,15 +372,20 @@ namespace CollegeManagement.API.Controllers.V1
                     try
                     {
                         var punchTime = result.InTime ?? DateTime.Now.ToString("hh:mm tt");
+                        var roleName = await _service.ResolveStaffRoleNameAsync(staffId);
+                        var actionUrl = BuildStaffAttendanceActionUrl(roleName, null, DateTime.Today);
                         await _notificationService.SendToStaffAsync(
                             staffId,
                             "Late Arrival Notice",
                             $"You punched in at {punchTime}, recorded as Late arrival.",
                             "Attendance",
                             null,
-                            "/staff/attendance");
+                            actionUrl);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to dispatch late arrival notification for staff {StaffId}", staffId);
+                    }
                 }
 
                 return Ok(new { Status = true, Message = "Checked in successfully.", Data = result });
@@ -353,11 +428,14 @@ namespace CollegeManagement.API.Controllers.V1
         [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(MyAttendanceHistoryResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetMyAttendanceHistory([FromQuery] string period = "week")
+        public async Task<IActionResult> GetMyAttendanceHistory(
+            [FromQuery] string period = "month",
+            [FromQuery] int? year = null,
+            [FromQuery] int? month = null)
         {
             var staffId = await ResolveStaffIdAsync();
-            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.Today);
-            return Ok(new { Status = true, Message = "Attendance history retrieved successfully.", Data = result });
+            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.Today, year, month);
+            return Ok(new { Status = true, Message = "Staff attendance history retrieved successfully.", Data = result });
         }
 
         /// <summary>
@@ -377,29 +455,44 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                var success = await _service.SubmitRegularizationAsync(staffId, request, userId);
+                var regResult = await _service.SubmitRegularizationWithDetailsAsync(staffId, request, userId);
 
-                if (success && _notificationService != null)
+                if (regResult.RegularizationId > 0 && _notificationService != null)
                 {
                     try
                     {
-                        var campusId = GetCurrentCampusId();
+                        var campusId = regResult.CampusId ?? GetCurrentCampusId();
                         var userName = GetCurrentUserName();
                         var dateStr = request.AttendanceDate.ToString("yyyy-MM-dd");
+                        var adminRegUrl = $"/dashboard/attendance/staff?tab=staff-attendance&view=regularize&regId={regResult.RegularizationId}";
 
                         await _notificationService.SendToRolesAsync(
-                            new[] { "Admin", "Super Admin", "Principal", "HR" },
+                            new[] { "Admin", "Super Admin", "Principal" },
                             campusId,
                             "Staff Attendance Regularization Request",
-                            $"{userName} requested regularization for {dateStr} ({request.Reason}). Review and approve.",
+                            $"{userName} requested {regResult.RequestType} regularization for {dateStr}: \"{request.Reason.Trim()}\".",
                             "Attendance",
-                            staffId,
-                            "/dashboard/staff-attendance/regularizations");
+                            regResult.RegularizationId,
+                            adminRegUrl);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to dispatch regularization submission notification for request {RegularizationId}", regResult.RegularizationId);
+                    }
                 }
 
-                return Ok(new { Status = true, Message = "Attendance regularization submitted successfully and is pending approval.", Data = success });
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "Attendance regularization submitted successfully and is pending approval.",
+                    Data = new
+                    {
+                        regularizationId = regResult.RegularizationId,
+                        requestType = regResult.RequestType,
+                        originalStatus = regResult.OriginalStatus,
+                        status = "Pending"
+                    }
+                });
             }
             catch (InvalidOperationException ex)
             {
@@ -408,13 +501,19 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Retrieves pending/all regularization requests. For non-admin faculty, strictly scopes to caller's own requests.
+        /// Retrieves pending/all regularization requests. For non-admin staff, strictly scopes to caller's own requests.
         /// </summary>
         [HttpGet("regularizations")]
+        [CollegeManagement.API.Filters.BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<RegularizationItemDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetRegularizations([FromQuery] string? status, [FromQuery] int? departmentId)
+        public async Task<IActionResult> GetRegularizations(
+            [FromQuery] string? status,
+            [FromQuery] int? departmentId,
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? requestType = null,
+            [FromQuery] string? search = null)
         {
-            var list = await _service.GetRegularizationsAsync(status, departmentId);
+            var list = await _service.GetRegularizationsAsync(status, departmentId, campusId, requestType, search);
             if (!IsCurrentUserAdmin())
             {
                 var staffId = await ResolveStaffIdAsync();
@@ -447,19 +546,32 @@ namespace CollegeManagement.API.Controllers.V1
                         var targetStaffId = target?.StaffId ?? target?.FacultyId ?? 0;
                         if (targetStaffId > 0)
                         {
+                            var roleName = await _service.ResolveStaffRoleNameAsync(targetStaffId);
+                            var staffUrl = BuildStaffAttendanceActionUrl(roleName, id, target?.AttendanceDate);
+                            var remarksSuffix = string.IsNullOrWhiteSpace(request.AdminRemarks)
+                                ? ""
+                                : $" Remarks: {request.AdminRemarks.Trim()}";
+
                             await _notificationService.SendToStaffAsync(
                                 targetStaffId,
                                 "Attendance Regularization Decision",
-                                $"Your attendance regularization request for {target?.AttendanceDate:yyyy-MM-dd} has been {request.Status}.",
+                                $"Your {target?.RequestType ?? "Attendance"} regularization request for {target?.AttendanceDate:yyyy-MM-dd} has been {request.Status}.{remarksSuffix}",
                                 "Attendance",
                                 id,
-                                "/staff/attendance");
+                                staffUrl);
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to dispatch regularization review notification for request {RegularizationId}", id);
+                    }
                 }
 
                 return Ok(new { Status = true, Message = $"Regularization {request.Status.ToLowerInvariant()} successfully.", Data = success });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { Status = false, Message = ex.Message });
             }
             catch (KeyNotFoundException ex)
             {

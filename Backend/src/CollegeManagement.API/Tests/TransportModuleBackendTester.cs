@@ -514,7 +514,7 @@ namespace CollegeManagement.API.Tests
             try
             {
                 // Regression Test 6.1: Filtered Counts & Pagination (CampusId=1)
-                var pagedDrivers = await driverRepo!.GetAllAsync(new TransportDriverFilterDto { CampusId = 1, PageNumber = 1, PageSize = 100 });
+                var pagedDrivers = await driverRepo!.GetAllAsync(new TransportDriverFilterDto { CampusId = 1, Status = true, PageNumber = 1, PageSize = 20 });
                 AssertTrue(pagedDrivers != null && pagedDrivers.TotalCount >= 1 && pagedDrivers.Items.Count() == pagedDrivers.TotalCount,
                     $"Driver Master: CampusId=1 returns registered transport drivers with matching TotalCount={pagedDrivers?.TotalCount} and ItemsCount={pagedDrivers?.Items.Count()}");
                 AssertTrue(pagedDrivers != null && pagedDrivers.TotalPages == 1 && !pagedDrivers.HasNextPage,
@@ -534,7 +534,19 @@ namespace CollegeManagement.API.Tests
                 AssertTrue(venkatDriver != null && venkatDriver.DriverId == 1068 && venkatDriver.DriverName == "Venkat Rao" && venkatDriver.LicenseNumber == "AP-07-2022-0099",
                     "Driver Master: Driver identity consistent with DriverId=1068, StaffId=1065, Venkat Rao, AP-07-2022-0099");
 
-                var managerStaff = pagedDrivers!.Items.Where(d => d.StaffId == 1125 || d.StaffId == 1128).ToList();
+                var rajeshDriver = pagedDrivers.Items.FirstOrDefault(d => d.StaffId == 1090);
+                AssertTrue(rajeshDriver != null && rajeshDriver.DriverId == 1077 && rajeshDriver.CampusId == 1 && rajeshDriver.EmployeeId == "MNT0030",
+                    "Driver Master: Staff 1090 PENETI RAJESH correctly returned with DriverId=1077, CampusId=1, EmployeeId=MNT0030");
+
+                var karthikDriver = pagedDrivers.Items.FirstOrDefault(d => d.StaffId == 1094);
+                AssertTrue(karthikDriver != null && karthikDriver.DriverId == 1078 && karthikDriver.CampusId == 1 && karthikDriver.EmployeeId == "MNT0032",
+                    "Driver Master: Staff 1094 Peneti Karthik correctly returned with DriverId=1078, CampusId=1, EmployeeId=MNT0032");
+
+                var sirDriver = pagedDrivers.Items.FirstOrDefault(d => d.StaffId == 1128);
+                AssertTrue(sirDriver != null && sirDriver.DriverId == 1083 && sirDriver.CampusId == 1 && sirDriver.EmployeeId == "MNT0046",
+                    "Driver Master: Staff 1128 sir r correctly returned with DriverId=1083, CampusId=1, EmployeeId=MNT0046");
+
+                var managerStaff = pagedDrivers!.Items.Where(d => d.StaffId == 1125).ToList();
                 AssertTrue(managerStaff.Count == 0,
                     "Driver Master: Transport Managers (Staff 1125, 1128) are strictly EXCLUDED from driver master");
 

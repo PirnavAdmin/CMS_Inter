@@ -29,5 +29,6 @@ namespace CollegeManagement.API.DTOs.Result
         public decimal Percentage { get; set; }
         public string Grade { get; set; } = string.Empty;
         public string Result { get; set; } = "PASS";
+        public string ResultStatus { get => Result; set => Result = value; }
     }
 }

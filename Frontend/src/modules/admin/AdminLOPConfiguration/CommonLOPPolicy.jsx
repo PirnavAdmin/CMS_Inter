@@ -153,10 +153,50 @@ export default function CommonLOPPolicy() {
             onChange={(e) => change("effectiveFrom", e.target.value)}
           />
         </label>
+        <label className="lop-policy-enable">
+          Enable missed-checkout LOP
+          <input
+            type="checkbox"
+            checked={draft.missedCheckoutLopEnabled ?? true}
+            onChange={(e) => change("missedCheckoutLopEnabled", e.target.checked)}
+          />
+        </label>
+        <label>
+          Allowed Missed Checkouts / Month
+          <input
+            type="number"
+            required
+            min="0"
+            max="31"
+            value={draft.allowedMissedCheckouts ?? 0}
+            onChange={(e) => change("allowedMissedCheckouts", e.target.value)}
+          />
+        </label>
+        <label>
+          Missed Checkouts Per Deduction
+          <input
+            type="number"
+            required
+            min="1"
+            max="31"
+            value={draft.missedCheckoutsPerPenalty ?? 1}
+            onChange={(e) => change("missedCheckoutsPerPenalty", e.target.value)}
+          />
+        </label>
+        <label>
+          LOP Days Per Missed-Checkout Penalty
+          <select
+            value={draft.missedCheckoutPenaltyDays ?? 0.5}
+            onChange={(e) => change("missedCheckoutPenaltyDays", Number(e.target.value))}
+          >
+            <option value="0.5">Half Day (0.5)</option>
+            <option value="1">One Day (1)</option>
+          </select>
+        </label>
         <div className="lop-policy-summary">
-          After the monthly allowance, each complete group of additional late logins triggers the
-          selected LOP days. Incomplete groups do not carry into the next month. The grace-period
-          boundary itself is not counted as late.
+          After the monthly allowance, each complete group of additional late logins or unresolved
+          missed checkouts triggers the selected LOP days. Approved regularization requests for Late
+          Attendance or Missed Checkout are automatically excluded from LOP penalties.
         </div>
         {error && (
           <p className="lop-error" role="alert">
@@ -207,6 +247,8 @@ export default function CommonLOPPolicy() {
           { key: "name", label: "Staff Name" },
           { key: "department", label: "Department" },
           { key: "lateCount", label: "Late Logins" },
+          { key: "missedCheckoutCount", label: "Missed Checkouts" },
+          { key: "absentCount", label: "Absences" },
           { key: "lopDays", label: "LOP Days" },
           { key: "deduction", label: "Deduction", render: (r) => money(r.deduction) },
           {

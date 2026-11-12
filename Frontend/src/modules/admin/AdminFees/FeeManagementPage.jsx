@@ -31,6 +31,16 @@ import { Modal, SkeletonRow, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import GatewayPaymentPanel from "./components/GatewayPaymentPanel.jsx";
+import { savedAcademicLevelLabel, savedStructureSummary, savedStructureTotal } from "./services/feeStructureSummary.js";
+import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "@/features/fees/feeDetails.js";
+import OfflineUtrQueueTab from "./components/OfflineUtrQueueTab.jsx";
+import PaymentReversalModal from "./components/PaymentReversalModal.jsx";
+import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData } from "./services/paymentGatewaySession.js";
+import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
+import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
+import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import {
@@ -46,6 +56,7 @@ import {
   todayISO,
 } from "@/data/feeManagementData.js";
 import "./FeeManagementPage.css";
+import { PaymentSettingsLink } from "../AdminSettings/PaymentGatewayConfigPage.jsx";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
 const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
@@ -53,9 +64,10 @@ const LEDGER_TABS = [
   { id: "Fee Collection", label: "Fee Collection" },
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
+  { id: "Pending UTRs", label: "Pending UTR Queue" },
 ];
 const feeSetupSlugs = { "Fee Types": "fee-types", "Fee Structure": "fee-structure", "Hostel Fees": "hostel-fees", "Transport Fees": "transport-fees", Scholarships: "scholarships", Fine: "fine" };
-const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history" };
+const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history", "Pending UTRs": "pending-utrs" };
 const resolveFeeView = (params, initialTab, initialSetupTab, initialLedgerTab) => {
   const tabKey = params.get("tab");
   const tab = tabKey === "setup" ? "Fee Setup" : tabKey === "student-ledger" ? "Student Fee Ledger" : tabKey === "overview" || tabKey ? "Overview" : initialTab;
@@ -376,7 +388,7 @@ const applyFineRulesToAccount = (account = {}, fineRules = []) => {
     totalFine,
     totalPayable: Number(account.totalPayable || 0) + totalFine,
     balance,
-    feeStatus: accountStatusFor({
+    feeStatus: account.backendFeeStatus || accountStatusFor({
       payable: Number(account.totalPayable || 0) + totalFine,
       paid: account.totalPaid,
       balance,
@@ -802,7 +814,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const academicYear = displayNameFor(academicYearName, academicYearId, lookups.years);
     const program = displayNameFor(programName, programId, lookups.programs, programId ? "-" : "Regular");
     const academicLevelId = read(item, "academicLevelId", "AcademicLevelId");
-    const academicLevelName = read(item, "academicLevelName", "AcademicLevelName") || (Number(academicLevelId) === 2 ? "2nd Year" : Number(academicLevelId) === 1 ? "1st Year" : "");
+    const academicLevelName = savedAcademicLevelLabel(academicLevelId, read(item, "academicLevelName", "AcademicLevelName"));
     const yearFeeMode = read(item, "yearFeeMode", "YearFeeMode");
     const incrementType = read(item, "incrementType", "IncrementType");
     const incrementValue = read(item, "incrementValue", "IncrementValue");
@@ -811,7 +823,9 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const key = structureId && !structureId.startsWith("api-")
       ? `struct-${structureId}`
       : [academicYearId || academicYear, groupId || group, programId || program, academicLevelId || ""].join("|");
-    const explicitTotal = optionalNumberValue(item, "totalFee", "TotalFee", "feeTotal", "FeeTotal", "totalAmount", "TotalAmount", "totalActiveFees", "TotalActiveFees", "activeFeeTotal", "ActiveFeeTotal");
+    const explicitTotal = Object.hasOwn(item, "serverTotalFee")
+      ? item.serverTotalFee
+      : optionalNumberValue(item, "totalFee", "TotalFee", "feeTotal", "FeeTotal", "totalAmount", "TotalAmount", "totalActiveFees", "TotalActiveFees", "activeFeeTotal", "ActiveFeeTotal");
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
@@ -828,15 +842,20 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
       incrementType,
       incrementValue,
       pairedStructureId,
+      secondYearTotalAmount: optionalNumberValue(item, "secondYearTotalAmount", "SecondYearTotalAmount"),
       groupId,
       group,
       programId,
       program,
       status: textValue(item, "status", "Status") || "Active",
       totalFee: explicitTotal,
+      serverTotalFee: explicitTotal,
       feeItems: [],
     };
-    if (row.totalFee === undefined && explicitTotal !== undefined) row.totalFee = explicitTotal;
+    if (row.serverTotalFee === undefined && explicitTotal !== undefined) {
+      row.serverTotalFee = explicitTotal;
+      row.totalFee = explicitTotal;
+    }
     const nestedItems = getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "feeStructureItems", "FeeStructureItems", "components", "Components", "feeComponents", "FeeComponents"));
     const hasTopLevelFeeItem = isStructureItemPayload(item);
     const sourceItems = nestedItems.length ? nestedItems : hasTopLevelFeeItem ? [item] : [];
@@ -855,7 +874,10 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
         id: structureItemId || feeType.id || textValue(feeItem, "id", "Id") || `type-${index}-${feeIndex}`,
         feeTypeId: feeType.id,
         structureItemId,
-        type: feeType.name === "Fee Type" && masterFeeType?.name ? masterFeeType.name : feeType.name,
+        feeTypeNameMissing: feeType.name === "Fee Type" && !masterFeeType?.name,
+        type: feeType.name === "Fee Type"
+          ? masterFeeType?.name || `Fee type${feeType.id ? ` #${feeType.id}` : ""} (name unavailable)`
+          : feeType.name,
         originalAmount: amount,
         payableAmount: amount,
         selected: isActiveStatus(status),
@@ -871,11 +893,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     return {
       ...row,
       feeItems,
-      totalFee: feeItems.length
-        ? feeItems.filter((feeItem) => feeItem.selected !== false).some((feeItem) => feeItem.originalAmount === undefined)
-          ? undefined
-          : feeItems.filter((feeItem) => feeItem.selected !== false).reduce((sum, feeItem) => sum + feeItem.originalAmount, 0)
-        : row.totalFee,
+      totalFee: savedStructureTotal(row.totalFee, feeItems),
     };
   });
 };
@@ -917,6 +935,11 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
   return {
     id: String(read(item, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id") ?? `${account.id || "payment"}-TXN-${index + 1}`),
     feePaymentId: read(item, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id"),
+    gatewayTransactionId: gatewayTransactionIdFor(item),
+    gatewayStatus: textValue(item, "gatewayStatus", "GatewayStatus", "transactionStatus", "TransactionStatus", "status", "Status"),
+    orderId: textValue(item, "orderId", "OrderId", "gatewayOrderId", "GatewayOrderId"),
+    isReversed: isReversedPayment(item),
+    reversalReason: textValue(item, "reversalReason", "ReversalReason"),
     studentId: read(item, "studentId", "StudentId") ?? read(student, "studentId", "StudentId", "id", "Id") ?? account.studentId,
     studentFeeId: read(item, "studentFeeId", "StudentFeeId", "studentFeeAssignmentId", "StudentFeeAssignmentId") ?? account.studentFeeId ?? account.studentFeeAssignmentId,
     receiptNo: textValue(item, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || account.receiptNo || "-",
@@ -952,7 +975,7 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
     method: textValue(item, "paymentMethod", "PaymentMethod", "paymentMode", "PaymentMode", "method", "Method") || "-",
     reference: textValue(item, "transactionNumber", "TransactionNumber", "reference", "Reference", "transactionReference", "TransactionReference"),
     date: textValue(item, "paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt") || todayISO(),
-    status: textValue(item, "status", "Status", "paymentStatus", "PaymentStatus") || "Paid",
+    status: isReversedPayment(item) ? "Reversed" : textValue(item, "status", "Status", "paymentStatus", "PaymentStatus") || "Paid",
     previousBalance: optionalNumberValue(item, "previousBalance", "PreviousBalance", "previousOutstanding", "PreviousOutstanding"),
     balance: optionalNumberValue(item, "balance", "Balance", "remainingBalance", "RemainingBalance", "outstandingBalance", "OutstandingBalance"),
   };
@@ -1046,6 +1069,7 @@ const normalizeReceipt = (payload, fallback = {}) => {
     ?? row?.amount;
   return {
     ...(row || fallback),
+    status: isReversedPayment(data) || isReversedPayment(fallback) ? "Reversed" : row?.status,
     receiptNo: textValue(data, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || fallback.receiptNo || "-",
     amount: optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount,
     date: textValue(data, "receiptDate", "ReceiptDate", "paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt") || fallback.date || "",
@@ -1120,7 +1144,8 @@ const normalizeInstallmentRows = (rows, account) => rows.map((item, index) => ({
   paid: optionalNumberValue(item, "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"),
   balance: optionalNumberValue(item, "balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
   dueDate: textValue(item, "dueDate", "DueDate", "date", "Date"),
-  status: textValue(item, "status", "Status") || account.feeStatus || "Pending",
+  backendStatus: Object.hasOwn(item, "backendStatus") ? item.backendStatus : textValue(item, "status", "Status"),
+  status: textValue(item, "status", "Status") || "Pending",
 })).map((item) => ({
   ...item,
   paid: item.paid ?? (item.balance !== undefined ? Math.max(Number(item.amount || 0) - Number(item.balance || 0), 0) : 0),
@@ -1138,35 +1163,23 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const studentRecord = studentsById.get(String(studentId)) || {};
   const admissionRecord = findMatchingAdmission(admissions, item, studentRecord);
   const ledgerAssignmentId = readStudentFeeId(item, studentFee);
-  const detail = feeDetailsByStudentId.get(String(studentId)) || feeDetailsByAccountId.get(String(ledgerAssignmentId)) || {};
+  const rawDetail = feeDetailsByStudentId.get(String(studentId)) || feeDetailsByAccountId.get(String(ledgerAssignmentId));
+  const detail = rawDetail ? normalizeFeeDetails(rawDetail) : {};
   const detailStudentFee = read(detail, "studentFee", "StudentFee", "feeAccount", "FeeAccount", "assignment", "Assignment");
   const group = read(item, "group", "Group");
   const section = read(item, "section", "Section");
   const program = read(item, "program", "Program");
   const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
   const assignmentId = readStudentFeeId(item, studentFee, detail);
-  const feeItems = feeDetailPayloadRows(detail).length ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
-  const normalizedItems = feeItems.map((feeItem, feeIndex) => {
-    const originalAmount = numberValue(feeItem, "originalAmount", "OriginalAmount", "amount", "Amount", "feeAmount", "FeeAmount", "baseAmount", "BaseAmount");
-    const concessionAmount = numberValue(feeItem, "concessionAmount", "ConcessionAmount", "discount", "Discount", "discountAmount", "DiscountAmount", "scholarshipAmount", "ScholarshipAmount");
-    const explicitPayable = optionalNumberValue(feeItem, "payableAmount", "PayableAmount", "payable", "Payable", "netAmount", "NetAmount", "finalAmount", "FinalAmount");
-    return {
-      id: String(read(feeItem, "feeTypeId", "FeeTypeId", "id", "Id") ?? `${index}-${feeIndex}`),
-      type: textValue(feeItem, "feeTypeName", "FeeTypeName", "feeType", "FeeType", "type", "Type", "name", "Name") || `Fee ${feeIndex + 1}`,
-      originalAmount,
-      concessionName: textValue(feeItem, "concessionName", "ConcessionName", "scholarshipName", "ScholarshipName", "schemeName", "SchemeName"),
-      concessionAmount,
-      payableAmount: explicitPayable ?? Math.max(originalAmount - concessionAmount, 0),
-      selected: read(feeItem, "selected", "Selected") !== false,
-      required: Boolean(read(feeItem, "isMandatory", "IsMandatory", "required", "Required")),
-    };
-  });
-  const detailTotal = normalizedItems.reduce((sum, feeItem) => sum + Number(feeItem.payableAmount || feeItem.originalAmount || 0), 0);
+  const feeItems = rawDetail ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
+  const normalizedItems = normalizeFeeBreakdown(feeItems);
+  const detailTotal = sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "payableAmount");
   const detailSchedules = feeDetailScheduleRows(detail).length
     ? feeDetailScheduleRows(detail)
     : feeDetailScheduleRows(detailStudentFee);
-  const schedules = detailSchedules.length
-    ? detailSchedules
+  const schedules = rawDetail
+    ? feeDetailScheduleRows(detail)
+    : detailSchedules.length ? detailSchedules
     : getCollection(read(item, "installments", "Installments", "schedules", "Schedules", "feeSchedules", "FeeSchedules"));
   const explicitPaymentPlan = normalizeBackendPaymentPlan(
     read(detail, "paymentPlan", "PaymentPlan"),
@@ -1188,27 +1201,27 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const numberOfInstallments = optionalNumberValue(detail, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
     ?? optionalNumberValue(paymentPlanObject, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
     ?? (schedules.length || undefined);
-  const rawTotalPayable = optionalNumberValue(item, "totalPayable", "TotalPayable", "payable", "Payable", "netPayable", "NetPayable", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
-    ?? optionalNumberValue(detail, "totalPayable", "TotalPayable", "payable", "Payable", "originalFee", "OriginalFee", "scheduledFees", "ScheduledFees", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
+  const rawTotalPayable = optionalNumberValue(detail, "totalPayable", "TotalPayable", "payableAmount", "PayableAmount")
+    ?? optionalNumberValue(item, "totalPayable", "TotalPayable", "payable", "Payable", "netPayable", "NetPayable", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
     ?? detailTotal;
-  const totalPaid = optionalNumberValue(item, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
-    ?? optionalNumberValue(detail, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
-    ?? 0;
-  const rawBalance = optionalNumberValue(item, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
-    ?? optionalNumberValue(detail, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
+  const totalPaid = optionalNumberValue(detail, "totalPaid", "TotalPaid", "paidAmount", "PaidAmount")
+    ?? optionalNumberValue(item, "totalPaid", "TotalPaid", "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "collectedAmount", "CollectedAmount", "totalCollected", "TotalCollected")
+    ?? undefined;
+  const rawBalance = optionalNumberValue(detail, "outstandingBalance", "OutstandingBalance", "balanceAmount", "BalanceAmount")
+    ?? optionalNumberValue(item, "balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount", "balanceAmount", "BalanceAmount")
     ?? undefined;
   const nextDueDate = textValue(item, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate")
     || textValue(detail, "nextDueDate", "NextDueDate", "nextDue", "NextDue", "dueDate", "DueDate");
   const rawStatus = textValue(item, "feeStatus", "FeeStatus", "status", "Status") || textValue(detail, "feeStatus", "FeeStatus", "status", "Status");
-  const totalPayable = rawTotalPayable <= 0 && detailTotal > 0 ? detailTotal : rawTotalPayable;
-  const balance = rawBalance !== undefined && !(rawBalance <= 0 && totalPayable > totalPaid && normalizeKey(rawStatus) === "pending")
-    ? rawBalance
-    : Math.max(totalPayable - totalPaid, 0);
+  const backendFeeStatus = Object.hasOwn(item, "backendFeeStatus") ? item.backendFeeStatus : rawStatus;
+  const totalPayable = rawTotalPayable;
+  const balance = rawBalance ?? (totalPayable === undefined || totalPaid === undefined ? undefined : Math.max(totalPayable - totalPaid, 0));
   const account = {
     id: String(assignmentId ?? read(item, "studentId", "StudentId") ?? read(item, "id", "Id") ?? `fee-account-${index + 1}`),
     assignmentId,
     studentFeeAssignmentId: assignmentId,
     studentFeeId: assignmentId,
+    campusId: read(item, "campusId", "CampusId") ?? read(detail, "campusId", "CampusId"),
     studentId,
     studentName: textValue(item, "studentName", "StudentName", "name", "Name")
       || textValue(detail, "studentName", "StudentName", "name", "Name")
@@ -1239,7 +1252,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     totalPaid,
     balance,
     concessionAmount: numberValue(item, "concessionAmount", "ConcessionAmount", "discountAmount", "DiscountAmount"),
-    feeStatus: accountStatusFor({ payable: totalPayable, paid: totalPaid, balance, dueDate: nextDueDate, status: rawStatus }),
+    backendFeeStatus,
+    feeStatus: accountStatusFor({ payable: totalPayable, paid: totalPaid, balance, status: rawStatus }),
     nextDueDate,
     feeItems: normalizedItems,
     transactions: [],
@@ -1253,9 +1267,16 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)))[0] || null;
   return {
     ...derived,
-    totalPayable: account.totalPayable ?? derived.totalPayable,
-    totalPaid: account.totalPaid ?? derived.totalPaid,
-    balance: account.balance ?? derived.balance,
+    feeItems: normalizedItems.filter(feeItem => feeItem.selected),
+    totalOriginal: detail.originalFee ?? sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "originalAmount"),
+    totalConcession: detail.concession ?? sumFeeValues(normalizedItems.filter(feeItem => feeItem.selected), "concessionAmount"),
+    scheduledFees: detail.scheduledFees,
+    dataWarnings: rawDetail ? feeDetailWarnings(detail, item) : [],
+    // Preserve backend balances and worker statuses; the shared helper derives demo schedules.
+    installments: account.installments,
+    totalPayable: account.totalPayable,
+    totalPaid: account.totalPaid,
+    balance: account.balance,
     feeStatus: account.feeStatus || derived.feeStatus,
     nextDueDate: account.nextDueDate || nextDue?.dueDate || derived.nextDueDate,
   };
@@ -1543,12 +1564,12 @@ const printFeeList = (title, columns, rows) => {
 };
 
 function StatusBadge({ status }) {
-  return <span className={`cms-badge ${feeStatusTone(status)}`}>{status}</span>;
+  return <span className={`cms-badge ${feeStatusTone(status)} ${normalizeKey(status) === "overdue" ? "cms-fee-status-overdue" : ""}`}>{status}</span>;
 }
 
 function PaymentStatusBadge({ status }) {
   const value = status || "Paid";
-  const tone = ["success", "paid", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
+  const tone = ["reversed", "refunded"].includes(normalizeKey(value)) ? "cms-fee-status-reversed" : ["success", "paid", "captured", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
   return <span className={`cms-badge ${tone}`}>{value}</span>;
 }
 
@@ -1948,8 +1969,11 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 }
 
 /* ---------------------------- Collect payment ---------------------------- */
-function CollectPaymentModal({ account, onClose, onSaved }) {
-  const pending = account.installments.filter((item) => normalizeKey(item.status) !== "paid" && Number(item.balance || 0) > 0);
+function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending }) {
+  const pending = pendingInstallments(account);
+  const [mode, setMode] = useState("UPI_QR");
+  const [gatewayLocked, setGatewayLocked] = useState(false);
+  const [gatewayFooter, setGatewayFooter] = useState(null);
   const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id || null;
   const firstPendingId = pending.length ? installmentIdFor(pending[0]) : null;
   const [target, setTarget] = useState(firstPendingId ? "schedules" : "full");
@@ -1966,6 +1990,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  const [cashUncertain, setCashUncertain] = useState(false);
+  const cashRequestRef = useRef(null);
+  useEffect(() => () => cashRequestRef.current?.abort(), []);
   const isReferenceRequired = method && method !== "Cash";
 
   const setFullBalanceTarget = () => {
@@ -1997,10 +2024,14 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
       : "Select pending fee schedules";
 
   const save = async () => {
-    if (savingRef.current) return null;
+    if (savingRef.current || cashUncertain) return null;
+    try { collectionPayload(account, target, selectedInstallmentIds, amount); }
+    catch (failure) { return setError(failure.message); }
     const value = Number(amount || 0);
     const discountValue = Number(discount || 0);
     const fineValue = Number(fine || 0);
+    if (![discountValue, fineValue].every((number) => Number.isFinite(number) && number >= 0)) return setError("Discount and fine must be valid non-negative amounts");
+    if (!date || !Number.isFinite(new Date(date).getTime())) return setError("Enter a valid payment date");
     const selectedIds = target === "full" ? [] : selectedInstallmentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
     if (!Number.isFinite(value) || value <= 0) return setError("Enter a valid payment amount");
     if (discountValue > value + fineValue) return setError("Discount cannot exceed the payment amount plus fine");
@@ -2017,6 +2048,8 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
     if (!Number.isFinite(studentIdValue) || studentIdValue <= 0) return setError("Student ID is required to collect payment");
     savingRef.current = true;
     setSaving(true);
+    const controller = new AbortController();
+    cashRequestRef.current = controller;
     try {
       const response = await apiClient.post(apiEndpoints.fee.collect, {
         studentId: studentIdValue,
@@ -2030,10 +2063,16 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         fine: fineValue,
         transactionReference: reference,
         note,
-      });
-      const saved = getObject(response.data);
+      }, { requireRealBackend: true, skipNetworkRetry: true, signal: controller.signal });
+      if (controller.signal.aborted) return null;
+      const saved = gatewayData(response.data);
+      if (!read(saved, "feePaymentId", "paymentId", "id") || !textValue(saved, "receiptNo", "receiptNumber")
+        || !(numberValue(saved, "amount", "paidAmount") > 0)
+        || (saved.status && !["paid", "success", "completed"].includes(normalizeKey(saved.status)))) {
+        setCashUncertain(true);
+        throw new Error("The server did not return a saved payment and receipt. Check payment history before collecting again.");
+      }
       setSaving(false);
-      savingRef.current = false;
       return onSaved({
         amount: numberValue(saved, "amount", "Amount", "paidAmount", "PaidAmount") || value,
         baseAmount: numberValue(saved, "baseAmount", "BaseAmount", "amount", "Amount") || value,
@@ -2046,7 +2085,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         receiptNo: textValue(saved, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || "-",
       });
     } catch (err) {
+      if (controller.signal.aborted) return null;
       setError(getApiErrorMessage(err));
+      if (!err.response || err.response.status >= 500) setCashUncertain(true);
       setSaving(false);
       savingRef.current = false;
       return null;
@@ -2056,11 +2097,13 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   return (
     <Modal
       title="Collect Payment"
-      onClose={onClose}
+      className="cms-fee-omnichannel-modal"
+      onClose={saving || gatewayFooter?.busy ? () => {} : onClose}
       footer={(
         <>
-          <button className="cms-btn cms-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="cms-btn cms-btn-primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Payment"}</button>
+          <button className="cms-btn cms-btn-ghost" onClick={onClose} disabled={saving || gatewayFooter?.busy}>Close</button>
+          {mode === "UPI_QR" && gatewayFooter?.showDone ? <button type="button" className="cms-btn cms-btn-primary" disabled={gatewayFooter.disabled} onClick={gatewayFooter.onDone}>Done</button> : null}
+          {mode === "CASH" ? <button className="cms-btn cms-btn-primary" onClick={save} disabled={saving || cashUncertain}>{saving ? "Saving..." : "Save Payment"}</button> : null}
         </>
       )}
     >
@@ -2072,6 +2115,10 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
           <div className="cms-fee-context-item"><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
         </div>
 
+        <div className="cms-fee-gateway-modes" role="tablist" aria-label="Collection method">
+          {[["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"], ["CASH", "Cash / Manual"]].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={mode === id} className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`} disabled={gatewayLocked || saving || cashUncertain} onClick={() => { setMode(id); setError(""); }}>{label}</button>)}
+        </div>
+        <fieldset className="cms-fee-gateway-fields" disabled={gatewayLocked || saving || cashUncertain}>
         <div className="cms-form-grid cols-3">
           <div className="cms-field full">
             <label>Pay Towards</label>
@@ -2105,8 +2152,9 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
           </div>
           <div className="cms-field">
             <label htmlFor="collect-amount">Amount <span className="req">*</span></label>
-            <input id="collect-amount" type="number" min="0" value={amount} disabled={target === "full"} onChange={(event) => setAmount(event.target.value)} />
+            <input id="collect-amount" type="number" min="0" step="0.01" value={amount} disabled={target === "full" && mode !== "BANK_TRANSFER"} onChange={(event) => setAmount(event.target.value)} />
           </div>
+          {mode === "CASH" ? <>
           <div className="cms-field">
             <label htmlFor="collect-date">Payment Date</label>
             <input id="collect-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
@@ -2133,8 +2181,12 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
             <label htmlFor="collect-note">Note</label>
             <textarea id="collect-note" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
+          </> : null}
         </div>
+        </fieldset>
+        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
+        {cashUncertain ? <p className="cms-error" role="alert">Review payment history before collecting again; this request may already have been recorded.</p> : null}
       </div>
     </Modal>
   );
@@ -2200,6 +2252,7 @@ function ReceiptModal({ receipt, onClose }) {
           <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
         </header>
         <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
+        {isReversedPayment(receipt) ? <p className="cms-fee-reversal-warning" role="alert">REVERSED PAYMENT — This receipt is retained as a historical record. It does not represent a current credit to the student's fee account.</p> : null}
         <div className="cms-fee-receipt-meta">
           <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
           <span><b>Payment Date</b> {receipt.date ? formatDate(receipt.date) : "-"}</span>
@@ -2235,13 +2288,14 @@ function ReceiptModal({ receipt, onClose }) {
 }
 
 /* --------------------------- Student fee details -------------------------- */
-function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false, reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const accountPrintRef = useRef(null);
-  const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
-    original: totals.original + Number(item.originalAmount || 0),
-    concession: totals.concession + Number(item.concessionAmount || 0),
-    payable: totals.payable + Number(item.payableAmount || 0),
-  }), { original: 0, concession: 0, payable: 0 });
+  const money = value => value == null ? "Unavailable" : formatCurrency(value);
+  const feeBreakdownTotals = {
+    original: sumFeeValues(account.feeItems, "originalAmount"),
+    concession: sumFeeValues(account.feeItems, "concessionAmount"),
+    payable: sumFeeValues(account.feeItems, "payableAmount"),
+  };
   const receiptFallback = (txn) => ({
     ...txn,
     studentName: account.studentName,
@@ -2289,7 +2343,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
               <Printer size={14} /> Print
             </button>
             {allowCollect ? (
-              <button className="cms-btn cms-btn-primary" onClick={onCollect} disabled={account.balance === 0}>
+              <button className="cms-btn cms-btn-primary" onClick={onCollect} disabled={!(Number(account.balance) > 0)}>
                 <WalletCards size={14} /> Collect Payment
               </button>
             ) : null}
@@ -2298,6 +2352,8 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
         </div>
 
         <div ref={accountPrintRef} className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
+          {account.dataWarnings?.length ? <div className="cms-alert" role="status">{account.dataWarnings.map(message => <p key={message}>{message}</p>)}</div> : null}
+          {backendOverdue(account) ? <div className="cms-fee-overdue-warning" role="status"><AlertCircle size={16} /><span><strong>Payment Overdue:</strong> The backend has marked this fee account or one of its installments overdue. Review the saved schedule and outstanding balance below.</span></div> : null}
           <section className="cms-fee-block">
             <h3>Student Information</h3>
             <div className="cms-fee-kv">
@@ -2315,13 +2371,13 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           <section className="cms-fee-block">
             <h3>Fee Summary</h3>
             <div className="cms-fee-kv">
-              <div><span>Original Fee</span><strong>{formatCurrency(account.totalOriginal)}</strong></div>
-              <div><span>Concession</span><strong>{formatCurrency(account.totalConcession)}</strong></div>
-              <div><span>Scheduled Fees</span><strong>{formatCurrency(account.courseFee)}</strong></div>
+              <div><span>Original Fee</span><strong>{money(account.totalOriginal)}</strong></div>
+              <div><span>Concession</span><strong>{money(account.totalConcession)}</strong></div>
+              <div><span>Scheduled Fees</span><strong>{money(account.scheduledFees)}</strong></div>
               {account.totalFine ? <div><span>Fine</span><strong>{formatCurrency(account.totalFine)}</strong></div> : null}
-              <div><span>Total Payable</span><strong>{formatCurrency(account.totalPayable)}</strong></div>
-              <div><span>Total Paid</span><strong>{formatCurrency(account.totalPaid)}</strong></div>
-              <div><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
+              <div><span>Total Payable</span><strong>{money(account.totalPayable)}</strong></div>
+              <div><span>Total Paid</span><strong>{money(account.totalPaid)}</strong></div>
+              <div><span>Outstanding Balance</span><strong>{money(account.balance)}</strong></div>
               <div><span>Payment Plan</span><strong>{account.paymentPlan ? feeScheduleLabel(account.paymentPlan) : "-"}</strong></div>
               <div><span>Fee Status</span><strong><StatusBadge status={account.feeStatus} /></strong></div>
             </div>
@@ -2345,27 +2401,28 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                   {account.feeItems.map((item) => (
                     <tr key={item.id}>
                       <td><strong>{item.type}</strong></td>
-                      <td className="num">{formatCurrency(item.originalAmount)}</td>
+                      <td className="num">{money(item.originalAmount)}</td>
                       <td>{item.concessionName || "-"} {item.concessionValue ? `(${item.concessionType === "Percentage" ? `${item.concessionValue}%` : formatCurrency(item.concessionValue)})` : ""}</td>
-                      <td className="num">{formatCurrency(item.concessionAmount)}</td>
-                      <td className="num"><strong>{formatCurrency(item.payableAmount)}</strong></td>
+                      <td className="num">{money(item.concessionAmount)}</td>
+                      <td className="num"><strong>{money(item.payableAmount)}</strong></td>
                     </tr>
                   ))}
+                  {!account.feeItems.length ? <tr><td colSpan={5} className="cms-fee-empty-row">No saved fee breakdown was returned for this account.</td></tr> : null}
                 </tbody>
                 <tfoot>
                   <tr>
                     <td><strong>Total Fee</strong></td>
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.original)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.original)}</strong></td>
                     <td />
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.concession)}</strong></td>
-                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.concession)}</strong></td>
+                    <td className="num"><strong>{money(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </section>
 
-          {account.installments.length ? (
+          {(
             <section className="cms-fee-block">
               <h3>Fee Schedule</h3>
               <div className="cms-table-wrap">
@@ -2384,18 +2441,19 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                         <td><StatusBadge status={item.status} /></td>
                       </tr>
                     ))}
+                    {!account.installments.length ? <tr><td colSpan={6} className="cms-fee-empty-row">No saved fee schedules were returned for this account.</td></tr> : null}
                   </tbody>
                 </table>
               </div>
             </section>
-          ) : null}
+          )}
 
           <section className="cms-fee-block">
             <h3>Payment History</h3>
             <div className="cms-table-wrap">
               <table className="cms-table">
                 <thead>
-                  <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Action</th></tr>
+                  <tr><th>Receipt No</th><th>Payment Type</th><th className="num">Amount</th><th>Method</th><th>Date</th><th>Status</th><th>Action</th></tr>
                 </thead>
                 <tbody>
                   {account.transactions.map((txn) => (
@@ -2405,10 +2463,12 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                       <td className="num">{formatCurrency(txn.amount)}</td>
                       <td>{txn.method}</td>
                       <td>{formatDate(txn.date)}</td>
+                      <td><PaymentStatusBadge status={txn.status} /></td>
                       <td>
                         <button className="cms-action-btn" title="View receipt" onClick={() => viewReceipt(txn)}>
                           <Eye size={15} />
                         </button>
+                        {canReversePayment(txn, reversalAuthorized) && !reversalBlocked.has(gatewayTransactionIdFor(txn)) ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={() => onReverse(txn)}>Reverse Payment</button> : null}
                       </td>
                     </tr>
                   ))}
@@ -2793,6 +2853,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           if (String(current.groupId) !== String(groupId)) return current;
           const selectedProgram = options.find((item) => item.value === String(current.programId));
           if (selectedProgram) return { ...current, program: selectedProgram.label };
+          if (initial?.id) return current;
           return {
             ...current,
             programId: options[0]?.value || "",
@@ -2808,7 +2869,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         if (programRequestRef.current === requestId) setProgramLoading(false);
       });
     return () => { programRequestRef.current += 1; };
-  }, [values.groupId]);
+  }, [values.groupId, initial?.id]);
 
   const feeItemsForContext = (currentItems = []) => (
     feeItemsWithMasterRows(feeTypes, currentItems)
@@ -2880,7 +2941,6 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       return {
         ...(values.structureName ? { structureName: values.structureName } : {}),
         ...(values.description ? { description: values.description } : {}),
-        ...(programId ? { programId } : {}),
         isActive: values.status !== "Inactive",
       };
     }
@@ -2984,7 +3044,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       <div className="cms-form-grid cols-3">
         <div className="cms-field">
           <label htmlFor="fs-board">Board <span className="req">*</span></label>
-          <select id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)}>
+          <select id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)} disabled={Boolean(initial?.id)}>
             <option value="">{masterErrors.boards ? "Unable to load boards" : masterLoading && !masters.boards.length ? "Loading boards..." : masters.boards.length ? "Select Board" : "No boards available"}</option>
             {masters.boards.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
@@ -2994,7 +3054,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           {!initial ? <>
             <input id="fs-year" readOnly value={values.academicYear || (values.academicYearId ? `Academic Year ${values.academicYearId}` : "")} placeholder="Select Academic Year in the top navbar" />
             {!values.academicYearId ? <span className="cms-error" role="alert">Select an academic year in the top navbar before adding a fee structure.</span> : null}
-          </> : <select id="fs-year" value={values.academicYearId || values.academicYear} onChange={(event) => {
+          </> : <select id="fs-year" disabled={Boolean(initial?.id)} value={values.academicYearId || values.academicYear} onChange={(event) => {
             update("academicYearId", event.target.value);
             update("academicYear", masters.years.find((item) => item.value === event.target.value)?.label || event.target.value);
           }}>
@@ -3004,7 +3064,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         </div>
         <div className="cms-field">
           <label htmlFor="fs-group">Group <span className="req">*</span></label>
-          <select id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={!values.boardId || !values.academicYearId || groupLoading || Boolean(groupError)}>
+          <select id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={Boolean(initial?.id) || !values.boardId || !values.academicYearId || groupLoading || Boolean(groupError)}>
             <option value="">{!values.boardId || !values.academicYearId ? "Select Board/Year first" : groupError ? "Unable to load groups" : groupLoading ? "Loading groups..." : groupOptions.length ? "Select Group" : "No groups available"}</option>
             {groupOptions.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}
           </select>
@@ -3012,13 +3072,15 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
         </div>
         <div className="cms-field">
           <label htmlFor="fs-program">Program</label>
-          <select id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={!values.groupId || programLoading || !programOptions.length}>
+          <select id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={Boolean(initial?.id) || !values.groupId || programLoading || !programOptions.length}>
+            {initial?.id && values.programId && !programOptions.some(program => String(program.value) === String(values.programId)) ? <option value={values.programId}>{values.program || "Saved program"}</option> : null}
             <option value="">{!values.groupId ? "Select Group first" : programLoading ? "Loading programs..." : programError ? "Unable to load programs" : programOptions.length ? "Select Program" : "No programs available"}</option>
             {programOptions.map((program) => <option key={program.value} value={program.value}>{program.label}</option>)}
           </select>
           {programError ? <span className="cms-error" role="alert">{programError}</span> : null}
         </div>
       </div>
+      {initial?.id ? <p className="cms-fee-note">Board, academic year, group and program are fixed for saved structures. Edit the fee amounts and rules below.</p> : <p className="cms-fee-note">{yearFeeMode === "different" ? "Different Fees: the second-year total is calculated when saved, including admission-fee exclusions and the requested increment." : "Same Fees: both years use the configured active fees."}</p>}
       <div className="cms-fee-structure-items">
         <div className="cms-fee-structure-items-head">
           <h4>Configured Fee Types</h4>
@@ -3622,19 +3684,30 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
   const [actionTarget, setActionTarget] = useState(null);
-  const [selectedYearFeeMode, setYearFeeMode] = useState(null);
-  const savedYearFeeMode = useMemo(() => {
-    const modes = new Set(structures.map((row) => String(row.yearFeeMode || "").trim().toLowerCase())
-      .filter((mode) => mode === "same" || mode === "different"));
-    // Conflicting per-structure modes do not define a single saved selection.
-    return modes.size === 1 ? [...modes][0] : "";
-  }, [structures]);
-  const yearFeeMode = selectedYearFeeMode ?? savedYearFeeMode;
+  const [yearFeeMode, setYearFeeMode] = useState("");
   const [yearIncrementType, setYearIncrementType] = useState("percentage");
   const [yearIncrementValue, setYearIncrementValue] = useState("");
   const [yearIncrementError, setYearIncrementError] = useState("");
   const [firstYearTotal, setFirstYearTotal] = useState(0);
   const [isAdding, setIsAdding] = useState(false);
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const summaryScopeKey = JSON.stringify([
+    selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "",
+    masters.selectedBoardId ?? "",
+    masters.selectedAcademicYearId ?? "",
+  ]);
+  const [summarySelection, setSummarySelection] = useState({ id: "", scopeKey: "" });
+  const summaryStructureId = summarySelection.scopeKey === summaryScopeKey ? summarySelection.id : "";
+  const summaryStructure = structures.find(row => String(row.id) === summaryStructureId);
+  const savedSummary = savedStructureSummary(summaryStructure, structures);
+  const summaryMoney = value => value === undefined ? "Unavailable" : formatCurrency(value);
+
+  useEffect(() => {
+    if (summarySelection.scopeKey !== summaryScopeKey
+      || (!loading && !error && summarySelection.id && !summaryStructure)) {
+      setSummarySelection({ id: "", scopeKey: summaryScopeKey });
+    }
+  }, [summaryScopeKey, summarySelection, summaryStructure, loading, error]);
 
   const [loadingEditId, setLoadingEditId] = useState("");
   const [deletingId, setDeletingId] = useState("");
@@ -3648,6 +3721,10 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   }, [page, totalPages]);
 
   const copyStructure = (row) => {
+    if (row.feeItems?.some(item => item.feeTypeNameMissing)) {
+      onToast("This structure has unresolved fee types. Their names and mappings must be corrected before copying.");
+      return;
+    }
     if (!row.feeItems?.length || row.feeItems.some((item) => item.originalAmount === undefined)) {
       onToast("Saved fee details are unavailable. Reload the fee structure before copying.");
       return;
@@ -3734,6 +3811,10 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
       onToast("Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.");
       return;
     }
+    if (yearFeeMode === "different" && (yearIncrementValue === "" || yearPreviewError)) {
+      setYearIncrementError("Enter a valid, non-negative increment value before adding a structure.");
+      return;
+    }
     setFirstYearTotal(0);
     setIsAdding(true);
     setEditing({});
@@ -3742,8 +3823,8 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   return (
     <>
       <section className="cms-fee-year-config cms-fee-year-page" aria-labelledby="fs-year-config-title">
-        <h4 id="fs-year-config-title">Fee Configuration by Year</h4>
-        <p className="cms-fee-year-warning" role="alert">Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.</p>
+        <h4 id="fs-year-config-title">Year Configuration for New Structures</h4>
+        <p className="cms-fee-year-helper">Choose Same Fees or Different Fees before adding a structure. These settings apply when creating a new structure. Existing saved structures keep their own year configuration.</p>
         <fieldset className="cms-fee-year-options">
           <legend className="cms-sr-only">Year fee configuration</legend>
           {[ ["same", "Same Fees for 1st and 2nd Year"], ["different", "Different Fees for 1st and 2nd Year"] ].map(([mode, label]) => (
@@ -3776,16 +3857,24 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
             </div>
           </div>
         ) : null}
-        <h4>Fee Summary</h4>
-        <p className="cms-fee-year-helper">{isAdding ? "Current unsaved Add Fee Structure draft." : "No active fee structure draft."}</p>
+        <h4>{isAdding ? "New Structure Fee Preview" : "Saved Fee Summary"}</h4>
+        {!isAdding ? <label className="cms-fee-filter">
+          <span>Saved fee structure</span>
+          <select value={summaryStructure?.id || ""} onChange={event => setSummarySelection({ id: event.target.value, scopeKey: summaryScopeKey })} disabled={loading}>
+            <option value="">Select Fee Structure</option>
+            {structures.map(row => <option key={row.id} value={row.id}>{[row.structureName, row.academicYear, row.group, row.program, row.academicLevelName].filter(Boolean).join(" / ")}</option>)}
+          </select>
+        </label> : null}
+        {!isAdding && !loading && !error && summaryStructure ? <p className="cms-fee-year-helper">Saved configuration: {String(summaryStructure.yearFeeMode).toLowerCase() === "same" ? "Same Fees" : String(summaryStructure.yearFeeMode).toLowerCase() === "different" ? `Different Fees — ${summaryStructure.incrementValue == null ? "increment unavailable" : String(summaryStructure.incrementType).toLowerCase() === "percentage" ? `${summaryStructure.incrementValue}% increment` : `${formatCurrency(summaryStructure.incrementValue)} increment`}` : "Not configured"}. Total for selected record: {summaryMoney(summaryStructure.totalFee)}.</p> : null}
+        <p className="cms-fee-year-helper">{isAdding ? "Current unsaved Add Fee Structure draft." : loading ? "Loading saved fee structures..." : error || (summaryStructure ? "Saved totals for the selected fee structure and its linked academic year level. Unavailable means no saved total was returned." : structures.length ? "Select a saved fee structure to view its year totals." : "No saved fee structures found.")}</p>
         <dl className="cms-fee-year-summary" aria-live="polite">
-          <div><dt>1st-Year Total Fee</dt><dd>{formatCurrency(firstYearTotal)}</dd></div>
-          {yearFeeMode === "different" ? <>
+          <div><dt>1st-Year Total Fee</dt><dd>{isAdding ? formatCurrency(firstYearTotal) : !summaryStructure ? formatCurrency(0) : loading || error ? "Unavailable" : summaryMoney(savedSummary.first)}</dd></div>
+          {isAdding && yearFeeMode === "different" ? <>
             <div><dt>Increment Type</dt><dd>{yearIncrementType === "percentage" ? "Percentage" : "Fixed Amount"}</dd></div>
             <div><dt>Increment Value</dt><dd>{yearPreviewError ? "-" : yearIncrementType === "percentage" ? `${Number(yearIncrementValue || 0)}%` : formatCurrency(yearIncrementValue || 0)}</dd></div>
             <div><dt>2nd-Year Increment</dt><dd>{yearPreviewError ? "-" : formatCurrency(secondYearIncrement)}</dd></div>
           </> : null}
-          <div className="cms-fee-year-total"><dt>2nd-Year Total Fee</dt><dd>{yearFeeMode === "different" && yearPreviewError ? "-" : formatCurrency(secondYearTotal)}</dd></div>
+          <div className="cms-fee-year-total"><dt>2nd-Year Total Fee</dt><dd>{isAdding ? yearFeeMode === "different" ? "Calculated when saved" : formatCurrency(secondYearTotal) : !summaryStructure ? formatCurrency(0) : loading || error ? "Unavailable" : summaryMoney(savedSummary.second)}</dd></div>
         </dl>
       </section>
     <div className="cms-card">
@@ -3848,6 +3937,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
                         </span>
                       ))}
                       {!feeItems.length ? <span>{row.feeDetailsError ? "Fee details unavailable" : "No saved fee types returned"}</span> : null}
+                      {feeItems.some(item => item.feeTypeNameMissing) ? <small className="cms-error">Some saved fee names could not be resolved. Fee mapping needs correction.</small> : null}
                       {row.feeDetailsError ? <small className="cms-error">{row.feeDetailsError}</small> : null}
                     </div>
                   </td>
@@ -4350,9 +4440,10 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
   );
 }
 
-function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
+function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors, gatewayScope, gatewayAccess, onSettled, onToast, onExport, exporting, onReverse, reversalBlocked }) {
   return (
     <div className="cms-fee-stack">
+      <div className="cms-fee-gateway-toolbar">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Student fee ledger">
         {LEDGER_TABS.map((item) => (
           <button
@@ -4367,15 +4458,18 @@ function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts,
           </button>
         ))}
       </div>
+      <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={exporting || !gatewayAccess.export} onClick={onExport}>{exporting ? "Exporting…" : "Export Payments Ledger (CSV)"}</button>
+      </div>
       {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} fineRules={fineRules} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
       {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
-      {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} /> : null}
+      {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} reversalAuthorized={gatewayAccess.reverse} onReverse={onReverse} reversalBlocked={reversalBlocked} /> : null}
+      {ledgerTab === "Pending UTRs" ? <OfflineUtrQueueTab scope={gatewayScope} canView={gatewayAccess.view} canReview={gatewayAccess.review} onSettled={onSettled} onToast={onToast} Pagination={TablePagination} /> : null}
     </div>
   );
 }
 
 /* ---------------------------- Payment history ---------------------------- */
-function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" }) {
+function HistoryTab({ transactions = [], onReceipt, loading = false, error = "", reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const [search, setSearch] = useState("");
   const [loadingReceiptId, setLoadingReceiptId] = useState("");
   const [page, setPage] = useState(1);
@@ -4483,6 +4577,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
                 <td><PaymentStatusBadge status={row.status || "Paid"} /></td>
                 <td>
                   <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ReceiptText size={15} /></button>
+                  {canReversePayment(row, reversalAuthorized) && !reversalBlocked.has(gatewayTransactionIdFor(row)) ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" onClick={() => onReverse(row)}>Reverse Payment</button> : null}
                 </td>
               </tr>
             ))}
@@ -4496,6 +4591,14 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
 
 /* -------------------------------- Page ---------------------------------- */
 export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTab = FEE_SETUP_TABS[0], initialLedgerTab = LEDGER_TABS[0].id } = {}) {
+  const gatewayPermissions = useEffectivePermissions();
+  const gatewayAccess = {
+    view: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canView("fee-management"),
+    review: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.APPROVE_REJECT, "fee-collection"),
+    export: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.EXPORT),
+    reverse: !gatewayPermissions.loading && !gatewayPermissions.error && hasPaymentReversalRole(getAuthUser() || {}, getAuthItem("role"))
+      && gatewayPermissions.canDo("fee-management", ACTIONS.EDIT, "fee-collection"),
+  };
   const {
     boards: contextBoards,
     academicYears: contextAcademicYears,
@@ -4540,7 +4643,19 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     if (next.toString() !== searchParams.toString()) setSearchParams(next);
   }, [searchParams, setSearchParams]);
   const [collecting, setCollecting] = useState(false);
-  useEffect(() => { setCollecting(false); }, [selectedId, selectedSource]);
+  const [reversing, setReversing] = useState(null);
+  const [reversalBlocked, setReversalBlocked] = useState(new Set());
+  const [confirmedReversals, setConfirmedReversals] = useState(new Set());
+  useEffect(() => { setCollecting(false); }, [selectedId, selectedSource, selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
+  const gatewayScope = cleanParams({ campusId: selectedCampusValue, academicYearId: selectedAcademicYearId });
+  const gatewayScopeKey = JSON.stringify([selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
+  const gatewayScopeRef = useRef(gatewayScopeKey);
+  gatewayScopeRef.current = gatewayScopeKey;
+  useEffect(() => { setReversing(null); }, [gatewayScopeKey]);
+  const [exporting, setExporting] = useState(false);
+  const exportGuard = useRef(false);
+  const exportController = useRef(null);
+  useEffect(() => () => { exportController.current?.abort(); }, [gatewayScopeKey]);
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
@@ -4563,6 +4678,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const [dueRows, setDueRows] = useState([]);
   const [, setOverviewError] = useState("");
   const [selectedDetail, setSelectedDetail] = useState(null);
+  const [selectedDetailError, setSelectedDetailError] = useState("");
   const [pendingPrintId, setPendingPrintId] = useState(null);
   const [selectedDetailVersion, setSelectedDetailVersion] = useState(0);
   const [paymentHistoryExtras, setPaymentHistoryExtras] = useState([]);
@@ -4603,7 +4719,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const overviewAccounts = ledgerAccounts;
   const selectedAccounts = selectedSource === "collection" ? [...collectionAccounts, ...ledgerAccounts] : [...ledgerAccounts, ...collectionAccounts];
   const selectedBase = selectedId ? selectedAccounts.find((item) => item.id === selectedId) : null;
-  const selectedRaw = selectedDetail || selectedBase;
+  const selectedRaw = selectedDetail && String(selectedDetail.id) === String(selectedBase?.id) ? selectedDetail : null;
   const selected = selectedRaw ? applyFineRulesToAccount(selectedRaw, fineRules) : null;
   const modalOpen = Boolean(collecting || receipt);
   const paymentHistoryRows = useMemo(() => {
@@ -4665,7 +4781,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       const response = await apiClient.get(endpoint, {
         params: cleanParams({
           campusId: selectedCampusValue,
-          academicYearId: source === "ledger" ? selectedAcademicYearId : "",
+          boardId: selectedBoardId,
+          academicYearId: selectedAcademicYearId,
         }),
       });
       if (accountRequestRef.current[source] !== requestId) return;
@@ -4697,6 +4814,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           feeDetailCacheRef.current.set(endpoint, detailRequest);
         }
         const detail = await detailRequest;
+        if (Object.keys(detail).length) assertFeeDetailIdentity(detail, account);
         return { account, detail };
       }));
       if (accountRequestRef.current[source] !== requestId) return;
@@ -4724,7 +4842,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         setAccountLoading((current) => ({ ...current, [source]: false }));
       }
     }
-  }, [loadAccountContext, selectedAcademicYearId, selectedCampusValue]);
+  }, [loadAccountContext, selectedAcademicYearId, selectedBoardId, selectedCampusValue]);
 
   const loadOverviewData = useCallback(async () => {
     const requestId = overviewRequestRef.current + 1;
@@ -4943,14 +5061,25 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   useEffect(() => {
     let ignore = false;
     setSelectedDetail(null);
-    if (!selectedId || !selectedBase?.studentId) return undefined;
+    setSelectedDetailError("");
+    if (!selectedId || !selectedBase) return undefined;
+    if (!selectedBase.studentId) {
+      setSelectedDetailError("The selected fee record has no student ID. Refresh the list and try again.");
+      return undefined;
+    }
     const loadSelectedDetail = async () => {
       const studentDetailResult = await apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(selectedBase.studentId)).then(
         (response) => ({ status: "fulfilled", response }),
         (error) => ({ status: "rejected", error }),
       );
       if (ignore) return;
-      let detail = studentDetailResult.status === "fulfilled" ? getObject(studentDetailResult.response?.data) : {};
+      if (studentDetailResult.status === "rejected") {
+        setSelectedDetailError(getApiErrorMessage(studentDetailResult.error));
+        return;
+      }
+      let detail = getObject(studentDetailResult.response?.data);
+      try { assertFeeDetailIdentity(detail, selectedBase); }
+      catch (failure) { setSelectedDetailError(failure.message); return; }
       const hasPayments = feeDetailPaymentRows(detail).length > 0;
       if (!hasPayments && Number(selectedBase.totalPaid || 0) > 0) {
         const historyResult = await apiClient.get(apiEndpoints.fee.getHistory(selectedBase.studentId)).then(
@@ -4970,10 +5099,6 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           feeDetailsByStudentId: new Map([[String(selectedBase.studentId), detail]]),
         });
         setSelectedDetail(normalized || selectedBase);
-      }
-      const primaryError = studentDetailResult.status === "rejected" ? studentDetailResult.error : null;
-      if (primaryError) {
-        setAccountErrors((current) => ({ ...current, ledger: current.ledger || getApiErrorMessage(primaryError) }));
       }
     };
     loadSelectedDetail();
@@ -5019,7 +5144,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();
     if (tab === "Student Fee Ledger" && ledgerTab === "Fee Collection") loadFeeAccounts("collection");
-    if (tab === "Student Fee Ledger" && ledgerTab !== "Fee Collection") loadFeeAccounts("ledger");
+    if (tab === "Student Fee Ledger" && ["Student Fee Ledger", "Payment History"].includes(ledgerTab)) loadFeeAccounts("ledger");
   }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, selectedCampusValue, tab]);
 
   useEffect(() => {
@@ -5045,11 +5170,74 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     loadMissingPaymentHistories(ledgerAccounts);
   }, [ledgerAccounts, ledgerTab, loadMissingPaymentHistories, tab]);
 
+  const refreshAfterSettlement = () => {
+    feeDetailCacheRef.current.clear();
+    setSelectedDetail(null);
+    setSelectedDetailVersion((current) => current + 1);
+    return Promise.allSettled([loadFeeAccounts("ledger"), loadFeeAccounts("collection"), loadOverviewData()]);
+  };
+  const exportGatewayLedger = async () => {
+    if (exportGuard.current || !gatewayAccess.export) return;
+    exportGuard.current = true; setExporting(true);
+    const controller = new AbortController(); exportController.current = controller;
+    try { await feePaymentGatewayApi.exportLedger(gatewayScope, controller.signal); if (!controller.signal.aborted) setToast("Payments ledger exported."); }
+    catch (failure) { if (!controller.signal.aborted) setToast(getApiErrorMessage(failure)); }
+    finally { exportGuard.current = false; setExporting(false); }
+  };
+  const paymentSaved = async (saved) => {
+    if (gatewayScopeRef.current !== gatewayScopeKey) return;
+    const scopeAtPayment = gatewayScopeKey;
+    const accountAtPayment = selected;
+    setCollecting(false);
+    setToast(`Payment of ${formatCurrency(saved.amount)} confirmed${saved.receiptNo ? ` - receipt ${saved.receiptNo}` : ""}`);
+    refreshAfterSettlement();
+    if (!saved.gatewayConfirmed) {
+      setReceipt(normalizeReceipt(saved, accountAtPayment));
+      setPaymentHistoryExtras((current) => [withPaymentContext(saved, [accountAtPayment]), ...current]);
+      return;
+    }
+    if (!saved.receiptNo) { setToast("Payment confirmed. The backend has not returned a receipt number; review Payment History."); return; }
+    try {
+      const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(saved.receiptNo), { requireRealBackend: true, skipGlobalLoader: true });
+      if (gatewayScopeRef.current !== scopeAtPayment) return;
+      const official = gatewayData(response.data);
+      const receiptNumber = textValue(official, "receiptNumber", "receiptNo");
+      if (receiptNumber !== saved.receiptNo || !read(official, "receiptDate", "paymentDate", "date") || Math.abs(Number(official.amount) - Number(saved.amount)) > 0.005 || !Number.isFinite(Number(official.amount))) throw new Error("The official receipt does not match the confirmed payment.");
+      setReceipt(normalizeReceipt(official, { ...accountAtPayment, ...saved }));
+    } catch (failure) {
+      if (gatewayScopeRef.current === scopeAtPayment) setToast(`Payment confirmed. Official receipt unavailable: ${getApiErrorMessage(failure)}. View it from Payment History once available.`);
+    }
+  };
+
+  const requestReversal = (transaction) => {
+    if (canReversePayment(transaction, gatewayAccess.reverse) && !reversalBlocked.has(gatewayTransactionIdFor(transaction))) setReversing(transaction);
+  };
+  const reversalAttemptState = (id, state) => {
+    setReversalBlocked((current) => {
+      const next = new Set(current);
+      if (state === "rejected") next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const paymentReversed = (_result, transaction) => {
+    const id = gatewayTransactionIdFor(transaction);
+    setConfirmedReversals((current) => new Set([...current, id]));
+    setReceipt(null);
+    setToast("Payment reversal confirmed by the backend. Refreshing balances and payment history.");
+    refreshAfterSettlement();
+  };
+  // Status-only overlay prevents stale historical copies from appearing captured after reversal.
+  // Balances, paid totals and schedule allocations are refreshed exclusively from the backend.
+  const withConfirmedReversal = (transaction) => confirmedReversals.has(gatewayTransactionIdFor(transaction))
+    ? { ...transaction, status: "Reversed", gatewayStatus: "Reversed", isReversed: true } : transaction;
+
   return (
     <DashboardLayout
       title="Fee Management"
       subtitle="Manage fee structures, scholarships, student balances and collections."
       breadcrumb={["Administration"]}
+      actions={<PaymentSettingsLink />}
     >
       <div className="cms-fee-tabs" role="tablist">
         {TABS.map((item) => (
@@ -5087,22 +5275,30 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           masterErrors={masterErrors}
         />
       ) : null}
+      {tab === "Student Fee Ledger" && selectedBase && !selected ? <div className="cms-card cms-card-body" role="status">
+        <p>{selectedDetailError || "Loading saved student fee details..."}</p>
+        {selectedDetailError ? <button className="cms-btn cms-btn-ghost" onClick={() => setSelectedDetailVersion(value => value + 1)}>Retry</button> : null}
+        <button className="cms-btn cms-btn-ghost" onClick={() => { navigateFeeAccount(null); setCollecting(false); }}>Back</button>
+      </div> : null}
       {tab === "Student Fee Ledger" && selected && !collecting ? (
         <StudentFeeAccountScreen
-          account={selected}
+          account={{ ...selected, transactions: selected.transactions.map(withConfirmedReversal) }}
           onClose={() => { navigateFeeAccount(null); setCollecting(false); }}
           onCollect={() => setCollecting(true)}
           onReceipt={setReceipt}
           allowCollect={selectedSource === "collection"}
+          reversalAuthorized={gatewayAccess.reverse}
+          onReverse={requestReversal}
+          reversalBlocked={reversalBlocked}
         />
       ) : null}
-      {tab === "Student Fee Ledger" && (!selected || collecting) ? (
+      {tab === "Student Fee Ledger" && ((!selected && !selectedBase) || collecting) ? (
         <StudentFeeLedgerSection
           ledgerTab={ledgerTab}
           onLedgerTabChange={setLedgerTab}
           ledgerAccounts={ledgerAccounts}
           collectionAccounts={collectionAccounts}
-          paymentHistoryRows={paymentHistoryRows}
+          paymentHistoryRows={paymentHistoryRows.map(withConfirmedReversal)}
           fineRules={fineRules}
           onView={(id) => navigateFeeAccount(id, "ledger")}
           onPrint={printStudentStatement}
@@ -5111,30 +5307,30 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           masters={syncedMasters}
           loading={accountLoading}
           errors={accountErrors}
+          gatewayScope={gatewayScope}
+          gatewayAccess={gatewayAccess}
+          onSettled={refreshAfterSettlement}
+          onToast={setToast}
+          onExport={exportGatewayLedger}
+          exporting={exporting}
+          onReverse={requestReversal}
+          reversalBlocked={reversalBlocked}
         />
       ) : null}
 
       {selected && collecting ? (
         <CollectPaymentModal
+          key={`${selected.id}:${gatewayScopeKey}`}
           account={selected}
+          campusId={selectedCampusValue}
           onClose={() => setCollecting(false)}
-          onSaved={(saved) => {
-            setCollecting(false);
-            setToast(`Payment of ${formatCurrency(saved.amount)} recorded - receipt ${saved.receiptNo}`);
-            setReceipt(normalizeReceipt(saved, selected));
-            setPaymentHistoryExtras((current) => [withPaymentContext(saved, [selected]), ...current]);
-            setSelectedDetail(null);
-            setSelectedDetailVersion((current) => current + 1);
-            Promise.allSettled([
-              loadFeeAccounts("ledger"),
-              loadFeeAccounts("collection"),
-              loadOverviewData(),
-            ]);
-          }}
+          onSaved={paymentSaved}
+          onPending={() => setToast("UTR submitted for verification. No fee credit has been applied.")}
         />
       ) : null}
 
       {receipt ? <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} /> : null}
+      {reversing ? <PaymentReversalModal key={`${gatewayScopeKey}:${gatewayTransactionIdFor(reversing)}`} transaction={reversing} authorized={gatewayAccess.reverse} onClose={() => setReversing(null)} onSuccess={paymentReversed} onAttemptState={reversalAttemptState} /> : null}
 
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>

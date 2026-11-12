@@ -30,6 +30,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task AddRangeAsync(IEnumerable<Staff> staffs);
         Task UpdateAsync(Staff staff);
         Task UpdatePhotoPathAsync(int id, string photoPath);
+        Task<string?> GetOfferLetterPathAsync(int id);
+        Task UpdateOfferLetterPathAsync(int id, string offerLetterPath);
         Task SoftDeleteAsync(Staff staff);
         Task BulkUpdateLinkSentAsync(List<int> staffIds, DateTime sentAt, DateTime expiresAt);
         Task UpdateProfileStatusAsync(int staffId, string profileStatus, int completionPercentage, string? correctionNotes = null);
