@@ -32,11 +32,12 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import GatewayPaymentPanel from "./components/GatewayPaymentPanel.jsx";
+import PaymentConfirmation from "./components/PaymentConfirmation.jsx";
 import { savedAcademicLevelLabel, savedStructureSummary, savedStructureTotal } from "./services/feeStructureSummary.js";
 import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "@/features/fees/feeDetails.js";
 import OfflineUtrQueueTab from "./components/OfflineUtrQueueTab.jsx";
 import PaymentReversalModal from "./components/PaymentReversalModal.jsx";
-import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData } from "./services/paymentGatewaySession.js";
+import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData, paymentUiState } from "./services/paymentGatewaySession.js";
 import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
@@ -891,7 +892,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
   return Array.from(grouped.values()).map((row) => {
     const feeItems = dedupeConfiguredFeeItems(row.feeItems).filter((feeItem) => !isDedicatedFacilityFeeType(feeItem));
     return {
-      ...row,
+    ...row,
       feeItems,
       totalFee: savedStructureTotal(row.totalFee, feeItems),
     };
@@ -1069,6 +1070,11 @@ const normalizeReceipt = (payload, fallback = {}) => {
     ?? row?.amount;
   return {
     ...(row || fallback),
+    feePaymentId: read(data, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId") || fallback.feePaymentId || row?.feePaymentId,
+    studentFeeId: read(data, "studentFeeId", "StudentFeeId") || fallback.studentFeeId,
+    gatewayConfirmed: data.gatewayConfirmed ?? fallback.gatewayConfirmed,
+    emailDeliveryStatus: data.emailDeliveryStatus ?? data.emailStatus ?? fallback.emailDeliveryStatus ?? fallback.emailStatus,
+    remainingBalance: data.remainingBalance ?? data.outstandingBalance ?? fallback.remainingBalance,
     status: isReversedPayment(data) || isReversedPayment(fallback) ? "Reversed" : row?.status,
     receiptNo: textValue(data, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || fallback.receiptNo || "-",
     amount: optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount,
@@ -2066,6 +2072,12 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
       }, { requireRealBackend: true, skipNetworkRetry: true, signal: controller.signal });
       if (controller.signal.aborted) return null;
       const saved = gatewayData(response.data);
+      if (paymentUiState(saved) === "PENDING_VERIFICATION") {
+        setCashUncertain(true);
+        setSaving(false);
+        setError("Payment details submitted successfully. Your payment is pending verification. Check the verification queue before collecting again.");
+        return null;
+      }
       if (!read(saved, "feePaymentId", "paymentId", "id") || !textValue(saved, "receiptNo", "receiptNumber")
         || !(numberValue(saved, "amount", "paidAmount") > 0)
         || (saved.status && !["paid", "success", "completed"].includes(normalizeKey(saved.status)))) {
@@ -2074,6 +2086,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
       }
       setSaving(false);
       return onSaved({
+        ...saved,
         amount: numberValue(saved, "amount", "Amount", "paidAmount", "PaidAmount") || value,
         baseAmount: numberValue(saved, "baseAmount", "BaseAmount", "amount", "Amount") || value,
         discount: numberValue(saved, "discount", "Discount", "discountAmount", "DiscountAmount"),
@@ -2194,100 +2207,9 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
 
 /* ------------------------------- Receipt -------------------------------- */
 function ReceiptModal({ receipt, onClose }) {
-  const receiptRef = useRef(null);
-  const printControllerRef = useRef(null);
-  const [printing, setPrinting] = useState(false);
-  const [printError, setPrintError] = useState("");
-  useEffect(() => {
-    setPrintError("");
-    setPrinting(false);
-    return () => { printControllerRef.current?.abort(); printControllerRef.current = null; };
-  }, [receipt]);
-
-  const printReceipt = async () => {
-    if (printControllerRef.current) return;
-    const controller = new AbortController();
-    printControllerRef.current = controller;
-    setPrinting(true);
-    setPrintError("");
-    try {
-      await printReceiptElement(receiptRef.current, controller.signal);
-    } catch (error) {
-      if (!controller.signal.aborted) setPrintError(error.message || "The receipt could not be printed. Please try again.");
-    } finally {
-      if (printControllerRef.current === controller) {
-        printControllerRef.current = null;
-        setPrinting(false);
-      }
-    }
-  };
-
-  const paidAmount = receipt.amount === null || receipt.amount === undefined || receipt.amount === "" ? NaN : Number(receipt.amount);
-  const money = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))
-    ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))
-    : "-";
-  const availableBreakdown = (receipt.breakdown || []).filter((item) => item.feeType && item.paidAmount !== null && item.paidAmount !== undefined && Number.isFinite(Number(item.paidAmount)) && Number(item.paidAmount) >= 0);
-  const breakdownTotal = availableBreakdown.reduce((sum, item) => sum + Number(item.paidAmount), 0);
-  const paymentItems = availableBreakdown.length && Number.isFinite(paidAmount) && Math.abs(breakdownTotal - paidAmount) < 0.005
-    ? availableBreakdown
-    : [{ id: "payment", feeType: "Fee Payment", paidAmount: receipt.amount }];
-  const words = Number.isFinite(paidAmount) ? amountToWords(paidAmount) : "";
-  const institutionName = receipt.collegeName || COLLEGE_NAME;
-  const studentRows = [
-    ["Student Name", receipt.studentName], ["Admission Number", receipt.admissionNo],
-    ["Group / Course", receipt.group], ["Program", receipt.program],
-    ["Section", receipt.section], ["Academic Year", receipt.academicYear], ["Campus", receipt.campusName],
-  ];
-  const contact = [receipt.collegeAddress, receipt.collegePhone ? 'Phone: ' + receipt.collegePhone : "", receipt.collegeEmail ? 'Email: ' + receipt.collegeEmail : ""].filter(Boolean);
-
-  return (
-    <Modal title="Payment Receipt" onClose={onClose} footer={<>
-      <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-      <button className="cms-btn cms-btn-primary" onClick={printReceipt} disabled={printing}><Printer size={14} />{printing ? "Preparing Receipt..." : "Print Receipt"}</button>
-    </>}>
-      {printError ? <p className="cms-error" role="alert">{printError}</p> : null}
-      <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
-        <header className="cms-fee-receipt-head">
-          <img src={collegeLogo} alt={institutionName + " logo"} />
-          <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
-        </header>
-        <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
-        {isReversedPayment(receipt) ? <p className="cms-fee-reversal-warning" role="alert">REVERSED PAYMENT — This receipt is retained as a historical record. It does not represent a current credit to the student's fee account.</p> : null}
-        <div className="cms-fee-receipt-meta">
-          <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
-          <span><b>Payment Date</b> {receipt.date ? formatDate(receipt.date) : "-"}</span>
-          <span><b>Payment Status</b> {receipt.status || "-"}</span>
-          <span><b>Transaction Reference</b> {receipt.reference || "-"}</span>
-        </div>
-        <section className="cms-fee-receipt-section">
-          <h4>Student Information</h4>
-          <table className="cms-fee-receipt-info-table"><tbody>
-            {studentRows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value || "-"}</td></tr>)}
-          </tbody></table>
-        </section>
-        <section className="cms-fee-receipt-section cms-fee-receipt-payment-section">
-          <h4>Payment Details</h4>
-          <table className="cms-fee-receipt-payment-table">
-            <colgroup><col style={{ width: "10%" }} /><col style={{ width: "60%" }} /><col style={{ width: "30%" }} /></colgroup>
-            <thead><tr><th scope="col">S.No</th><th scope="col">Fee Particulars</th><th scope="col" className="num">Amount (INR)</th></tr></thead>
-            <tbody>{paymentItems.map((item, index) => <tr key={item.id + "-" + index}><td>{index + 1}</td><td>{item.feeType}</td><td className="num">{money(item.paidAmount)}</td></tr>)}</tbody>
-            <tfoot><tr><th colSpan={2} scope="row">Total Paid</th><td className="num">{money(receipt.amount)}</td></tr></tfoot>
-          </table>
-        </section>
-        <div className="cms-fee-receipt-payment-summary">
-          <div><span>Payment Mode</span><strong>{receipt.method || "-"}</strong></div>
-          {receipt.reference ? <div><span>Transaction Reference</span><strong>{receipt.reference}</strong></div> : null}
-        </div>
-        <div className="cms-fee-receipt-total"><span>Total Amount Paid</span><strong>{money(receipt.amount)}</strong></div>
-        {words ? <div className="cms-fee-receipt-words"><span>Amount in Words</span><strong>{words}</strong></div> : null}
-        <div className="cms-fee-signature"><span>Student / Parent Signature</span><span>Received By / Authorized Signatory</span></div>
-        <p className="cms-fee-receipt-note">This is a computer-generated fee payment receipt.<br />Thank you for your payment.</p>
-      </div>
-    </Modal>
-  );
+  return <PaymentConfirmation payment={receipt} onClose={onClose} />;
 }
 
-/* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false, reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const accountPrintRef = useRef(null);
   const money = value => value == null ? "Unavailable" : formatCurrency(value);
@@ -5186,27 +5108,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   };
   const paymentSaved = async (saved) => {
     if (gatewayScopeRef.current !== gatewayScopeKey) return;
-    const scopeAtPayment = gatewayScopeKey;
     const accountAtPayment = selected;
     setCollecting(false);
     setToast(`Payment of ${formatCurrency(saved.amount)} confirmed${saved.receiptNo ? ` - receipt ${saved.receiptNo}` : ""}`);
-    refreshAfterSettlement();
-    if (!saved.gatewayConfirmed) {
-      setReceipt(normalizeReceipt(saved, accountAtPayment));
-      setPaymentHistoryExtras((current) => [withPaymentContext(saved, [accountAtPayment]), ...current]);
-      return;
-    }
-    if (!saved.receiptNo) { setToast("Payment confirmed. The backend has not returned a receipt number; review Payment History."); return; }
-    try {
-      const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(saved.receiptNo), { requireRealBackend: true, skipGlobalLoader: true });
-      if (gatewayScopeRef.current !== scopeAtPayment) return;
-      const official = gatewayData(response.data);
-      const receiptNumber = textValue(official, "receiptNumber", "receiptNo");
-      if (receiptNumber !== saved.receiptNo || !read(official, "receiptDate", "paymentDate", "date") || Math.abs(Number(official.amount) - Number(saved.amount)) > 0.005 || !Number.isFinite(Number(official.amount))) throw new Error("The official receipt does not match the confirmed payment.");
-      setReceipt(normalizeReceipt(official, { ...accountAtPayment, ...saved }));
-    } catch (failure) {
-      if (gatewayScopeRef.current === scopeAtPayment) setToast(`Payment confirmed. Official receipt unavailable: ${getApiErrorMessage(failure)}. View it from Payment History once available.`);
-    }
+    setReceipt(normalizeReceipt(saved, accountAtPayment));
+    await refreshAfterSettlement();
   };
 
   const requestReversal = (transaction) => {

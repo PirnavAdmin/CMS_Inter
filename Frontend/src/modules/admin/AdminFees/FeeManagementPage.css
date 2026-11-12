@@ -30,6 +30,9 @@
 .cms-fee-omnichannel-modal .cms-fee-qr-verification { display: grid; gap: 12px; min-width: 0; }
 .cms-fee-omnichannel-modal .cms-fee-qr-verification h3 { margin: 0; }
 .cms-fee-omnichannel-modal .cms-fee-qr-verification .cms-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cms-fee-proof-selection { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.cms-fee-proof-selection span { overflow-wrap: anywhere; min-width: 0; }
+.cms-fee-proof-preview { display: block; max-width: 100%; max-height: 240px; object-fit: contain; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-start { display: grid; gap: 10px; justify-items: start; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-start p { color: var(--cms-muted); font-size: 13px; margin: 0; }
 .cms-fee-omnichannel-modal .cms-fee-gateway-order {

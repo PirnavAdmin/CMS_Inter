@@ -1,8 +1,9 @@
 import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
-// Isolated Exam Cell screen. Shared services and reference styles retain existing contracts.
 // Examination Management Component
+// getCatalogGroups replaced with direct resilient groups loader
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   CalendarDays,
@@ -28,20 +29,21 @@ import {
   Users,
   Ban,
   RefreshCw,
+  FileSpreadsheet,
+  MoreVertical,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import { useExamCellTab, useExamCellAction, getModuleState, saveModuleState } from "../statePersistence.js";
-import DashboardLayout from "../layout/ExamCellPageLayout.jsx";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast, Pagination } from "@/shared/components/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
 import "@/modules/admin/AdminExaminations/ExaminationPage.css";
 import { enrichExaminations } from "../services/examCellMasterData.js";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 // Use the shared table-row skeleton for the examination table's ten columns.
 const ExaminationTableSkeleton = () =>
@@ -109,6 +111,9 @@ const isCombinedExamination = (examOrForm) => {
   const mode = normalizeStatus(examOrForm.scheduleMode);
   if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
 
+  const examMode = normalizeStatus(examOrForm.examMode || examOrForm.mode);
+  if (examMode === "OBJECTIVE") return true;
+
   const cat = String(
     examOrForm.examCategory ||
     examOrForm.category ||
@@ -125,8 +130,12 @@ const isCombinedExamination = (examOrForm) => {
   }
 
   // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
-  const pat = String(examOrForm.examPattern || examOrForm.pattern || "").trim().toLowerCase();
-  if (pat && pat !== "regular" && pat !== "regular pattern" && pat !== "regular academic pattern" && pat !== "none") {
+  const isRegularPat = (p) => {
+    const s = String(p || "").trim().toLowerCase();
+    return !s || ["regular", "regular pattern", "regular academic", "regular academic pattern", "regular_academic", "none", "standard", "default"].includes(s);
+  };
+  const pat = String(examOrForm.examPattern || examOrForm.pattern || examOrForm.patternName || "").trim().toLowerCase();
+  if (pat && !isRegularPat(pat)) {
     return true;
   }
 
@@ -135,18 +144,39 @@ const isCombinedExamination = (examOrForm) => {
     const grpPats = Object.values(examOrForm.selectedGroupPatterns)
       .flat()
       .map((p) => String(p).trim().toLowerCase());
-    if (grpPats.some((p) => p && p !== "regular" && p !== "regular academic pattern" && p !== "none")) {
+    if (grpPats.some((p) => p && !isRegularPat(p))) {
       return true;
     }
   }
 
-  // Check exam name or code indicators (e.g. OBJECTIVE_MPC_002)
-  const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
-  if (name.includes("objective") || name.includes("combined")) return true;
+  // Check if start date and end date are the same (single-day objective exam) with non-regular pattern or objective signals
+  const sDate = canonicalDate(examOrForm.startDate);
+  const eDate = canonicalDate(examOrForm.endDate);
+  if (sDate && eDate && sDate === eDate) {
+    if (pat && !isRegularPat(pat)) return true;
+    const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
+    if (name.includes("mains") || name.includes("jee") || name.includes("neet") || name.includes("objective")) {
+      return true;
+    }
+  }
 
-  // Check schedules if any schedule has PATTERN_WISE or patternName
+  // Check exam name or code indicators (e.g. OBJECTIVE_MPC_002, Mains sample test)
+  const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
+  if (name.includes("objective") || name.includes("combined") || name.includes("mains") || name.includes("neet") || name.includes("jee")) {
+    if (pat && !isRegularPat(pat)) return true;
+  }
+
+  // Check schedules if any schedule has PATTERN_WISE, patternName, examMode === Objective, or includedSubjectIds
   if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
-    if (examOrForm.schedules.some((s) => s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName))) {
+    if (examOrForm.schedules.some((s) =>
+      s && (
+        normalizeStatus(s.scheduleMode) === "PATTERN_WISE" ||
+        normalizeStatus(s.mode) === "OBJECTIVE" ||
+        normalizeStatus(s.examMode) === "OBJECTIVE" ||
+        (s.patternName && !isRegularPat(s.patternName)) ||
+        (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1)
+      )
+    )) {
       return true;
     }
   }
@@ -292,13 +322,17 @@ const getEligibleSubjects = (exam, subjectsList = []) => {
   const levelIds = ensureArray(exam.levelIds || exam.academicLevelIds || [exam.levelId || exam.academicLevelId]).filter(Boolean).map(normalizeId);
   const groupIds = ensureArray(exam.groupIds || (Array.isArray(exam.groups) ? exam.groups.map((g) => g.id || g.groupId) : null) || [exam.groupId]).filter(Boolean).map(normalizeId);
   const programIds = ensureArray(exam.programIds || [exam.programId]).filter(Boolean).map(normalizeId);
+  const category = String(exam.examCategory || exam.category || "").trim().toLowerCase();
+  const isObjective = category === "objective" || isCombinedExamination(exam);
+  const isRegular = category === "regular";
 
   const seenIds = new Set();
   return ensureArray(subjectsList).filter((s) => {
     const sId = normalizeId(s.id ?? s.subjectId);
     if (sId && seenIds.has(sId)) return false;
     if (s.isActive === false) return false;
-    if (isCombinedExamination(exam) && isLanguageSubject(s)) return false;
+    // For objective, exclude language subjects (core subjects only). For regular, display all subjects.
+    if (isObjective && !isRegular && isLanguageSubject(s)) return false;
     const sLevelIds = ensureArray(s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [])).map(normalizeId);
     const sGroupIds = ensureArray(s.groupIds || (s.groupId ? [s.groupId] : [])).map(normalizeId);
     const sProgramIds = ensureArray(s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId);
@@ -1119,7 +1153,9 @@ function formatDDMMYYYY(val) {
       const year = dObj.getFullYear();
       return `${day}-${month}-${year}`;
     }
-  } catch (_) { /* Keep the existing fallback path. */ }
+  } catch (_) {
+    /* ignore date format error */
+  }
   return String(val);
 }
 
@@ -1195,7 +1231,8 @@ function directExportScheduleExcel(
   // 1. Top Title Row: "Examination Schedules" (Dark blue banner)
   const titleRowIdx = aoa.length;
   titleRowIndices.push(titleRowIdx);
-  aoa.push(["Examination Schedules", "", "", "", ""]);
+  const mainTitleText = safeExams.length === 1 ? `${safeExams[0].name || safeExams[0].code || "Examination"} Schedule` : "Examination Schedules";
+  aoa.push([mainTitleText, "", "", "", ""]);
   merges.push({ s: { r: titleRowIdx, c: 0 }, e: { r: titleRowIdx, c: 4 } });
 
   // 2. Subheader Row: "Generated On" | Date
@@ -1345,6 +1382,180 @@ function directExportScheduleExcel(
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Examination_Schedules");
   XLSX.writeFile(workbook, `${filename.replace(/\s+/g, "_")}.xlsx`);
+  return true;
+}
+
+// Exports examination schedules to PDF matching the reference schedule layout
+async function directExportSchedulePdf(
+  targetExams,
+  schedules,
+  groupsList = [],
+  filename = "Examination_Schedules",
+  programsList = [],
+  academicYearsList = []
+) {
+  const safeExams = ensureArray(targetExams);
+  const safeSchedules = ensureArray(schedules);
+  if (!safeExams.length) return false;
+
+  const [{ jsPDF }, autoTableModule] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const autoTable = autoTableModule?.default || autoTableModule;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 24;
+  const contentWidth = pageWidth - margin * 2;
+  let currentY = margin;
+
+  const THEMES = [
+    { headerBg: [204, 227, 253], thBg: [226, 239, 254], border: [158, 197, 247], text: [15, 53, 103] }, // Blue
+    { headerBg: [203, 235, 212], thBg: [227, 246, 234], border: [153, 219, 171], text: [19, 78, 40] }, // Green
+    { headerBg: [253, 226, 202], thBg: [255, 240, 226], border: [248, 190, 140], text: [122, 49, 12] }, // Orange
+    { headerBg: [229, 219, 248], thBg: [242, 237, 252], border: [198, 180, 239], text: [76, 29, 149] }, // Purple
+  ];
+
+  // 1. Dark Blue Title Banner
+  doc.setFillColor(32, 64, 112); // #204070
+  doc.roundedRect(margin, currentY, contentWidth, 30, 3, 3, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  const pdfTitleText = safeExams.length === 1 ? `${safeExams[0].name || safeExams[0].code || "Examination"} Schedule` : "Examination Schedules";
+  doc.text(pdfTitleText, pageWidth / 2, currentY + 20, { align: "center" });
+  currentY += 36;
+
+  // 2. Subheader Row: Generated On
+  const genH = 22;
+  doc.setDrawColor(148, 163, 184); // #94a3b8
+  doc.setLineWidth(0.75);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(margin, currentY, contentWidth, genH, "FD");
+
+  const labelW = 140;
+  doc.line(margin + labelW, currentY, margin + labelW, currentY + genH);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text("Generated On", margin + 10, currentY + 15);
+
+  const todayFormatted = formatDDMMYYYY(new Date());
+  doc.setFont("helvetica", "bold");
+  doc.text(todayFormatted, margin + labelW + 10, currentY + 15);
+  currentY += genH + 14;
+
+  // 3. Examination Blocks
+  safeExams.forEach((exam, examIdx) => {
+    let examSchedules = safeSchedules.filter((s) => {
+      const sExamId = normalizeId(s.examId ?? s.examinationId);
+      const eExamId = normalizeId(exam.id ?? exam.examinationId);
+      return sExamId && eExamId ? sExamId === eExamId : true;
+    });
+    if (examSchedules.length === 0 && safeExams.length === 1) {
+      examSchedules = safeSchedules;
+    }
+
+    const theme = THEMES[examIdx % THEMES.length];
+    const examTitle = exam.name || exam.examName || "Examination";
+    const yearName =
+      nameOf(academicYearsList, exam.yearId || exam.academicYearId) !== "—"
+        ? nameOf(academicYearsList, exam.yearId || exam.academicYearId)
+        : exam.academicYearName || exam.yearName || "";
+
+    const examBanner =
+      yearName && !examTitle.includes(yearName)
+        ? `${examTitle} (${yearName})`
+        : examTitle;
+
+    // Check page overflow
+    if (currentY + 70 > pageHeight - margin) {
+      doc.addPage();
+      currentY = margin + 10;
+    }
+
+    // Exam Card Header
+    const cardHeaderH = 22;
+    doc.setFillColor(theme.headerBg[0], theme.headerBg[1], theme.headerBg[2]);
+    doc.setDrawColor(theme.border[0], theme.border[1], theme.border[2]);
+    doc.setLineWidth(0.75);
+    doc.rect(margin, currentY, contentWidth, cardHeaderH, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(theme.text[0], theme.text[1], theme.text[2]);
+    doc.text(examBanner, margin + 10, currentY + 15);
+    currentY += cardHeaderH;
+
+    // Table Data
+    const tableBody =
+      examSchedules.length > 0
+        ? examSchedules.map((s) => [
+            resolveSubjectDisplay(s),
+            resolveExamDateDisplay(s, exam),
+            resolveInvigilatorDisplay(s),
+            resolveRoomDisplay(s),
+            resolveModeDisplay(s),
+          ])
+        : [
+            [
+              {
+                content: "No sessions scheduled for this examination",
+                colSpan: 5,
+                styles: { halign: "center", fontStyle: "italic", textColor: [100, 116, 139] },
+              },
+            ],
+          ];
+
+    const tableConfig = {
+      startY: currentY,
+      margin: { left: margin, right: margin },
+      head: [["Subject", "Exam Date", "Invigilator", "Exam Hall / Room", "Exam Mode"]],
+      body: tableBody,
+      theme: "plain",
+      headStyles: {
+        fillColor: theme.thBg,
+        textColor: theme.text,
+        fontStyle: "bold",
+        fontSize: 9,
+        lineColor: theme.border,
+        lineWidth: 0.5,
+        cellPadding: 5,
+      },
+      bodyStyles: {
+        fillColor: [255, 255, 255],
+        textColor: [30, 41, 59],
+        fontSize: 8.5,
+        lineColor: theme.border,
+        lineWidth: 0.5,
+        cellPadding: 5,
+      },
+      columnStyles: {
+        0: { cellWidth: contentWidth * 0.24 },
+        1: { cellWidth: contentWidth * 0.16 },
+        2: { cellWidth: contentWidth * 0.24 },
+        3: { cellWidth: contentWidth * 0.22 },
+        4: { cellWidth: contentWidth * 0.14 },
+      },
+      styles: {
+        overflow: "linebreak",
+      },
+    };
+
+    if (typeof autoTable === "function") {
+      autoTable(doc, tableConfig);
+    } else if (typeof doc.autoTable === "function") {
+      doc.autoTable(tableConfig);
+    }
+
+    currentY = (doc.lastAutoTable?.finalY || currentY) + 14;
+  });
+
+  const dateStr = new Date().toISOString().split("T")[0];
+  doc.save(`${filename.replace(/\s+/g, "_")}_${dateStr}.pdf`);
   return true;
 }
 
@@ -2111,7 +2322,14 @@ const normalizeScheduleRecord = (
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
   const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
-  const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || isCombinedExamination(examContext);
+  const isRegular = isRegularExamination(examContext) || String(examContext?.examCategory || "").toLowerCase() === "regular";
+  const combined = !isRegular && (
+    ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) ||
+    normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s?.mode) === "OBJECTIVE" ||
+    (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 1) ||
+    isCombinedExamination(examContext)
+  );
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
   const patternName = s?.patternName || (combined ? configuredPattern : "");
 
@@ -2159,9 +2377,9 @@ const normalizeScheduleRecord = (
     patternName,
     includedSubjectIds,
     combinedConfigurationVerified: isVerified,
-    subjectName: combined ? combinedSessionName : (s?.subjectName || "Subject"),
-    subjectCode: combined ? combinedSessionCodes : (s?.subjectCode || ""),
-    combinedSubjectsDisplay: combinedSessionSubjects,
+    subjectName: combined ? combinedSessionName : (s?.subjectName && s.subjectName !== "Regular" && s.subjectName !== "Subject" ? s.subjectName : (nameOf(subjectsSource, s?.subjectId, "") || s?.subjectName || "Subject")),
+    subjectCode: combined ? combinedSessionCodes : (s?.subjectCode && s.subjectCode !== "—" ? s.subjectCode : (codeOf(subjectsSource, s?.subjectId, "") || s?.subjectCode || "")),
+    combinedSubjectsDisplay: combined ? combinedSessionSubjects : "",
     date: formattedDate,
     startTime: s?.startTime ? String(s.startTime).substring(0, 5) : "09:00",
     endTime: s?.endTime ? String(s.endTime).substring(0, 5) : "12:00",
@@ -2275,7 +2493,16 @@ const validateSchedulePayload = (dto, isObj = false) => {
 
 // Format schedule entry to strict backend API DTO matching CreateExamScheduleRequest contract
 const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = []) => {
-  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
+  const isRegularExamContext = examContext && (
+    String(examContext.examCategory || examContext.category || "").trim().toLowerCase() === "regular" ||
+    examContext.scheduleMode === "SUBJECT_WISE"
+  );
+  const isObj = !isRegularExamContext && (
+    isCombinedExamination(examContext) ||
+    s.scheduleMode === "PATTERN_WISE" ||
+    normalizeStatus(s.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s.mode) === "OBJECTIVE"
+  );
 
   // 1. Examination ID (Number > 0)
   const examNumericId = Number(targetExamId || s.examId || s.examinationId || examContext?.id);
@@ -2396,7 +2623,7 @@ const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], ta
 
   // 11. Marks and percentages
   const maxMarksNum = Number(s.maxMarks ?? s.totalMarks) || (isObj ? 300 : 100);
-  const passMarksNum = s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 35;
+  const passMarksNum = s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 28;
   const passPctNum = Number(s.passPercentage) || (isObj ? 40 : 35);
 
   // 12. Included Subjects (for Objective examinations only)
@@ -2490,9 +2717,6 @@ const sanitizeUpdateScheduleDto = (dto) => {
     "endTime",
     "sessionId",
     "scheduleMode",
-    "patternName",
-    "groupId",
-    "includedSubjectIds",
     "roomId",
     "invigilatorId",
     "hall",
@@ -2520,7 +2744,7 @@ const sanitizeUpdateScheduleDto = (dto) => {
   if (sanitized.roomId !== undefined) sanitized.roomId = Number(sanitized.roomId) || 0;
   if (sanitized.invigilatorId !== undefined) sanitized.invigilatorId = Number(sanitized.invigilatorId) || 0;
   if (sanitized.maxMarks !== undefined) sanitized.maxMarks = Number(sanitized.maxMarks) || 100;
-  if (sanitized.passingMarks !== undefined) sanitized.passingMarks = Number(sanitized.passingMarks) || 35;
+  if (sanitized.passingMarks !== undefined) sanitized.passingMarks = Number(sanitized.passingMarks) || 28;
   if (sanitized.startTime && sanitized.startTime.length === 5) sanitized.startTime = `${sanitized.startTime}:00`;
   if (sanitized.endTime && sanitized.endTime.length === 5) sanitized.endTime = `${sanitized.endTime}:00`;
   return sanitized;
@@ -2724,10 +2948,19 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
 
   for (const s of schedulesList) {
     const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
-    const isCombinedSchedule =
-      s.scheduleMode === "PATTERN_WISE" ||
-      Boolean(s.patternName) ||
-      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1);
+    const isRegularContext = examContext && (
+      String(examContext.examCategory || examContext.category || "").trim().toLowerCase() === "regular" ||
+      examContext.scheduleMode === "SUBJECT_WISE"
+    );
+    const isCombinedSchedule = !isRegularContext && (
+
+      isCombinedExamination(examContext) ||
+      (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1)
+    );
+
+
+
+
 
     if (isCombinedSchedule && Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) {
       const validSubIds = s.includedSubjectIds
@@ -2966,23 +3199,27 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
 };
 
 const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList = [], studentsList = []) => {
-  const id = normalizeId(e?.examinationId ?? e?.examId ?? e?.id);
-  const rawLevels =
-    e?.academicLevelIds ??
-    e?.levelIds ??
-    e?.academicLevelId ??
-    e?.levelId ??
-    (Array.isArray(e?.academicLevels) ? e.academicLevels.map((l) => l.id || l.academicLevelId) : null) ??
-    (e?.academicLevel?.id ? [e.academicLevel.id] : null);
-  const levelIds = ensureArray(rawLevels).map(normalizeId).filter(Boolean);
-  const rawGroups =
-    e?.groupIds ??
-    e?.groupId ??
-    e?.courseGroupId ??
-    e?.courseGroupIds ??
-    (Array.isArray(e?.groups) ? e.groups.map((g) => g.id || g.groupId) : null) ??
-    (Array.isArray(e?.groupProgramSelections) ? e.groupProgramSelections.map((g) => g.groupId) : (e?.groupProgramSelections && typeof e.groupProgramSelections === "object" ? Object.keys(e.groupProgramSelections) : null));
-  const groupIds = ensureArray(rawGroups).map(normalizeId).filter(Boolean);
+  const id = normalizeId(e?.examinationId ?? e?.id);
+  const rawLevelList = (Array.isArray(e?.academicLevelIds) && e.academicLevelIds.length > 0)
+    ? e.academicLevelIds
+    : (Array.isArray(e?.levelIds) && e.levelIds.length > 0)
+      ? e.levelIds
+      : (Array.isArray(e?.academicLevels) && e.academicLevels.length > 0)
+        ? e.academicLevels.map((l) => l.id || l.academicLevelId)
+        : (e?.academicLevelId ? [e.academicLevelId] : (e?.levelId ? [e.levelId] : []));
+  const levelIds = ensureArray(rawLevelList).map(normalizeId).filter(Boolean);
+  const primaryLevelId = levelIds[0] || normalizeId(e?.academicLevelId ?? e?.levelId ?? "");
+  const rawGroupList = (Array.isArray(e?.groupIds) && e.groupIds.length > 0)
+    ? e.groupIds
+    : (Array.isArray(e?.courseGroupIds) && e.courseGroupIds.length > 0)
+      ? e.courseGroupIds
+      : (Array.isArray(e?.groups) && e.groups.length > 0)
+        ? e.groups.map((g) => g.id || g.groupId)
+        : (Array.isArray(e?.groupProgramSelections) && e.groupProgramSelections.length > 0)
+          ? e.groupProgramSelections.map((g) => g.groupId)
+          : (e?.groupId ? [e.groupId] : (e?.courseGroupId ? [e.courseGroupId] : []));
+  const groupIds = ensureArray(rawGroupList).map(normalizeId).filter(Boolean);
+  const primaryGroupId = groupIds[0] || normalizeId(e?.groupId ?? e?.courseGroupId ?? "");
   const isAllPrograms = !e?.programId || String(e?.programName || "").trim().toLowerCase() === "all programs";
   const rawPrograms = isAllPrograms ? [] : (e?.programIds ?? (e?.programId ? [e.programId] : []));
   const programIds = ensureArray(rawPrograms).map(normalizeId).filter(Boolean);
@@ -2997,22 +3234,44 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
     e?.categoryName ??
     e?.rawCategory;
 
+  const pat = e?.examPattern ?? e?.pattern ?? e?.patternName ?? "";
+  const isPatObjective = Boolean(pat && String(pat).trim() !== "" && !["regular", "regular pattern", "regular academic pattern", "none"].includes(String(pat).trim().toLowerCase()));
+  const hasObjectiveSched = Array.isArray(rawSchedules) && rawSchedules.some((s) =>
+    normalizeStatus(s?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(s?.examMode) === "OBJECTIVE" ||
+    normalizeStatus(s?.mode) === "OBJECTIVE" ||
+    (Array.isArray(s?.includedSubjectIds) && s.includedSubjectIds.length > 0) ||
+    Boolean(s?.patternName)
+  );
+
+  const isRegularPat = (p) => {
+    const s = String(p || "").trim().toLowerCase();
+    return !s || ["regular", "regular pattern", "regular academic", "regular academic pattern", "regular_academic", "none", "standard", "default"].includes(s);
+  };
+  const sDate = canonicalDate(e?.startDate);
+  const eDate = canonicalDate(e?.endDate);
+  const isSameDayWithPattern = Boolean(sDate && eDate && sDate === eDate && (isPatObjective || (pat && !isRegularPat(pat))));
+
   let resolvedExamCategory = "Regular";
   const catCandidate = rawCat ? String(rawCat).trim() : "";
-  if (isCombinedExamination(e) || catCandidate.toLowerCase() === "objective" || catCandidate.toLowerCase().includes("objective")) {
+  if (
+    isCombinedExamination(e) ||
+    catCandidate.toLowerCase() === "objective" ||
+    catCandidate.toLowerCase().includes("objective") ||
+    isPatObjective ||
+    isSameDayWithPattern ||
+    hasObjectiveSched ||
+    normalizeStatus(e?.scheduleMode) === "PATTERN_WISE" ||
+    normalizeStatus(e?.scheduleMode) === "COMBINED_OBJECTIVE" ||
+    normalizeStatus(e?.examMode) === "OBJECTIVE" ||
+    (e?.examName && (String(e.examName).toLowerCase().includes("objective") || String(e.examName).toLowerCase().includes("mains") || String(e.examName).toLowerCase().includes("neet") || String(e.examName).toLowerCase().includes("jee"))) ||
+    (e?.name && (String(e.name).toLowerCase().includes("objective") || String(e.name).toLowerCase().includes("mains") || String(e.name).toLowerCase().includes("neet") || String(e.name).toLowerCase().includes("jee")))
+  ) {
     resolvedExamCategory = "Objective";
   } else if (catCandidate.toLowerCase() === "others") {
     resolvedExamCategory = "Others";
-  } else if (catCandidate.toLowerCase() === "regular") {
-    resolvedExamCategory = "Regular";
   } else {
-    resolvedExamCategory = catCandidate || "Regular";
-  }
-
-  const pat = e?.examPattern ?? e?.pattern ?? "";
-  const isPatObjective = pat && pat !== "Regular" && pat !== "Regular Academic Pattern" && pat !== "None";
-  if (isPatObjective || (e?.examName && String(e.examName).toLowerCase().includes("objective")) || (e?.name && String(e.name).toLowerCase().includes("objective"))) {
-    resolvedExamCategory = "Objective";
+    resolvedExamCategory = "Regular";
   }
 
   const rawGroupPatterns = e?.selectedGroupPatterns || {};
@@ -3043,11 +3302,12 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
     academicYearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
     academicYear: e?.academicYear ?? e?.academicYearName ?? e?.yearName ?? e?.AcademicYear ?? e?.AcademicYearName ?? "",
     academicYearName: e?.academicYearName ?? e?.academicYear ?? e?.yearName ?? e?.AcademicYearName ?? e?.AcademicYear ?? "",
-    academicLevelIds: levelIds,
-    levelIds,
-    levelId: levelIds[0] || "",
-    groupIds,
-    groupId: groupIds[0] || "",
+    academicLevelIds: levelIds.length > 0 ? levelIds : (primaryLevelId ? [primaryLevelId] : []),
+    levelIds: levelIds.length > 0 ? levelIds : (primaryLevelId ? [primaryLevelId] : []),
+    academicLevelId: primaryLevelId,
+    levelId: primaryLevelId,
+    groupIds: groupIds.length > 0 ? groupIds : (primaryGroupId ? [primaryGroupId] : []),
+    groupId: primaryGroupId,
     programIds: isAllPrograms ? [] : programIds,
     programId: isAllPrograms ? "" : (programIds[0] || ""),
     groupName: e?.groupName || e?.group?.name || "",
@@ -3079,13 +3339,13 @@ const normalizeExamRecord = (e, roomsList = [], facultyList = [], programsList =
 };
 
 export const pageConfig = {
-  title: "Examination",
+  title: "Examination Management",
   subtitle: "Configure Intermediate college examinations and build conflict-free schedules.",
   breadcrumb: ["Examinations"],
 };
 
 // ---------- MAIN EXAMINATION PAGE COMPONENT ----------
-export default function ExaminationPage({ initialTab = "exams", initialExamId = "", initialView = "" }) {
+export default function ExaminationPage({ initialTab = "exams", initialExamId = "", initialView = "" } = {}) {
   const {
     campuses: contextCampuses = [],
     activeCampuses = [],
@@ -3111,6 +3371,8 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   const [academicYears, setAcademicYears] = useState([]);
   const [academicLevels, setAcademicLevels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsReady, setGroupsReady] = useState(false);
   const [programs, setPrograms] = useState([]);
   const [masterPatterns, setMasterPatterns] = useState([]);
   const [examTypes, setExamTypes] = useState([]);
@@ -3148,101 +3410,130 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   examsRef.current = exams;
 
   // Clean React View State (No Window Router Hacks)
-  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeAction = searchParams.get("action") || (initialView === "create" ? "create" : "");
+  const queryTab = (routeAction === "create" ? "create" : routeAction === "edit" ? "edit" : searchParams.get("tab")) || 
+    (initialTab === "schedule" || location.pathname.endsWith("/exam-timetable") ? "schedule" : "") ||
+    (initialView === "create" || location.pathname.endsWith("/create") || location.pathname.endsWith("/add") ? "create" : "exams");
+  const requestedEditId = searchParams.get("examId") || initialExamId || location.state?.examId || "";
+  const editingExamId = queryTab === "edit" && /^[1-9]\d*$/.test(requestedEditId) ? requestedEditId : null;
+  const viewMode = queryTab === "create" ? "add" : editingExamId ? "edit" : "list";
+  const activeTab = queryTab === "schedule" ? "schedule" : "exams";
+  const editingIdRef = useRef(editingExamId);
+  useEffect(() => { editingIdRef.current = editingExamId; }, [editingExamId]);
+  const setEditingExamId = useCallback((id) => { editingIdRef.current = id; }, []);
+  const pendingNavigation = useRef(null);
+  const updateExamNavigation = useCallback((update) => {
+    const pending = pendingNavigation.current;
+    const next = pending || new URLSearchParams(searchParams);
+    update(next);
+    pendingNavigation.current = next;
+    if (pending) return;
+    // Existing workflows set mode and tab together; create one history entry.
+    queueMicrotask(() => {
+      const target = pendingNavigation.current;
+      pendingNavigation.current = null;
+      if (target && target.toString() !== searchParams.toString()) setSearchParams(target);
+    });
+  }, [searchParams, setSearchParams]);
+  const setActiveTab = useCallback((tab) => updateExamNavigation((next) => {
+    if (tab === "schedule") next.set("tab", "schedule");
+    else if (location.pathname.endsWith("/add")) next.set("tab", "exams");
+    else next.delete("tab");
+    next.delete("examId"); next.delete("action"); next.delete("scheduleId");
+  }), [location.pathname, updateExamNavigation]);
+  const setViewMode = useCallback((mode) => updateExamNavigation((next) => {
+    if (mode === "add") { next.set("tab", "examinations"); next.set("action", "create"); next.delete("examId"); }
+    else if (mode === "edit" && editingIdRef.current) { next.set("tab", "examinations"); next.set("action", "edit"); next.set("examId", String(editingIdRef.current)); }
+    else if (mode === "schedule") { next.set("tab", "schedule"); next.delete("action"); if (editingIdRef.current) next.set("examId", String(editingIdRef.current)); }
+    else if (mode === "list") {
+      next.delete("action"); next.delete("scheduleId");
+      if (["create", "edit"].includes(next.get("tab")) || location.pathname.endsWith("/add")) next.set("tab", "exams");
+      next.delete("examId");
+    }
+  }), [location.pathname, updateExamNavigation]);
 
-  const savedExamState = useMemo(() => getModuleState("examinations", {}), []);
-
-  const [viewMode, setViewModeAction] = useExamCellAction({
-    moduleKey: "examinations",
-    paramKey: "view",
-    defaultAction: "list",
-    initialProp: initialView,
-    aliases: {
-      "create": "create",
-      "add": "create",
-      "edit": "edit",
-      "list": "list",
-    },
-    pathMap: {
-      "create": "/exam-cell-dashboard/exams/create",
-    },
+  const navigateExamAction = (action, record, scheduleId) => updateExamNavigation((next) => {
+    if (action) next.set("action", action); else next.delete("action");
+    if (record) next.set("examId", String(record.id ?? record.examId));
+    else if (activeTab !== "schedule") next.delete("examId");
+    if (scheduleId) next.set("scheduleId", String(scheduleId)); else { next.delete("scheduleId"); next.delete("scheduleIds"); }
   });
-
-  const [editingExamId, setEditingExamIdState] = useState(() => {
-    if (typeof window !== "undefined") {
-      const p = new URLSearchParams(window.location.search);
-      if (p.get("id")) return p.get("id");
-    }
-    return savedExamState?.editingExamId || null;
-  });
-
-  const setEditingExamId = useCallback((id) => {
-    setEditingExamIdState(id);
-    saveModuleState("examinations", { editingExamId: id });
-    if (typeof window !== "undefined") {
-      try {
-        const url = new URL(window.location.href);
-        if (id) {
-          url.searchParams.set("id", String(id));
-        } else {
-          url.searchParams.delete("id");
-        }
-        window.history.replaceState(window.history.state, "", url.toString());
-      } catch {}
-    }
-  }, []);
-
-  const setViewMode = useCallback((mode) => {
-    const norm = (mode === "add" || mode === "create") ? "create" : mode;
-    setViewModeAction(norm);
-    if (norm !== "edit") {
-      setEditingExamId(null);
-    }
-  }, [setViewModeAction, setEditingExamId]);
-
-  const [activeTab, setActiveTab] = useExamCellTab({
-    moduleKey: "examinations",
-    defaultTab: "exams",
-    initialProp: initialTab,
-    tabAliases: {
-      "exams": "exams",
-      "examinations": "exams",
-      "schedule": "schedule",
-      "timetable": "schedule",
-      "exam-timetable": "schedule",
-    },
-  });
-
-  const examIdParam = searchParams.get("examId") || location.state?.examId || initialExamId || savedExamState?.examId || "";
-  const [examId, setExamId] = useState(examIdParam);
-
-  useEffect(() => {
-    const currentExamId = searchParams.get("examId");
-    if (currentExamId && currentExamId !== examId) {
-      setExamId(currentExamId);
-    }
-  }, [searchParams, examId]);
-
-  const handleSelectScheduleTab = () => {
-    setActiveTab("schedule");
+  const [localExamId, setExamIdState] = useState("");
+  const examId = activeTab === "schedule" ? requestedEditId : localExamId;
+  const setExamId = (id) => {
+    setExamIdState(id);
+    if (activeTab === "schedule") updateExamNavigation((next) => {
+      if (id) next.set("examId", String(id)); else next.delete("examId");
+      next.delete("action"); next.delete("scheduleId"); next.delete("scheduleIds");
+    });
   };
-
-  const handleSelectExamsTab = () => {
-    setActiveTab("exams");
+  const restorationRef = useRef("");
+  const examActionLoaders = useRef({});
+  const [detail, setDetailState] = useState(null);
+  const setDetail = (value) => {
+    setDetailState(value);
+    if (!value && routeAction === "view") navigateExamAction(null);
   };
-  const [detail, setDetail] = useState(null);
-  const [globalPreviewModal, setGlobalPreviewModal] = useState(null);
-  const [editingExam, setEditingExam] = useState(null);
+  const [globalPreviewModal, setGlobalPreviewModalState] = useState(null);
+  const setGlobalPreviewModal = (value) => {
+    setGlobalPreviewModalState(value);
+    if (!value && routeAction === "preview") navigateExamAction(null);
+  };
+  const [editingExam, setEditingExamState] = useState(null);
+  const setEditingExam = (value) => {
+    if (value) { navigateExamAction("period", value); return; }
+    setEditingExamState(null);
+    if (routeAction === "period") navigateExamAction(null);
+  };
   const [toast, setToast] = useState({ message: "", type: "success" });
-  const [remove, setRemove] = useState(null);
-  const [removeSchedule, setRemoveSchedule] = useState(null);
-  const [cancelExamTarget, setCancelExamTarget] = useState(null);
+  const [remove, setRemoveState] = useState(null);
+  const setRemove = (value) => {
+    if (value) { navigateExamAction("delete", value, null); return; }
+    setRemoveState(value);
+    if (!value && routeAction === "delete") navigateExamAction(null);
+  };
+  const [removeSchedule, setRemoveScheduleState] = useState(null);
+  const setRemoveSchedule = (value) => {
+    if (value) { navigateExamAction("delete-schedule", exams.find((exam) => String(exam.id) === String(value.examId)), value.id); updateExamNavigation((next) => next.set("scheduleIds", ensureArray(value.allScheduleIds || value.scheduleIds || [value.id]).join(","))); return; }
+    setRemoveScheduleState(value);
+    if (!value && routeAction === "delete-schedule") navigateExamAction(null);
+  };
+  const [cancelExamTarget, setCancelExamTargetState] = useState(null);
+  const setCancelExamTarget = (value) => {
+    if (value) { navigateExamAction("cancel", value, null); return; }
+    setCancelExamTargetState(value);
+    if (!value && routeAction === "cancel") navigateExamAction(null);
+  };
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteScheduleLoading, setDeleteScheduleLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditingState] = useState(null);
+  const setEditing = (id) => {
+    setEditingState(id);
+    if (!id && routeAction === "edit-schedule") navigateExamAction(null);
+  };
+
+  const [moreMenu, setMoreMenu] = useState(null);
+  const moreMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!moreMenu) return;
+    const handleOutside = (event) => {
+      if (!moreMenuRef.current || !moreMenuRef.current.contains(event.target)) {
+        setMoreMenu(null);
+      }
+    };
+    const handleScroll = () => setMoreMenu(null);
+    window.addEventListener("mousedown", handleOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", handleOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [moreMenu]);
 
   const [sch, setSch] = useState({
     groupId: "",
@@ -3252,42 +3543,16 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     startTime: "09:00",
     endTime: "12:00",
     totalMarks: "100",
-    passingMarks: "35",
-    passPercentage: "35",
+    passingMarks: "28",
+    passPercentage: "28",
     hallAssignments: [],
     mode: "Written",
   });
   const [errors, setErrors] = useState({});
 
-  const [filters, setFilters] = useState(() => savedExamState?.filters || { groupId: "", programId: "", levelId: "" });
-
-  const initialLevelFilterCheckedRef = useRef(false);
-  useEffect(() => {
-    if (exams.length > 0 && !initialLevelFilterCheckedRef.current) {
-      initialLevelFilterCheckedRef.current = true;
-      if (filters.levelId) {
-        const normFilterLevel = normalizeId(filters.levelId);
-        const matchingExamsCount = exams.filter((e) => {
-          const ids = ensureArray(e.levelIds || e.academicLevelIds || [e.levelId || e.academicLevelId]).filter(Boolean).map(normalizeId);
-          return ids.includes(normFilterLevel);
-        }).length;
-        if (matchingExamsCount === 0) {
-          setFilters((prev) => ({ ...prev, levelId: "" }));
-        }
-      }
-    }
-  }, [exams, filters.levelId]);
-  const [search, setSearch] = useState(() => savedExamState?.search || "");
-  const [page, setPage] = useState(() => savedExamState?.page || 1);
-
-  useEffect(() => {
-    saveModuleState("examinations", {
-      examId,
-      search,
-      page,
-      filters,
-    });
-  }, [examId, search, page, filters]);
+  const [filters, setFilters] = useState({ groupId: "", programId: "", levelId: "" });
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -3542,7 +3807,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
       });
 
       // Graceful fallback: If strict Board/Year filtering excludes all examinations but normalized has records for this campus (or overall),
-      // fallback to campus examinations so Exam Cell does not show a blank list due to navbar mismatch
+      // fallback to campus examinations so UI does not show a blank list due to navbar mismatch
       let finalExams = filteredExams;
       if (filteredExams.length === 0 && normalized.length > 0) {
         const campusFallback = normalized.filter((exam) => {
@@ -3558,8 +3823,16 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
         return finalExams.map((exam) => {
           const existing = prevMap.get(normalizeId(exam.id));
           if (existing) {
+            const isObj =
+              exam.examCategory === "Objective" ||
+              existing.examCategory === "Objective" ||
+              isCombinedExamination(exam) ||
+              isCombinedExamination(existing);
             return {
               ...exam,
+              examCategory: isObj ? "Objective" : exam.examCategory,
+              category: isObj ? "Objective" : exam.category,
+              scheduleMode: isObj ? "PATTERN_WISE" : exam.scheduleMode,
               selectedSubjectIds: (exam.selectedSubjectIds && exam.selectedSubjectIds.length > 0)
                 ? exam.selectedSubjectIds
                 : (!exam.needsSubjectSelection ? [] : (existing.selectedSubjectIds || [])),
@@ -3670,16 +3943,49 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
   const fetchStudentsList = useCallback(async (signal) => {
     try {
-      const [studentsRes, admissionsRes, activeStudentsRes] = await Promise.allSettled([
-        apiClient.get("/api/v1/students", { signal }),
-        apiClient.get("/api/v1/student-admissions", { signal }),
-        apiClient.get("/api/v1/students/active", { signal }),
-      ]);
-      if (signal?.aborted) return [];
+      const scopeParams = {
+        campusId: effectiveCampusId ? Number(effectiveCampusId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+      };
 
-      const rawStudents = studentsRes.status === "fulfilled" ? unwrap(studentsRes.value) : [];
-      const rawAdmissions = admissionsRes.status === "fulfilled" ? unwrap(admissionsRes.value) : [];
-      const rawActive = activeStudentsRes.status === "fulfilled" ? unwrap(activeStudentsRes.value) : [];
+      // Fetch all students across pages with academic scope
+      const allStudents = [];
+      const fetchPageSize = 100;
+      for (let pageNumber = 1; ; pageNumber += 1) {
+        if (signal?.aborted) return [];
+        try {
+          const res = await apiClient.get("/api/v1/students", {
+            params: { ...scopeParams, pageNumber, pageSize: fetchPageSize },
+            signal,
+            skipGlobalLoader: true,
+          });
+          const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+          const batch = Array.isArray(payload)
+            ? payload
+            : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+          allStudents.push(...batch);
+          const totalCount = payload.totalCount ?? payload.TotalCount;
+          if (!batch.length || (totalCount != null ? allStudents.length >= Number(totalCount) : batch.length < fetchPageSize)) break;
+          if (pageNumber >= 15) break; // Safeguard
+        } catch (fetchErr) {
+          console.warn("Notice: could not query page of students:", fetchErr);
+          break;
+        }
+      }
+
+      // Fetch admissions matching the academic scope
+      let rawAdmissions = [];
+      try {
+        const admissionsRes = await apiClient.get("/api/v1/student-admissions", {
+          params: scopeParams,
+          signal,
+          skipGlobalLoader: true,
+        });
+        rawAdmissions = unwrap(admissionsRes) || [];
+      } catch (admErr) {
+        console.warn("Notice: could not query student admissions:", admErr);
+      }
 
       const admissionsByStudentId = new Map();
       const admissionsByNumber = new Map();
@@ -3687,24 +3993,21 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
       ensureArray(rawAdmissions).forEach((adm) => {
         const sId = normalizeId(adm.studentId ?? adm.id);
-        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
+        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? adm.AdmissionNo ?? "").trim();
         const admName = String(adm.studentName ?? adm.fullName ?? adm.name ?? "").trim().toLowerCase();
         if (sId) admissionsByStudentId.set(sId, adm);
         if (admNo) admissionsByNumber.set(admNo, adm);
         if (admName) admissionsByName.set(admName, adm);
       });
 
-      const combinedRaw = [...ensureArray(rawStudents), ...ensureArray(rawActive)];
-      if (combinedRaw.length === 0 && rawAdmissions.length > 0) {
-        combinedRaw.push(...ensureArray(rawAdmissions));
-      }
+      const combinedRaw = allStudents.length > 0 ? allStudents : ensureArray(rawAdmissions);
 
       const seenIds = new Set();
       const normalizedStudents = [];
 
       for (const s of combinedRaw) {
         const id = normalizeId(s.studentId ?? s.id ?? s._id);
-        const admNo = String(s.admissionNo ?? s.admissionNumber ?? "").trim();
+        const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? "").trim();
         const sName = String(s.studentName ?? s.fullName ?? s.name ?? "Student").trim();
         const dedupKey = id || admNo || sName.toLowerCase();
         if (!dedupKey || seenIds.has(dedupKey)) continue;
@@ -3723,6 +4026,8 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
         const rawCampus = s.campusId ?? s.CampusId ?? s.campus?.id ?? s.campus?.campusId ?? adm.campusId ?? adm.CampusId;
         const sCampusId = normalizeId(rawCampus);
 
+        const admissionDate = s.admissionDate || s.dateOfAdmission || adm.admissionDate || adm.AdmissionDate || s.allocatedDate || null;
+
         normalizedStudents.push({
           id: id || admNo || `student-${dedupKey}`,
           studentId: id || admNo,
@@ -3737,48 +4042,18 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           programId,
           programName,
           status,
+          admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
           isActive: s.isActive !== false && normalizeStatus(status) !== "INACTIVE" && normalizeStatus(status) !== "SUSPENDED",
-        });
-      }
-
-      // If admissions had records and students list was completely empty, add them as fallback
-      if (combinedRaw.length === 0) {
-        ensureArray(rawAdmissions).forEach((adm) => {
-          const id = normalizeId(adm.studentId ?? adm.id);
-          const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
-          const admFullName = `${adm.firstName ?? ""} ${adm.lastName ?? ""}`.trim();
-          const sName = String(adm.studentName ?? adm.fullName ?? adm.name ?? (admFullName || "Student")).trim();
-          const dedupKey = id || admNo || sName.toLowerCase();
-          if (dedupKey && !seenIds.has(dedupKey)) {
-            seenIds.add(dedupKey);
-            const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
-            normalizedStudents.push({
-              id: id || admNo || `adm-${dedupKey}`,
-              studentId: id || admNo,
-              campusId: admCampusId,
-              name: sName,
-              admissionNo: admNo,
-              rollNo: adm.rollNo ?? adm.rollNumber ?? "",
-              academicLevelId: normalizeId(adm.academicLevelId ?? adm.levelId),
-              academicYearId: normalizeId(adm.academicYearId),
-              groupId: normalizeId(adm.groupId ?? adm.group?.id),
-              groupName: adm.groupName ?? "",
-              programId: normalizeId(adm.programId ?? adm.programmeId ?? adm.program?.id),
-              programName: adm.programName ?? adm.programmeName ?? "",
-              status: adm.status ?? "Active",
-              isActive: adm.isActive !== false && normalizeStatus(adm.status) !== "INACTIVE",
-            });
-          }
         });
       }
 
       setStudents(normalizedStudents);
       return normalizedStudents;
     } catch (e) {
-      console.warn("fetchStudentsList encountered an issue:", e);
+      console.warn("fetchStudentsList error:", e);
       return [];
     }
-  }, []);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId]);
 
   // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
   const fetchRoomsList = useCallback(async (filters = {}, signal, targetCampusId = effectiveCampusId) => {
@@ -3886,6 +4161,98 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     }
   }, [effectiveCampusId]);
 
+    useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    if (!selectedBoardId) {
+      setGroupsReady(true);
+      return;
+    }
+    setGroupsLoading(true);
+
+    const loadMainGroups = async () => {
+      try {
+        let rows = [];
+        try {
+          const res = await apiClient.get(`/api/v1/groups/board/${encodeURIComponent(selectedBoardId)}`, {
+            params: {
+              isActive: true,
+            },
+            signal: controller.signal,
+          });
+          const raw = unwrap(res);
+          if (Array.isArray(raw) && raw.length > 0) rows = raw;
+        } catch {
+          // fallback to /api/v1/groups
+        }
+
+        if (!rows.length) {
+          try {
+            const res = await apiClient.get("/api/v1/groups", {
+              params: { boardId: selectedBoardId, isActive: true },
+              signal: controller.signal,
+            });
+            const raw = unwrap(res);
+            if (Array.isArray(raw) && raw.length > 0) rows = raw;
+          } catch {
+            // fallback
+          }
+        }
+
+        if (!active) return;
+
+        const loadedGroups = rows.map((group) => {
+          const gid = normalizeId(group.groupId ?? group.id);
+          const name = group.groupName ?? group.name ?? `Group ${gid}`;
+          const code = group.groupCode ?? group.code ?? name;
+          const progs = ensureArray(group.programs).map((program) => ({
+            ...program,
+            id: normalizeId(program.programId ?? program.id),
+            name: program.programName ?? program.name ?? "",
+            code: program.programCode ?? program.code ?? program.programName ?? "",
+            candidateStrength: Number(program.candidateStrength ?? program.strength ?? program.capacity) || 0,
+            capacity: Number(program.capacity ?? program.candidateStrength) || 0,
+            objectivePatternCodes: program.objectivePatternCodes || [],
+            groupId: gid,
+            isActive: program.isActive !== false,
+          }));
+          return {
+            ...group,
+            id: gid,
+            groupId: gid,
+            name,
+            groupName: name,
+            code,
+            groupCode: code,
+            boardId: normalizeId(group.boardId),
+            programs: progs,
+            isActive: group.isActive !== false,
+          };
+        }).filter((g) => g.id);
+
+        setGroups(loadedGroups);
+        setGroupsReady(true);
+        setPrograms((current) => [...new Map([...current, ...loadedGroups.flatMap((group) => group.programs)].map((program) => [program.groupId + "_" + program.id, program])).values()]);
+        setFilters((current) => current.groupId && !loadedGroups.some((group) => group.id === normalizeId(current.groupId))
+          ? { ...current, groupId: "", programId: "" } : current);
+      } catch (error) {
+        if (active) showToast(getApiErrorMessage(error) || "Unable to load groups.", "error");
+      } finally {
+        if (active) setGroupsLoading(false);
+      }
+    };
+
+    loadMainGroups();
+    return () => { active = false; controller.abort(); };
+  }, [selectedBoardId, selectedAcademicYearId, effectiveCampusId, showToast]);
+
+  const filterGroups = useMemo(() => groups.filter((group) => !filters.levelId || normalizeId(group.academicLevelId) === normalizeId(filters.levelId)), [groups, filters.levelId]);
+  useEffect(() => {
+    if (!groupsReady) return;
+    setFilters((current) => current.groupId && !filterGroups.some((group) => group.id === normalizeId(current.groupId))
+      ? { ...current, groupId: "", programId: "" } : current);
+  }, [groupsReady, filterGroups]);
+
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
     let isMounted = true;
@@ -3911,7 +4278,10 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             apiClient.get("/api/v1/examinations/types", { signal }),
             apiClient.get("/api/v1/staff/dropdown", { signal, params: { staffType: "Teaching" } }).catch(() => apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching", pageSize: 1000 } })),
             apiClient.get("/api/v1/academic-levels", { signal }),
-            apiClient.get("/api/v1/groups", { signal }),
+            apiClient.get("/api/v1/groups", { signal }).catch((err) => {
+              if (signal?.aborted) throw err;
+              return apiClient.get("/api/v1/groups/dropdown", { signal }).catch(() => null);
+            }),
             apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
             apiClient.get("/api/v1/programs", { signal }),
             apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
@@ -4010,8 +4380,8 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           );
         }
 
-        if (groupsRes.status === "fulfilled") {
-          const rawGroups = unwrap(groupsRes.value);
+        if (groupsRes.status === "fulfilled" && groupsRes.value) {
+          const rawGroups = ensureArray(unwrap(groupsRes.value));
           const mappedGroups = rawGroups.map((g) => {
             const gid = normalizeId(g.groupId ?? g.id);
             const progs = ensureArray(g.programs).map((p) => ({
@@ -4039,8 +4409,9 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           if (extractedPrograms.length > 0) {
             setPrograms(extractedPrograms);
           }
+        }
 
-          try {
+        try {
             if (programsRes.status === "rejected") throw programsRes.reason;
             const progsRes = programsRes.value;
             const rawProgs = unwrap(progsRes);
@@ -4075,7 +4446,6 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
               });
             }
           } catch (error) { if (isMounted) showToast(getApiErrorMessage(error) || "Failed to load programs.", "error"); }
-        }
 
         if (subjectsRes?.status === "fulfilled" && subjectsRes.value) {
           const rawSubjects = unwrap(subjectsRes.value);
@@ -4120,14 +4490,12 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     prevFetchParamsRef.current = { campusId: campusKey, boardId: boardKey, yearId: yearKey };
     fetchedScheduleExamIdsRef.current.clear();
 
-    if (!initialExamId) {
-      setExamId("");
-    }
-    setDetail(null);
-    setEditingExam(null);
+    setExamIdState("");
+    setDetailState(null);
+    setEditingExamState(null);
     loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
     fetchRoomsList({ campusId: effectiveCampusId }, undefined, effectiveCampusId);
-  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId, loadExaminations, fetchRoomsList, initialExamId]);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId, loadExaminations, fetchRoomsList]);
 
   // Lazy-load active exam schedules for collision detection when Exam Schedule tab is active
   useEffect(() => {
@@ -4135,21 +4503,6 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
       loadActiveExamSchedules(effectiveCampusId, exams);
     }
   }, [activeTab, effectiveCampusId, exams, loadActiveExamSchedules]);
-
-  // Auto-select first eligible examination if none is selected in Schedule view
-  useEffect(() => {
-    if (activeTab === "schedule" && exams.length > 0) {
-      const eligible = exams.filter((ex) =>
-        ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED"].includes(normalizeStatus(ex.status))
-      );
-      if (eligible.length > 0) {
-        const currentExists = eligible.some((e) => normalizeId(e.id) === normalizeId(examId));
-        if (!examId || !currentExists) {
-          setExamId(String(eligible[0].id));
-        }
-      }
-    }
-  }, [activeTab, exams, examId]);
 
   const query = search.trim().toLowerCase();
 
@@ -4220,10 +4573,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     if (query) {
       const matchesSearch = [
         exam.code,
-        exam.examCode,
         exam.name,
-        exam.examName,
-        exam.boardName,
         codeOf(boards, exam.boardId),
         getGroupNames(exam, groups),
         getLevelNames(exam, academicLevels),
@@ -4242,6 +4592,23 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   const rangeStart = list.length ? (page - 1) * PAGE_SIZE + 1 : 0;
   const rangeEnd = Math.min(page * PAGE_SIZE, list.length);
 
+  const initialLevelFilterCheckedRef = useRef(false);
+  useEffect(() => {
+    if (exams.length > 0 && !initialLevelFilterCheckedRef.current) {
+      initialLevelFilterCheckedRef.current = true;
+      if (filters.levelId) {
+        const normFilterLevel = normalizeId(filters.levelId);
+        const matchingExamsCount = exams.filter((e) => {
+          const ids = ensureArray(e.levelIds || e.academicLevelIds || [e.levelId || e.academicLevelId]).filter(Boolean).map(normalizeId);
+          return ids.includes(normFilterLevel);
+        }).length;
+        if (matchingExamsCount === 0) {
+          setFilters((prev) => ({ ...prev, levelId: "" }));
+        }
+      }
+    }
+  }, [exams, filters.levelId]);
+
   useEffect(() => setPage(1), [filters, search]);
 
   const changeFilter = (n, v) => {
@@ -4252,23 +4619,19 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     }));
   };
 
-  const handleOpenDetails = async (exam) => {
+  const handleOpenDetails = async (exam, restoring = false) => {
+    if (!restoring) { navigateExamAction("view", exam); return; }
+    const routeKey = restorationRef.current;
     try {
-      const [examRes, schedRes] = await Promise.all([
-        apiClient.get(`/api/v1/examinations/${exam.id}`).catch(() => null),
-        apiClient.get(`/api/v1/examinations/${exam.id}/schedules`).catch(() => null),
-      ]);
-      const fetchedExam = examRes ? (unwrap(examRes) || exam) : exam;
-      const detailedExam = { ...exam, ...fetchedExam };
-      const fallbackGid = detailedExam.groupIds?.[0] || detailedExam.groupId || groups[0]?.id;
-      const rawScheds = schedRes ? unwrap(schedRes) : [];
-      const schedsToUse = rawScheds.length > 0 ? rawScheds : (detailedExam.schedules || []);
-      const entries = schedsToUse.map((entry) => ({
-        ...normalizeScheduleRecord(entry, fallbackGid, detailedExam, groups, eligibleSubjects, rooms, faculty, programs, students),
+      const response = await apiClient.get("/api/v1/examinations/" + exam.id + "/schedules");
+      const fallbackGid = exam.groupIds?.[0] || exam.groupId || groups[0]?.id;
+      const entries = unwrap(response).map((entry) => ({
+        ...normalizeScheduleRecord(entry, fallbackGid, exam, groups, eligibleSubjects, rooms, faculty, programs, students),
         examId: exam.id,
       }));
+      if (restorationRef.current !== routeKey) return;
       setSchedules((previous) => [...previous.filter((entry) => entry.examId !== exam.id), ...entries]);
-      setDetail({ exam: detailedExam, schedules: entries });
+      if (restorationRef.current === routeKey) setDetailState({ exam, schedules: entries });
     } catch (error) {
       showToast(getApiErrorMessage(error) || "Failed to load examination details.", "error");
     }
@@ -4307,172 +4670,139 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     setActiveTab("exams");
     setEditing(null);
     setErrors({});
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("tab");
-      next.delete("examId");
-      return next;
-    }, { replace: true });
-    if (location.pathname === "/exam-cell-dashboard/exam-timetable") {
-      navigate("/exam-cell-dashboard/exams", { replace: true });
-    }
   };
 
   const handleExportExaminationList = () => {
-    if (!list.length) {
-      showToast("No examinations found to export.", "warning");
-      return;
-    }
-
-    const exportData = list.map((e) => ({
-      "Exam Code": e.code || "",
-      "Exam Name": e.name || "",
-      "Academic Level(s)": getLevelNames(e, academicLevels),
-      "Group(s)": getGroupNames(e, groups),
-      "Program(s)": getProgramNames(e, programs),
-      "Exam Category": e.examCategory || "Regular",
-      "Exam Pattern(s)": e.examPattern || "Standard Pattern",
-      "Start Date": d(e.startDate),
-      "End Date": d(e.endDate),
-      "Status": normalizeStatus(e.status) || "DRAFT",
-      "Total Marks": e.totalMarks || "—",
-      "Pass Percentage": e.passPercentage ? `${e.passPercentage}%` : "—",
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    ws["!cols"] = [
-      { wch: 16 },
-      { wch: 28 },
-      { wch: 20 },
-      { wch: 22 },
-      { wch: 22 },
-      { wch: 16 },
-      { wch: 20 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 12 },
-      { wch: 16 },
-    ];
-    try {
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Examinations");
-      const dateStr = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `Examinations_List_${dateStr}.xlsx`);
-      showToast("Examination list exported successfully.", "success");
-    } catch (exportErr) {
-      console.error("Export Examination List error:", exportErr);
-      showToast("Failed to export examination list.", "error");
-    }
+    printSchedule();
   };
 
-  const printSchedule = async (targetExam = null) => {
-    const targetExams = targetExam
-      ? [targetExam]
-      : exams.filter((item) => normalizeStatus(item.status) === "SCHEDULED");
-    const filename = targetExam ? `${targetExam.name}_Schedule` : "Examination_Schedules";
+  const printSchedule = async (targetExam = null, restoring = false) => {
+    if (!restoring) { navigateExamAction("preview", targetExam); return; }
+    const previewRouteKey = restorationRef.current;
+    let targetExams = [];
+    if (targetExam) {
+      targetExams = [targetExam];
+    } else {
+      const activeInList = (list.length > 0 ? list : exams).filter(
+        (item) => normalizeStatus(item.status) !== "CANCELLED"
+      );
+      const scheduledInList = activeInList.filter(
+        (item) => normalizeStatus(item.status) === "SCHEDULED"
+      );
+      targetExams = scheduledInList.length > 0 ? scheduledInList : activeInList;
+    }
 
     if (!targetExams.length) {
-      showToast("No scheduled examinations are available to export.", "warning");
+      showToast("No examinations are available to export.", "warning");
       return;
     }
 
-    if (!targetExam) {
-      // Global schedule export: Open preview modal styled like reference; only download when user clicks modal download button
+    // Open preview modal styled like reference template with Download Excel and Download PDF buttons
+    setGlobalPreviewModal({
+      targetExams,
+      schedules: [],
+      loading: true,
+    });
+
+    try {
+      const results = await Promise.all(
+        targetExams.map(async (e) => {
+          if (Array.isArray(e.schedules) && e.schedules.length > 0) {
+            return e.schedules.map((entry) => ({
+              ...normalizeScheduleRecord(
+                entry,
+                e.groupIds?.[0] || e.groupId || groups[0]?.id,
+                e,
+                groups,
+                eligibleSubjects,
+                rooms,
+                faculty,
+                programs,
+                students
+              ),
+              examId: e.id,
+              examinationId: e.id,
+              examCode: e.code,
+              examName: e.name,
+              examCategory: e.examCategory,
+              startDate: e.startDate,
+              endDate: e.endDate,
+              programId: entry.programId || e.programIds?.[0] || e.programId,
+              programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
+              groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
+              groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
+            }));
+          }
+          const inState = schedules.filter(
+            (s) => normalizeId(s.examId ?? s.examinationId) === normalizeId(e.id)
+          );
+          if (inState.length > 0) {
+            return inState;
+          }
+          try {
+            let schedRes;
+            try {
+              schedRes = await apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
+                params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
+                headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+              });
+            } catch {
+              schedRes = await apiClient.get(`/api/v1/examinations/${e.id}/schedules`);
+            }
+            return unwrap(schedRes).map((entry) => ({
+              ...normalizeScheduleRecord(
+                entry,
+                e.groupIds?.[0] || e.groupId || groups[0]?.id,
+                e,
+                groups,
+                eligibleSubjects,
+                rooms,
+                faculty,
+                programs,
+                students
+              ),
+              examId: e.id,
+              examinationId: e.id,
+              examCode: e.code,
+              examName: e.name,
+              examCategory: e.examCategory,
+              startDate: e.startDate,
+              endDate: e.endDate,
+              programId: entry.programId || e.programIds?.[0] || e.programId,
+              programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
+              groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
+              groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
+            }));
+          } catch {
+            return [];
+          }
+        })
+      );
+
+      if (restorationRef.current !== previewRouteKey) return;
+      const currentSchedules = results.flat();
+
+      if (currentSchedules.length > 0) {
+        setSchedules((prev) => [
+          ...prev.filter(
+            (entry) =>
+              !targetExams.some(
+                (te) => normalizeId(te.id) === normalizeId(entry.examId ?? entry.examinationId)
+              )
+          ),
+          ...currentSchedules,
+        ]);
+      }
+
       setGlobalPreviewModal({
         targetExams,
-        schedules: [],
-        loading: true,
+        schedules: currentSchedules,
+        loading: false,
       });
-
-      try {
-        const results = await Promise.all(
-          targetExams.map((e) =>
-            apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
-              params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
-              headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-            }).then((res) =>
-              unwrap(res).map((entry) => ({
-                ...normalizeScheduleRecord(
-                  entry,
-                  e.groupIds?.[0] || e.groupId || groups[0]?.id,
-                  e,
-                  groups,
-                  eligibleSubjects,
-                  rooms,
-                  faculty,
-                  programs,
-                  students
-                ),
-                examId: e.id,
-                examinationId: e.id,
-                examCode: e.code,
-                examName: e.name,
-                examCategory: e.examCategory,
-                startDate: e.startDate,
-                endDate: e.endDate,
-                programId: entry.programId || e.programIds?.[0] || e.programId,
-                programName: entry.programName || e.programName || resolveProgramText(entry, e, programs),
-                groupId: entry.groupId || e.groupIds?.[0] || e.groupId,
-                groupName: entry.groupName || e.groupName || resolveGroupText(entry, e, groups),
-              }))
-            ).catch(() => [])
-          )
-        );
-
-        const currentSchedules = results.flat();
-
-        setGlobalPreviewModal({
-          targetExams,
-          schedules: currentSchedules,
-          loading: false,
-        });
-      } catch (err) {
-        setGlobalPreviewModal(null);
-        showToast(getApiErrorMessage(err) || "Failed to load global schedules.", "error");
-      }
-      return;
-    }
-
-    // Single exam export flow
-    let currentSchedules = schedules.filter((s) => normalizeId(s.examId ?? s.examinationId) === normalizeId(targetExam.id));
-    if (currentSchedules.length === 0 && targetExam.id) {
-      try {
-        const schedRes = await apiClient.get(`/api/v1/examinations/${targetExam.id}/schedules`, {
-          params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
-          headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
-        });
-        currentSchedules = unwrap(schedRes).map((entry) => ({
-          ...normalizeScheduleRecord(
-            entry,
-            targetExam.groupIds?.[0] || targetExam.groupId || groups[0]?.id,
-            targetExam,
-            groups,
-            eligibleSubjects,
-            rooms,
-            faculty,
-            programs,
-            students
-          ),
-          examinationId: targetExam.id,
-          examCode: targetExam.code,
-          examName: targetExam.name,
-        }));
-      } catch (_) { /* Keep the existing fallback path. */ }
-    }
-
-    const ok = directExportScheduleExcel(
-      [targetExam],
-      currentSchedules,
-      groups,
-      filename,
-      programs,
-      academicYears.length > 0 ? academicYears : contextAcademicYears
-    );
-    if (!ok) {
-      showToast("No schedules are available to export for this examination.", "warning");
-    } else {
-      showToast("Schedule exported to Excel successfully.", "success");
+    } catch (err) {
+      if (restorationRef.current !== previewRouteKey) return;
+      setGlobalPreviewModal(null);
+      showToast(getApiErrorMessage(err) || "Failed to load examination schedules.", "error");
     }
   };
 
@@ -4480,7 +4810,6 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
   const handleSaveExamRecord = async (newRecord, proceedToSchedule = false) => {
     if (mutationRef.current) return;
     mutationRef.current = true;
-    let resolvedExamCode = "";
     try {
       if (editingExamId) {
         try {
@@ -4598,6 +4927,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           showToast(errMsg, "error");
         }
       } else {
+        let resolvedExamCode = "";
         try {
           const targetCampus = Number(effectiveCampusId) || 1;
 
@@ -4635,12 +4965,6 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           while (attempt < maxAttempts) {
             attempt++;
             try {
-              const validBoardId = Number(newRecord.boardId || selectedBoardId || selectedBoard?.id || 1);
-              const firstLevelId = Number((newRecord.levelIds || [])[0] || newRecord.levelId || 0);
-              const firstGroupId = Number((newRecord.groupIds || [])[0] || newRecord.groupId || 0);
-              const firstProgramId = Number((newRecord.programIds || [])[0] || newRecord.programId || 0);
-              const allSelectedSubjectIds = (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id);
-
               res = await apiClient.post("/api/v1/examinations", {
                 campusId: Number(effectiveCampusId) || 1,
                 examCode: resolvedExamCode,
@@ -4653,23 +4977,14 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                 exam_category: newRecord.examCategory,
                 categoryName: newRecord.examCategory,
                 rawCategory: newRecord.rawCategory || newRecord.examCategory,
-                customCategoryName: newRecord.customCategoryName || "",
-                boardId: validBoardId,
+                customCategoryName: newRecord.customCategoryName,
+                boardId: Number(newRecord.boardId) || newRecord.boardId,
                 academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 yearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
                 academicLevelIds: (newRecord.levelIds || []).map((id) => Number(id) || id),
-                academicLevelId: firstLevelId,
-                academicLevel: newRecord.levelName || "",
                 groupIds: (newRecord.groupIds || []).map((id) => Number(id) || id),
-                groupId: firstGroupId,
                 programIds: (newRecord.programIds || []).map((id) => Number(id) || id),
-                programId: firstProgramId,
-                assessmentTypeId: Number(newRecord.assessmentTypeId) || 0,
-                examType: newRecord.examType || "",
-                totalMarks: Number(newRecord.totalMarks) || 0,
-                passPercentage: Number(newRecord.passPercentage) || 0,
-                allocatedSubjectIds: allSelectedSubjectIds,
-                selectedSubjectIds: allSelectedSubjectIds,
+                selectedSubjectIds: (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id),
                 groupProgramSelections: Array.isArray(newRecord.groupProgramSelections)
                   ? newRecord.groupProgramSelections.map((item) => ({
                     groupId: Number(item?.groupId) || item?.groupId,
@@ -4678,15 +4993,15 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                       : [],
                   }))
                   : [],
-                examPattern: newRecord.examPattern || "",
-                pattern: newRecord.examPattern || "",
-                examPatternId: String(newRecord.examPatternId || ""),
+                examPattern: newRecord.examPattern,
+                pattern: newRecord.examPattern,
+                examType: newRecord.examType,
                 selectedGroupPatterns: newRecord.selectedGroupPatterns,
                 startDate: newRecord.startDate,
                 endDate: newRecord.endDate,
-                description: newRecord.description || "",
+                description: newRecord.description,
                 status: "DRAFT",
-                scheduleMode: newRecord.scheduleMode || "SUBJECT_WISE",
+                scheduleMode: newRecord.scheduleMode,
               });
               break;
             } catch (postErr) {
@@ -4749,6 +5064,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             setExamId(String(draftRecord.id));
             setViewMode("list");
             setActiveTab("schedule");
+            updateExamNavigation((next) => next.set("examId", String(draftRecord.id)));
           } else {
             showToast(
               "Examination created and saved as Draft. You can schedule it anytime from the Examinations list.",
@@ -4787,6 +5103,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                   setExamId(String(draftRecord.id));
                   setViewMode("list");
                   setActiveTab("schedule");
+            updateExamNavigation((next) => next.set("examId", String(draftRecord.id)));
                 } else {
                   showToast(
                     "Examination created and saved as Draft. You can schedule it anytime from the Examinations list.",
@@ -4807,6 +5124,36 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
         }
       }
     } finally { mutationRef.current = false; }
+  };
+
+  const handleScheduleExam = (targetExam) => {
+    if (!targetExam) return;
+    const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+    const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+    if (targetExam.boardId && currentCtxBoardId && normalizeId(targetExam.boardId) !== currentCtxBoardId && setSelectedBoard) {
+      setSelectedBoard(targetExam.boardId);
+    }
+    if (targetExam.yearId && currentCtxYearId && normalizeId(targetExam.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+      setSelectedAcademicYear(targetExam.yearId);
+    }
+    setExamId(String(targetExam.id));
+    setActiveTab("schedule");
+    updateExamNavigation((next) => next.set("examId", String(targetExam.id)));
+    setEditing(null);
+  };
+
+  const handleEditExamScope = (targetExam) => {
+    if (!targetExam) return;
+    const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
+    const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
+    if (targetExam.boardId && currentCtxBoardId && normalizeId(targetExam.boardId) !== currentCtxBoardId && setSelectedBoard) {
+      setSelectedBoard(targetExam.boardId);
+    }
+    if (targetExam.yearId && currentCtxYearId && normalizeId(targetExam.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
+      setSelectedAcademicYear(targetExam.yearId);
+    }
+    setEditingExamId(String(targetExam.id));
+    setViewMode("edit");
   };
 
   // Delete Examination API Call
@@ -5285,409 +5632,8 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
     }
   };
 
-  // Render Exam Scope Form (Create / Edit)
-  if (viewMode === "create" || viewMode === "add" || viewMode === "edit") {
-    return (
-      <ExamForm
-        campusId={effectiveCampusId}
-        exams={exams}
-        schedules={schedules}
-        editId={viewMode === "edit" ? editingExamId : null}
-        existing={viewMode === "edit" ? (editingExam || exams.find((x) => normalizeId(x.id) === normalizeId(editingExamId))) : null}
-        boards={campusBoards.length > 0 ? campusBoards : (boards.length > 0 ? boards : contextBoards)}
-        academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
-        academicLevels={academicLevels}
-        groups={groups}
-        programs={programs}
-        masterPatterns={masterPatterns}
-        examTypes={examTypes}
-        rooms={rooms}
-        faculty={faculty}
-        showToast={showToast}
-        onCancel={() => {
-          saveModuleState("examinations", { draftForm: null });
-          setViewMode("list");
-          setEditingExamId(null);
-          if (typeof window !== "undefined" && (window.location.pathname.includes("/exams/create") || window.location.pathname.includes("/exams/add"))) {
-            navigate("/exam-cell-dashboard/exams");
-          }
-        }}
-        onSave={async (record, proceedToSchedule) => {
-          saveModuleState("examinations", { draftForm: null });
-          const res = await handleSaveExamRecord(record, proceedToSchedule);
-          if (res) {
-            setViewMode("list");
-            if (typeof window !== "undefined" && (window.location.pathname.includes("/exams/create") || window.location.pathname.includes("/exams/add"))) {
-              navigate("/exam-cell-dashboard/exams");
-            }
-          }
-        }}
-      />
-    );
-  }
-
-  return (
-    <DashboardLayout
-      title={activeTab === "schedule" ? "Exam Schedule" : "Examination"}
-      subtitle={
-        activeTab === "schedule"
-          ? "Configure subject-wise or pattern-wise examination dates, timings, halls and invigilators."
-          : "Create and manage academic examinations for Intermediate students."
-      }
-      breadcrumb={activeTab === "schedule" ? ["Examinations", "Exam Schedule"] : ["Examinations"]}
-    >
-      <div className="exam-tabs-row">
-        <div className="exam-tabs" role="tablist" aria-label="Examination modules">
-          <button
-            role="tab"
-            aria-selected={activeTab === "exams"}
-            className={activeTab === "exams" ? "active" : ""}
-            onClick={handleSelectExamsTab}
-          >
-            Examinations
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "schedule"}
-            className={activeTab === "schedule" ? "active" : ""}
-            onClick={handleSelectScheduleTab}
-          >
-            Exam Schedule
-          </button>
-        </div>
-        {activeTab === "exams" && (
-          <button
-            className="cms-btn cms-btn-primary exam-header-create-btn"
-            onClick={() => {
-              setEditingExamId(null);
-              setViewMode("create");
-            }}
-          >
-            <Plus size={16} /> Create Examination
-          </button>
-        )}
-      </div>
-
-      {activeTab === "exams" ? (
-        <div className="cms-card exam-list-card">
-          <div className="exam-table-toolbar">
-            <div className="exam-search">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by code, name, board, group, level, category or pattern..."
-              />
-            </div>
-
-            <div className="exam-toolbar-filters">
-              <div className="exam-toolbar-select">
-                <SearchableSingleSelect
-                  value={filters.groupId}
-                  onChange={(v) => changeFilter("groupId", v)}
-                  options={[
-                    { id: "", name: "All Groups" },
-                    ...groups.filter((g) => g.isActive !== false && (!selectedBoardId || !g.boardId || normalizeId(g.boardId) === normalizeId(selectedBoardId))),
-                  ]}
-                  placeholder="Select Group"
-                />
-              </div>
-              <div className="exam-toolbar-select">
-                <SearchableSingleSelect
-                  value={filters.programId}
-                  disabled={!filters.groupId}
-                  onChange={(v) => changeFilter("programId", v)}
-                  options={[{ id: "", name: "All Programs" }, ...getProgramsForGroups(programs, [filters.groupId], groups)]}
-                  placeholder="Select Program"
-                />
-              </div>
-              <div className="exam-toolbar-select">
-                <SearchableSingleSelect
-                  value={filters.levelId}
-                  onChange={(v) => changeFilter("levelId", v)}
-                  options={[{ id: "", name: "All Academic Levels" }, ...academicLevels]}
-                  placeholder="Select Level"
-                />
-              </div>
-              {Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-ghost exam-clear-filters-btn"
-                  onClick={() => {
-                    setFilters({ groupId: "", programId: "", levelId: "" });
-                    setSearch("");
-                    setPage(1);
-                  }}
-                  title="Clear all filters"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                >
-                  <X size={14} /> Clear Filters
-                </button>
-              )}
-              <button
-                type="button"
-                className="cms-btn cms-btn-ghost exam-export-btn"
-                onClick={handleExportExaminationList}
-                title="Export Examination List"
-              >
-                <Printer size={15} /> Export
-              </button>
-            </div>
-          </div>
-
-          <div className="cms-table-wrap">
-            <table className="cms-table exam-list-table">
-              <thead>
-                <tr>
-                  <th>Exam Code</th>
-                  <th>Exam Name</th>
-                  <th>Academic Level(s)</th>
-                  <th>Group(s)</th>
-                  <th>Program(s)</th>
-                  <th>Exam Category</th>
-                  <th>Exam Pattern(s)</th>
-                  <th>Exam Period</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {examsLoading ? (
-                  <ExaminationTableSkeleton />
-                ) : shownExams.length ? (
-                  shownExams.map((e) => (
-                    <tr key={e.id}>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.code}>
-                          {e.code}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.name}>
-                          {e.name}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
-                          {getLevelNames(e, academicLevels)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
-                          {getGroupNames(e, groups)}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="exam-cell-two-lines"
-                          title={getProgramNames(e, programs)}
-                        >
-                          {getProgramNames(e, programs)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
-                      </td>
-                      <td>
-                        <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
-                          {e.examPattern || "Standard Pattern"}
-                        </span>
-                      </td>
-                      <td>
-                        {d(e.startDate)}
-                        <small className="exam-muted"> to {d(e.endDate)}</small>
-                      </td>
-                      <td className="exam-status-cell">
-                        <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(e.status).toLowerCase()}`}>
-                          {normalizeStatus(e.status) || "DRAFT"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="cms-actions">
-                          <button
-                            type="button"
-                            className="cms-action-btn view"
-                            title="View Details"
-                            onClick={() => handleOpenDetails(e)}
-                          >
-                            <Eye size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn"
-                            title={e.status === "COMPLETED" ? "View Examination Schedule" : "Schedule / Reschedule Examination"}
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setExamId(String(e.id));
-                              setActiveTab("schedule");
-                              setEditing(null);
-                              setSearchParams((prev) => {
-                                const next = new URLSearchParams(prev);
-                                next.set("tab", "schedule");
-                                next.set("examId", String(e.id));
-                                return next;
-                              }, { replace: true });
-                            }}
-                          >
-                            <CalendarDays size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn edit"
-                            title="Edit Examination Scope"
-                            onClick={() => {
-                              const currentCtxBoardId = normalizeId(selectedBoardId ?? (selectedBoard?.boardId ?? selectedBoard?.id));
-                              const currentCtxYearId = normalizeId(selectedAcademicYearId ?? (selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.id));
-                              if (e.boardId && currentCtxBoardId && normalizeId(e.boardId) !== currentCtxBoardId && setSelectedBoard) {
-                                setSelectedBoard(e.boardId);
-                              }
-                              if (e.yearId && currentCtxYearId && normalizeId(e.yearId) !== currentCtxYearId && setSelectedAcademicYear) {
-                                setSelectedAcademicYear(e.yearId);
-                              }
-                              setEditingExamId(String(e.id));
-                              setViewMode("edit");
-                            }}
-                          >
-                            <Pencil size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn warning"
-                            title={normalizeStatus(e.status) === "CANCELLED" ? "Examination already cancelled" : "Cancel Examination"}
-                            onClick={() => {
-                              if (normalizeStatus(e.status) === "CANCELLED") {
-                                showToast(`Examination "${e.name}" is already cancelled.`, "info");
-                                return;
-                              }
-                              setCancelExamTarget(e);
-                            }}
-                          >
-                            <Ban size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            className="cms-action-btn danger"
-                            title="Delete Examination"
-                            onClick={() => setRemove(e)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="10">
-                      <div className="cms-empty">
-                        {examsError ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
-                            <span style={{ color: "var(--cms-danger, #ef4444)", fontWeight: 500 }}>{examsError}</span>
-                            <button
-                              type="button"
-                              className="cms-btn cms-btn-primary"
-                              onClick={() => loadExaminations(true, effectiveCampusId, selectedBoardId, selectedAcademicYearId)}
-                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                            >
-                              <RefreshCw size={14} /> Retry Fetching Examinations
-                            </button>
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
-                            <span>
-                              {exams.length > 0
-                                ? `No examinations match the current filters${filters.levelId ? ` (Level: ${nameOf(academicLevels, filters.levelId)})` : ""}.`
-                                : "No examinations match the current filters."}
-                            </span>
-                            {exams.length > 0 && Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
-                              <button
-                                type="button"
-                                className="cms-btn cms-btn-primary"
-                                onClick={() => {
-                                  setFilters({ groupId: "", programId: "", levelId: "" });
-                                  setSearch("");
-                                  setPage(1);
-                                }}
-                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-                              >
-                                <X size={14} /> Clear Filters to Show All Examinations ({exams.length})
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <Pagination
-            currentPage={page}
-            totalRecords={list.length}
-            pageSize={PAGE_SIZE}
-            onPageChange={setPage}
-            unit="records"
-          />
-        </div>
-      ) : (
-        <>
-          <button
-            type="button"
-            className="exam-schedule-back-link"
-            onClick={handleBackFromSchedule}
-          >
-            <ArrowLeft size={15} /> Back to Examinations
-          </button>
-          <ScheduleSection
-            campusId={effectiveCampusId}
-            exam={currentExam}
-            exams={exams}
-            schedules={schedules}
-            examId={examId}
-            onUpdateSchedule={handleUpdateScheduleHalls}
-            onBack={handleBackFromSchedule}
-            onEditPeriod={(targetExam) => setEditingExam(targetExam)}
-            setExamId={(v) => {
-              setExamId(v);
-              setEditing(null);
-              setErrors({});
-              setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
-                next.set("tab", "schedule");
-                if (v) next.set("examId", String(v));
-                else next.delete("examId");
-                return next;
-              }, { replace: true });
-              setSch({
-                groupId: "",
-                subjectId: "",
-                patternName: "",
-                date: "",
-                startTime: "09:00",
-                endTime: "12:00",
-                totalMarks: "100",
-                passingMarks: "35",
-                passPercentage: "35",
-                hallAssignments: [],
-                mode: "Written",
-              });
-            }}
-            sch={sch}
-            setSch={setSch}
-            errors={errors}
-            setErrors={setErrors}
-            editing={editing}
-            setEditing={setEditing}
-            onEdit={(s) => {
-              setExamId(String(s.examId));
+    const restoreScheduleEditor = (s) => {
+              setExamIdState(String(s.examId));
               const targetExam = exams.find((e) => normalizeId(e.id) === normalizeId(s.examId)) || currentExam;
               const reqStrength = getScopedCandidateStrength(targetExam, s.groupId, programs, students);
               const rawAssignments = ensureArray(s.hallAssignments);
@@ -5802,7 +5748,458 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
               } catch {
                 /* ignore scroll error */
               }
+  };
+  examActionLoaders.current = { view: handleOpenDetails, preview: printSchedule, schedule: restoreScheduleEditor };
+  useEffect(() => {
+    const key = [routeAction, requestedEditId, searchParams.get("scheduleId"), activeTab].join(":");
+    if (restorationRef.current === key) return;
+    if (examsLoading || examsError) return;
+    setDetailState(null); setGlobalPreviewModalState(null); setRemoveState(null); setRemoveScheduleState(null); setCancelExamTargetState(null); setEditingExamState(null);
+    if (activeTab === "schedule") setExamIdState(requestedEditId);
+    if (!routeAction || ["create", "edit"].includes(routeAction)) {
+      if (activeTab === "schedule" && requestedEditId) {
+        if (!exams.length) return;
+        if (!exams.some((exam) => String(exam.id) === requestedEditId)) showToast("Selected examination is unavailable in this context.", "error");
+      }
+      restorationRef.current = key; return;
+    }
+    if (!exams.length) return;
+    const exam = exams.find((item) => String(item.id) === requestedEditId);
+    if (!exam && !(routeAction === "preview" && !requestedEditId)) {
+      restorationRef.current = key; showToast("Examination is unavailable in the current context.", "error"); return;
+    }
+    const scheduleId = searchParams.get("scheduleId");
+    const schedule = schedules.find((item) => String(item.id) === scheduleId && String(item.examId) === requestedEditId);
+    if (["edit-schedule", "delete-schedule"].includes(routeAction) && !schedule) {
+      if (fetchedScheduleExamIdsRef.current.has(normalizeId(requestedEditId))) { restorationRef.current = key; showToast("Selected examination schedule is unavailable.", "error"); }
+      return;
+    }
+    restorationRef.current = key;
+    if ((routeAction === "delete" && !["DRAFT", "CANCELLED"].includes(normalizeStatus(exam?.status))) || (routeAction === "cancel" && !["DRAFT", "SCHEDULED"].includes(normalizeStatus(exam?.status)))) { showToast("This examination action is unavailable for its current status.", "error"); return; }
+    if (routeAction === "view") examActionLoaders.current.view(exam, true);
+    else if (routeAction === "preview") examActionLoaders.current.preview(exam || null, true);
+    else if (routeAction === "period") setEditingExamState(exam);
+    else if (routeAction === "inline-halls") { /* Restored by the existing schedule table below. */ }
+    else if (routeAction === "delete") setRemoveState(exam);
+    else if (routeAction === "cancel") setCancelExamTargetState(exam);
+    else if (routeAction === "delete-schedule") setRemoveScheduleState({ ...schedule, allScheduleIds: (searchParams.get("scheduleIds") || String(schedule.id)).split(",") });
+    else if (routeAction === "edit-schedule") examActionLoaders.current.schedule(schedule);
+    else showToast("Invalid examination action.", "error");
+  }, [routeAction, requestedEditId, searchParams, activeTab, exams, schedules, examsLoading, examsError, showToast]);
+
+
+  // Render Exam Scope Form (Create / Edit)
+  if (viewMode === "add" || viewMode === "edit") {
+    return (
+      <ExamForm
+        campusId={effectiveCampusId}
+        exams={exams}
+        schedules={schedules}
+        editId={editingExamId}
+        boards={campusBoards.length > 0 ? campusBoards : boards}
+        academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
+        academicLevels={academicLevels}
+        groups={groups}
+        programs={programs}
+        masterPatterns={masterPatterns}
+        examTypes={examTypes}
+        rooms={rooms}
+        faculty={faculty}
+        showToast={showToast}
+        onCancel={() => {
+          setViewMode("list");
+          setEditingExamId(null);
+        }}
+        onSave={handleSaveExamRecord}
+      />
+    );
+  }
+
+  return (
+    <DashboardLayout
+      title={activeTab === "schedule" ? "Exam Schedule" : "Examination Management"}
+      subtitle={
+        activeTab === "schedule"
+          ? "Configure subject-wise or pattern-wise examination dates, timings, halls and invigilators."
+          : "Create and manage academic examinations for Intermediate students."
+      }
+      breadcrumb={activeTab === "schedule" ? ["Examinations", "Exam Schedule"] : ["Examinations"]}
+    >
+      <div className="exam-tabs-row">
+        <div className="exam-tabs" role="tablist" aria-label="Examination modules">
+          <button
+            role="tab"
+            aria-selected={activeTab === "exams"}
+            className={activeTab === "exams" ? "active" : ""}
+            onClick={() => {
+              if (activeTab === "schedule") {
+                handleBackFromSchedule();
+              } else {
+                setActiveTab("exams");
+              }
             }}
+          >
+            Examinations
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === "schedule"}
+            className={activeTab === "schedule" ? "active" : ""}
+            onClick={() => setActiveTab("schedule")}
+          >
+            Exam Schedule
+          </button>
+        </div>
+        {activeTab === "exams" && (
+          <button
+            className="cms-btn cms-btn-primary exam-header-create-btn"
+            onClick={() => {
+              setEditingExamId(null);
+              setViewMode("add");
+            }}
+          >
+            <Plus size={16} /> Create Examination
+          </button>
+        )}
+      </div>
+
+      {activeTab === "exams" ? (
+        <div className="cms-card exam-list-card">
+          <div className="exam-table-toolbar">
+            <div className="exam-search">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by code, name, board, group, level, category or pattern..."
+              />
+            </div>
+
+            <div className="exam-toolbar-filters">
+              <div className="exam-toolbar-select">
+                <SearchableSingleSelect
+                  value={filters.groupId}
+                  disabled={groupsLoading}
+                  onChange={(v) => changeFilter("groupId", v)}
+                  options={[
+                    { id: "", name: "All Groups" },
+                    ...filterGroups,
+                  ]}
+                  placeholder={groupsLoading ? "Loading groups..." : "Select Group"}
+                />
+              </div>
+              <div className="exam-toolbar-select">
+                <SearchableSingleSelect
+                  value={filters.programId}
+                  disabled={!filters.groupId}
+                  onChange={(v) => changeFilter("programId", v)}
+                  options={[{ id: "", name: "All Programs" }, ...getProgramsForGroups(programs, [filters.groupId], groups)]}
+                  placeholder="Select Program"
+                />
+              </div>
+              <div className="exam-toolbar-select">
+                <SearchableSingleSelect
+                  value={filters.levelId}
+                  onChange={(v) => changeFilter("levelId", v)}
+                  options={[{ id: "", name: "All Academic Levels" }, ...academicLevels]}
+                  placeholder="Select Level"
+                />
+              </div>
+              {Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost exam-clear-filters-btn"
+                  onClick={() => {
+                    setFilters({ groupId: "", programId: "", levelId: "" });
+                    setSearch("");
+                    setPage(1);
+                  }}
+                  title="Clear all filters"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <X size={14} /> Clear Filters
+                </button>
+              )}
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost exam-export-btn"
+                onClick={handleExportExaminationList}
+                title="Export Examination List"
+              >
+                <Printer size={15} /> Export
+              </button>
+            </div>
+          </div>
+
+          <div className="cms-table-wrap">
+            <table className="cms-table exam-list-table">
+              <thead>
+                <tr>
+                  <th>Exam Code</th>
+                  <th>Exam Name</th>
+                  <th>Academic Level(s)</th>
+                  <th>Group(s)</th>
+                  <th>Program(s)</th>
+                  <th>Exam Category</th>
+                  <th>Exam Pattern(s)</th>
+                  <th>Exam Period</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {examsLoading ? (
+                  <ExaminationTableSkeleton />
+                ) : shownExams.length ? (
+                  shownExams.map((e) => {
+                    const examStatus = normalizeStatus(e.status) || "DRAFT";
+                    const isDraft = examStatus === "DRAFT";
+                    const isScheduled =
+                      examStatus === "SCHEDULED" ||
+                      examStatus === "ONGOING" ||
+                      examStatus === "ACTIVE" ||
+                      examStatus === "PUBLISHED";
+                    const isCompleted = examStatus === "COMPLETED";
+                    const isCancelled = examStatus === "CANCELLED";
+
+                    return (
+                      <tr key={e.id}>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.code}>
+                            {e.code}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.name}>
+                            {e.name}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines exam-cell-academic-level" title={getLevelNames(e, academicLevels)}>
+                            {getLevelNames(e, academicLevels)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={getGroupNames(e, groups)}>
+                            {getGroupNames(e, groups)}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className="exam-cell-two-lines"
+                            title={getProgramNames(e, programs)}
+                          >
+                            {getProgramNames(e, programs)}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines">{e.examCategory || "Regular"}</span>
+                        </td>
+                        <td>
+                          <span className="exam-cell-two-lines" title={e.examPattern || "Standard Pattern"}>
+                            {e.examPattern || "Standard Pattern"}
+                          </span>
+                        </td>
+                        <td>
+                          {d(e.startDate)}
+                          <small className="exam-muted"> to {d(e.endDate)}</small>
+                        </td>
+                        <td className="exam-status-cell">
+                          <span className={`cms-badge exam-status-badge exam-status-${examStatus.toLowerCase()}`}>
+                            {examStatus}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="cms-actions">
+                            <button
+                              type="button"
+                              className="cms-action-btn view"
+                              title="View Details"
+                              aria-label="View Details"
+                              onClick={() => handleOpenDetails(e)}
+                            >
+                              <Eye size={15} />
+                            </button>
+                            {isDraft && (
+                              <button
+                                type="button"
+                                className="cms-action-btn edit"
+                                title="Edit Examination Scope"
+                                aria-label="Edit Examination Scope"
+                                onClick={() => handleEditExamScope(e)}
+                              >
+                                <Pencil size={15} />
+                              </button>
+                            )}
+                            {(isScheduled || isCompleted) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn print"
+                                title="Print / Export Examination Schedule"
+                                aria-label="Print / Export Examination Schedule"
+                                onClick={() => printSchedule(e)}
+                              >
+                                <Printer size={15} />
+                              </button>
+                            )}
+                            {(isCancelled || isDraft) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn danger delete"
+                                title={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                aria-label={isCancelled ? "Delete Cancelled Examination" : "Delete Draft Examination"}
+                                onClick={() => setRemove(e)}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                            {(isDraft || isScheduled) && (
+                              <button
+                                type="button"
+                                className="cms-action-btn more"
+                                aria-label="More actions"
+                                title="More actions"
+                                aria-haspopup="menu"
+                                aria-expanded={moreMenu?.id === String(e.id)}
+                                onClick={(event) => {
+                                  const id = String(e.id);
+                                  if (moreMenu?.id === id) {
+                                    setMoreMenu(null);
+                                    return;
+                                  }
+                                  const rect = event.currentTarget.getBoundingClientRect();
+                                  const openAbove = rect.bottom + 190 > window.innerHeight;
+                                  setMoreMenu({
+                                    id,
+                                    exam: e,
+                                    style: openAbove
+                                      ? { bottom: window.innerHeight - rect.top + 6, right: window.innerWidth - rect.right }
+                                      : { top: rect.bottom + 6, right: window.innerWidth - rect.right },
+                                  });
+                                }}
+                              >
+                                <MoreVertical size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="10">
+                      <div className="cms-empty">
+                        {examsError ? (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
+                            <span style={{ color: "var(--cms-danger, #ef4444)", fontWeight: 500 }}>{examsError}</span>
+                            <button
+                              type="button"
+                              className="cms-btn cms-btn-primary"
+                              onClick={() => loadExaminations(true, effectiveCampusId, selectedBoardId, selectedAcademicYearId)}
+                              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                            >
+                              <RefreshCw size={14} /> Retry Fetching Examinations
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
+                            <span>
+                              {exams.length > 0
+                                ? `No examinations match the current filters${filters.levelId ? ` (Level: ${nameOf(academicLevels, filters.levelId)})` : ""}.`
+                                : "No examinations match the current filters."}
+                            </span>
+                            {exams.length > 0 && Boolean(filters.groupId || filters.programId || filters.levelId || search) && (
+                              <button
+                                type="button"
+                                className="cms-btn cms-btn-primary"
+                                onClick={() => {
+                                  setFilters({ groupId: "", programId: "", levelId: "" });
+                                  setSearch("");
+                                  setPage(1);
+                                }}
+                                style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                              >
+                                <X size={14} /> Clear Filters to Show All Examinations ({exams.length})
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="exam-list-pagination">
+            <span className="exam-record-summary">
+              Showing {rangeStart}–{rangeEnd} of {list.length} records
+            </span>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={page === 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </button>
+            <span>
+              {page} / {pages}
+            </span>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={page === pages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="exam-schedule-back-link"
+            onClick={handleBackFromSchedule}
+          >
+            <ArrowLeft size={15} /> Back to Examinations
+          </button>
+          <ScheduleSection
+            campusId={effectiveCampusId}
+            exam={currentExam}
+            exams={exams}
+            schedules={schedules}
+            examId={examId}
+            onUpdateSchedule={handleUpdateScheduleHalls}
+            onBack={handleBackFromSchedule}
+            onEditPeriod={(targetExam) => setEditingExam(targetExam)}
+            setExamId={(v) => {
+              setExamId(v);
+              setEditing(null);
+              setErrors({});
+              setSch({
+                groupId: "",
+                subjectId: "",
+                patternName: "",
+                date: "",
+                startTime: "09:00",
+                endTime: "12:00",
+                totalMarks: "100",
+                passingMarks: "35",
+                passPercentage: "40",
+                hallAssignments: [],
+                mode: "Written",
+              });
+            }}
+            sch={sch}
+            setSch={setSch}
+            errors={errors}
+            setErrors={setErrors}
+            editing={editing}
+            setEditing={setEditing}
+            onEdit={(schedule) => navigateExamAction("edit-schedule", { id: schedule.examId }, schedule.id)}
             onCancelEdit={() => setEditing(null)}
             onSave={handleSaveSchedules}
             onRemove={(target) => setRemoveSchedule(target)}
@@ -5870,16 +6267,56 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           programs={programs}
           academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
           onClose={() => setGlobalPreviewModal(null)}
-          onExport={(filteredSchedules) => {
+          onExportExcel={(filteredSchedules) => {
+            const isSingle = globalPreviewModal.targetExams.length === 1;
+            const singleExam = isSingle ? globalPreviewModal.targetExams[0] : null;
+            const baseName = singleExam
+              ? (singleExam.name || singleExam.code || "Examination")
+              : "Examination_Schedules";
+            const safeFileName = `${baseName.replace(/[\/\\?%*:|"<>]/g, "_")}${isSingle ? "_Schedule" : ""}`;
+
             directExportScheduleExcel(
               globalPreviewModal.targetExams,
               filteredSchedules || globalPreviewModal.schedules,
               groups,
-              "Examination_Schedules",
+              safeFileName,
               programs,
               academicYears.length > 0 ? academicYears : contextAcademicYears
             );
-            showToast("Examination schedules exported successfully.", "success");
+            showToast(
+              isSingle
+                ? `Examination "${singleExam.name || singleExam.code}" schedule exported to Excel successfully.`
+                : "Examination schedules exported to Excel successfully.",
+              "success"
+            );
+          }}
+          onExportPdf={async (filteredSchedules) => {
+            const isSingle = globalPreviewModal.targetExams.length === 1;
+            const singleExam = isSingle ? globalPreviewModal.targetExams[0] : null;
+            const baseName = singleExam
+              ? (singleExam.name || singleExam.code || "Examination")
+              : "Examination_Schedules";
+            const safeFileName = `${baseName.replace(/[\/\\?%*:|"<>]/g, "_")}${isSingle ? "_Schedule" : ""}`;
+
+            try {
+              await directExportSchedulePdf(
+                globalPreviewModal.targetExams,
+                filteredSchedules || globalPreviewModal.schedules,
+                groups,
+                safeFileName,
+                programs,
+                academicYears.length > 0 ? academicYears : contextAcademicYears
+              );
+              showToast(
+                isSingle
+                  ? `Examination "${singleExam.name || singleExam.code}" schedule downloaded as PDF successfully.`
+                  : "Examination schedules downloaded as PDF successfully.",
+                "success"
+              );
+            } catch (err) {
+              console.error("PDF generation error:", err);
+              showToast("Failed to generate PDF schedule.", "error");
+            }
           }}
         />
       )}
@@ -5933,132 +6370,41 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
                 )
               );
 
-              // 2. Reschedule existing examination sessions to match the updated examination period
+              // 2. Automatically reschedule examination across the new updated period
               const isComb = isCombinedExamination(editingExam);
-              const userStart = formatTimeOnly(sch?.startTime || "09:00");
-              const userEnd = formatTimeOnly(sch?.endTime || "12:00", userStart);
+              const userStart = formatTimeOnly("09:00");
+              const userEnd = formatTimeOnly("12:00", userStart);
 
-              let existingSchedules = [];
-              try {
-                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
-                  params: { campusId: effectiveCampusId, _t: Date.now() },
-                });
-                existingSchedules = unwrap(schedRes);
-              } catch (e) {
-                existingSchedules = schedules.filter((s) => normalizeId(s.examId) === normalizeId(examId));
-              }
+              const targetGids = ensureArray(
+                (editingExam.groupIds && editingExam.groupIds.length > 0)
+                  ? editingExam.groupIds
+                  : (editingExam.groupId ? [editingExam.groupId] : [])
+              ).map((id) => Number(id) || id).filter(Boolean);
 
-              // Deduplicate any redundant/duplicate schedules for the same subject/pattern
-              const seenMap = new Map();
-              const primarySchedules = [];
-              const duplicateSchedules = [];
+              const effectiveGids = targetGids.length > 0 ? targetGids : [Number(editingExam.groupId || 1)];
 
-              for (const s of ensureArray(existingSchedules)) {
-                const key = `${s.groupId || "_"}_${s.subjectId || s.patternName || s.sessionId || s.id}`;
-                if (!seenMap.has(key)) {
-                  seenMap.set(key, s);
-                  primarySchedules.push(s);
-                } else {
-                  duplicateSchedules.push(s);
-                }
-              }
-
-              // Clean up duplicate schedule records from backend if any exist
-              for (const dup of duplicateSchedules) {
-                const dupId = dup.examScheduleId || dup.scheduleId || dup.id;
-                if (dupId) {
-                  try {
-                    await deleteScheduleFromBackend(examId, dupId);
-                  } catch (delErr) {
-                    console.warn("Could not remove duplicate schedule", dupId, delErr);
-                  }
-                }
-              }
-
-              if (primarySchedules.length > 0) {
-                // Change dates of all existing schedules sequentially within the new examination period
-                const schedulesByGroup = {};
-                for (const s of primarySchedules) {
-                  const gid = String(s.groupId || s.courseGroupId || "default");
-                  if (!schedulesByGroup[gid]) schedulesByGroup[gid] = [];
-                  schedulesByGroup[gid].push(s);
-                }
-
-                for (const gid of Object.keys(schedulesByGroup)) {
-                  const groupList = schedulesByGroup[gid];
-                  groupList.sort((a, b) => {
-                    const da = canonicalDate(a.examDate || a.date || a.scheduleDate) || "";
-                    const db = canonicalDate(b.examDate || b.date || b.scheduleDate) || "";
-                    if (da !== db) return da.localeCompare(db);
-                    return (Number(a.subjectId) || 0) - (Number(b.subjectId) || 0);
+              let isFirstGroup = true;
+              for (const gid of effectiveGids) {
+                const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);
+                try {
+                  await apiClient.post(`/api/v1/examinations/${examId}/auto-schedule`, {
+                    groupId: Number(gid),
+                    academicLevelId: Number(editingExam.academicLevelId || editingExam.academicLevelIds?.[0] || editingExam.levelIds?.[0] || 0),
+                    academicLevelIds: ensureArray(editingExam.academicLevelIds || editingExam.levelIds || (editingExam.academicLevelId ? [editingExam.academicLevelId] : [])).map((id) => Number(id) || id),
+                    programId: selectedProgramIds.length === 1 ? (Number(selectedProgramIds[0]) || selectedProgramIds[0]) : undefined,
+                    programIds: selectedProgramIds.map((id) => Number(id) || id),
+                    totalMarks: Number(editingExam.totalMarks || 100),
+                    passingMarks: Number(editingExam.passingMarks || 35),
+                    scheduleMode: isComb ? "PATTERN_WISE" : "SUBJECT_WISE",
+                    defaultStartTime: userStart,
+                    defaultEndTime: userEnd,
+                    skipSundays: true,
+                    campusId: Number(effectiveCampusId || editingExam.campusId || 1),
+                    replaceExisting: isFirstGroup,
                   });
-
-                  const sequentialDates = generateSequentialExamDates(period.startDate, groupList.length);
-
-                  for (let i = 0; i < groupList.length; i++) {
-                    const s = groupList[i];
-                    const sId = s.examScheduleId || s.scheduleId || s.id;
-                    if (!sId) continue;
-                    const targetDate = isComb ? period.startDate : (sequentialDates[i] || period.startDate);
-
-                    const updatePayload = sanitizeUpdateScheduleDto({
-                      campusId: Number(effectiveCampusId || editingExam.campusId || s.campusId) || 1,
-                      subjectId: s.subjectId ? Number(s.subjectId) : undefined,
-                      examDate: targetDate,
-                      startTime: s.startTime || userStart,
-                      endTime: s.endTime || userEnd,
-                      sessionId: s.sessionId,
-                      scheduleMode: s.scheduleMode || (isComb ? "PATTERN_WISE" : "SUBJECT_WISE"),
-                      roomId: s.roomId ? Number(s.roomId) : undefined,
-                      hall: s.hall || s.roomNumber || "",
-                      invigilatorId: s.invigilatorId ? Number(s.invigilatorId) : undefined,
-                      invigilator: s.invigilator || s.invigilatorName || "",
-                      examMode: s.examMode || (isComb ? "Objective" : "Written"),
-                      maxMarks: s.maxMarks || s.totalMarks || 100,
-                      passingMarks: s.passingMarks || 35,
-                      hallAssignments: s.hallAssignments || [],
-                    });
-
-                    try {
-                      await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, updatePayload);
-                    } catch (updateErr) {
-                      console.warn(`Could not update schedule ${sId} to date ${targetDate}:`, updateErr);
-                    }
-                  }
-                }
-              } else {
-                // If the examination had no existing schedules, auto-schedule across the new period
-                const targetGids = ensureArray(
-                  (editingExam.groupIds && editingExam.groupIds.length > 0)
-                    ? editingExam.groupIds
-                    : editingExam.groupId ? [editingExam.groupId] : []
-                ).map((id) => Number(id) || id).filter(Boolean);
-
-                const effectiveGids = targetGids.length > 0
-                  ? targetGids
-                  : (sch.groupId ? [Number(sch.groupId)] : []);
-
-                for (const gid of effectiveGids) {
-                  const selectedProgramIds = getSelectedProgramsForGroup(editingExam, gid);
-                  try {
-                    await apiClient.post(`/api/v1/examinations/${examId}/auto-schedule`, {
-                      groupId: Number(gid),
-                      academicLevelId: Number(editingExam.academicLevelId || editingExam.academicLevelIds?.[0] || editingExam.levelIds?.[0] || 0),
-                      academicLevelIds: ensureArray(editingExam.academicLevelIds || editingExam.levelIds || (editingExam.academicLevelId ? [editingExam.academicLevelId] : [])).map((id) => Number(id) || id),
-                      programId: selectedProgramIds.length === 1 ? (Number(selectedProgramIds[0]) || selectedProgramIds[0]) : undefined,
-                      programIds: selectedProgramIds.map((id) => Number(id) || id),
-                      totalMarks: Number(editingExam.totalMarks || sch?.totalMarks || 100),
-                      passingMarks: Number(editingExam.passingMarks || sch?.passingMarks || 35),
-                      scheduleMode: isComb ? "PATTERN_WISE" : "SUBJECT_WISE",
-                      defaultStartTime: userStart,
-                      defaultEndTime: userEnd,
-                      skipSundays: true,
-                      campusId: Number(effectiveCampusId || editingExam.campusId || 1),
-                      replaceExisting: true,
-                    });
-                  } catch (autoErr) {
-                    console.warn(`Could not auto-schedule group ${gid}:`, autoErr);
-                  }
+                  isFirstGroup = false;
+                } catch (autoErr) {
+                  console.warn(`Could not auto-schedule group ${gid} after period edit:`, autoErr);
                 }
               }
 
@@ -6074,7 +6420,44 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
               }));
 
               // 4. Reload fresh normalized schedules from backend
-              await fetchSchedulesForExam(examId);
+              const freshSchedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
+                params: { campusId: effectiveCampusId, _t: Date.now() },
+              });
+              const freshSchedRaw = unwrap(freshSchedRes);
+              const updatedExamObj = {
+                ...editingExam,
+                startDate: period.startDate,
+                endDate: isComb ? period.startDate : period.endDate,
+              };
+              const normalizedFresh = freshSchedRaw.map((entry) => ({
+                ...normalizeScheduleRecord(
+                  entry,
+                  effectiveGids[0] || editingExam.groupId,
+                  updatedExamObj,
+                  groups,
+                  eligibleSubjects,
+                  rooms,
+                  faculty,
+                  programs,
+                  students
+                ),
+                examId,
+              }));
+
+              // Update global schedules state
+              setSchedules((prev) => [
+                ...prev.filter((s) => normalizeId(s.examId) !== normalizeId(examId)),
+                ...normalizedFresh,
+              ]);
+
+              // Update detail modal state if currently open
+              setDetail((prev) => {
+                if (!prev || normalizeId(prev.exam?.id) !== normalizeId(examId)) return prev;
+                return {
+                  exam: updatedExamObj,
+                  schedules: normalizedFresh,
+                };
+              });
 
               // 5. Reload examinations list
               await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
@@ -6091,7 +6474,7 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
 
       {remove && (
         <ConfirmDialog
-          title={remove.status === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
+          title={normalizeStatus(remove.status) === "CANCELLED" ? "Delete cancelled examination" : "Delete examination"}
           message={`Delete ${remove.name}? All associated schedules will be removed.`}
           onCancel={() => !deleteLoading && setRemove(null)}
           onConfirm={handleDeleteExam}
@@ -6126,6 +6509,133 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           danger={true}
         />
       )}
+
+      {moreMenu ? createPortal(
+        <div ref={moreMenuRef} className="exam-row-more-menu" style={moreMenu.style} role="menu">
+          {(() => {
+            const rowExam = moreMenu.exam;
+            const rowStatus = normalizeStatus(rowExam?.status) || "DRAFT";
+            const rowIsDraft = rowStatus === "DRAFT";
+            const rowIsScheduled =
+              rowStatus === "SCHEDULED" ||
+              rowStatus === "ONGOING" ||
+              rowStatus === "ACTIVE" ||
+              rowStatus === "PUBLISHED";
+            const rowIsCancelled = rowStatus === "CANCELLED";
+
+            return (
+              <>
+                {rowIsScheduled && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleScheduleExam(rowExam);
+                      }}
+                    >
+                      <CalendarDays size={16} aria-hidden="true" /> Reschedule Examination
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        printSchedule(rowExam);
+                      }}
+                    >
+                      <Printer size={16} aria-hidden="true" /> Print / Export Schedule
+                    </button>
+                    <div className="exam-row-more-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        if (normalizeStatus(rowExam.status) === "CANCELLED") {
+                          showToast(`Examination "${rowExam.name}" is already cancelled.`, "info");
+                          return;
+                        }
+                        setCancelExamTarget(rowExam);
+                      }}
+                    >
+                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                    </button>
+                  </>
+                )}
+
+                {rowIsDraft && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleScheduleExam(rowExam);
+                      }}
+                    >
+                      <CalendarDays size={16} aria-hidden="true" /> Schedule Examination
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        handleEditExamScope(rowExam);
+                      }}
+                    >
+                      <Pencil size={16} aria-hidden="true" /> Edit Examination Scope
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        if (normalizeStatus(rowExam.status) === "CANCELLED") {
+                          showToast(`Examination "${rowExam.name}" is already cancelled.`, "info");
+                          return;
+                        }
+                        setCancelExamTarget(rowExam);
+                      }}
+                    >
+                      <Ban size={16} aria-hidden="true" /> Cancel Examination
+                    </button>
+                    <div className="exam-row-more-divider" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="is-danger"
+                      onClick={() => {
+                        setMoreMenu(null);
+                        setRemove(rowExam);
+                      }}
+                    >
+                      <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                    </button>
+                  </>
+                )}
+
+                {rowIsCancelled && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="is-danger"
+                    onClick={() => {
+                      setMoreMenu(null);
+                      setRemove(rowExam);
+                    }}
+                  >
+                    <Trash2 size={16} aria-hidden="true" /> Delete Examination
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>,
+        document.body,
+      ) : null}
 
       <Toast
         message={typeof toast === "string" ? toast : toast.message}
@@ -6351,7 +6861,7 @@ function SearchableSingleSelect({
 
         {open && !disabled && (
           <div
-            className="cms-searchable-select-dropdown staff-search-dropdown-menu"
+            className="cms-searchable-select-dropdown"
             style={{
               backgroundColor: "#ffffff",
               background: "#ffffff",
@@ -6583,6 +7093,7 @@ function ExamForm({
   onSave,
   onCancel,
 }) {
+  const [formRoute, setFormRoute] = useSearchParams();
   const academicCtx = useAcademicContext();
   const {
     selectedBoard = null,
@@ -6592,7 +7103,7 @@ function ExamForm({
     academicYears: contextAcademicYears = [],
   } = academicCtx;
 
-  const existing = editId ? exams.find((e) => String(e.id) === String(editId)) : null;
+  const existing = exams.find((e) => String(e.id) === String(editId));
 
   const initialGroupProgramSelections = useMemo(() => {
     if (!existing) return {};
@@ -6676,6 +7187,8 @@ function ExamForm({
   const [formYears, setFormYears] = useState(availableYears);
   const [formLevels, setFormLevels] = useState([]);
   const [formGroups, setFormGroups] = useState([]);
+  const [formGroupsLoading, setFormGroupsLoading] = useState(false);
+  const [formGroupsError, setFormGroupsError] = useState("");
   const [formPrograms, setFormPrograms] = useState([]);
   const [formEligibleSubjects, setFormEligibleSubjects] = useState([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
@@ -6743,11 +7256,11 @@ function ExamForm({
 
   const [examCodePreview, setExamCodePreview] = useState("");
 
-  const savedDraft = useMemo(() => (!existing ? getModuleState("examinations", {})?.draftForm : null), [existing]);
 
-  const [form, setForm] = useState(() => {
-    if (existing) {
-      return {
+
+  const [form, setForm] = useState(() =>
+    existing
+      ? {
         ...existing,
         campusId: normalizeId(existing.campusId || campusId || "1"),
         boardId: normalizeId(existing.boardId || defaultBoardId),
@@ -6764,43 +7277,33 @@ function ExamForm({
         selectedGroupPatterns: initialGroupPatterns,
         examPattern: existing.examPattern || existing.pattern || "",
         examType: existing.examType || "",
-      };
-    }
-    if (savedDraft && typeof savedDraft === "object") {
-      return {
-        ...savedDraft,
+      }
+      : {
         campusId: normalizeId(campusId || "1"),
-        boardId: savedDraft.boardId || defaultBoardId,
-        yearId: savedDraft.yearId || defaultYearId,
-        academicYearId: savedDraft.academicYearId || savedDraft.yearId || defaultYearId,
-      };
-    }
-    return {
-      campusId: normalizeId(campusId || "1"),
-      code: "",
-      name: "",
-      examCategory: "",
-      customCategoryName: "",
-      boardId: defaultBoardId,
-      yearId: defaultYearId,
-      academicYearId: defaultYearId,
-      levelId: "",
-      levelIds: [],
-      groupId: "",
-      groupIds: [],
-      programId: "",
-      programIds: [],
-      selectedSubjectIds: [],
-      groupProgramSelections: {},
-      selectedGroupPatterns: {},
-      examPattern: "",
-      examType: "",
-      startDate: "",
-      endDate: "",
-      description: "",
-      status: "DRAFT",
-    };
-  });
+        code: "",
+        name: "",
+        examCategory: "", // MANUAL SELECTION ONLY: starts empty so user must explicitly choose
+        customCategoryName: "",
+        boardId: defaultBoardId,
+        yearId: defaultYearId,
+        academicYearId: defaultYearId,
+        levelId: "",
+        levelIds: [],
+        groupId: "",
+        groupIds: [],
+        programId: "",
+        programIds: [],
+        selectedSubjectIds: [],
+        groupProgramSelections: {},
+        selectedGroupPatterns: {},
+        examPattern: "",
+        examType: "",
+        startDate: "",
+        endDate: "",
+        description: "",
+        status: "DRAFT",
+      },
+  );
 
   useEffect(() => {
     if (existing) {
@@ -6853,62 +7356,40 @@ function ExamForm({
     };
   }, [existing, campusId, form.boardId, form.yearId, boards, academicYears]);
 
-  const isInitialMountRef = useRef(true);
-  const prevContextBoardRef = useRef(defaultBoardId);
-  const prevContextYearRef = useRef(defaultYearId);
-
   useEffect(() => {
     if (existing) return;
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      prevContextBoardRef.current = defaultBoardId;
-      prevContextYearRef.current = defaultYearId;
-      setForm((previous) => {
-        let updated = false;
-        const next = { ...previous };
-        if (!previous.boardId && defaultBoardId) {
-          next.boardId = defaultBoardId;
-          updated = true;
-        }
-        if (!previous.yearId && defaultYearId) {
-          next.yearId = defaultYearId;
-          next.academicYearId = defaultYearId;
-          updated = true;
-        }
-        return updated ? next : previous;
-      });
-      return;
-    }
+    setForm((previous) => {
+      const nextBoardId = defaultBoardId || "";
+      const nextYearId = defaultYearId || "";
 
-    // Only if context board changes during session
-    if (defaultBoardId && prevContextBoardRef.current !== defaultBoardId) {
-      prevContextBoardRef.current = defaultBoardId;
-      setForm((previous) => ({
-        ...previous,
-        boardId: defaultBoardId,
-        yearId: defaultYearId || previous.yearId,
-        levelId: "",
-        levelIds: [],
-        groupId: "",
-        groupIds: [],
-        programId: "",
-        programIds: [],
-        selectedSubjectIds: [],
-        groupProgramSelections: {},
-        selectedGroupPatterns: {},
-      }));
-      return;
-    }
+      // If context board changes or clears:
+      if (normalizeId(previous.boardId) !== normalizeId(nextBoardId)) {
+        return {
+          ...previous,
+          boardId: nextBoardId,
+          yearId: nextYearId,
+          levelId: "",
+          levelIds: [],
+          groupId: "",
+          groupIds: [],
+          programId: "",
+          programIds: [],
+          selectedSubjectIds: [],
+          groupProgramSelections: {},
+          selectedGroupPatterns: {},
+        };
+      }
 
-    // If only context year changes:
-    if (defaultYearId && prevContextYearRef.current !== defaultYearId) {
-      prevContextYearRef.current = defaultYearId;
-      setForm((previous) => ({
-        ...previous,
-        yearId: defaultYearId,
-        academicYearId: defaultYearId,
-      }));
-    }
+      // If only context year changes:
+      if (normalizeId(previous.yearId) !== normalizeId(nextYearId)) {
+        return {
+          ...previous,
+          yearId: nextYearId,
+        };
+      }
+
+      return previous;
+    });
   }, [defaultBoardId, defaultYearId, existing]);
 
   // Load fresh examination details and schedule subjects from backend when editing
@@ -7020,6 +7501,7 @@ function ExamForm({
   const isSubmittingRef = useRef(false);
   const todayStr = new Date().toISOString().split("T")[0];
 
+  const groupLevelKey = JSON.stringify(form.levelIds || []);
   // Resolve hierarchy against backend records for the selected board.
   useEffect(() => {
     let active = true;
@@ -7036,7 +7518,7 @@ function ExamForm({
 
     const load = async () => {
       try {
-        const [yearsResponse, levelsResponse, groupsResponse] = await Promise.allSettled([
+        const [yearsResponse, levelsResponse] = await Promise.allSettled([
           apiClient.get("/api/v1/academic-years", {
             params: {
               ...(campusId ? { campusId, CampusId: campusId } : {}),
@@ -7051,9 +7533,6 @@ function ExamForm({
               boardId: form.boardId,
               BoardId: form.boardId,
             },
-          }),
-          apiClient.get("/api/v1/groups/board/" + form.boardId, {
-            params: campusId ? { campusId, CampusId: campusId } : {},
           }),
         ]);
         if (!active) return;
@@ -7106,21 +7585,6 @@ function ExamForm({
           setHierarchyError("Failed to load academic levels for the selected Board.");
         }
 
-        // Process groups
-        if (groupsResponse.status === "fulfilled") {
-          const unwrappedGroups = unwrap(groupsResponse.value).filter(belongsToBoard).map((group) => ({
-            ...group,
-            id: normalizeId(group.groupId ?? group.id),
-            boardId: normalizeId(form.boardId),
-            name: group.groupName ?? group.name,
-            code: group.groupCode ?? group.code,
-          }));
-          // Valid empty response must be applied as empty array!
-          setFormGroups(unwrappedGroups);
-        } else {
-          setFormGroups([]);
-          setHierarchyError((prev) => prev || "Failed to load groups for the selected Board.");
-        }
       } catch (error) {
         if (active) {
           setFormLevels([]);
@@ -7134,7 +7598,113 @@ function ExamForm({
     };
     load();
     return () => { active = false; };
-  }, [form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast, existing, academicYears, academicLevels]);
+  }, [campusId, form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast, existing, academicYears, academicLevels]);
+
+    useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    if (!form.boardId) {
+      setFormGroups([]);
+      setFormGroupsLoading(false);
+      return;
+    }
+    setFormGroupsError("");
+    setFormGroupsLoading(true);
+
+    const loadFormGroups = async () => {
+      try {
+        let rows = [];
+        // 1. Try board-specific endpoint
+        try {
+          const res = await apiClient.get(`/api/v1/groups/board/${encodeURIComponent(form.boardId)}`, {
+            params: {
+              isActive: true,
+            },
+            signal: controller.signal,
+          });
+          const raw = unwrap(res);
+          if (Array.isArray(raw) && raw.length > 0) rows = raw;
+        } catch {
+          // fallback
+        }
+
+        // 2. Try general groups endpoint
+        if (!rows.length) {
+          try {
+            const res = await apiClient.get("/api/v1/groups", {
+              params: { boardId: form.boardId, isActive: true },
+              signal: controller.signal,
+            });
+            const raw = unwrap(res);
+            if (Array.isArray(raw) && raw.length > 0) rows = raw;
+          } catch {
+            // fallback
+          }
+        }
+
+        // 3. Fallback to groups prop passed from parent
+        if (!rows.length && Array.isArray(groups) && groups.length > 0) {
+          rows = groups;
+        }
+
+        if (!active) return;
+
+        const mapped = rows.map((g) => {
+          const gid = normalizeId(g.groupId ?? g.id);
+          const name = g.groupName ?? g.name ?? (g.groupCode ? `Group ${g.groupCode}` : `Group ${gid}`);
+          const code = g.groupCode ?? g.code ?? name;
+          const progs = ensureArray(g.programs).map((p) => ({
+            id: normalizeId(p.programId ?? p.id),
+            name: p.programName ?? p.name ?? "",
+            code: p.programCode ?? p.code ?? p.programName ?? "",
+            groupId: gid,
+            candidateStrength: Number(p.candidateStrength ?? p.strength ?? p.capacity) || 0,
+            capacity: Number(p.capacity ?? p.candidateStrength) || 0,
+            isActive: p.isActive !== false,
+            objectivePatternCodes: p.objectivePatternCodes || [],
+          }));
+          return {
+            ...g,
+            id: gid,
+            groupId: gid,
+            name,
+            groupName: name,
+            code,
+            groupCode: code,
+            boardId: normalizeId(g.boardId),
+            programs: progs,
+            isActive: g.isActive !== false,
+          };
+        }).filter((g) => g.id);
+
+        setFormGroups(mapped);
+
+        // Pre-populate formPrograms with programs from the groups
+        const initialProgs = mapped.flatMap((g) => g.programs || []);
+        if (initialProgs.length > 0) {
+          setFormPrograms((prev) => {
+            const map = new Map();
+            prev.forEach((p) => map.set(`${normalizeId(p.groupId)}_${normalizeId(p.id)}`, p));
+            initialProgs.forEach((p) => map.set(`${normalizeId(p.groupId)}_${normalizeId(p.id)}`, p));
+            return Array.from(map.values());
+          });
+        }
+      } catch (error) {
+        if (active) {
+          if (Array.isArray(groups) && groups.length > 0) {
+            setFormGroups(groups);
+          } else {
+            setFormGroupsError(getApiErrorMessage(error) || "Unable to load groups.");
+          }
+        }
+      } finally {
+        if (active) setFormGroupsLoading(false);
+      }
+    };
+
+    loadFormGroups();
+    return () => { active = false; controller.abort(); };
+  }, [campusId, form.boardId, groups]);
 
   useEffect(() => {
     if (availableYears.length > 0) {
@@ -7154,11 +7724,11 @@ function ExamForm({
     if (existing) return;
     const targetYearId = defaultYearId || normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id);
     if (!targetYearId) return;
-    setForm((previous) => (previous.yearId ? previous : { ...previous, yearId: targetYearId, academicYearId: targetYearId }));
+    setForm((previous) => (previous.yearId === targetYearId ? previous : { ...previous, yearId: targetYearId }));
   }, [defaultYearId, selectedAcademicYearId, selectedAcademicYear, existing]);
 
   const availableGroups = useMemo(() => formGroups.filter((group) =>
-    form.boardId && group.isActive !== false && normalizeId(group.boardId) === normalizeId(form.boardId)
+    form.boardId && group.isActive !== false && (!group.boardId || normalizeId(group.boardId) === normalizeId(form.boardId))
   ), [formGroups, form.boardId]);
 
   const preferredGroupTab = useMemo(() => {
@@ -7170,10 +7740,7 @@ function ExamForm({
   }, [existing, availableGroups]);
 
   // Group Tabs active tab state in Creation Form
-  const [activeGroupTab, setActiveGroupTab] = useState(() => {
-    if (savedDraft?.activeGroupTab) return normalizeId(savedDraft.activeGroupTab);
-    return preferredGroupTab;
-  });
+  const [activeGroupTab, setActiveGroupTab] = useState(() => preferredGroupTab);
 
   useEffect(() => {
     if (availableGroups.length > 0) {
@@ -7186,7 +7753,10 @@ function ExamForm({
     }
   }, [availableGroups, activeGroupTab, form.groupIds]);
 
-  const activeGroupObj = availableGroups.find((g) => normalizeId(g.id) === normalizeId(activeGroupTab)) || availableGroups[0];
+  const activeGroupObj = useMemo(() => {
+    if (!availableGroups.length) return null;
+    return availableGroups.find((g) => normalizeId(g.id) === normalizeId(activeGroupTab)) || availableGroups[0];
+  }, [availableGroups, activeGroupTab]);
 
   // Group-scoped program selection helpers:
   const getSelectedProgramsForGroup = useCallback(
@@ -7301,13 +7871,12 @@ function ExamForm({
     const set = new Set();
     if (activeGroupTab) set.add(normalizeId(activeGroupTab));
     ensureArray(form.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
-    Object.keys(form.groupProgramSelections || {}).forEach((gid) => gid && set.add(normalizeId(gid)));
     if (existing) {
       ensureArray(existing.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
       if (existing.groupId) set.add(normalizeId(existing.groupId));
     }
     return Array.from(set);
-  }, [activeGroupTab, form.groupIds, form.groupProgramSelections, existing]);
+  }, [activeGroupTab, form.groupIds, existing]);
 
   const groupIdsToFetchKey = useMemo(() => [...groupIdsToFetchPrograms].sort().join(","), [groupIdsToFetchPrograms]);
 
@@ -7374,9 +7943,34 @@ function ExamForm({
     return () => { active = false; };
   }, [groupIdsToFetchKey, groupIdsToFetchPrograms, form.boardId, showToast]);
 
-  const getProgramsForGroup = useCallback((group) => formPrograms.filter((program) =>
-    program.isActive !== false && normalizeId(program.groupId) === normalizeId(group?.id)
-  ), [formPrograms]);
+    const getProgramsForGroup = useCallback((group) => {
+    if (!group) return [];
+    const gid = normalizeId(group.id || group.groupId);
+
+    // 1. Direct programs from group definition (e.g. Regular for BIPC, CA Foundation for CEC, JEE for MPC)
+    const fromGroup = ensureArray(group.programs).filter((p) => p && p.isActive !== false).map((p) => ({
+      ...p,
+      id: normalizeId(p.programId ?? p.id),
+      groupId: gid,
+      name: p.programName ?? p.name ?? "",
+      code: p.programCode ?? p.code ?? p.programName ?? "",
+    }));
+    if (fromGroup.length > 0) return fromGroup;
+
+    // 2. Programs loaded in formPrograms for this specific group
+    const fromForm = formPrograms.filter((program) =>
+      program.isActive !== false && normalizeId(program.groupId) === gid
+    );
+    if (fromForm.length > 0) return fromForm;
+
+    return [];
+  }, [formPrograms]);
+
+  const handleGroupTabClick = (groupId) => {
+    const targetId = normalizeId(groupId);
+    if (!targetId) return;
+    setActiveGroupTab(targetId);
+  };
 
   // 4. Context Subject Fetching
   const levelIdsKey = useMemo(
@@ -7384,15 +7978,19 @@ function ExamForm({
     [form.levelIds],
   );
 
-  const groupsToFetch = useMemo(() => {
-    const activeInMap = Object.keys(form.groupProgramSelections || {}).filter(
-      (gid) => (form.groupProgramSelections[gid] || []).length > 0,
-    );
-    if (activeInMap.length > 0) return activeInMap.map(normalizeId);
-    if (form.groupIds && form.groupIds.length > 0) return form.groupIds.map(normalizeId);
-    if (form.groupId) return [normalizeId(form.groupId)];
-    return [];
-  }, [form.groupProgramSelections, form.groupIds, form.groupId]);
+    const groupsToFetch = useMemo(() => {
+    const set = new Set();
+    Object.keys(form.groupProgramSelections || {}).forEach((gid) => {
+      if ((form.groupProgramSelections[gid] || []).length > 0) set.add(normalizeId(gid));
+    });
+    ensureArray(form.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
+    if (form.groupId) set.add(normalizeId(form.groupId));
+    if (activeGroupTab) set.add(normalizeId(activeGroupTab));
+    if (set.size === 0 && availableGroups.length > 0) {
+      availableGroups.forEach((g) => set.add(normalizeId(g.id)));
+    }
+    return Array.from(set);
+  }, [form.groupProgramSelections, form.groupIds, form.groupId, activeGroupTab, availableGroups]);
 
   const groupsToFetchKey = useMemo(() => [...groupsToFetch].sort().join(","), [groupsToFetch]);
 
@@ -7423,8 +8021,6 @@ function ExamForm({
                     groupId: gid,
                     academicLevelId: lid,
                   },
-                  silent: true,
-                  skipErrorLog: true,
                 })
                 .then((res) => ({ res, gid, lid }))
                 .catch(() =>
@@ -7503,20 +8099,39 @@ function ExamForm({
     return () => { active = false; };
   }, [form.boardId, form.levelIds, groupsToFetch, groupsToFetchKey, levelIdsKey, showToast]);
 
-  // Eligible subjects considering Academic Level, Group, Program, and Category
+  // Effective exam representation for subject eligibility:
+  // If user selected programs, use those groups; otherwise include active group tab so subjects for the active group tab are shown immediately.
+  const effectiveExamForEligible = useMemo(() => {
+    const activeProgramGids = Object.keys(form.groupProgramSelections || {}).filter(
+      (gid) => (form.groupProgramSelections[gid] || []).length > 0
+    );
+    const formGids = ensureArray(form.groupIds).map(normalizeId).filter(Boolean);
+    const currentTabGid = activeGroupTab ? normalizeId(activeGroupTab) : "";
+
+    const selectedGids = activeProgramGids.length > 0
+      ? activeProgramGids
+      : (formGids.length > 0 ? formGids : (currentTabGid ? [currentTabGid] : []));
+
+    return {
+      ...form,
+      groupIds: selectedGids,
+      programIds: [],
+    };
+  }, [form, activeGroupTab]);
+
   const eligibleSubjects = useMemo(
-    () => getEligibleSubjects(form, formEligibleSubjects),
-    [form, formEligibleSubjects],
+    () => getEligibleSubjects(effectiveExamForEligible, formEligibleSubjects),
+    [effectiveExamForEligible, formEligibleSubjects],
   );
 
   // Group subjects by Academic Level & Group for Tabbed Subject View
   const subjectTabGroups = useMemo(() => {
     if (!eligibleSubjects.length) return [];
     const map = new Map();
-    const effectiveGroupIds = form.groupIds.length > 0
-      ? form.groupIds.map(normalizeId)
+    const effectiveGroupIds = (effectiveExamForEligible.groupIds && effectiveExamForEligible.groupIds.length > 0)
+      ? effectiveExamForEligible.groupIds.map(normalizeId)
       : (activeGroupTab ? [normalizeId(activeGroupTab)] : availableGroups.map((g) => normalizeId(g.id)));
-    const effectiveLevelIds = form.levelIds.length > 0
+    const effectiveLevelIds = (form.levelIds && form.levelIds.length > 0)
       ? form.levelIds.map(normalizeId)
       : (formLevels[0]?.id ? [normalizeId(formLevels[0].id)] : []);
 
@@ -7560,11 +8175,18 @@ function ExamForm({
       ];
     }
     return Array.from(map.values());
-  }, [eligibleSubjects, form.levelIds, form.groupIds, formLevels, formGroups, activeGroupTab, availableGroups]);
+  }, [eligibleSubjects, effectiveExamForEligible.groupIds, form.levelIds, formLevels, formGroups, activeGroupTab, availableGroups]);
 
-  const [activeSubjectTabKey, setActiveSubjectTabKey] = useState(() => savedDraft?.activeSubjectTabKey || "");
+  const [activeSubjectTabKey, setActiveSubjectTabKey] = useState("");
 
   useEffect(() => {
+    if (activeGroupTab && subjectTabGroups.length > 0) {
+      const match = subjectTabGroups.find((g) => g.key.endsWith(`_${normalizeId(activeGroupTab)}`));
+      if (match) {
+        setActiveSubjectTabKey(match.key);
+        return;
+      }
+    }
     if (subjectTabGroups.length > 0) {
       if (!activeSubjectTabKey || !subjectTabGroups.some((g) => g.key === activeSubjectTabKey)) {
         setActiveSubjectTabKey(subjectTabGroups[0].key);
@@ -7572,7 +8194,7 @@ function ExamForm({
     } else {
       setActiveSubjectTabKey("");
     }
-  }, [subjectTabGroups, activeSubjectTabKey]);
+  }, [subjectTabGroups, activeSubjectTabKey, activeGroupTab]);
 
   const currentSubjectTabGroup = subjectTabGroups.find((g) => g.key === activeSubjectTabKey) || subjectTabGroups[0];
 
@@ -7605,30 +8227,7 @@ function ExamForm({
     return isStandard ? "" : form.examType;
   });
 
-  useEffect(() => {
-    if (!form.examType) return;
-    const isStandard = combinedExamTypeOptions.some(
-      (o) => o.id !== "Others" && o.name.toLowerCase() === form.examType.toLowerCase(),
-    );
-    setSelectedExamTypeOption(isStandard ? form.examType : "Others");
-    if (!isStandard) {
-      setCustomExamType(form.examType);
-    }
-  }, [form.examType, combinedExamTypeOptions]);
-
   const availablePatternOptions = useMemo(() => resolveGroupPatterns(activeGroupObj, form.examCategory, masterPatterns), [activeGroupObj, form.examCategory, masterPatterns]);
-
-  useEffect(() => {
-    if (!existing) {
-      saveModuleState("examinations", {
-        draftForm: {
-          ...form,
-          activeGroupTab,
-          activeSubjectTabKey,
-        },
-      });
-    }
-  }, [form, activeGroupTab, activeSubjectTabKey, existing]);
 
   const change = (n, v) => {
     if (n === "boardId" || n === "yearId") {
@@ -8126,25 +8725,31 @@ function ExamForm({
                       </span> */}
                     </div>
 
-                    <div className="exam-group-tabs-bar">
-                      {availableGroups.map((group) => {
-                        const selectedCount = getGroupProgramCount(group.id);
-                        const isActiveTab = String(group.id) === String(activeGroupTab);
-                        const isGroupActive = selectedCount > 0;
+                                        <div className="exam-group-tabs-bar">
+                      {availableGroups.length > 0 ? (
+                        availableGroups.map((group) => {
+                          const selectedCount = getGroupProgramCount(group.id);
+                          const isActiveTab = normalizeId(group.id) === normalizeId(activeGroupTab);
+                          const isGroupActive = selectedCount > 0 || (form.groupIds || []).map(normalizeId).includes(normalizeId(group.id));
 
-                        return (
-                          <button
-                            key={group.id}
-                            type="button"
-                            className={`exam-group-tab-btn ${isActiveTab ? "current" : ""} ${isGroupActive ? "has-selections" : ""}`}
-                            onClick={() => setActiveGroupTab(group.id)}
-                          >
-                            <span className="exam-group-code">{group.code}</span>
-                            <span className="exam-group-name">{group.name.split(" ")[0]}</span>
-                            {selectedCount > 0 && <span className="exam-group-badge">{selectedCount}</span>}
-                          </button>
-                        );
-                      })}
+                          return (
+                            <button
+                              key={group.id}
+                              type="button"
+                              className={`exam-group-tab-btn ${isActiveTab ? "current" : ""} ${isGroupActive ? "has-selections" : ""}`}
+                              onClick={() => handleGroupTabClick(group.id)}
+                            >
+                              <span className="exam-group-code">{group.code || group.groupCode || ""}</span>
+                              <span className="exam-group-name">{(group.name || group.groupName || "").split(" ")[0]}</span>
+                              {selectedCount > 0 && <span className="exam-group-badge">{selectedCount}</span>}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div style={{ padding: "8px 12px", color: "var(--cms-muted)", fontSize: "13px" }}>
+                          {formGroupsLoading ? "Loading groups..." : "No groups configured for the selected Board."}
+                        </div>
+                      )}
                     </div>
 
                     {activeGroupObj && (
@@ -8152,7 +8757,7 @@ function ExamForm({
                         <div className="exam-group-panel-header">
                           <div>
                             <strong>
-                              {activeGroupObj.name} ({activeGroupObj.code}) Program Selection
+                              {activeGroupObj.name || activeGroupObj.groupName} ({activeGroupObj.code || activeGroupObj.groupCode}) Program Selection
                             </strong>
                             <p>Select the program track to conduct this examination for.</p>
                           </div>
@@ -8166,8 +8771,8 @@ function ExamForm({
                                 getProgramsForGroup(activeGroupObj).every((p) =>
                                   isProgramSelectedInGroup(activeGroupObj.id, p.id),
                                 )
-                                ? `Deselect All ${activeGroupObj.code}`
-                                : `Select All ${activeGroupObj.code}`}
+                                ? `Deselect All ${activeGroupObj.code || activeGroupObj.groupCode}`
+                                : `Select All ${activeGroupObj.code || activeGroupObj.groupCode}`}
                             </button>
                           </div>
                         </div>
@@ -8186,8 +8791,8 @@ function ExamForm({
                                   {isSelected ? <Check size={14} /> : <div className="exam-program-pill-empty" />}
                                 </div>
                                 <div className="exam-program-pill-info">
-                                  <strong>{program.name}</strong>
-                                  <small>Code: {program.code}</small>
+                                  <strong>{program.name || program.programName}</strong>
+                                  <small>Code: {program.code || program.programCode}</small>
                                 </div>
                               </button>
                             );
@@ -8290,7 +8895,8 @@ function ExamForm({
                         </div>
                       </div>
                     )}
-                    {errors.groupIds && <span className="cms-error">{errors.groupIds}</span>}
+                    {(errors.groupIds || formGroupsError) && <span className="cms-error" role="alert">{errors.groupIds || formGroupsError}</span>}
+                    {formGroupsLoading && <span>Loading groups...</span>}
                     {errors.programIds && <span className="cms-error">{errors.programIds}</span>}
                   </div>
                 </>
@@ -8561,6 +9167,7 @@ function ScheduleSection({
   onRefreshRooms = null,
   campusId = "",
 }) {
+  const [scheduleRoute, setScheduleRoute] = useSearchParams();
   const campusCtx = useCampusContext?.();
   const effectiveCampusId = normalizeId(campusId || exam?.campusId || campusCtx?.currentCampusId || campusCtx?.selectedCampusId || "1");
 
@@ -8576,41 +9183,96 @@ function ScheduleSection({
   const [readinessErrors, setReadinessErrors] = useState([]);
   const [editingHallsSchedule, setEditingHallsSchedule] = useState(null);
 
-  // Draft schedules can be created; scheduled, ongoing, completed, active, published or cancelled examinations can be viewed or managed.
+  // Scheduled and draft examinations only in schedule dropdown (removing completed, cancelled)
   const schedulableExams = useMemo(
-    () => exams.filter((ex) => ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(ex.status))),
+    () => exams.filter((ex) => ["DRAFT", "SCHEDULED"].includes(normalizeStatus(ex.status))),
     [exams],
   );
 
   useEffect(() => {
-    if (examId && (!exam || !["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "ACTIVE", "PUBLISHED", "CANCELLED"].includes(normalizeStatus(exam.status)))) {
+    if (examId && (!exam || !["DRAFT", "SCHEDULED"].includes(normalizeStatus(exam.status)))) {
       const stillValid = schedulableExams.some((e) => normalizeId(e.id) === normalizeId(examId));
       if (!stillValid) setExamId("");
     }
   }, [examId, exam, schedulableExams, setExamId]);
 
   // Exam Group Scope Tabs in Schedule View
-  const examGroupIds = useMemo(() => (exam?.groupIds || [exam?.groupId]).filter(Boolean).map(normalizeId), [exam]);
+  const examGroupIds = useMemo(() => {
+    const raw = (exam?.groupIds && exam.groupIds.length > 0) ? exam.groupIds : (exam?.groupId ? [exam.groupId] : []);
+    return ensureArray(raw).filter(Boolean).map(normalizeId);
+  }, [exam]);
   const examGroups = useMemo(
-    () => groups.filter((g) => examGroupIds.includes(normalizeId(g.id))),
-    [groups, examGroupIds],
+    () => {
+      const matched = groups.filter((g) => examGroupIds.includes(normalizeId(g.id || g.groupId)));
+      if (matched.length > 0) return matched;
+      const fallbackIds = (exam?.groupIds && exam?.groupIds.length > 0) ? exam.groupIds : (exam?.groupId ? [exam.groupId] : []);
+      if (fallbackIds.length > 0) {
+        return fallbackIds.filter(Boolean).map((gid) => {
+          const isExamGid = normalizeId(gid) === normalizeId(exam?.groupId);
+          const gName = (isExamGid && exam?.groupName) ? exam.groupName : (nameOf(groups, gid, "") || `Group ${gid}`);
+          return {
+            id: normalizeId(gid),
+            groupId: normalizeId(gid),
+            name: gName,
+            groupName: gName,
+            code: (isExamGid && exam?.groupName) ? exam.groupName : (codeOf(groups, gid, "") || `GRP-${gid}`),
+            programs: [],
+            isActive: true,
+          };
+        });
+      }
+      return [];
+    },
+    [groups, examGroupIds, exam],
   );
 
-  const [selectedGroupId, setSelectedGroupId] = useState(() => examGroups[0]?.id || "");
+  const [selectedGroupId, setSelectedGroupId] = useState(() => (typeof scheduleRoute !== "undefined" && scheduleRoute.get("scheduleGroupId")) || examGroups[0]?.id || exam?.groupId || "");
+  useEffect(() => {
+    if (typeof scheduleRoute !== "undefined" && scheduleRoute.get) {
+      const id = scheduleRoute.get("scheduleGroupId");
+      if (id && examGroups.some((group) => normalizeId(group.id) === normalizeId(id))) {
+        setSelectedGroupId(id);
+      } else if (!selectedGroupId && examGroups.length > 0) {
+        setSelectedGroupId(examGroups[0].id);
+      }
+    }
+  }, [scheduleRoute, examGroups, selectedGroupId]);
 
   useEffect(() => {
-    if (examGroups.length > 0 && !examGroups.some((g) => normalizeId(g.id) === normalizeId(selectedGroupId))) {
-      setSelectedGroupId(examGroups[0].id);
+    if (examGroups.length > 0) {
+      if (!examGroups.some((g) => normalizeId(g.id) === normalizeId(selectedGroupId))) {
+        setSelectedGroupId(examGroups[0].id);
+      }
+    } else if (exam?.groupId && !selectedGroupId) {
+      setSelectedGroupId(exam.groupId);
     }
-  }, [examGroups, selectedGroupId]);
+  }, [examGroups, selectedGroupId, exam]);
 
   useEffect(() => {
     if (editing && sch.groupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
       setSelectedGroupId(sch.groupId);
     } else if (!editing && selectedGroupId && normalizeId(sch.groupId) !== normalizeId(selectedGroupId)) {
-      setSch((prev) => ({ ...prev, groupId: selectedGroupId, subjectId: "", patternName: "", hallAssignments: [] }));
+      setSch((prev) => ({
+        ...prev,
+        groupId: selectedGroupId,
+        subjectId: "",
+        patternName: "",
+        hallAssignments: [],
+        ...(isCombined ? {
+          mode: "Objective",
+          examMode: "Objective",
+          totalMarks: sch.totalMarks !== undefined && sch.totalMarks !== "" ? sch.totalMarks : (exam?.totalMarks ? String(exam.totalMarks) : "300"),
+          passPercentage: sch.passPercentage !== undefined && sch.passPercentage !== "" ? sch.passPercentage : "40",
+          date: exam?.startDate || prev.date,
+        } : {
+          mode: prev.mode || "Written",
+          totalMarks: prev.totalMarks || (exam?.totalMarks ? String(exam.totalMarks) : "100"),
+            passingMarks: prev.passingMarks || (exam?.passingMarks ? String(exam.passingMarks) : "28"),
+            passPercentage: prev.passPercentage || (exam?.passPercentage ? String(exam.passPercentage) : "28"),
+        }),
+      }));
     }
-  }, [selectedGroupId, sch.groupId, editing, setSch]);
+  }, [selectedGroupId, sch.groupId, editing, isCombined, exam?.startDate, exam?.totalMarks, setSch]);
 
   // Auto-fetch active classrooms and examination halls if not yet loaded
   useEffect(() => {
@@ -8636,8 +9298,6 @@ function ScheduleSection({
                 groupId: selectedGroupId,
                 academicLevelId: lid,
               },
-              silent: true,
-              skipErrorLog: true,
             })
             .catch(() =>
               apiClient.get("/api/v1/subjects", {
@@ -8716,14 +9376,21 @@ function ScheduleSection({
     [sectionSubjects],
   );
 
-  // Filter entries for the active individual group tab, or fallback to all entries if no group is selected or groups are untagged
+  // Filter entries strictly for the active individual group tab!
   const groupEntries = useMemo(
     () => {
-      if (!selectedGroupId || examGroups.length === 0) return entries;
-      const filtered = entries.filter((s) => normalizeId(s.groupId) === normalizeId(selectedGroupId) || matchesScheduleGroup(s, selectedGroupId, exam, effectiveGroupSubjects));
-      return filtered.length > 0 ? filtered : entries;
+      const effGid = selectedGroupId || exam?.groupId || examGroups[0]?.id;
+      return entries.filter((s) => {
+        if (effGid && (normalizeId(s.groupId) === normalizeId(effGid) || matchesScheduleGroup(s, effGid, exam, effectiveGroupSubjects))) {
+          return true;
+        }
+        if (!effGid || examGroups.length <= 1) {
+          return true;
+        }
+        return false;
+      });
     },
-    [entries, selectedGroupId, exam, effectiveGroupSubjects, examGroups.length],
+    [entries, selectedGroupId, exam, effectiveGroupSubjects, examGroups],
   );
 
   const availableSubjectsToSchedule = useMemo(() => {
@@ -8755,9 +9422,13 @@ function ScheduleSection({
         startTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : (prev.startTime || defaultSessionStartTime),
         endTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : (prev.endTime || defaultSessionEndTime),
         includedSubjectIds: subjectIds.length > 0 ? subjectIds : (prev.includedSubjectIds || []),
+        mode: "Objective",
+        totalMarks: prev.totalMarks !== undefined && prev.totalMarks !== "" ? prev.totalMarks : (exam?.totalMarks ? String(exam.totalMarks) : "100"),
+          passingMarks: prev.passingMarks !== undefined && prev.passingMarks !== "" ? prev.passingMarks : (exam?.passingMarks ? String(exam.passingMarks) : "28"),
+          passPercentage: prev.passPercentage !== undefined && prev.passPercentage !== "" ? prev.passPercentage : (exam?.passPercentage ? String(exam.passPercentage) : "28"),
       }));
     }
-  }, [isCombined, exam?.startDate, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
+  }, [isCombined, exam?.startDate, exam?.totalMarks, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
 
   useEffect(() => {
     if (isCombined && activeGroupSubjects.length > 0) {
@@ -8921,7 +9592,7 @@ function ScheduleSection({
       showToast?.("This Group already has saved schedules. Edit or remove those entries before automatic scheduling.", "error");
       return;
     }
-    const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
+    const currentGroupCode = codeOf(examGroups.length ? examGroups : groups, selectedGroupId, "GROUP");
     const selectedProgramIds = getSelectedProgramsForGroup(exam, selectedGroupId);
     setProcessing(true);
     try {
@@ -9105,7 +9776,7 @@ function ScheduleSection({
         }
       }
 
-      const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
+      const currentGroupCode = codeOf(examGroups.length ? examGroups : groups, selectedGroupId, "GROUP");
       const resolvedStartStr = formatTimeOnly(
         isCombined && anyCombinedSessionForExam && !editing ? (anyCombinedSessionForExam.startTime || sch.startTime) : sch.startTime
       );
@@ -9214,8 +9885,9 @@ function ScheduleSection({
             date: entry.date,
             startTime: entry.startTime,
             endTime: entry.endTime,
-            totalMarks: sch.totalMarks,
-            passPercentage: sch.passPercentage,
+            totalMarks: sch.totalMarks !== undefined && sch.totalMarks !== "" ? String(sch.totalMarks) : (exam.totalMarks ? String(exam.totalMarks) : "100"),
+            passingMarks: sch.passingMarks !== undefined && sch.passingMarks !== "" ? String(sch.passingMarks) : (sch.passPercentage || "28"),
+            passPercentage: sch.passPercentage !== undefined && sch.passPercentage !== "" ? String(sch.passPercentage) : (sch.passingMarks || "28"),
             candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
             hallAssignments: enrichedAssignments,
             roomId: validFirstRoom,
@@ -9227,7 +9899,8 @@ function ScheduleSection({
             invigilatorId: validFirstInv,
             invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
-            mode: sch.mode || (isObjective ? "Objective" : (exam.examCategory || "Combined")),
+            mode: "Objective",
+            examMode: "Objective",
             scheduleMode: "PATTERN_WISE",
             sessionId: sch.sessionId || (sch.patternName ? `SESSION-${sch.patternName}-${selectedGroupId}` : undefined),
             subjectId: sch.subjectId ? Number(sch.subjectId) : validSubId,
@@ -9249,8 +9922,9 @@ function ScheduleSection({
             date: entry.date,
             startTime: entry.startTime,
             endTime: entry.endTime,
-            totalMarks: sch.totalMarks,
-            passingMarks: sch.passingMarks,
+            totalMarks: sch.totalMarks !== undefined && sch.totalMarks !== "" ? String(sch.totalMarks) : "100",
+            passingMarks: sch.passingMarks !== undefined && sch.passingMarks !== "" ? String(sch.passingMarks) : "28",
+            passPercentage: sch.passPercentage !== undefined && sch.passPercentage !== "" ? String(sch.passPercentage) : "28",
             candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
             hallAssignments: enrichedAssignments,
             roomId: validFirstRoom,
@@ -9262,7 +9936,10 @@ function ScheduleSection({
             invigilatorId: validFirstInv,
             invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
-            mode: sch.mode || "Written",
+            mode: sch.mode && sch.mode !== "Objective" ? sch.mode : "Written",
+            examMode: sch.mode && sch.mode !== "Objective" ? sch.mode : "Written",
+            patternName: null,
+            includedSubjectIds: validSubId ? [validSubId] : [],
             scheduleMode: "SUBJECT_WISE",
             allScheduleIds: sch.allScheduleIds || (editing ? [editing] : []),
           },
@@ -9282,8 +9959,8 @@ function ScheduleSection({
     <>
       <div className="exam-toolbar">
         <div>
-          <h2>Exam Schedule Editor</h2>
-          <p>Examination schedule with subject dates, timings, examination halls, and invigilator faculty allocations.</p>
+          <h2>Exam Schedule & Postponement Editor</h2>
+          <p>Configure or reschedule subject dates, timings, halls, and invigilator faculty group-wise.</p>
         </div>
         {exam && entries.length > 0 && (
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -9337,30 +10014,43 @@ function ScheduleSection({
                 className="exam-context"
                 style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
               >
-                <div>
-                  <strong>
-                    {exam.name} ({exam.code})
-                  </strong>
-                  <span>
-                    {nameOf(boards, exam.boardId)} · Category: {exam.examCategory} · Levels:{" "}
-                    {getLevelNames(exam, academicLevels)} · Groups: {getGroupNames(exam, groups)}
-                  </span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginTop: "4px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <strong style={{ fontWeight: "700", color: "var(--cms-text, #0f172a)" }}>
+                      {exam.name} ({exam.code})
+                    </strong>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>{nameOf(boards, exam.boardId)}</span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
                     <span>
-                      Pattern: {exam.examPattern} · Period: {d(exam.startDate)} – {d(exam.endDate)}
+                      Category: <strong style={{ fontWeight: "700" }}>{exam.examCategory}</strong>
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Levels: {getLevelNames(exam, academicLevels)}
+                    </span>
+                    <span style={{ color: "#94a3b8" }}>·</span>
+                    <span>
+                      Groups: <strong style={{ fontWeight: "700" }}>{getGroupNames(exam, groups)}</strong>
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", color: "var(--cms-text, #1e293b)", fontSize: "13px" }}>
+                    <span>
+                      Pattern: <strong style={{ fontWeight: "700" }}>{exam.examPattern}</strong>
+                      <span style={{ margin: "0 8px", color: "#94a3b8" }}>·</span>
+                      Period: <strong style={{ fontWeight: "700" }}>{d(exam.startDate)} – {d(exam.endDate)}</strong>
                     </span>
                     {onEditPeriod && (
                       <button
                         type="button"
                         className="cms-btn cms-btn-primary exam-edit-period-btn"
-                        style={{ padding: "4px 10px", fontSize: "11px", height: "auto", display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: "600" }}
                         onClick={() => onEditPeriod(exam)}
                         title="Change examination time period dates"
                       >
-                        <Pencil size={12} style={{ marginRight: "3px" }} /> Edit Period
+                        <Pencil size={11} style={{ marginRight: "2px" }} /> Edit Period
                       </button>
                     )}
-                  </span>
+                  </div>
                 </div>
                 <span className={`cms-badge exam-status-badge exam-status-${normalizeStatus(exam.status).toLowerCase()}`}>
                   {normalizeStatus(exam.status) || "DRAFT"}
@@ -9418,6 +10108,7 @@ function ScheduleSection({
                         className={`exam-group-tab-btn ${isCurrentGroup ? "current" : ""} ${isGroupReady ? "has-selections" : ""}`}
                         onClick={() => {
                           setSelectedGroupId(group.id);
+                          const next = new URLSearchParams(scheduleRoute); next.set("scheduleGroupId", String(group.id)); setScheduleRoute(next);
                           setSch((prev) => ({
                             ...prev,
                             groupId: group.id,
@@ -9464,7 +10155,7 @@ function ScheduleSection({
                   <h3 style={{ margin: 0, fontSize: "14px", color: "var(--cms-text)" }}>
                     {editing ? "Edit / Postpone Schedule Entry for " : "Schedule Entry for "}
                     <strong>
-                      {nameOf(groups, selectedGroupId)} ({codeOf(groups, selectedGroupId)})
+                      {nameOf(examGroups.length ? examGroups : groups, selectedGroupId)} ({codeOf(examGroups.length ? examGroups : groups, selectedGroupId)})
                     </strong>
                   </h3>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -9477,7 +10168,7 @@ function ScheduleSection({
                           onClick={autoGenerateSchedule}
                           style={{ whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}
                         >
-                          <Wand2 size={14} /> {processing ? "Auto-Scheduling..." : `Auto-Schedule ${codeOf(groups, selectedGroupId)}`}
+                          <Wand2 size={14} /> {processing ? "Auto-Scheduling..." : `Auto-Schedule ${codeOf(examGroups.length ? examGroups : groups, selectedGroupId)}`}
                         </button>
                       )}
                   </div>
@@ -9625,8 +10316,8 @@ function ScheduleSection({
                   <Field
                     label="Total Marks *"
                     type="number"
-                    placeholder="e.g. 100 or 300"
-                    value={sch.totalMarks}
+                    placeholder="e.g. 100"
+                    value={sch.totalMarks !== undefined && sch.totalMarks !== null ? sch.totalMarks : "100"}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, totalMarks: v }));
                       setErrors((x) => ({ ...x, totalMarks: undefined }));
@@ -9637,17 +10328,31 @@ function ScheduleSection({
                   <Field
                     label={isCombined ? "Pass Percentage (%) *" : "Passing Marks *"}
                     type="number"
-                    placeholder={isCombined ? "e.g. 40" : "e.g. 35"}
-                    value={isCombined ? sch.passPercentage : sch.passingMarks}
+                    placeholder="e.g. 28"
+                    min={1}
+                    max={100}
+                    value={
+                      isCombined
+                        ? (sch.passPercentage !== undefined && sch.passPercentage !== null ? sch.passPercentage : (sch.passingMarks !== undefined && sch.passingMarks !== null ? sch.passingMarks : "28"))
+                        : (sch.passingMarks !== undefined && sch.passingMarks !== null ? sch.passingMarks : (sch.passPercentage !== undefined && sch.passPercentage !== null ? sch.passPercentage : "28"))
+                    }
                     onChange={(v) => {
-                      setSch((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: v }));
-                      setErrors((x) => ({ ...x, [isCombined ? "passPercentage" : "passingMarks"]: undefined }));
+                      setSch((x) => ({
+                        ...x,
+                        passingMarks: v,
+                        passPercentage: v,
+                      }));
+                      setErrors((x) => ({
+                        ...x,
+                        passingMarks: undefined,
+                        passPercentage: undefined,
+                      }));
                     }}
                     error={errors[isCombined ? "passPercentage" : "passingMarks"]}
                   />
 
                   {isCombined ? (
-                    <Field label="Exam Mode" value={sch.mode || (isObjective ? "Objective" : (exam?.examCategory || "Combined"))} readOnly />
+                    <Field label="Exam Mode" value={isCombined || isObjective ? "Objective" : (sch.mode || exam?.examCategory || "Combined")} readOnly />
 
                   ) : (
                     <SearchableSingleSelect
@@ -9663,8 +10368,8 @@ function ScheduleSection({
                   assignments={sch.hallAssignments}
                   rooms={eligibleRooms}
                   faculty={eligibleInvigilators}
-                  required={getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students)}
-                  enrolledStudentCount={getGroupStudents(exam, selectedGroupId, programs, students).length}
+                  required={getScopedCandidateStrength(exam, selectedGroupId, programs, students)}
+                  enrolledStudentCount={getScopedGroupStudents(exam, selectedGroupId, programs, students).length}
                   onRefreshStudents={onRefreshStudents}
                   onRefreshRooms={onRefreshRooms}
                   onChange={(hallAssignments) => setSch((x) => ({ ...x, hallAssignments }))}
@@ -9684,9 +10389,9 @@ function ScheduleSection({
                         date: "",
                         startTime: editing ? current.startTime : "09:00",
                         endTime: editing ? current.endTime : "12:00",
-                        totalMarks: "100",
-                        passingMarks: "35",
-                        passPercentage: "35",
+                        totalMarks: exam?.totalMarks ? String(exam.totalMarks) : "100",
+                          passingMarks: exam?.passingMarks ? String(exam.passingMarks) : "28",
+                          passPercentage: exam?.passPercentage ? String(exam.passPercentage) : "28",
                         hallAssignments: [],
                         mode: "Written",
                       }));
@@ -9732,7 +10437,7 @@ function ScheduleSection({
               <div className="exam-print-area" aria-hidden="true">
                 <div style={{ textAlign: "center", marginBottom: "16px" }}>
                   <h1 style={{ fontSize: "18px", margin: "0 0 4px", fontWeight: "bold" }}>
-                    COLLEGE EXAMINATION SCHEDULE
+                    COLLEGE EXAMINATION TIMETABLE / SCHEDULE
                   </h1>
                   <h2 style={{ fontSize: "14px", margin: "0 0 6px" }}>
                     {exam.name} ({exam.code}) — {nameOf(boards, exam.boardId)}
@@ -9756,7 +10461,7 @@ function ScheduleSection({
                       <th>Timing</th>
                       <th>Exam Mode</th>
                       <th>Total Marks</th>
-                      <th>Passing Marks</th>
+                      <th>{isCombined ? "Pass Percentage" : "Passing Marks"}</th>
                       <th>Room / Hall(s)</th>
                       <th>Invigilator Faculty</th>
                     </tr>
@@ -9772,7 +10477,7 @@ function ScheduleSection({
                         <td>{item.startTime} – {item.endTime}</td>
                         <td>{item.mode || "Written"}</td>
                         <td>{item.totalMarks}</td>
-                        <td>{item.passingMarks || (item.passPercentage ? `${item.passPercentage}%` : "—")}</td>
+                        <td>{isCombined ? `${item.passPercentage || "40"}%` : (item.passingMarks || "—")}</td>
                         <td>
                           {item.roomName && item.roomName !== "—"
                             ? item.roomName
@@ -10112,6 +10817,9 @@ function ScheduleTable({
   onUpdateSchedule = null,
   showToast = null,
 }) {
+  const [inlineRoute, setInlineRoute] = useSearchParams();
+  const inlineRestore = useRef("");
+  const inlineLoader = useRef(null);
   const displayEntries = useMemo(() => {
     if (!entries || !entries.length) return [];
     const patternSessionMap = new Map();
@@ -10119,10 +10827,12 @@ function ScheduleTable({
     const result = [];
 
     entries.forEach((item) => {
-      const isPatternWise =
+      const isItemRegular = isRegularExamination(exam) || String(exam?.examCategory || "").toLowerCase() === "regular" || String(item?.examCategory || "").toLowerCase() === "regular";
+      const isPatternWise = !isItemRegular && (
         item.scheduleMode === "PATTERN_WISE" ||
-        Boolean(item.patternName) ||
-        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1);
+        Boolean(item.patternName && !["regular", "regular pattern", "none"].includes(String(item.patternName).trim().toLowerCase())) ||
+        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1)
+      );
 
       const slotDate = canonicalDate(item.date || item.examDate);
       const slotStart = formatTimeOnly(item.startTime);
@@ -10244,6 +10954,11 @@ function ScheduleTable({
     });
 
     return result.map((item) => {
+      const isItemPattern = !isRegularExamination(exam) && (
+        item.scheduleMode === "PATTERN_WISE" ||
+        Boolean(item.patternName && !["regular", "regular pattern", "none"].includes(String(item.patternName).trim().toLowerCase())) ||
+        (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1)
+      );
       const mergedAssignments = (item.allHallAssignments && item.allHallAssignments.length > 0)
         ? item.allHallAssignments
         : (item.hallAssignments && item.hallAssignments.length > 0 ? item.hallAssignments : []);
@@ -10300,24 +11015,32 @@ function ScheduleTable({
 
       return {
         ...item,
-        subjectCode: combinedCodes || item.subjectCode,
-        subjectName: item.patternName || item.subjectName,
-        combinedSubjectsDisplay: combinedNames || item.combinedSubjectsDisplay,
+        subjectCode: isItemPattern && combinedCodes ? combinedCodes : item.subjectCode,
+        subjectName: isItemPattern
+          ? (item.patternName || item.subjectName)
+          : (item.subjectName && item.subjectName !== "Regular" ? item.subjectName : (item.subjectName || item.patternName)),
+        combinedSubjectsDisplay: isItemPattern && combinedNames ? combinedNames : (isItemPattern ? item.combinedSubjectsDisplay : ""),
         hallAssignments: mergedAssignments.length > 0 ? mergedAssignments : item.hallAssignments,
         roomName: hallDisplay || item.roomName,
         invigilatorName: invDisplay || item.invigilatorName,
       };
     });
-  }, [entries, rooms, faculty]);
+  }, [entries, rooms, faculty, exam]);
 
   const [page, setPage] = useState(1);
-  const pageSize = 10;
+  const pageSize = 6;
   const pages = Math.max(1, Math.ceil(displayEntries.length / pageSize));
   const pagedEntries = displayEntries.slice((page - 1) * pageSize, page * pageSize);
   const rangeStart = displayEntries.length ? (page - 1) * pageSize + 1 : 0;
   const rangeEnd = Math.min(page * pageSize, displayEntries.length);
 
-  const [inlineEditId, setInlineEditId] = useState(null);
+  const [inlineEditId, setInlineEditIdState] = useState(null);
+  const setInlineEditId = (id) => {
+    setInlineEditIdState(id);
+    if (!id && inlineRoute.get("action") === "inline-halls") {
+      const next = new URLSearchParams(inlineRoute); next.delete("action"); next.delete("scheduleId"); setInlineRoute(next);
+    }
+  };
   const [inlineAssignments, setInlineAssignments] = useState([]);
   const [inlineError, setInlineError] = useState("");
   const [inlineSaving, setInlineSaving] = useState(false);
@@ -10327,7 +11050,8 @@ function ScheduleTable({
   const isExamScheduled = exam && normalizeStatus(exam.status) === "SCHEDULED";
   const canEditAny = Boolean(canEdit && (isExamScheduled || edit || remove));
 
-  const handleToggleInlineEdit = (s) => {
+  const handleToggleInlineEdit = (s, restoring = false) => {
+    if (!restoring && inlineEditId !== s.id) { const next = new URLSearchParams(inlineRoute); next.set("action", "inline-halls"); next.set("scheduleId", String(s.id)); next.set("examId", String(s.examId || exam?.id)); setInlineRoute(next); return; }
     if (inlineEditId === s.id) {
       setInlineEditId(null);
       setInlineAssignments([]);
@@ -10387,6 +11111,15 @@ function ScheduleTable({
     setInlineAssignments(initial);
     setInlineError("");
   };
+
+  inlineLoader.current = handleToggleInlineEdit;
+  useEffect(() => {
+    const id = inlineRoute.get("action") === "inline-halls" ? inlineRoute.get("scheduleId") || "" : "";
+    if (!id) { inlineRestore.current = ""; setInlineEditIdState(null); return; }
+    if (inlineRestore.current === id) return;
+    const schedule = displayEntries.find((entry) => String(entry.id) === id);
+    if (schedule) { inlineRestore.current = id; inlineLoader.current(schedule, true); }
+  }, [inlineRoute, displayEntries]);
 
   const handleInlineAutoAssign = (s) => {
     const autoAssigned = autoAssignHallsAndInvigilators(
@@ -10750,13 +11483,35 @@ function ScheduleTable({
         </table>
       </div>
 
-      <Pagination
-          currentPage={page}
-          totalRecords={displayEntries.length}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          unit="records"
-        />
+      {displayEntries.length > pageSize && (
+        <div
+          className="exam-list-pagination"
+          style={{ border: "1px solid var(--cms-border)", borderRadius: "0 0 12px 12px" }}
+        >
+          <span className="exam-record-summary">
+            Showing {rangeStart}–{rangeEnd} of {displayEntries.length} records (6 per page)
+          </span>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            disabled={page === 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </button>
+          <span>
+            {page} / {pages}
+          </span>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            disabled={page === pages}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -11048,13 +11803,19 @@ function GlobalSchedulePreviewModal({
   academicYears = [],
   onClose,
   onExport,
+  onExportExcel,
+  onExportPdf,
 }) {
   const todayFormatted = useMemo(() => formatDDMMYYYY(new Date()), []);
   const THEMES = ["ref-theme-blue", "ref-theme-green", "ref-theme-orange", "ref-theme-purple"];
 
   return (
     <Modal
-      title="Examination Schedules Preview"
+      title={
+        targetExams.length === 1
+          ? `${targetExams[0]?.name || targetExams[0]?.code || "Examination"} Schedule Preview`
+          : "Examination Schedules Preview"
+      }
       onClose={onClose}
       className="exam-modal exam-preview-modal"
     >
@@ -11062,27 +11823,54 @@ function GlobalSchedulePreviewModal({
         {/* Top Action & Summary Bar */}
         <div className="exam-preview-action-bar">
           <div className="exam-preview-meta-info">
-            <span className="exam-preview-meta-text">
-              Scheduled Examinations: <strong>{targetExams.length}</strong>
-            </span>
-            <span className="exam-preview-meta-sep">•</span>
-            <span className="exam-preview-meta-text">
-              Total Sessions: <strong>{schedules.length}</strong>
-            </span>
+            {targetExams.length === 1 ? (
+              <>
+                <span className="exam-preview-meta-text">
+                  Examination: <strong>{targetExams[0]?.name || targetExams[0]?.code}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Status: <strong>{normalizeStatus(targetExams[0]?.status) || "SCHEDULED"}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Total Sessions: <strong>{schedules.length}</strong>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="exam-preview-meta-text">
+                  Scheduled Examinations: <strong>{targetExams.length}</strong>
+                </span>
+                <span className="exam-preview-meta-sep">•</span>
+                <span className="exam-preview-meta-text">
+                  Total Sessions: <strong>{schedules.length}</strong>
+                </span>
+              </>
+            )}
           </div>
           <div className="exam-preview-action-buttons">
             <button
               type="button"
-              className="cms-btn cms-btn-primary exam-preview-download-btn"
-              onClick={() => onExport(schedules)}
-              disabled={loading || schedules.length === 0}
+              className="cms-btn cms-btn-primary exam-preview-excel-btn"
+              onClick={() => (onExportExcel ? onExportExcel(schedules) : onExport?.(schedules))}
+              disabled={loading || targetExams.length === 0}
               title="Download Excel spreadsheet matching this layout"
             >
-              <Award size={16} /> Download Excel (.xlsx)
+              <FileSpreadsheet size={16} /> Download Excel
             </button>
             <button
               type="button"
-              className="cms-btn cms-btn-ghost"
+              className="cms-btn cms-btn-primary exam-preview-pdf-btn"
+              onClick={() => onExportPdf && onExportPdf(schedules)}
+              disabled={loading || targetExams.length === 0}
+              title="Download PDF document matching this layout"
+            >
+              <Printer size={16} /> Download PDF
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost exam-preview-close-btn"
               onClick={onClose}
             >
               Close
@@ -11102,7 +11890,9 @@ function GlobalSchedulePreviewModal({
           <div className="ref-doc-wrapper">
             {/* 1. Main Blue Title Banner */}
             <div className="ref-main-title-banner">
-              Examination Schedules
+              {targetExams.length === 1
+                ? `${targetExams[0]?.name || targetExams[0]?.code || "Examination"} Schedule`
+                : "Examination Schedules"}
             </div>
 
             {/* 2. Subheader Row: Generated On */}
@@ -11116,11 +11906,14 @@ function GlobalSchedulePreviewModal({
             <div className="ref-exams-container">
               {targetExams.map((exam, idx) => {
                 const themeClass = THEMES[idx % THEMES.length];
-                const examSchedules = schedules.filter((s) => {
+                let examSchedules = schedules.filter((s) => {
                   const sExamId = normalizeId(s.examId ?? s.examinationId);
                   const eExamId = normalizeId(exam.id ?? exam.examinationId);
                   return sExamId && eExamId ? sExamId === eExamId : true;
                 });
+                if (examSchedules.length === 0 && targetExams.length === 1) {
+                  examSchedules = schedules;
+                }
 
                 const examTitle = exam.name || exam.examName || "Examination";
                 const yearName = nameOf(academicYears, exam.yearId || exam.academicYearId) !== "—"
@@ -11320,7 +12113,7 @@ function Field({ label, value, onChange, type = "text", error, readOnly, placeho
       {label && <label>{label}</label>}
       {type === "textarea" ? (
         <textarea
-          value={value || ""}
+          value={value !== undefined && value !== null ? value : ""}
           readOnly={readOnly}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
@@ -11328,7 +12121,7 @@ function Field({ label, value, onChange, type = "text", error, readOnly, placeho
       ) : (
         <input
           type={type}
-          value={value || ""}
+          value={value !== undefined && value !== null ? value : ""}
           readOnly={readOnly}
           placeholder={placeholder}
           min={min}

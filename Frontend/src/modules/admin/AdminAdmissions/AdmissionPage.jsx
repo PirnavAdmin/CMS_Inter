@@ -1359,6 +1359,7 @@ const readAdmissionDraft = () => {
       step: migrateDraftStep(draft),
       feeSelection,
       hasFeeSelection: Array.isArray(draft?.feeSelection),
+      submissionUncertain: draft?.submissionUncertain === true,
     };
   } catch {
     window.localStorage.removeItem(ADMISSION_DRAFT_KEY);
@@ -1366,7 +1367,7 @@ const readAdmissionDraft = () => {
   }
 };
 
-const persistAdmissionDraft = ({ currentStep, formData, feeSelection }) => {
+const persistAdmissionDraft = ({ currentStep, formData, feeSelection, submissionUncertain = readAdmissionDraft().submissionUncertain === true }) => {
   if (!isBrowserStorageAvailable()) return;
 
   window.localStorage.setItem(ADMISSION_DRAFT_KEY, JSON.stringify({
@@ -1374,6 +1375,7 @@ const persistAdmissionDraft = ({ currentStep, formData, feeSelection }) => {
     currentStep: safeStepIndex(currentStep),
     formData: toSerializableAdmissionValues(formData),
     feeSelection: Array.isArray(feeSelection) ? feeSelection.map(String) : [],
+    submissionUncertain,
     updatedAt: new Date().toISOString(),
   }));
 };
@@ -1810,12 +1812,6 @@ const numericId = (value) => {
 };
 
 const admissionKeyFor = (record) => String(record?.admissionId || record?.id || "");
-
-const findAdmissionByNumber = (rows = [], admissionNo = "") => {
-  const target = String(admissionNo || "").trim().toLowerCase();
-  if (!target) return null;
-  return rows.find((row) => String(row.admissionNo || "").trim().toLowerCase() === target) || null;
-};
 
 const readStudentFeeAssignmentId = (payload) => {
   const data = getObject(payload);
@@ -3143,6 +3139,7 @@ export default function AdmissionPage() {
   const fileInputRefs = useRef({});
   const committedAdmissionRef = useRef(null);
   const submitInFlightRef = useRef(false);
+  const uncertainAdmissionRef = useRef(initialDraft.submissionUncertain === true);
   const allocatedAdmissionNumbersRef = useRef(new Map());
   const stepNavRef = useRef(null);
   const stepButtonRefs = useRef({});
@@ -3826,11 +3823,10 @@ export default function AdmissionPage() {
     document.save(`${safeExportFileName(`Admission ${admissionNo}`)}.pdf`);
   };
 
-  const refreshAdmissions = useCallback(async () => {
+  const refreshAdmissions = useCallback(async ({ reportError = true } = {}) => {
     const requestId = admissionsRequestRef.current + 1;
     admissionsRequestRef.current = requestId;
     setListLoading(true);
-    setAdmissions([]);
     try {
       const response = await apiClient.get(apiEndpoints.admissions.getAll, { params: admissionListParams });
       const apiRows = getCollection(response.data).map(normalizeAdmissionRow);
@@ -3838,12 +3834,14 @@ export default function AdmissionPage() {
       setAdmissions(apiRows);
       return apiRows;
     } catch (err) {
-      if (admissionsRequestRef.current === requestId) setToast(getApiErrorMessage(err), "error");
-      return [];
+      if (reportError && admissionsRequestRef.current === requestId) {
+        setToast(`Unable to refresh admissions. Previously loaded records have been kept. ${getApiErrorMessage(err)}`, "error");
+      }
+      return null;
     } finally {
       if (admissionsRequestRef.current === requestId) setListLoading(false);
     }
-  }, [admissionListParams]);
+  }, [admissionListParams, setToast]);
 
   useEffect(() => {
     setPage(1);
@@ -5137,6 +5135,7 @@ export default function AdmissionPage() {
   };
 
   const resetAdmissionDraftState = () => {
+    uncertainAdmissionRef.current = false;
     allocatedAdmissionNumbersRef.current.clear();
     suppressPersistRef.current = true;
     clearAdmissionDraft();
@@ -5164,6 +5163,7 @@ export default function AdmissionPage() {
   };
 
   const clearAdmissionForm = () => {
+    uncertainAdmissionRef.current = false;
     allowAutomaticNumberAllocation.current = true;
     allocatedAdmissionNumbersRef.current.clear();
     setAdmissionNumberPreviewVersion((current) => current + 1);
@@ -5601,6 +5601,10 @@ export default function AdmissionPage() {
 
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
+    if (!editingAdmissionId && uncertainAdmissionRef.current) {
+      setToast("The previous admission submission has an uncertain outcome. Check the admission list and confirm its status with the administrator before clearing this draft and retrying. It has not been submitted again.", "warning");
+      return;
+    }
     if (!isCrossCampusAdmission && feeStructureLoading) {
       setToast("Fee structure is being prepared. Please wait.", "warning");
       return;
@@ -5611,10 +5615,7 @@ export default function AdmissionPage() {
     }
 
     const committed = committedAdmissionRef.current;
-    const committedAdmissionId = committed
-      && String(committed.admissionNo || "").trim().toLowerCase() === String(values.admissionNo || "").trim().toLowerCase()
-      ? committed.admissionId
-      : "";
+    const committedAdmissionId = committed?.admissionId || "";
     const submitAdmissionId = editingAdmissionId || committedAdmissionId;
     const isUpdate = Boolean(submitAdmissionId);
     const visibleMobile = typeof document !== "undefined"
@@ -5633,6 +5634,7 @@ export default function AdmissionPage() {
     setSaving(true);
     let savedAdmissionId = submitAdmissionId;
     let admissionWriteCompleted = false;
+    let admissionRequestSent = false;
     let submittedAdmissionNo = isReferral || !isUpdate ? "" : submitValues.admissionNo || values.admissionNo;
     try {
       if (!isUpdate && !isReferral) {
@@ -5654,7 +5656,9 @@ export default function AdmissionPage() {
         formData.delete("SourceCampusId");
       }
       debugAdmissionSubmitPayload({ endpoint, method, formData, values: submitValues });
+      admissionRequestSent = true;
       const response = await apiClient[method](endpoint, formData, {
+        ...(!isUpdate ? { skipNetworkRetry: true } : {}),
         transformRequest: [(data, headers) => {
           delete headers["Content-Type"];
           delete headers["content-type"];
@@ -5678,17 +5682,18 @@ export default function AdmissionPage() {
       }
       if (!isUpdate) {
         savedAdmissionId = savedRow.admissionId || readId(getObject(response.data), "admissionId", "AdmissionId", "id", "Id");
-        if (savedRow.admissionId) {
+        if (numericId(savedAdmissionId)) {
           committedAdmissionRef.current = {
-            admissionId: savedRow.admissionId,
+            admissionId: savedAdmissionId,
             admissionNo: savedRow.admissionNo || submittedAdmissionNo,
           };
         }
+        else throw new Error("The server acknowledged the admission but did not return a valid admission ID.");
       }
       await saveAdmissionFeeSelections(savedAdmissionId, submitValues);
     } catch (err) {
       const message = getApiErrorMessage(err);
-      if (admissionWriteCompleted && savedAdmissionId) {
+      if (admissionWriteCompleted && numericId(savedAdmissionId)) {
         if (!isUpdate) {
           committedAdmissionRef.current = {
             admissionId: savedAdmissionId,
@@ -5702,29 +5707,22 @@ export default function AdmissionPage() {
         setSaving(false);
         return;
       }
-      if (!isUpdate && submittedAdmissionNo) {
-        const latestAdmissions = await refreshAdmissions();
-        const committedRow = findAdmissionByNumber(latestAdmissions, submittedAdmissionNo);
-        if (committedRow?.admissionId) {
-          committedAdmissionRef.current = {
-            admissionId: committedRow.admissionId,
-            admissionNo: committedRow.admissionNo || submittedAdmissionNo,
-          };
-          setEditingAdmissionId(committedRow.admissionId);
-          setValues((current) => ({
-            ...current,
-            admissionNo: committedRow.admissionNo || current.admissionNo,
-            status: committedRow.status || current.status,
-          }));
-          setViewMode("list");
-          setPage(1);
-          setToast(`Admission ${committedRow.admissionNo || submittedAdmissionNo} was created successfully, but fee setup could not be completed: ${message}`, "warning");
-          submitInFlightRef.current = false;
-          setSaving(false);
-          return;
+      const status = Number(err.response?.status);
+      const confirmedRejection = !admissionWriteCompleted && [400, 401, 403, 404, 405, 413, 415, 422].includes(status);
+      if (admissionRequestSent && !confirmedRejection) {
+        if (!isUpdate) {
+          uncertainAdmissionRef.current = true;
+          try {
+            persistAdmissionDraft({ currentStep: step, formData: submitValues, feeSelection, submissionUncertain: true });
+          } catch {
+            // Keep the in-memory submission guard even when browser storage is unavailable.
+          }
         }
+        const refreshed = await refreshAdmissions({ reportError: false });
+        setToast(`The admission ${isUpdate ? "update" : "submission"} outcome is uncertain; it may already have been saved. ${refreshed === null ? "The list could not be refreshed. " : "The admission list has been refreshed for review. "}Check the saved records and confirm the result with the administrator before retrying. ${message}`, "warning");
+      } else {
+        setToast(confirmedRejection ? `The server rejected the admission request: ${message}` : message, "error");
       }
-      setToast(message, "error");
       submitInFlightRef.current = false;
       setSaving(false);
       return;

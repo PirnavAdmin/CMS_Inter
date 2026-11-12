@@ -86,11 +86,6 @@ export const deleteBed = (id, config = {}) =>
 export const getWardens = (params, config = {}) =>
   api.get("/api/v1/hostel/wardens", { params, ...config });
 
-export const getWardenMe = (params, config = {}) =>
-  api.get("/api/v1/hostel/warden/me", { params, ...config }).catch(() =>
-    api.get("/api/v1/hostel/wardens", { params, ...config })
-  );
-
 export const getWardenById = (id, config = {}) =>
   api.get(`/api/v1/hostel/wardens/${id}`, config);
 

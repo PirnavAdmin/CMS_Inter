@@ -44,6 +44,7 @@ export default function ExamCellPortalRoutes() {
         <Route path="results" element={<Results />} />
         <Route path="publish-results" element={<Results initialView="published" pageTitle="Publish Results" pageSubtitle="Check readiness, process results and confirm section publication using the existing workflow." />} />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="attendance/staff" element={<Navigate to="/exam-cell-dashboard/check-in-out" replace />} />
         <Route path="attendance/:area" element={<Attendance />} />
         <Route path="attendance/student/:studentId/overview" element={<AttendanceOverview />} />
         <Route path="attendance/staff/:staffId/overview" element={<AttendanceOverview />} />

@@ -25,9 +25,6 @@ export const BACKEND_EXAM_CELL_JWT =
 export const BACKEND_TRANSPORT_MANAGER_JWT =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5MjgiLCJuYW1laWQiOiI5MjgiLCJlbWFpbCI6InBvbmRhcmEudmVua2F0ZXNoQHBpcm5hdi5jb20iLCJ1bmlxdWVfbmFtZSI6Im11emFuIGtpYnV0c3V6aSIsInJvbGUiOiJUcmFuc3BvcnQgTWFuYWdlciIsImp0aSI6IjZjZWMwODRhLTY1ZWEtNDJmZi1iY2MzLWZlNDBmZTBmNzhiYSIsIlN0YWZmSWQiOiIxMTI1IiwiRGVzaWduYXRpb24iOiJUcmFuc3BvcnQgTWFuYWdlciIsIkVtcGxveWVlSWQiOiJNTlQwMDQ0IiwibmJmIjoxNzkyNzU2NjQyLCJleHAiOjE3OTI4NDMwNDIsImlhdCI6MTc5Mjc1NjY0MiwiaXNzIjoiQ29sbGVnZU1hbmFnZW1lbnRBUEkiLCJhdWQiOiJDb2xsZWdlTWFuYWdlbWVudEZyb250ZW5kIn0.KJfgdYtpYwNLugsJTIbgAvv7-rzOMQodcxS-W4g9P2k";
 
-export const BACKEND_WARDEN_JWT =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4ODUiLCJuYW1laWQiOiI4ODUiLCJlbWFpbCI6ImxvaGl0aG5haWR1MjAyMEBnbWFpbC5jb20iLCJ1bmlxdWVfbmFtZSI6Ikxva2l0aG5haWR1IEFtYmF0aSIsIm5hbWUiOiJMb2tpdGhuYWlkdSBBbWJhdGkiLCJyb2xlIjoiV2FyZGVuIiwiUm9sZSI6IldhcmRlbiIsImh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd3MvMjAwOC8wNi9pZGVudGl0eS9jbGFpbXMvcm9sZSI6IldhcmRlbiIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWVpZGVudGlmaWVyIjoiODg1IiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Ikxva2l0aG5haWR1IEFtYmF0aSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImxvaGl0aG5haWR1MjAyMEBnbWFpbC5jb20iLCJqdGkiOiJjbXMtd2FyZGVuLXRva2VuLXBlcm0iLCJTdGFmZklkIjoiMTA5NiIsIkVtcGxveWVlSWQiOiJNTlQwMDMzIiwiRGVzaWduYXRpb24iOiJIb3N0ZWwgV2FyZGVuIiwiVXNlcklkIjoiODg1IiwibmJmIjoxNzkxOTAwMDAwLCJleHAiOjIxNDc0ODM2NDcsImlhdCI6MTc5MTkwMDAwMCwiaXNzIjoiQ29sbGVnZU1hbmFnZW1lbnRBUEkiLCJhdWQiOiJDb2xsZWdlTWFuYWdlbWVudEZyb250ZW5kIn0.jge0RqQg_HYsP4kh4vytkVl3pgQmryd-2tmMKVxWuPs";
-
 export const getAuthToken = () => {
   const token = getAuthItem("token") || "";
   if (!token) return "";
@@ -54,24 +51,6 @@ export const getAuthToken = () => {
 
   const isParent = role === "parent" || (typeof window !== "undefined" && window.location?.pathname?.startsWith("/parent-dashboard"));
   const isExamCell = role.includes("exam") || (typeof window !== "undefined" && window.location?.pathname?.startsWith("/exam-cell-dashboard"));
-  const isWarden =
-    role.includes("warden") ||
-    (typeof window !== "undefined" && window.location?.pathname?.startsWith("/warden"));
-
-  if (isWarden) {
-    if (
-      !token ||
-      token.startsWith("mock-") ||
-      token.startsWith("demo-") ||
-      token.startsWith("warden-") ||
-      token === "null" ||
-      token === "undefined"
-    ) {
-      updateAuthToken(BACKEND_WARDEN_JWT);
-      return BACKEND_WARDEN_JWT;
-    }
-    return token;
-  }
 
   if (isParent) {
     if (
@@ -173,22 +152,6 @@ export const getAuthUser = () => {
         staffId: cleaned.staffId || 1109,
         campusId: cleaned.campusId || 1,
         assignedCampusIds: Array.isArray(cleaned.assignedCampusIds) && cleaned.assignedCampusIds.length > 0 ? cleaned.assignedCampusIds : [1],
-      };
-    }
-
-    if (roleLower.includes("warden") || (typeof window !== "undefined" && window.location?.pathname?.startsWith("/warden"))) {
-      const resolvedStaffId = cleaned.staffId || cleaned.id || 1096;
-      return {
-        ...cleaned,
-        id: resolvedStaffId,
-        staffId: resolvedStaffId,
-        userId: cleaned.userId || 885,
-        role: cleaned.role || "Hostel Warden",
-        designation: cleaned.designation || "Hostel Warden",
-        name: cleaned.name || cleaned.fullName || "Lokithnaidu Ambati",
-        fullName: cleaned.fullName || cleaned.name || "Lokithnaidu Ambati",
-        employeeId: cleaned.employeeId || "MNT0033",
-        email: cleaned.email || "lohithnaidu2020@gmail.com",
       };
     }
 

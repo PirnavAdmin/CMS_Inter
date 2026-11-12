@@ -7,6 +7,8 @@ import {
   normalizePaymentConfig,
   paymentConfigCampusId,
   paymentConfigPayload,
+  validatePaymentProof,
+  paymentProofType,
 } from "../modules/admin/AdminFees/services/paymentGatewaySession.js";
 
 const config = {
@@ -18,6 +20,32 @@ const config = {
 const post = async (url, payload, signal) =>
   gatewayData((await apiClient.post(url, payload, { ...config, signal })).data);
 export const feePaymentGatewayApi = {
+  paymentProof: async (attachmentId, signal) => {
+    const id = Number(attachmentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid payment proof ID is required.");
+    const response = await apiClient.get(`/api/v1/fee-payments/gateway/attachments/${id}`, {
+      ...config, signal, timeout: 60000, responseType: "blob", headers: { Accept: "image/jpeg,image/png,application/pdf" },
+    });
+    const blob = response.data;
+    if (!(blob instanceof Blob) || !blob.size || blob.size > 5 * 1024 * 1024) throw new Error("Payment proof is empty or exceeds the supported size.");
+    const type = paymentProofType(new Uint8Array(await blob.slice(0, 12).arrayBuffer()));
+    if (!type || (blob.type && blob.type.split(";")[0] !== type)) throw new Error("The backend did not return a supported payment proof file.");
+    signal?.throwIfAborted();
+    return new Blob([blob], { type });
+  },
+  receiptPdf: async (feePaymentId, signal) => {
+    const id = Number(feePaymentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid saved payment ID is required to retrieve the official receipt.");
+    const response = await apiClient.get(`/api/v1/fee-payments/gateway/receipt/${id}/pdf`, {
+      ...config, signal, responseType: "blob", headers: { Accept: "application/pdf" },
+    });
+    const blob = response.data;
+    if (!(blob instanceof Blob) || !blob.size || !/application\/pdf/i.test(response.headers?.["content-type"] || blob.type))
+      throw new Error("The backend did not return an official PDF receipt.");
+    if (await blob.slice(0, 5).text() !== "%PDF-") throw new Error("The receipt response is not a valid PDF file.");
+    signal?.throwIfAborted();
+    return blob;
+  },
   createOrder: (payload, signal) => post(apiEndpoints.feeGateway.createOrder, payload, signal),
   verify: (payload, signal) => post(apiEndpoints.feeGateway.verify, payload, signal),
   reverse: async (payload, signal) => {
@@ -26,8 +54,31 @@ export const feePaymentGatewayApi = {
       throw new Error("Reversal was not confirmed. Review Payment History before trying again.");
     return data;
   },
-  submitUtr: async (payload, signal) => {
-    const data = await post(apiEndpoints.feeGateway.submitUtr, payload, signal);
+  submitUtr: async (payload, signal, { attachment, idempotencyKey } = {}) => {
+    let data;
+    if (attachment) {
+      const type = await validatePaymentProof(attachment);
+      const form = new FormData();
+      for (const [key, value] of Object.entries(payload)) {
+        if (value == null) continue;
+        if (Array.isArray(value)) value.forEach(item => form.append(key, String(item)));
+        else form.append(key, String(value));
+      }
+      form.append("attachment", attachment);
+      if (idempotencyKey) form.append("idempotencyKey", idempotencyKey);
+      data = gatewayData((await apiClient.post(apiEndpoints.feeGateway.submitUtr, form, {
+        ...config, signal, timeout: 60000, ...(idempotencyKey ? { headers: { "Idempotency-Key": idempotencyKey } } : {}),
+      })).data);
+      if (data.success !== true || String(data.status).toLowerCase() !== "pendingverification"
+        || !Number.isSafeInteger(Number(data.transactionId)) || Number(data.transactionId) <= 0
+        || Number(data.studentId) !== Number(payload.studentId) || Number(data.studentFeeId) !== Number(payload.studentFeeId)
+        || Math.abs(Number(data.amount) - Number(payload.amount)) > 0.005 || !Number.isFinite(Number(data.amount))
+        || data.utrNumber !== payload.utrNumber || (payload.orderId && data.orderId !== payload.orderId)
+        || !Number.isSafeInteger(Number(data.attachment?.attachmentId)) || Number(data.attachment.attachmentId) <= 0
+        || data.attachment.contentType !== type || Number(data.attachment.sizeBytes) !== attachment.size) {
+        throw new Error("The backend did not confirm that this verification request and its proof were stored together. Check the pending queue before retrying.");
+      }
+    } else data = await post(apiEndpoints.feeGateway.submitUtr, payload, signal);
     if (data.success !== true)
       throw new Error("UTR submission was not acknowledged. Review the queue before retrying.");
     return data;

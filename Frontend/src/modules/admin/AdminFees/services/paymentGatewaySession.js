@@ -1,6 +1,42 @@
 // Gateway amounts use rupees; only Razorpay Checkout uses currency subunits.
 export const UTR_SUBMITTED_EVENT = "cms-fee-utr-submitted";
 
+export function paymentProofType(bytes) {
+  if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, i) => bytes[i] === value)) return "image/png";
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";
+  if ([37, 80, 68, 70, 45].every((value, i) => bytes[i] === value)) return "application/pdf";
+  return "";
+}
+
+export async function validatePaymentProof(file) {
+  if (!file || !file.size) throw new Error("Choose a non-empty payment proof file.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Payment proof must be 5 MB or smaller.");
+  const extension = String(file.name || "").split(".").at(-1).toLowerCase();
+  const expected = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", pdf: "application/pdf" }[extension];
+  if (!expected) throw new Error("Choose a JPG, JPEG, PNG or PDF file.");
+  const actual = paymentProofType(new Uint8Array(await file.slice(0, 12).arrayBuffer()));
+  if (actual !== expected || (file.type && file.type !== "application/octet-stream" && file.type !== actual))
+    throw new Error("The file contents do not match a supported JPG, PNG or PDF file. Choose the original payment proof.");
+  return actual;
+}
+
+export function paymentUiState(payment = {}) {
+  const status = String(payment.status || payment.paymentStatus || "").toLowerCase().replace(/[ _-]/g, "");
+  if (["rejected"].includes(status)) return "PAYMENT_REJECTED";
+  if (status === "expired") return "PAYMENT_EXPIRED";
+  if (["failed", "cancelled", "canceled", "reversed", "refunded"].includes(status)) return "PAYMENT_FAILED";
+  if (["pendingverification", "submitted", "awaitingverification"].includes(status)) return "PENDING_VERIFICATION";
+  if (payment.isPaid !== false && (payment.isPaid === true || payment.gatewayConfirmed === true
+    || ["paid", "captured", "settled", "success", "completed"].includes(status))) return "PAYMENT_SUCCESSFUL";
+  if (status === "created" || status === "initiated") return "PAYMENT_INITIATED";
+  return "AWAITING_PAYMENT";
+}
+
+export function emailDeliveryState(payment = {}) {
+  const value = String(payment.emailDeliveryStatus ?? payment.emailStatus ?? "").toUpperCase().replace(/[ -]/g, "_");
+  return ["NOT_REQUESTED", "QUEUED", "SENT", "FAILED"].includes(value) ? value : "UNKNOWN";
+}
+
 export function isManualQrOrder(order) {
   return order?.requiresManualUtr === true && typeof order.orderId === "string" && Boolean(order.orderId.trim())
     && order.currency === "INR" && Number.isFinite(Number(order.amount)) && Number(order.amount) > 0
@@ -22,8 +58,9 @@ export function directQrUtrPayload(order, account, draft, today) {
     invalid("amountPaid", "Amount paid must match the generated QR amount. Contact the finance team if a different amount was transferred.");
   }
   const utrNumber = String(draft.utrNumber || "").trim();
-  if (utrNumber.length < 6 || utrNumber.length > 50 || /[\u0000-\u001f\u007f]/.test(utrNumber) || !/[A-Za-z0-9]/.test(utrNumber)) {
-    invalid("utrNumber", "Enter a transaction reference of 6–50 characters containing letters or digits.");
+  const hasControlCharacters = Array.from(utrNumber).some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127);
+  if (utrNumber.length < 6 || utrNumber.length > 100 || hasControlCharacters || !/[A-Za-z0-9]/.test(utrNumber)) {
+    invalid("utrNumber", "Enter a transaction reference of 6–100 characters containing letters or digits.");
   }
   const bankName = String(draft.bankName || "").trim();
   if (!bankName || bankName.length > 200) invalid("bankName", "Enter the bank or payment app used (up to 200 characters).");
@@ -33,8 +70,8 @@ export function directQrUtrPayload(order, account, draft, today) {
     || parsedDate.toISOString().slice(0, 10) !== paymentDate || paymentDate < "2000-01-01" || paymentDate > today) {
     invalid("paymentDate", "Enter a valid payment date from 2000 onwards that is not in the future.");
   }
-  // The existing DTO has no originalOrderId or installment selection field.
-  // Retain the QR reference for reviewers using its supported Remarks field.
+  // Keep a human-readable reference for reviewers. The caller also sends the
+  // supported OrderId and FeeInstallmentIds fields when linking the QR request.
   const remarks = `Direct UPI QR order: ${order.orderId}${draft.remarks?.trim() ? `\n${draft.remarks.trim()}` : ""}`;
   if (remarks.length > 500) invalid("remarks", "Shorten the remarks so they and the QR order reference fit within 500 characters.");
   return { studentId: payment.studentId, studentFeeId: payment.studentFeeId, amount: payment.amount,
@@ -404,6 +441,7 @@ export function startPaymentPolling({
     stop();
     onUpdate({
       status: "TIMEOUT",
+      paymentState: order.expiresAt && now() >= order.expiresAt ? "PAYMENT_EXPIRED" : "AWAITING_PAYMENT",
       error: "Monitoring ended. Check this order again before collecting another payment.",
     });
   };
@@ -429,10 +467,10 @@ export function startPaymentPolling({
       }
       if (status === "FAILED") {
         stop();
-        onUpdate({ status, error: data.failureReason || `Payment ${data.status}.` });
+        onUpdate({ status, paymentState: paymentUiState(data), error: data.failureReason || `Payment ${data.status}.` });
         return;
       }
-      onUpdate({ status: "PENDING", error: "" });
+      onUpdate({ status: "PENDING", paymentState: paymentUiState(data), error: "" });
     } catch (error) {
       if (stopped) return;
       const code = error.response?.status;
