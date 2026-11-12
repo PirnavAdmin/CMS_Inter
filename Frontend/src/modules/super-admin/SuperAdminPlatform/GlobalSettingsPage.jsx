@@ -271,7 +271,7 @@ export default function GlobalSettingsPage() {
             onClick={() => setActiveTab("platform_identity")}
           >
             <Palette size={16} className="gsp-tab-icon" />
-            <span>Platform Appearance</span>
+            <span>Theme Appearance</span>
           </button>
 
           <button
@@ -741,7 +741,7 @@ export default function GlobalSettingsPage() {
             </form>
           )}
 
-          {/* ════ TAB 3: Platform Identity & Theme Appearance ════ */}
+          {/* ════ TAB 3: Theme Appearance ════ */}
           {activeTab === "platform_identity" && (
             <div className="gsp-form">
               <div className="gsp-form-header">
@@ -749,7 +749,7 @@ export default function GlobalSettingsPage() {
                   <Palette size={20} />
                 </div>
                 <div>
-                  <h2 className="gsp-form-title">Platform Appearance & Theme Palettes</h2>
+                  <h2 className="gsp-form-title">Theme Appearance</h2>
                   <p className="gsp-form-subtitle">
                     Customize your platform color theme palette and toggle between Dark and Light mode.
                   </p>
