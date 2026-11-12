@@ -1240,18 +1240,6 @@ export default function RenewalsPage() {
                                     type="button"
                                     className="rnp-popover-item"
                                     onClick={() => {
-                                      setProcessRenewalModal(item);
-                                      setRenewalPeriodChoice("1year");
-                                      setActivePopover(null);
-                                    }}
-                                  >
-                                    <RefreshCw size={14} color="#16a34a" />
-                                    <span>Process Renewal</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rnp-popover-item"
-                                    onClick={() => {
                                       setSendReminderModal(item);
                                       setReminderMessage(
                                         `Dear ${item.adminName !== "—" ? item.adminName : "Administrator"},\n\nYour subscription for ${item.collegeName} is due for renewal on ${item.renewalDate}. Please complete renewal to ensure uninterrupted portal access.`
@@ -1261,18 +1249,6 @@ export default function RenewalsPage() {
                                   >
                                     <Bell size={14} color="#ea580c" />
                                     <span>Send Expiry Reminder</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rnp-popover-item"
-                                    onClick={() => {
-                                      setChangePlanModal(item);
-                                      setNewSelectedPlan(item.plan !== "—" ? item.plan : "Standard");
-                                      setActivePopover(null);
-                                    }}
-                                  >
-                                    <ArrowUpRight size={14} color="#7c3aed" />
-                                    <span>Upgrade / Change Plan</span>
                                   </button>
                                   <button
                                     type="button"

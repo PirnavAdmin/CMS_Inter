@@ -14,7 +14,13 @@ export function usePaymentPolling(order, attempt, onSuccess) {
       setState({ status: "IDLE", error: "" });
       return;
     }
-    const deadline = Math.min(Date.now() + 600000, order.expiresAt || Infinity);
+    if (order.requiresManualUtr) {
+      setState({ status: "MANUAL_UTR", error: "" });
+      setSecondsLeft(0);
+      return;
+    }
+    const timeoutMs = Number(order.monitoringTimeoutSeconds || 600) * 1000;
+    const deadline = Math.min(Date.now() + timeoutMs, order.expiresAt || Infinity);
     setState({ status: "PENDING", error: "" });
     const updateCountdown = () =>
       setSecondsLeft(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
@@ -22,6 +28,8 @@ export function usePaymentPolling(order, attempt, onSuccess) {
     const countdown = window.setInterval(updateCountdown, 1000);
     const stop = startPaymentPolling({
       order,
+      timeoutMs,
+      intervalMs: Number(order.pollingIntervalMs || 1200),
       probe: (signal) => feePaymentGatewayApi.status(order.studentFeeId, order.orderId, signal),
       onUpdate: (next) => {
         setState(next);

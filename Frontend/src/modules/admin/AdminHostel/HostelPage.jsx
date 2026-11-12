@@ -466,6 +466,7 @@ export default function HostelPage() {
   const [dashBlockSearch, setDashBlockSearch] = useState("");
   const [dashSelectedBlockId, setDashSelectedBlockId] = useState("");
   const [dashBlockPage, setDashBlockPage] = useState(1);
+  const [wardenSelectedBlockId, setWardenSelectedBlockId] = useState("all");
 
   // ── API-backed State Initialization ─────────────────────────────────
   const [blocks, setBlocks] = useState([]);
@@ -1615,7 +1616,134 @@ export default function HostelPage() {
     }
   }, [dashBlockSearch, enrichedBlocks]);
 
-  // ── Computed Metrics ────────────────────────────────────────────────
+  // ── Warden Active Assignment & Scope Resolution ─────────────────────
+  // Resolve authenticated warden identity (StaffId, EmployeeId)
+  const authenticatedStaffId = useMemo(() => {
+    return Number(user?.staffId || user?.id || 0);
+  }, [user]);
+
+  const authenticatedEmployeeId = useMemo(() => {
+    return String(user?.employeeId || user?.empId || "").trim().toLowerCase();
+  }, [user]);
+
+  // Retrieve active warden assignments belonging to the authenticated warden
+  const myWardenAssignments = useMemo(() => {
+    if (!isWarden) return [];
+    return wardens.filter((w) => {
+      const isActive = (w.status || "").toLowerCase() === "active";
+      if (!isActive) return false;
+      const wStaffId = Number(w.staffId || 0);
+      const wEmpId = String(w.employeeId || w.empId || "").trim().toLowerCase();
+      if (authenticatedStaffId > 0 && wStaffId > 0 && authenticatedStaffId === wStaffId) return true;
+      if (authenticatedEmployeeId && wEmpId && authenticatedEmployeeId === wEmpId) return true;
+      return false;
+    });
+  }, [isWarden, wardens, authenticatedStaffId, authenticatedEmployeeId]);
+
+  // Authorized block IDs explicitly assigned to this warden (null for Admin)
+  const authorizedBlockIds = useMemo(() => {
+    if (!isWarden) return null;
+    const ids = myWardenAssignments
+      .map((a) => Number(a.hostelId))
+      .filter((id) => !isNaN(id) && id > 0);
+    return new Set(ids);
+  }, [isWarden, myWardenAssignments]);
+
+  // Authorized blocks for warden (or full enrichedBlocks for Admin)
+  const myAssignedBlocks = useMemo(() => {
+    if (!isWarden) return enrichedBlocks;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return enrichedBlocks.filter((b) => authorizedBlockIds.has(Number(b.id)));
+  }, [isWarden, authorizedBlockIds, enrichedBlocks]);
+
+  // Auto-select single assigned block or reset if assignment changes
+  useEffect(() => {
+    if (!isWarden) return;
+    if (myAssignedBlocks.length === 1) {
+      const singleId = String(myAssignedBlocks[0].id);
+      setWardenSelectedBlockId(singleId);
+      setDashSelectedBlockId(singleId);
+      setDashBlockSearch(singleId);
+    } else if (myAssignedBlocks.length > 1) {
+      if (wardenSelectedBlockId !== "all" && !myAssignedBlocks.some((b) => String(b.id) === String(wardenSelectedBlockId))) {
+        setWardenSelectedBlockId("all");
+      }
+    }
+  }, [isWarden, myAssignedBlocks, wardenSelectedBlockId]);
+
+  // Active in-scope block IDs (for single block filter selection vs all assigned)
+  const inScopeBlockIds = useMemo(() => {
+    if (!isWarden) return null;
+    if (myAssignedBlocks.length === 0) return new Set();
+    if (myAssignedBlocks.length === 1) return new Set([Number(myAssignedBlocks[0].id)]);
+    if (wardenSelectedBlockId && wardenSelectedBlockId !== "all") {
+      return new Set([Number(wardenSelectedBlockId)]);
+    }
+    return authorizedBlockIds;
+  }, [isWarden, myAssignedBlocks, wardenSelectedBlockId, authorizedBlockIds]);
+
+  // Scoped datasets strictly restricted to authorized blocks for warden
+  const scopedRooms = useMemo(() => {
+    if (!isWarden) return rooms;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return rooms.filter((r) => authorizedBlockIds.has(Number(r.hostelId)));
+  }, [isWarden, rooms, authorizedBlockIds]);
+
+  const scopedBeds = useMemo(() => {
+    if (!isWarden) return beds;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    const scopedRoomIds = new Set(scopedRooms.map((r) => Number(r.id)).filter(Boolean));
+    return beds.filter((b) => (b.hostelId && authorizedBlockIds.has(Number(b.hostelId))) || (b.roomId && scopedRoomIds.has(Number(b.roomId))));
+  }, [isWarden, beds, authorizedBlockIds, scopedRooms]);
+
+  const scopedAllocations = useMemo(() => {
+    if (!isWarden) return allocations;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return allocations.filter((a) => authorizedBlockIds.has(Number(a.hostelId)));
+  }, [isWarden, allocations, authorizedBlockIds]);
+
+  const scopedActiveAllocations = useMemo(() => {
+    const base = isWarden ? scopedAllocations : allocations;
+    return base.filter((a) => (a.status || "").toLowerCase() === "active" || (a.status || "").toLowerCase() === "allocated");
+  }, [isWarden, scopedAllocations, allocations]);
+
+  const scopedAttendanceStudents = useMemo(() => {
+    if (!isWarden) return attendanceStudents;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return attendanceStudents.filter((s) => {
+      const blk = blocks.find((b) => b.name === s.block || b.code === s.blockCode || String(b.id) === String(s.hostelId));
+      return blk && authorizedBlockIds.has(Number(blk.id));
+    });
+  }, [isWarden, attendanceStudents, authorizedBlockIds, blocks]);
+
+  const scopedOutpasses = useMemo(() => {
+    if (!isWarden) return outpasses;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return outpasses.filter((o) => {
+      if (o.hostelId && authorizedBlockIds.has(Number(o.hostelId))) return true;
+      const alloc = scopedAllocations.find((a) =>
+        (o.studentId && Number(a.studentId) === Number(o.studentId)) ||
+        (o.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(o.admissionNo).trim().toLowerCase())
+      );
+      return Boolean(alloc);
+    });
+  }, [isWarden, outpasses, authorizedBlockIds, scopedAllocations]);
+
+  const scopedTransfers = useMemo(() => {
+    if (!isWarden) return transfers;
+    if (!authorizedBlockIds || authorizedBlockIds.size === 0) return [];
+    return transfers.filter((t) => {
+      if (t.fromHostelId && authorizedBlockIds.has(Number(t.fromHostelId))) return true;
+      if (t.toHostelId && authorizedBlockIds.has(Number(t.toHostelId))) return true;
+      const alloc = scopedAllocations.find((a) =>
+        (t.allocationId && Number(a.id) === Number(t.allocationId)) ||
+        (t.studentId && Number(a.studentId) === Number(t.studentId))
+      );
+      return Boolean(alloc);
+    });
+  }, [isWarden, transfers, authorizedBlockIds, scopedAllocations]);
+
+  // ── Computed Metrics (Admin & Warden Scoped) ────────────────────────
   const totalRooms = useMemo(
     () => dashboardData?.totalRooms ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0),
     [dashboardData, enrichedBlocks]
@@ -1634,6 +1762,35 @@ export default function HostelPage() {
   const occupiedBeds = activeAllocations.length;
   const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
   const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+
+  // Specific Warden Scoped 9 Metrics (Phase 4)
+  const wardenMetrics = useMemo(() => {
+    const assignedBlocksCount = myAssignedBlocks.length;
+    const wTotalRooms = myAssignedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0) || scopedRooms.length;
+    const wTotalBeds = myAssignedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0) || (scopedBeds.length > 0 ? scopedBeds.length : scopedRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
+    const wOccupiedBeds = scopedActiveAllocations.length;
+    const wVacantBeds = Math.max(0, wTotalBeds - wOccupiedBeds);
+    const wResidentStudents = scopedActiveAllocations.length;
+    const wOccupancyRate = wTotalBeds > 0 ? Math.round((wOccupiedBeds / wTotalBeds) * 100) : 0;
+    const pendingOutpassesCount = scopedOutpasses.filter(
+      (o) => (o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review") && !/leave/i.test(o.outpassType || o.requestType || "")
+    ).length;
+    const pendingLeavesCount = scopedOutpasses.filter(
+      (o) => (o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review") && /leave/i.test(o.outpassType || o.requestType || "")
+    ).length;
+
+    return {
+      assignedBlocksCount,
+      totalRooms: wTotalRooms,
+      totalBeds: wTotalBeds,
+      occupiedBeds: wOccupiedBeds,
+      vacantBeds: wVacantBeds,
+      residentStudents: wResidentStudents,
+      occupancyRate: wOccupancyRate,
+      pendingOutpasses: pendingOutpassesCount,
+      pendingLeaves: pendingLeavesCount,
+    };
+  }, [myAssignedBlocks, scopedRooms, scopedBeds, scopedActiveAllocations, scopedOutpasses]);
   const monthlyRevenue = useMemo(() => {
     return activeAllocations.reduce((sum, a) => {
       const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
@@ -4035,8 +4192,61 @@ export default function HostelPage() {
 
   // 1. Dashboard
   const renderDashboard = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-stack">
+          <div className="cms-dash-header-row">
+            <div>
+              <div className="cms-dash-header-title">
+                <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
+                <span>Hostel Warden Portal</span>
+              </div>
+              <p className="cms-dash-header-sub">
+                Resident student oversight, room &amp; bed allocations, daily attendance, outpass approvals, and hostel analytics.
+              </p>
+            </div>
+            <div className="cms-dash-live-badge" style={{ borderColor: "#f59e0b", color: "#d97706" }}>
+              <span className="cms-dash-live-dot" style={{ background: "#f59e0b" }} />
+              <span>Unassigned Status</span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "48px 24px",
+              borderRadius: 18,
+              background: "#fffbeb",
+              border: "1.5px solid #fef3c7",
+              color: "#92400e",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 14,
+              textAlign: "center",
+              margin: "32px 0",
+              boxShadow: "0 6px 20px rgba(217, 119, 6, 0.08)",
+            }}
+          >
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#fef3c7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <AlertTriangle size={32} style={{ color: "#d97706" }} />
+            </div>
+            <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#78350f" }}>
+              No hostel block assigned. Please contact Admin.
+            </h3>
+            <p style={{ margin: 0, fontSize: 13.5, maxWidth: 540, lineHeight: 1.6, color: "#92400e" }}>
+              Your authenticated staff identity (<strong>{user?.name || "Hostel Warden"}</strong> {user?.employeeId ? `— ${user.employeeId}` : ""}) does not currently have any active hostel block allocations configured. Please contact the College Administration to link your staff duty profile to your assigned residential block.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Source blocks: myAssignedBlocks for Warden, enrichedBlocks for Admin
+    const baseDashBlocks = isWarden ? myAssignedBlocks : enrichedBlocks;
+
     // Blocks filtered by selected hostel from dropdown
-    const filteredDashBlocks = enrichedBlocks.filter((b) => {
+    const filteredDashBlocks = baseDashBlocks.filter((b) => {
       if (!dashBlockSearch) return true;
       return String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch;
     });
@@ -4049,325 +4259,567 @@ export default function HostelPage() {
     );
 
     const selectedDashBlock =
-      enrichedBlocks.find(
+      baseDashBlocks.find(
         (b) =>
           (dashBlockSearch && (String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch)) ||
           (dashSelectedBlockId && (String(b.id) === String(dashSelectedBlockId) || b.code === dashSelectedBlockId))
       ) ||
-      enrichedBlocks[0] ||
+      baseDashBlocks[0] ||
       null;
 
-    // Recent 4 live allocations for dashboard display
-    const recentAllocationsList = allocations.slice(0, 4);
+    // Recent 4 live allocations for dashboard display (scoped for warden)
+    const recentAllocationsList = (isWarden ? scopedAllocations : allocations).slice(0, 4);
 
-    // Outpass requests for dashboard display
-    const dashOutpassesList = outpasses.slice(0, 4);
+    // Outpass requests for dashboard display (scoped for warden)
+    const dashOutpassesList = (isWarden ? scopedOutpasses : outpasses).slice(0, 4);
 
     return (
       <div className="cms-hostel-stack">
-        {/* 1. Header & Live Status matching Screenshot 3 */}
+        {/* 1. Header & Live Status */}
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
               <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
-              <span>Hostel Management Dashboard</span>
+              <span>{isWarden ? "Hostel Warden Portal" : "Hostel Management Dashboard"}</span>
             </div>
             <p className="cms-dash-header-sub">
-              Monitor bed occupancy, manage block capacities, and process student outpass permissions.
+              {isWarden
+                ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
+                : "Monitor bed occupancy, manage block capacities, and process student outpass permissions."}
             </p>
           </div>
           <div className="cms-dash-live-badge">
             <span className="cms-dash-live-dot" />
-            <span>Live Status • All Blocks Operational</span>
+            <span>
+              {isWarden
+                ? `Live Status • ${myAssignedBlocks.length} Assigned Block(s) Operational`
+                : "Live Status • All Blocks Operational"}
+            </span>
           </div>
         </div>
 
-        {/* 2. Info Banner matching Screenshot 3 */}
+        {/* 2. Info Banner */}
         <div className="cms-dash-info-banner">
           <Info size={18} style={{ color: "var(--cms-primary)", flexShrink: 0 }} />
           <span>
-            Hostel Facilities Overview • Tracking live occupancy for {blocks.length} Hostel Blocks with {totalBeds} Total Beds.
+            {isWarden
+              ? `Hostel Facilities Overview • Tracking live occupancy for ${myAssignedBlocks.length} Assigned Hostel Block(s) with ${wardenMetrics.totalBeds} Total Beds.`
+              : `Hostel Facilities Overview • Tracking live occupancy for ${blocks.length} Hostel Blocks with ${totalBeds} Total Beds.`}
           </span>
         </div>
 
-        {/* 3. 8 Metric KPI Cards matching Screenshot 3 (2 rows of 4) */}
+        {/* 3. Metric KPI Cards: 9 KPI Cards for Warden (Phase 4), 8 KPI Cards for Admin */}
         <div className="cms-dash-kpi-grid">
-          {/* Card 1: TOTAL HOSTELS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Building2 size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">TOTAL HOSTELS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-                  Active
-                </span>
+          {isWarden ? (
+            <>
+              {/* Warden Card 1: MY ASSIGNED HOSTEL BLOCKS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
+                  <Building2 size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">MY ASSIGNED HOSTEL BLOCKS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                      Active
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.assignedBlocksCount}</div>
+                  <div className="cms-dash-kpi-sub">Duty assignment</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{blocks.length}</div>
-              <div className="cms-dash-kpi-sub">Operational blocks</div>
-            </div>
-          </div>
 
-          {/* Card 2: TOTAL CAPACITY */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <BedDouble size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">TOTAL CAPACITY</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-                  Max Cap
-                </span>
+              {/* Warden Card 2: TOTAL ROOMS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  <Home size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">TOTAL ROOMS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                      Rooms
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.totalRooms}</div>
+                  <div className="cms-dash-kpi-sub">Across assigned blocks</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{totalBeds} Beds</div>
-              <div className="cms-dash-kpi-sub">Registered capacity</div>
-            </div>
-          </div>
 
-          {/* Card 3: OCCUPANCY RATE */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Clock size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">OCCUPANCY RATE</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "color-mix(in srgb, var(--cms-primary) 18%, transparent)", color: "var(--cms-primary)" }}>
-                  Optimal
-                </span>
+              {/* Warden Card 3: TOTAL BEDS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  <BedDouble size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">TOTAL BEDS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                      Max Cap
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.totalBeds} Beds</div>
+                  <div className="cms-dash-kpi-sub">Registered capacity</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{occupancyRate}%</div>
-              <div className="cms-dash-kpi-sub">Live allocation</div>
-            </div>
-          </div>
 
-          {/* Card 4: OCCUPIED BEDS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <Users size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">OCCUPIED BEDS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-                  Assigned
-                </span>
+              {/* Warden Card 4: OCCUPIED BEDS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                  <Users size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">OCCUPIED BEDS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                      Assigned
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.occupiedBeds}</div>
+                  <div className="cms-dash-kpi-sub">Allotted to students</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{occupiedBeds}</div>
-              <div className="cms-dash-kpi-sub">Allotted to students</div>
-            </div>
-          </div>
 
-          {/* Card 5: VACANT BEDS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-              <Home size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">VACANT BEDS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-                  Available
-                </span>
+              {/* Warden Card 5: VACANT BEDS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                  <Home size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">VACANT BEDS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                      Available
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.vacantBeds}</div>
+                  <div className="cms-dash-kpi-sub">Ready for allocation</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{vacantBeds}</div>
-              <div className="cms-dash-kpi-sub">Ready for allocation</div>
-            </div>
-          </div>
 
-          {/* Card 6: HOSTELLERS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <UserCheck size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">HOSTELLERS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-                  Students
-                </span>
+              {/* Warden Card 6: RESIDENT STUDENTS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  <UserCheck size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">RESIDENT STUDENTS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                      Students
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.residentStudents}</div>
+                  <div className="cms-dash-kpi-sub">Active residents</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{occupiedBeds}</div>
-              <div className="cms-dash-kpi-sub">Active residents</div>
-            </div>
-          </div>
 
-          {/* Card 7: MONTHLY REVENUE */}
-          <div
-            className="cms-dash-kpi-card"
-            style={{ cursor: "pointer", transition: "all 0.2s ease" }}
-            onClick={() => {
-              setActiveMajorTab("reports");
-              setReportCategory("Monthly Revenue & Fee Report");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            title="Click to view Student-by-Student Dues & Fee Collection Report →"
-          >
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-              <IndianRupee size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">MONTHLY REVENUE</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-                  Billed
-                </span>
+              {/* Warden Card 7: OCCUPANCY RATE */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
+                  <Clock size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">OCCUPANCY RATE</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "color-mix(in srgb, var(--cms-primary) 18%, transparent)", color: "var(--cms-primary)" }}>
+                      Optimal
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.occupancyRate}%</div>
+                  <div className="cms-dash-kpi-sub">Live allocation</div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">
-                {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
-              </div>
-              <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span>Hostel fees billing</span>
-                <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>View Dues →</span>
-              </div>
-            </div>
-          </div>
 
-          {/* Card 8: ACTIVE WARDENS */}
-          <div className="cms-dash-kpi-card">
-            <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
-              <ShieldCheck size={20} />
-            </div>
-            <div className="cms-dash-kpi-info">
-              <div className="cms-dash-kpi-top">
-                <span className="cms-dash-kpi-label">ACTIVE WARDENS</span>
-                <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
-                  Supervising
-                </span>
+              {/* Warden Card 8: PENDING OUTPASS REQUESTS */}
+              <div
+                className="cms-dash-kpi-card"
+                style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+                onClick={() => navigate("/warden-dashboard/leave-requests")}
+                title="Click to view pending outpass requests"
+              >
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                  <ArrowRightLeft size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">PENDING OUTPASS REQUESTS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                      Outpasses
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.pendingOutpasses}</div>
+                  <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>Awaiting approval</span>
+                    <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>Review →</span>
+                  </div>
+                </div>
               </div>
-              <div className="cms-dash-kpi-val">{activeWardensCount}</div>
-              <div className="cms-dash-kpi-sub">Staff on duty</div>
-            </div>
-          </div>
+
+              {/* Warden Card 9: PENDING STUDENT LEAVE REQUESTS */}
+              <div
+                className="cms-dash-kpi-card"
+                style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+                onClick={() => navigate("/warden-dashboard/leave-requests")}
+                title="Click to view pending student leave requests"
+              >
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
+                  <Calendar size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">PENDING STUDENT LEAVES</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
+                      Leaves
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{wardenMetrics.pendingLeaves}</div>
+                  <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>Awaiting review</span>
+                    <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>Review →</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Card 1: TOTAL HOSTELS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
+                  <Building2 size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">TOTAL HOSTELS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                      Active
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{blocks.length}</div>
+                  <div className="cms-dash-kpi-sub">Operational blocks</div>
+                </div>
+              </div>
+
+              {/* Card 2: TOTAL CAPACITY */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  <BedDouble size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">TOTAL CAPACITY</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                      Max Cap
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{totalBeds} Beds</div>
+                  <div className="cms-dash-kpi-sub">Registered capacity</div>
+                </div>
+              </div>
+
+              {/* Card 3: OCCUPANCY RATE */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
+                  <Clock size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">OCCUPANCY RATE</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "color-mix(in srgb, var(--cms-primary) 18%, transparent)", color: "var(--cms-primary)" }}>
+                      Optimal
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{occupancyRate}%</div>
+                  <div className="cms-dash-kpi-sub">Live allocation</div>
+                </div>
+              </div>
+
+              {/* Card 4: OCCUPIED BEDS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                  <Users size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">OCCUPIED BEDS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
+                      Assigned
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{occupiedBeds}</div>
+                  <div className="cms-dash-kpi-sub">Allotted to students</div>
+                </div>
+              </div>
+
+              {/* Card 5: VACANT BEDS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                  <Home size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">VACANT BEDS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                      Available
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{vacantBeds}</div>
+                  <div className="cms-dash-kpi-sub">Ready for allocation</div>
+                </div>
+              </div>
+
+              {/* Card 6: HOSTELLERS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                  <UserCheck size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">HOSTELLERS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
+                      Students
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{occupiedBeds}</div>
+                  <div className="cms-dash-kpi-sub">Active residents</div>
+                </div>
+              </div>
+
+              {/* Card 7: MONTHLY REVENUE */}
+              <div
+                className="cms-dash-kpi-card"
+                style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+                onClick={() => {
+                  setActiveMajorTab("reports");
+                  setReportCategory("Monthly Revenue & Fee Report");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                title="Click to view Student-by-Student Dues & Fee Collection Report →"
+              >
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                  <IndianRupee size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">MONTHLY REVENUE</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
+                      Billed
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">
+                    {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
+                  </div>
+                  <div className="cms-dash-kpi-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span>Hostel fees billing</span>
+                    <span style={{ color: "var(--cms-primary)", fontWeight: 700, fontSize: "11px" }}>View Dues →</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 8: ACTIVE WARDENS */}
+              <div className="cms-dash-kpi-card">
+                <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
+                  <ShieldCheck size={20} />
+                </div>
+                <div className="cms-dash-kpi-info">
+                  <div className="cms-dash-kpi-top">
+                    <span className="cms-dash-kpi-label">ACTIVE WARDENS</span>
+                    <span className="cms-dash-kpi-pill" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
+                      Supervising
+                    </span>
+                  </div>
+                  <div className="cms-dash-kpi-val">{activeWardensCount}</div>
+                  <div className="cms-dash-kpi-sub">Staff on duty</div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* 4. Quick Actions Bar matching Screenshot 3 */}
+        {/* 4. Quick Actions Bar */}
         <div className="cms-dash-quick-bar">
           <span className="cms-dash-quick-label">Quick Actions</span>
-          <button
-            type="button"
-            className="cms-dash-quick-btn"
-            onClick={() => {
-              if (isWardenRoute) {
-                navigate("/warden-dashboard/rooms");
-              } else {
-                navigateHostelView("setup", "blocks");
-              }
-            }}
-          >
-            <Building2 size={14} style={{ color: "var(--cms-primary)" }} />
-            <span>Setup Blocks</span>
-          </button>
-          <button
-            type="button"
-            className="cms-dash-quick-btn"
-            onClick={() => {
-              if (isWardenRoute) {
-                navigate("/warden-dashboard/students");
-              } else {
-                navigateHostelView("students", "allocations");
-              }
-            }}
-          >
-            <Users size={14} style={{ color: "var(--cms-primary)" }} />
-            <span>Hostel Students</span>
-          </button>
-          <button
-            type="button"
-            className="cms-dash-quick-btn"
-            onClick={() => {
-              if (isWardenRoute) {
-                navigate("/warden-dashboard/allocations");
-              } else {
-                navigateHostelView("students", "allocations");
-              }
-              setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
-            }}
-          >
-            <BedDouble size={14} style={{ color: "var(--cms-primary)" }} />
-            <span>Bed Allocation</span>
-          </button>
-          <button
-            type="button"
-            className="cms-dash-quick-btn"
-            onClick={() => {
-              if (isWardenRoute) {
-                navigate("/warden-dashboard/attendance");
-              } else {
-                navigateHostelView("students", "attendance");
-              }
-            }}
-          >
-            <CheckCircle2 size={14} style={{ color: "var(--cms-primary)" }} />
-            <span>Mark Attendance</span>
-          </button>
-          <button
-            type="button"
-            className="cms-dash-quick-btn"
-            onClick={() => {
-              if (isWardenRoute) {
-                navigate("/warden-dashboard/reports");
-              } else {
-                setActiveMajorTab("reports");
-              }
-            }}
-          >
-            <BarChart3 size={14} style={{ color: "var(--cms-primary)" }} />
-            <span>Hostel Reports</span>
-          </button>
+          {isWarden ? (
+            <>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigate("/warden-dashboard/rooms")}
+              >
+                <Building2 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Rooms &amp; Beds</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigate("/warden-dashboard/students")}
+              >
+                <Users size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Resident Students</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => {
+                  navigate("/warden-dashboard/allocations");
+                  setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
+                }}
+              >
+                <BedDouble size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Bed Allocation</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigate("/warden-dashboard/attendance")}
+              >
+                <CheckCircle2 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Mark Attendance</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigate("/warden-dashboard/leave-requests")}
+              >
+                <ArrowRightLeft size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Outpass &amp; Leaves</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigate("/warden-dashboard/reports")}
+              >
+                <BarChart3 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Hostel Reports</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigateHostelView("setup", "blocks")}
+              >
+                <Building2 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Setup Blocks</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigateHostelView("students", "allocations")}
+              >
+                <Users size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Hostel Students</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => {
+                  navigateHostelView("students", "allocations");
+                  setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
+                }}
+              >
+                <BedDouble size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Bed Allocation</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => navigateHostelView("students", "attendance")}
+              >
+                <CheckCircle2 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Mark Attendance</span>
+              </button>
+              <button
+                type="button"
+                className="cms-dash-quick-btn"
+                onClick={() => setActiveMajorTab("reports")}
+              >
+                <BarChart3 size={14} style={{ color: "var(--cms-primary)" }} />
+                <span>Hostel Reports</span>
+              </button>
+            </>
+          )}
         </div>
 
-        {/* 5. Overall Bed Occupancy Progress Card matching Screenshot 3 */}
+        {/* 5. Overall Bed Occupancy Progress Card */}
         <div className="cms-dash-occupancy-card">
           <div className="cms-dash-occ-header">
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <Clock size={16} style={{ color: "var(--cms-primary)" }} />
-              <span style={{ letterSpacing: "0.03em" }}>OVERALL HOSTEL BED OCCUPANCY</span>
+              <span style={{ letterSpacing: "0.03em" }}>
+                {isWarden ? "ASSIGNED HOSTEL BED OCCUPANCY" : "OVERALL HOSTEL BED OCCUPANCY"}
+              </span>
             </div>
             <span style={{ color: "var(--cms-muted)", fontWeight: 600 }}>
-              {occupiedBeds} Occupied / {vacantBeds} Vacant ({totalBeds} Total Capacity)
+              {isWarden
+                ? `${wardenMetrics.occupiedBeds} Occupied / ${wardenMetrics.vacantBeds} Vacant (${wardenMetrics.totalBeds} Total Capacity)`
+                : `${occupiedBeds} Occupied / ${vacantBeds} Vacant (${totalBeds} Total Capacity)`}
             </span>
           </div>
           <div className="cms-dash-progress-track">
             <div
               className="cms-dash-progress-fill"
-              style={{ width: `${Math.max(3, occupancyRate)}%` }}
+              style={{ width: `${Math.max(3, isWarden ? wardenMetrics.occupancyRate : occupancyRate)}%` }}
             />
           </div>
           <div className="cms-dash-occ-footer">
             <div style={{ display: "flex", gap: 18 }}>
-              <span>Occupied Beds ({occupancyRate}%)</span>
-              <span>Vacant Beds ({100 - occupancyRate}%)</span>
+              <span>Occupied Beds ({isWarden ? wardenMetrics.occupancyRate : occupancyRate}%)</span>
+              <span>Vacant Beds ({100 - (isWarden ? wardenMetrics.occupancyRate : occupancyRate)}%)</span>
             </div>
             <span style={{ fontWeight: 600 }}>Live Status</span>
           </div>
         </div>
-
-        {/* 6. Hostel Block Overview & Analytics matching Screenshot 4 */}
+        {/* 6. Section: "My Assigned Hostel Block(s)" for Warden (Phase 5) OR Overview for Admin */}
         <div className="cms-dash-block-section">
           {/* Section Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, position: "relative", zIndex: 40 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.95rem", fontWeight: 800, color: "var(--cms-text)" }}>
               <Building2 size={18} style={{ color: "var(--cms-primary)" }} />
-              <span>Hostel Block Overview &amp; Analytics</span>
+              <span>{isWarden ? "My Assigned Hostel Block(s)" : "Hostel Block Overview & Analytics"}</span>
             </div>
-            <HostelBlockDropdown
-              blocks={enrichedBlocks}
-              selectedBlockId={dashBlockSearch}
-              onSelectBlock={(blockId) => {
-                setDashBlockSearch(blockId);
-                setDashBlockPage(1);
-                if (blockId) {
-                  setDashSelectedBlockId(blockId);
-                }
-              }}
-              isLoading={isLoading}
-            />
+            {isWarden ? (
+              myAssignedBlocks.length > 1 ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Assigned Block:</span>
+                  <select
+                    className="cms-hostel-select"
+                    value={dashBlockSearch || "all"}
+                    onChange={(e) => {
+                      const val = e.target.value === "all" ? "" : e.target.value;
+                      setDashBlockSearch(val);
+                      setDashBlockPage(1);
+                      if (val) setDashSelectedBlockId(val);
+                    }}
+                    style={{ minWidth: 200, borderRadius: 10, fontWeight: 700 }}
+                  >
+                    <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                    {myAssignedBlocks.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null
+            ) : (
+              <HostelBlockDropdown
+                blocks={enrichedBlocks}
+                selectedBlockId={dashBlockSearch}
+                onSelectBlock={(blockId) => {
+                  setDashBlockSearch(blockId);
+                  setDashBlockPage(1);
+                  if (blockId) {
+                    setDashSelectedBlockId(blockId);
+                  }
+                }}
+                isLoading={isLoading}
+              />
+            )}
           </div>
 
-          {/* Selected Block Banner matching Screenshot 4 */}
+          {/* Selected Block Banner matching Screenshot 4 & Phase 5 specifications */}
           {Boolean(selectedDashBlock && (selectedDashBlock.id || selectedDashBlock.name)) && (
             <div className="cms-dash-block-banner">
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: "0.95rem", color: "var(--cms-text)" }}>
@@ -4375,13 +4827,22 @@ export default function HostelPage() {
                 <span style={{ color: "var(--cms-muted)", fontWeight: 600 }}>({selectedDashBlock.code})</span>
                 <span>•</span>
                 <span style={{ color: "var(--cms-primary)" }}>{selectedDashBlock.type}</span>
+                {isWarden && (
+                  <>
+                    <span>•</span>
+                    <span style={{ color: "var(--cms-muted)", fontSize: 12 }}>Campus: <strong>Main Campus</strong></span>
+                  </>
+                )}
               </div>
               <p style={{ margin: 0, fontSize: 12, color: "var(--cms-muted)" }}>
-                {selectedDashBlock.description || "Main campus residence housing enrolled students."}
+                {selectedDashBlock.description || (isWarden ? "Authorized residential block assigned to your duty profile." : "Main campus residence housing enrolled students.")}
               </p>
               <div className="cms-dash-block-badges">
                 <span className="cms-dash-badge-pill">Floors: <strong>{selectedDashBlock.floors}</strong></span>
                 <span className="cms-dash-badge-pill">Rooms: <strong>{selectedDashBlock.totalRooms}</strong></span>
+                <span className="cms-dash-badge-pill">
+                  Total Beds: <strong>{selectedDashBlock.totalBeds}</strong>
+                </span>
                 <span className="cms-dash-badge-pill">
                   Occupied: <strong style={{ color: "var(--cms-amber)" }}>{selectedDashBlock.occupiedBeds}</strong>
                 </span>
@@ -4392,18 +4853,19 @@ export default function HostelPage() {
                   Warden: <strong>{selectedDashBlock.warden || "Unassigned"}</strong> {selectedDashBlock.wardenPhone && selectedDashBlock.wardenPhone !== "-" ? `(${selectedDashBlock.wardenPhone})` : ""}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-green)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                  • Active Status
+                  • {selectedDashBlock.status || "Active Status"}
                 </span>
               </div>
             </div>
           )}
 
-          {/* 7-Block Analytics Table matching Screenshot 4 */}
+          {/* Block Analytics Table with Campus Column for Warden */}
           <div className="cms-hostel-compact-card">
             <div className="cms-hostel-table-scroll">
               <table className="cms-hostel-compact-table">
                 <thead>
                   <tr>
+                    {isWarden && <th>CAMPUS</th>}
                     <th>BLOCK NAME &amp; CODE</th>
                     <th>TYPE</th>
                     <th>FLOORS</th>
@@ -4418,10 +4880,10 @@ export default function HostelPage() {
                 <tbody>
                   {currentBlocksPage.length === 0 ? (
                     <tr>
-                      <td colSpan={9} style={{ textAlign: "center", padding: "32px 16px", color: "var(--cms-muted)", fontSize: 12 }}>
+                      <td colSpan={isWarden ? 10 : 9} style={{ textAlign: "center", padding: "32px 16px", color: "var(--cms-muted)", fontSize: 12 }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                           <Building2 size={22} style={{ opacity: 0.4 }} />
-                          <span>No hostel blocks available</span>
+                          <span>{isWarden ? "No assigned hostel blocks available" : "No hostel blocks available"}</span>
                         </div>
                       </td>
                     </tr>
@@ -4437,6 +4899,11 @@ export default function HostelPage() {
                             background: isSelected ? "var(--cms-primary-soft)" : "transparent",
                           }}
                         >
+                          {isWarden && (
+                            <td>
+                              <span style={{ fontWeight: 600, color: "var(--cms-text)" }}>Main Campus</span>
+                            </td>
+                          )}
                           <td>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cms-primary)", flexShrink: 0 }} />
@@ -4478,13 +4945,13 @@ export default function HostelPage() {
                                 gap: 4,
                                 padding: "2px 8px",
                                 borderRadius: 9999,
-                                border: "1px solid var(--cms-green)",
-                                color: "var(--cms-green)",
+                                border: (b.status || "").toLowerCase() === "active" ? "1px solid var(--cms-green)" : "1px solid var(--cms-border)",
+                                color: (b.status || "").toLowerCase() === "active" ? "var(--cms-green)" : "var(--cms-muted)",
                                 fontSize: 11,
                                 fontWeight: 700,
                               }}
                             >
-                              • Active
+                              • {b.status || "Active"}
                             </span>
                           </td>
                         </tr>
@@ -4693,9 +5160,28 @@ export default function HostelPage() {
 
   // 2. Hostel Blocks
   const renderHostelBlocks = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseBlocks = isWarden
+      ? enrichedBlocks.filter((b) => authorizedBlockIds.has(Number(b.id)))
+      : enrichedBlocks;
+
     const isHostelSelected = !filterBlock || filterBlock === "all" || Boolean(filterBlock);
 
-    const filtered = enrichedBlocks.filter((b) => {
+    const filtered = baseBlocks.filter((b) => {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -4729,13 +5215,15 @@ export default function HostelPage() {
               Configure physical residences, gender assignments, and floor capacity
             </p>
           </div>
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={() => setModal({ isOpen: true, type: "block", mode: "add", data: null })}
-          >
-            <Plus size={15} /> Add Block
-          </button>
+          {!isWarden && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={() => setModal({ isOpen: true, type: "block", mode: "add", data: null })}
+            >
+              <Plus size={15} /> Add Block
+            </button>
+          )}
         </div>
         <div className="cms-card-body">
           <div className="cms-hostel-toolbar">
@@ -4749,20 +5237,38 @@ export default function HostelPage() {
             </div>
             <div className="cms-hostel-toolbar-actions" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Filter:</span>
-              <select
-                className="cms-hostel-select"
-                value={filterBlock}
-                onChange={(e) => setFilterBlock(e.target.value)}
-                style={{ minWidth: 230 }}
-              >
-                <option value="">Select Hostel...</option>
-                <option value="all">All Hostels</option>
-                {Array.from(new Map(blocks.map((b) => [String(b.id || b.code), b])).values()).map((b) => (
-                  <option key={b.id || b.code} value={b.code}>
-                    {b.name} ({b.code})
-                  </option>
-                ))}
-              </select>
+              {isWarden ? (
+                <select
+                  className="cms-hostel-select"
+                  value={filterBlock}
+                  onChange={(e) => setFilterBlock(e.target.value)}
+                  style={{ minWidth: 230 }}
+                >
+                  {myAssignedBlocks.length > 1 && (
+                    <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                  )}
+                  {myAssignedBlocks.map((b) => (
+                    <option key={b.id || b.code} value={b.code}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  className="cms-hostel-select"
+                  value={filterBlock}
+                  onChange={(e) => setFilterBlock(e.target.value)}
+                  style={{ minWidth: 230 }}
+                >
+                  <option value="">Select Hostel...</option>
+                  <option value="all">All Hostels</option>
+                  {Array.from(new Map(blocks.map((b) => [String(b.id || b.code), b])).values()).map((b) => (
+                    <option key={b.id || b.code} value={b.code}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
@@ -4878,22 +5384,26 @@ export default function HostelPage() {
                             >
                               <Eye size={14} />
                             </button>
-                            <button
-                              type="button"
-                              className="cms-action-btn"
-                              title="Edit block"
-                              onClick={() => setModal({ isOpen: true, type: "block", mode: "edit", data: b })}
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              className="cms-action-btn danger"
-                              title="Delete block"
-                              onClick={() => handleDeleteBlock(b)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {!isWarden && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="cms-action-btn"
+                                  title="Edit block"
+                                  onClick={() => setModal({ isOpen: true, type: "block", mode: "edit", data: b })}
+                                >
+                                  <Edit3 size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="cms-action-btn danger"
+                                  title="Delete block"
+                                  onClick={() => handleDeleteBlock(b)}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -5249,6 +5759,25 @@ export default function HostelPage() {
 
   // ── Tab 3: Rooms & Bed Allocation ──────────────────────────────────
   const renderRooms = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            Your warden identity does not have active hostel blocks configured.
+          </p>
+        </div>
+      );
+    }
+
+    const activeBlocks = isWarden ? myAssignedBlocks : blocks;
+    const activeRooms = isWarden ? scopedRooms : rooms;
+    const activeBeds = isWarden ? scopedBeds : beds;
+
     // Floor matcher helper (supports "Ground Floor", "1st Floor", "Floor 1", etc.)
     const isFloorMatch = (roomFloor, filterVal) => {
       if (!filterVal || filterVal === "all") return true;
@@ -5267,21 +5796,21 @@ export default function HostelPage() {
     const availableFloors = (() => {
       const floorSet = new Set();
       if (filterHostelRooms && filterHostelRooms !== "all") {
-        const b = blocks.find((blk) => String(blk.id) === String(filterHostelRooms) || blk.code === filterHostelRooms || blk.name === filterHostelRooms);
+        const b = activeBlocks.find((blk) => String(blk.id) === String(filterHostelRooms) || blk.code === filterHostelRooms || blk.name === filterHostelRooms);
         if (b) {
           const count = Math.max(1, Number(b.floors || 2));
           for (let i = 0; i < count; i++) {
             floorSet.add(i === 0 ? "Ground Floor" : i === 1 ? "1st Floor" : i === 2 ? "2nd Floor" : i === 3 ? "3rd Floor" : `${i}th Floor`);
           }
         }
-        rooms
+        activeRooms
           .filter((r) => String(r.hostelId) === String(filterHostelRooms) || (b && (String(r.hostelId) === String(b.id) || r.block === b.code || r.block === b.name || r.blockName === b.name || r.blockName === b.code)))
           .forEach((r) => {
             if (r.floor) floorSet.add(normalizeFloorName(r.floor));
           });
       } else {
         ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"].forEach((f) => floorSet.add(f));
-        rooms.forEach((r) => {
+        activeRooms.forEach((r) => {
           if (r.floor) floorSet.add(normalizeFloorName(r.floor));
         });
       }
@@ -5313,14 +5842,14 @@ export default function HostelPage() {
       return false;
     };
 
-    const totalRoomsCount = rooms.length;
-    const acRoomsCount = rooms.filter((r) => isRoomAc(r)).length;
+    const totalRoomsCount = activeRooms.length;
+    const acRoomsCount = activeRooms.filter((r) => isRoomAc(r)).length;
     const nonAcRoomsCount = totalRoomsCount - acRoomsCount;
-    const occupiedBedsCount = beds.filter((b) => (b.bedStatus || "").toLowerCase() === "occupied").length;
-    const availableBedsCount = Math.max(0, beds.length - occupiedBedsCount);
+    const occupiedBedsCount = activeBeds.filter((b) => (b.bedStatus || "").toLowerCase() === "occupied").length;
+    const availableBedsCount = Math.max(0, activeBeds.length - occupiedBedsCount);
 
     // Filter rooms by query, hostel block, floor, and AC/Non-AC type
-    const filtered = rooms.filter((r) => {
+    const filtered = activeRooms.filter((r) => {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -5330,7 +5859,7 @@ export default function HostelPage() {
         String(r.type || "").toLowerCase().includes(q) ||
         String(r.floor || "").toLowerCase().includes(q);
 
-      const b = blocks.find((blk) => String(blk.id) === String(filterHostelRooms) || blk.code === filterHostelRooms || blk.name === filterHostelRooms);
+      const b = activeBlocks.find((blk) => String(blk.id) === String(filterHostelRooms) || blk.code === filterHostelRooms || blk.name === filterHostelRooms);
       const matchBlock =
         !filterHostelRooms ||
         filterHostelRooms === "all" ||
@@ -5366,7 +5895,7 @@ export default function HostelPage() {
 
     return (
       <div className="cms-rooms-view" style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
-        {/* Main Header with Primary Action Button: + Add New Room */}
+        {/* Main Header with Primary Action Button: + Add New Room (Admin only) */}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", maxWidth: "100%", minWidth: 0, boxSizing: "border-box" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Home size={22} style={{ color: "var(--cms-primary)" }} />
@@ -5380,16 +5909,18 @@ export default function HostelPage() {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="cms-btn cms-btn-primary"
-              onClick={() => setModal({ isOpen: true, type: "room", mode: "add", data: null })}
-              style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 20px", boxShadow: "0 4px 12px rgba(82, 110, 52, 0.2)" }}
-            >
-              <Plus size={16} /> Add New Room
-            </button>
-          </div>
+          {!isWarden && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                onClick={() => setModal({ isOpen: true, type: "room", mode: "add", data: null })}
+                style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 20px", boxShadow: "0 4px 12px rgba(82, 110, 52, 0.2)" }}
+              >
+                <Plus size={16} /> Add New Room
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Quick Room Classification & Inventory Overview Bar */}
@@ -5629,12 +6160,33 @@ export default function HostelPage() {
                 }}
                 style={{ minWidth: 170, borderRadius: 10, fontWeight: 600 }}
               >
-                <option value="all">All Hostels ({blocks.length})</option>
-                {Array.from(new Map(blocks.map((b) => [String(b.id || b.code), b])).values()).map((b) => (
-                  <option key={b.id || b.code} value={b.id}>
-                    {b.name} ({b.code})
-                  </option>
-                ))}
+                {isWarden ? (
+                  myAssignedBlocks.length > 1 ? (
+                    <>
+                      <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                      {myAssignedBlocks.map((b) => (
+                        <option key={b.id || b.code} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </>
+                  ) : myAssignedBlocks.length === 1 ? (
+                    <option value={myAssignedBlocks[0].id}>
+                      {myAssignedBlocks[0].name} ({myAssignedBlocks[0].code})
+                    </option>
+                  ) : (
+                    <option value="none">No Assigned Blocks</option>
+                  )
+                ) : (
+                  <>
+                    <option value="all">All Hostels ({blocks.length})</option>
+                    {Array.from(new Map(blocks.map((b) => [String(b.id || b.code), b])).values()).map((b) => (
+                      <option key={b.id || b.code} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
 
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -5919,7 +6471,31 @@ export default function HostelPage() {
 
   // 5. Wardens (Matching user screenshot reference)
   const renderWardens = () => {
-    const filtered = wardens.filter((w) => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseWardens = isWarden
+      ? (myWardenAssignments.length > 0 ? myWardenAssignments : wardens.filter((w) => {
+          if (authenticatedStaffId && Number(w.staffId) === Number(authenticatedStaffId)) return true;
+          if (authenticatedEmployeeId && String(w.empId).toLowerCase() === String(authenticatedEmployeeId).toLowerCase()) return true;
+          if (w.hostelId && authorizedBlockIds.has(Number(w.hostelId))) return true;
+          return false;
+        }))
+      : wardens;
+
+    const filtered = baseWardens.filter((w) => {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -5961,14 +6537,16 @@ export default function HostelPage() {
             </h2>
           </div>
 
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={() => setModal({ isOpen: true, type: "warden", mode: "add", data: null })}
-            style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
-          >
-            <Plus size={16} /> Assign Warden
-          </button>
+          {!isWarden && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={() => setModal({ isOpen: true, type: "warden", mode: "add", data: null })}
+              style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
+            >
+              <Plus size={16} /> Assign Warden
+            </button>
+          )}
         </div>
 
         {/* Toolbar matching Screenshot 1 */}
@@ -6197,22 +6775,26 @@ export default function HostelPage() {
                         >
                           <Eye size={14} />
                         </button>
-                        <button
-                          type="button"
-                          className="cms-action-btn"
-                          title="Edit warden"
-                          onClick={() => setModal({ isOpen: true, type: "warden", mode: "edit", data: w })}
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="cms-action-btn danger"
-                          title="Remove warden"
-                          onClick={() => handleDeleteWarden(w)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {!isWarden && (
+                          <>
+                            <button
+                              type="button"
+                              className="cms-action-btn"
+                              title="Edit warden"
+                              onClick={() => setModal({ isOpen: true, type: "warden", mode: "edit", data: w })}
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-action-btn danger"
+                              title="Remove warden"
+                              onClick={() => handleDeleteWarden(w)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -6240,11 +6822,30 @@ export default function HostelPage() {
 
   // 6. Student Allocations (Student Room Allocations)
   const renderAllocations = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            Your warden identity does not have active hostel blocks configured.
+          </p>
+        </div>
+      );
+    }
+
+    const activeBlocks = isWarden ? myAssignedBlocks : blocks;
+    const activeAllocs = isWarden ? scopedAllocations : allocations;
+    const activeRooms = isWarden ? scopedRooms : rooms;
+
     // Unique list of hostels for dropdown
     const hostelOptions = Array.from(
       new Set([
-        ...blocks.map((b) => b.name).filter(Boolean),
-        ...allocations.map((a) => a.blockName).filter(Boolean),
+        ...activeBlocks.map((b) => b.name).filter(Boolean),
+        ...activeAllocs.map((a) => a.blockName).filter(Boolean),
       ])
     );
 
@@ -6252,23 +6853,23 @@ export default function HostelPage() {
     const floorOptions = (() => {
       const set = new Set();
       if (filterAllocHostel !== "all") {
-        const blk = blocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
+        const blk = activeBlocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
         if (blk) {
           const count = Math.max(1, Number(blk.floors || 2));
           for (let i = 0; i < count; i++) {
             set.add(i === 0 ? "Ground Floor" : i === 1 ? "1st Floor" : i === 2 ? "2nd Floor" : i === 3 ? "3rd Floor" : `${i}th Floor`);
           }
         }
-        rooms
+        activeRooms
           .filter((r) => r.blockName === filterAllocHostel || r.block === filterAllocHostel || (blk && (String(r.hostelId) === String(blk.id) || r.block === blk.code || r.blockName === blk.name)))
           .forEach((r) => { if (r.floor) set.add(normalizeFloorName(r.floor)); });
-        allocations
+        activeAllocs
           .filter((a) => a.blockName === filterAllocHostel || (blk && (String(a.hostelId) === String(blk.id) || a.blockCode === blk.code || a.blockName === blk.name)))
           .forEach((a) => { if (a.floor) set.add(normalizeFloorName(a.floor)); });
       } else {
         ["Ground Floor", "1st Floor", "2nd Floor", "3rd Floor", "4th Floor"].forEach((f) => set.add(f));
-        rooms.forEach((r) => { if (r.floor) set.add(normalizeFloorName(r.floor)); });
-        allocations.forEach((a) => { if (a.floor) set.add(normalizeFloorName(a.floor)); });
+        activeRooms.forEach((r) => { if (r.floor) set.add(normalizeFloorName(r.floor)); });
+        activeAllocs.forEach((a) => { if (a.floor) set.add(normalizeFloorName(a.floor)); });
       }
       return sortFloorLabels(Array.from(set));
     })();
@@ -6276,8 +6877,8 @@ export default function HostelPage() {
     // Dynamic room options strictly deduplicated and canonicalized
     const roomOptions = (() => {
       const set = new Set();
-      const blk = blocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
-      rooms
+      const blk = activeBlocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
+      activeRooms
         .filter((r) => {
           const matchH = filterAllocHostel === "all" || r.blockName === filterAllocHostel || r.block === filterAllocHostel || (blk && (String(r.hostelId) === String(blk.id) || r.block === blk.code || r.blockName === blk.name));
           const matchF = isFloorMatch(r.floor, filterAllocFloor);
@@ -6288,7 +6889,7 @@ export default function HostelPage() {
           if (c) set.add(c);
         });
 
-      allocations
+      activeAllocs
         .filter((a) => {
           const matchH = filterAllocHostel === "all" || a.blockName === filterAllocHostel || (blk && (String(a.hostelId) === String(blk.id) || a.blockCode === blk.code || a.blockName === blk.name));
           const matchF = isFloorMatch(a.floor, filterAllocFloor);
@@ -6308,7 +6909,7 @@ export default function HostelPage() {
     })();
 
     // Filter allocations
-    const filtered = allocations.filter((a) => {
+    const filtered = activeAllocs.filter((a) => {
       const q = filterAllocSearch.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -6318,7 +6919,7 @@ export default function HostelPage() {
         String(a.roomBadge || "").toLowerCase().includes(q) ||
         String(a.blockName || "").toLowerCase().includes(q);
 
-      const blk = blocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
+      const blk = activeBlocks.find((b) => b.name === filterAllocHostel || b.code === filterAllocHostel || String(b.id) === String(filterAllocHostel));
       const matchHostel =
         filterAllocHostel === "all" ||
         a.blockName === filterAllocHostel ||
@@ -6343,6 +6944,15 @@ export default function HostelPage() {
     const endIndex = Math.min(startIndex + allocsPerPage, filtered.length);
     const paginatedAllocs = filtered.slice(startIndex, endIndex);
 
+    const activeUnallocated = isWarden
+      ? unallocatedHostelStudents.filter((st) => {
+          const bName = st.hostelBlock || st.hostelBlockName || st.blockName;
+          return myAssignedBlocks.some(
+            (b) => b.name === bName || b.code === bName || String(b.id) === String(st.hostelId)
+          );
+        })
+      : unallocatedHostelStudents;
+
     return (
       <div className="cms-hostel-stack">
         {/* Header matching Screenshot 1 */}
@@ -6366,7 +6976,7 @@ export default function HostelPage() {
         </div>
 
         {/* Live Pending Hostel Opted Candidates Section */}
-        {unallocatedHostelStudents.length > 0 && (
+        {activeUnallocated.length > 0 && (
           <div
             style={{
               padding: "16px 20px",
@@ -6382,7 +6992,7 @@ export default function HostelPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <BedDouble size={18} style={{ color: "var(--cms-primary)" }} />
                 <span style={{ fontSize: 14, fontWeight: 800, color: "var(--cms-text)" }}>
-                  Hostel Applicants Awaiting Room Allocation ({unallocatedHostelStudents.length})
+                  Hostel Applicants Awaiting Room Allocation ({activeUnallocated.length})
                 </span>
               </div>
               <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>
@@ -6391,7 +7001,7 @@ export default function HostelPage() {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
-              {unallocatedHostelStudents.slice(0, 8).map((st) => (
+              {activeUnallocated.slice(0, 8).map((st) => (
                 <div
                   key={`unalloc-${st.studentId || st.admissionNo}`}
                   style={{
@@ -6488,12 +7098,31 @@ export default function HostelPage() {
               }}
               className="cms-alloc-select-compact"
             >
-              <option value="all">All Hostels</option>
-              {hostelOptions.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
+              {isWarden ? (
+                myAssignedBlocks.length > 1 ? (
+                  <>
+                    <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                    {hostelOptions.map((h) => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </>
+                ) : myAssignedBlocks.length === 1 ? (
+                  <option value={myAssignedBlocks[0].name}>{myAssignedBlocks[0].name}</option>
+                ) : (
+                  <option value="none">No Assigned Blocks</option>
+                )
+              ) : (
+                <>
+                  <option value="all">All Hostels</option>
+                  {hostelOptions.map((h) => (
+                    <option key={h} value={h}>
+                      {h}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
             <div
               style={{
@@ -6682,9 +7311,25 @@ export default function HostelPage() {
 
   // 7. Outpass & Leave
   const renderOutpasses = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseOutpasses = isWarden ? scopedOutpasses : outpasses;
     const isFiltered = true;
 
-    const filtered = outpasses.filter((o) => {
+    const filtered = baseOutpasses.filter((o) => {
       const q = outpassSearch.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -6797,7 +7442,7 @@ export default function HostelPage() {
               className="cms-btn cms-btn-ghost"
               style={{ height: 38, borderRadius: 8, padding: "0 12px", fontSize: 12.5 }}
               onClick={() =>
-                exportCsv("outpass-requests.csv", filtered.length ? filtered : outpasses, [
+                exportCsv("outpass-requests.csv", filtered.length ? filtered : baseOutpasses, [
                   { key: "studentName", label: "Student" },
                   { key: "admissionNo", label: "Adm No" },
                   { key: "blockName", label: "Hostel & Room", value: (r) => `${r.blockName} (Room #${r.roomNo?.replace("Room #", "") || r.roomNumber || "101"})` },
@@ -6853,7 +7498,7 @@ export default function HostelPage() {
                   paginatedOutpasses.map((r) => {
                     const isPending = r.status === "Pending" || r.status === "Pending Approval";
                     const isApproved = r.status === "Approved";
-                    const matchedAlloc = (allocations || []).find((a) =>
+                    const matchedAlloc = ((isWarden ? scopedAllocations : allocations) || []).find((a) =>
                       (r.studentId && Number(a.studentId) === Number(r.studentId)) ||
                       (r.admissionNo && a.admissionNo === r.admissionNo) ||
                       (r.studentName && a.studentName === r.studentName)
@@ -6966,7 +7611,24 @@ export default function HostelPage() {
 
   // 8. Transfer & Vacate (Screenshots 1 & 2 - Theme-based & Compact)
   const renderTransfers = () => {
-    const filtered = transfers.filter((t) => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseTransfers = isWarden ? scopedTransfers : transfers;
+
+    const filtered = baseTransfers.filter((t) => {
       const q = transferSearch.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -7264,9 +7926,27 @@ export default function HostelPage() {
 
   // 9. Attendance (Exact match for Screenshots 1 & 2)
   const renderAttendance = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseAttendanceStudents = isWarden ? scopedAttendanceStudents : attendanceStudents;
+    const baseBlocksList = isWarden ? myAssignedBlocks : blocks;
+    const baseRoomsList = isWarden ? scopedRooms : rooms;
     const shiftData = attendanceMap[attendanceShift] || {};
 
-    const filtered = attendanceStudents.filter((s) => {
+    const filtered = baseAttendanceStudents.filter((s) => {
       const q = attendanceSearch.toLowerCase().trim();
       const matchQ =
         !q ||
@@ -7276,7 +7956,7 @@ export default function HostelPage() {
         String(s.roomBed || "").toLowerCase().includes(q) ||
         String(s.room || "").toLowerCase().includes(q);
 
-      const blk = blocks.find((b) => b.name === attendanceBlock || b.code === attendanceBlock || String(b.id) === String(attendanceBlock));
+      const blk = baseBlocksList.find((b) => b.name === attendanceBlock || b.code === attendanceBlock || String(b.id) === String(attendanceBlock));
       const matchBlock =
         !attendanceBlock ||
         attendanceBlock === "all" ||
@@ -7326,24 +8006,26 @@ export default function HostelPage() {
     const aggPct = aggTotal > 0 ? Math.round(((aggPresent + aggHalf * 0.5) / aggTotal) * 100) : 0;
 
     // Available hostel block options for dropdown strictly deduplicated
-    const attendanceBlockOptions = Array.from(
-      new Set([
-        ...blocks.map((b) => b.name).filter(Boolean),
-        ...attendanceStudents.map((s) => s.block).filter(Boolean),
-      ])
-    );
+    const attendanceBlockOptions = isWarden
+      ? myAssignedBlocks.map((b) => b.name)
+      : Array.from(
+          new Set([
+            ...blocks.map((b) => b.name).filter(Boolean),
+            ...attendanceStudents.map((s) => s.block).filter(Boolean),
+          ])
+        );
 
     // Available room options for selected block strictly deduplicated and canonicalized
     const attendanceRoomOptions = (() => {
       const set = new Set();
-      const blk = blocks.find((b) => b.name === attendanceBlock || b.code === attendanceBlock || String(b.id) === String(attendanceBlock));
-      attendanceStudents
+      const blk = baseBlocksList.find((b) => b.name === attendanceBlock || b.code === attendanceBlock || String(b.id) === String(attendanceBlock));
+      baseAttendanceStudents
         .filter((s) => !attendanceBlock || attendanceBlock === "all" || s.block === attendanceBlock || s.blockCode === attendanceBlock || (blk && (s.block === blk.name || s.blockCode === blk.code)))
         .forEach((s) => {
           const c = cleanRoomNumber(s.room);
           if (c) set.add(c);
         });
-      rooms
+      baseRoomsList
         .filter((r) => !attendanceBlock || attendanceBlock === "all" || r.blockName === attendanceBlock || r.block === attendanceBlock || (blk && (String(r.hostelId) === String(blk.id) || r.block === blk.code || r.blockName === blk.name)))
         .forEach((r) => {
           const c = cleanRoomNumber(r.roomNo);
@@ -7591,22 +8273,43 @@ export default function HostelPage() {
           <div>
             <label className="cms-att-filter-lbl-compact">HOSTEL BLOCK</label>
             <div style={{ position: "relative", width: "100%" }}>
-              <select
-                value={attendanceBlock}
-                onChange={(e) => {
-                  setAttendanceBlock(e.target.value);
-                  setAttendanceRoom("all");
-                }}
-                className="cms-alloc-select-compact"
-                style={{ height: 34, fontSize: 12.5 }}
-              >
-                <option value="all">All Hostel Blocks</option>
-                {attendanceBlockOptions.map((blk) => (
-                  <option key={blk} value={blk}>
-                    {blk}
-                  </option>
-                ))}
-              </select>
+              {isWarden ? (
+                <select
+                  value={attendanceBlock}
+                  onChange={(e) => {
+                    setAttendanceBlock(e.target.value);
+                    setAttendanceRoom("all");
+                  }}
+                  className="cms-alloc-select-compact"
+                  style={{ height: 34, fontSize: 12.5 }}
+                >
+                  {myAssignedBlocks.length > 1 && (
+                    <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                  )}
+                  {myAssignedBlocks.map((blk) => (
+                    <option key={blk.id || blk.name} value={blk.name}>
+                      {blk.name} ({blk.code})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={attendanceBlock}
+                  onChange={(e) => {
+                    setAttendanceBlock(e.target.value);
+                    setAttendanceRoom("all");
+                  }}
+                  className="cms-alloc-select-compact"
+                  style={{ height: 34, fontSize: 12.5 }}
+                >
+                  <option value="all">All Hostel Blocks</option>
+                  {attendanceBlockOptions.map((blk) => (
+                    <option key={blk} value={blk}>
+                      {blk}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div
                 style={{
                   position: "absolute",
@@ -8058,33 +8761,61 @@ export default function HostelPage() {
 
   // 10. Hostel Reports (Matching User Reference Screenshot)
   const renderReports = () => {
+    // If authenticated warden has no assigned blocks, display official restriction notice
+    if (isWarden && !isLoading && myAssignedBlocks.length === 0) {
+      return (
+        <div className="cms-hostel-filter-empty-state" style={{ padding: "48px 24px" }}>
+          <div className="cms-hostel-filter-empty-icon" style={{ background: "#fef3c7" }}>
+            <AlertTriangle size={28} style={{ color: "#d97706" }} />
+          </div>
+          <h4 className="cms-hostel-filter-empty-title" style={{ color: "#78350f" }}>No hostel block assigned. Please contact Admin.</h4>
+          <p className="cms-hostel-filter-empty-desc" style={{ color: "#92400e" }}>
+            You do not currently have any active hostel block assignments. Please contact the administrator.
+          </p>
+        </div>
+      );
+    }
+
+    const baseBlocksList = isWarden ? myAssignedBlocks : blocks;
+
     // 1. Raw dataset by category
     let rawData = [];
     if (reportCategory === "Monthly Revenue & Fee Report") {
-      rawData = revenueStudentRecords;
+      rawData = isWarden
+        ? revenueStudentRecords.filter((r) => authorizedBlockIds.has(Number(r.hostelId)))
+        : revenueStudentRecords;
     } else if (reportCategory === "Block Report") {
-      rawData = blocks;
+      rawData = isWarden ? myAssignedBlocks : blocks;
     } else if (reportCategory === "Room Report") {
-      rawData = rooms;
+      rawData = isWarden ? scopedRooms : rooms;
     } else if (reportCategory === "Bed Allocation Report" || reportCategory === "Student Allocation Report") {
-      rawData = allocations;
+      rawData = isWarden ? scopedAllocations : allocations;
     } else if (reportCategory === "Attendance Report") {
-      rawData = attendanceStudents;
+      rawData = isWarden ? scopedAttendanceStudents : attendanceStudents;
     } else if (reportCategory === "Outpass & Leave Report") {
-      rawData = outpasses;
+      rawData = isWarden ? scopedOutpasses : outpasses;
     } else if (reportCategory === "Transfer & Vacate Report") {
-      rawData = transfers;
+      rawData = isWarden ? scopedTransfers : transfers;
     } else if (reportCategory === "Warden Report") {
-      rawData = wardens;
+      rawData = isWarden
+        ? (myWardenAssignments.length > 0 ? myWardenAssignments : wardens.filter((w) => {
+            if (authenticatedStaffId && Number(w.staffId) === Number(authenticatedStaffId)) return true;
+            if (authenticatedEmployeeId && String(w.empId).toLowerCase() === String(authenticatedEmployeeId).toLowerCase()) return true;
+            if (w.hostelId && authorizedBlockIds.has(Number(w.hostelId))) return true;
+            return false;
+          }))
+        : wardens;
     } else {
-      rawData = revenueStudentRecords;
+      rawData = isWarden
+        ? revenueStudentRecords.filter((r) => authorizedBlockIds.has(Number(r.hostelId)))
+        : revenueStudentRecords;
     }
 
     // 2. Filter by Block
     let filtered = rawData;
     if (reportBlockFilter && reportBlockFilter !== "all" && reportBlockFilter !== "") {
       const bFilter = String(reportBlockFilter || "").toLowerCase().trim();
-      const matchedBlock = blocks.find(
+      const matchedBlock = baseBlocksList.find(
         (b) => String(b.name || "").toLowerCase().trim() === bFilter || String(b.code || "").toLowerCase().trim() === bFilter
       );
       const bId = matchedBlock?.id;
@@ -8530,22 +9261,42 @@ export default function HostelPage() {
             {/* 1. Hostel Block Filter */}
             <div className="cms-report-field">
               <label className="cms-report-label">Hostel Block Filter</label>
-              <select
-                className="cms-report-select"
-                value={reportBlockFilter}
-                onChange={(e) => {
-                  setReportBlockFilter(e.target.value);
-                  setReportPage(1);
-                }}
-              >
-                <option value="">-- Select Hostel Block --</option>
-                <option value="all">All Hostel Blocks</option>
-                {Array.from(new Set(blocks.map((b) => b.name).filter(Boolean))).map((bName) => (
-                  <option key={bName} value={bName}>
-                    {bName}
-                  </option>
-                ))}
-              </select>
+              {isWarden ? (
+                <select
+                  className="cms-report-select"
+                  value={reportBlockFilter}
+                  onChange={(e) => {
+                    setReportBlockFilter(e.target.value);
+                    setReportPage(1);
+                  }}
+                >
+                  {myAssignedBlocks.length > 1 && (
+                    <option value="all">All My Assigned Blocks ({myAssignedBlocks.length})</option>
+                  )}
+                  {myAssignedBlocks.map((b) => (
+                    <option key={b.id || b.code || b.name} value={b.name}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  className="cms-report-select"
+                  value={reportBlockFilter}
+                  onChange={(e) => {
+                    setReportBlockFilter(e.target.value);
+                    setReportPage(1);
+                  }}
+                >
+                  <option value="">-- Select Hostel Block --</option>
+                  <option value="all">All Hostel Blocks</option>
+                  {Array.from(new Set(blocks.map((b) => b.name).filter(Boolean))).map((bName) => (
+                    <option key={bName} value={bName}>
+                      {bName}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="cms-report-chevron">
                 <ChevronDown size={18} />
               </div>
@@ -9070,39 +9821,45 @@ export default function HostelPage() {
   };
 
   // ── Render Major Tab Section Dispatchers with Transport-Style Subtabs ──
-  const renderSetupMasters = () => (
-    <div className="cms-hostel-stack">
-      <div className="cms-hostel-tabs is-compact">
-        {setupSubtabs.map((tab) => {
-          const isActive = activeSetupSubtab === tab.id;
-          const SubIcon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-              onClick={() => {
-                setActiveSetupSubtab(tab.id);
-                setSearchQuery("");
-                setBlocksCurrentPage(1);
-                setRoomsCurrentPage(1);
-                setWardensCurrentPage(1);
-                setCategoriesCurrentPage(1);
-              }}
-            >
-              {SubIcon && <SubIcon size={14} />}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+  const renderSetupMasters = () => {
+    const visibleSubtabs = isWarden
+      ? setupSubtabs.filter((t) => t.id === "rooms" || t.id === "blocks")
+      : setupSubtabs;
+
+    return (
+      <div className="cms-hostel-stack">
+        <div className="cms-hostel-tabs is-compact">
+          {visibleSubtabs.map((tab) => {
+            const isActive = activeSetupSubtab === tab.id;
+            const SubIcon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                onClick={() => {
+                  setActiveSetupSubtab(tab.id);
+                  setSearchQuery("");
+                  setBlocksCurrentPage(1);
+                  setRoomsCurrentPage(1);
+                  setWardensCurrentPage(1);
+                  setCategoriesCurrentPage(1);
+                }}
+              >
+                {SubIcon && <SubIcon size={14} />}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {isLoading ? <HostelLoadingSkeleton section={activeSetupSubtab} /> : <>
+        {activeSetupSubtab === "blocks" && renderHostelBlocks()}
+        {(activeSetupSubtab === "rooms" || activeSetupSubtab === "categories") && renderRooms()}
+        {activeSetupSubtab === "wardens" && (!isWarden ? renderWardens() : renderRooms())}
+        </>}
       </div>
-      {isLoading ? <HostelLoadingSkeleton section={activeSetupSubtab} /> : <>
-      {activeSetupSubtab === "blocks" && renderHostelBlocks()}
-      {(activeSetupSubtab === "rooms" || activeSetupSubtab === "categories") && renderRooms()}
-      {activeSetupSubtab === "wardens" && renderWardens()}
-      </>}
-    </div>
-  );
+    );
+  };
 
   const renderStudentManagement = () => (
     <div className="cms-hostel-stack">
@@ -9283,11 +10040,11 @@ export default function HostelPage() {
           <RoomModal
             modal={modal}
             closeModal={closeModal}
-            blocks={blocks}
+            blocks={isWarden ? myAssignedBlocks : blocks}
             categories={categories}
-            rooms={rooms}
-            beds={beds}
-            allocations={allocations}
+            rooms={isWarden ? scopedRooms : rooms}
+            beds={isWarden ? scopedBeds : beds}
+            allocations={isWarden ? scopedAllocations : allocations}
             handleSaveRoom={handleSaveRoom}
             handleSaveRoomSharingConfig={handleSaveRoomSharingConfig}
             setModal={setModal}
@@ -9310,11 +10067,11 @@ export default function HostelPage() {
           <AllocationModal
             modal={modal}
             closeModal={closeModal}
-            blocks={blocks}
-            rooms={rooms}
-            beds={beds}
-            allocations={allocations}
-            transfers={transfers}
+            blocks={isWarden ? myAssignedBlocks : blocks}
+            rooms={isWarden ? scopedRooms : rooms}
+            beds={isWarden ? scopedBeds : beds}
+            allocations={isWarden ? scopedAllocations : allocations}
+            transfers={isWarden ? scopedTransfers : transfers}
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
             canAccessAdminEndpoints={canAccessAdminEndpoints}
@@ -9333,8 +10090,8 @@ export default function HostelPage() {
           <OutpassModal
             modal={modal}
             closeModal={closeModal}
-            allocations={allocations}
-            outpasses={outpasses}
+            allocations={isWarden ? scopedAllocations : allocations}
+            outpasses={isWarden ? scopedOutpasses : outpasses}
             handleSaveOutpass={handleSaveOutpass}
             showToast={showToast}
           />
@@ -9343,10 +10100,10 @@ export default function HostelPage() {
           <TransferModal
             modal={modal}
             closeModal={closeModal}
-            blocks={blocks}
-            rooms={rooms}
-            beds={beds}
-            allocations={allocations}
+            blocks={isWarden ? myAssignedBlocks : blocks}
+            rooms={isWarden ? scopedRooms : rooms}
+            beds={isWarden ? scopedBeds : beds}
+            allocations={isWarden ? scopedAllocations : allocations}
             handleSaveTransfer={handleSaveTransfer}
             showToast={showToast}
           />
@@ -9948,6 +10705,9 @@ function StudentAttendanceModal({
             </button>
           )}
           <button
+            type="button"
+            onClick={onClose}
+            className="cms-btn cms-btn-secondary"
             type="button"
             onClick={onClose}
             className="cms-btn cms-btn-secondary"
@@ -14816,6 +15576,19 @@ function AllocationModal({
 
     const [studentSearch, setStudentSearch] = useState(modal.data?.studentName || "");
     const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
+
+    // Auto-select block if exactly one block is provided (e.g. for warden with single assigned block)
+    useEffect(() => {
+      if (blocks && blocks.length === 1 && !form.blockName) {
+        const single = blocks[0];
+        setForm((prev) => ({
+          ...prev,
+          blockName: single.name,
+          blockCode: single.code || single.name,
+          hostelId: single.id,
+        }));
+      }
+    }, [blocks, form.blockName]);
 
     // Map of active hostel allocations by student ID and admission number
     const activeAllocationsMap = useMemo(() => {

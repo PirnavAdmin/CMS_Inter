@@ -197,6 +197,7 @@ export const apiEndpoints = {
     mappedByGroup: (groupId) => `/api/v1/programs/group/${encodeURIComponent(groupId)}`,
   },
   feeGateway: {
+    config: "/api/v1/fee-payments/gateway/config",
     createOrder: "/api/v1/fee-payments/gateway/create-order",
     verify: "/api/v1/fee-payments/gateway/verify",
     status: (studentFeeId) => `/api/v1/fee-payments/gateway/status/${encodeURIComponent(studentFeeId)}`,

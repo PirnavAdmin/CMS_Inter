@@ -81,19 +81,19 @@ CREATE TABLE IF NOT EXISTS `PaymentGatewayConfigs` (
     `IfscCode` VARCHAR(20) NULL,
     `BranchName` VARCHAR(200) NULL,
     `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
-    `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT 'pirnavcolleges@hdfcbank',
-    `PayeeName` VARCHAR(200) NOT NULL DEFAULT 'Pirnav Educational Group',
+    `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT '',
+    `PayeeName` VARCHAR(200) NOT NULL DEFAULT '',
     `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
     `Mcc` VARCHAR(10) NOT NULL DEFAULT '8220',
-    `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 1,
+    `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 0,
     `Provider` VARCHAR(50) NOT NULL DEFAULT 'Razorpay',
     `IsLiveMode` TINYINT(1) NOT NULL DEFAULT 0,
     `RazorpayKeyId` VARCHAR(100) NULL,
     `RazorpayKeySecret` VARCHAR(200) NULL,
     `RazorpayWebhookSecret` VARCHAR(200) NULL,
     `AutoCapture` TINYINT(1) NOT NULL DEFAULT 1,
-    `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 1,
-    `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 1,
+    `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 0,
+    `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 0,
     `PollingIntervalMs` INT NOT NULL DEFAULT 1200,
     `MonitoringTimeoutSeconds` INT NOT NULL DEFAULT 600,
     `BaseAppUrl` VARCHAR(255) NULL,
@@ -103,4 +103,48 @@ CREATE TABLE IF NOT EXISTS `PaymentGatewayConfigs` (
     `UpdatedByUserId` INT NULL,
     PRIMARY KEY (`Id`),
     KEY `IX_PaymentGatewayConfigs_CampusId` (`CampusId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. Idempotent column checks for Razorpay Dynamic QR & Campus scoping on PaymentGatewayTransactions
+SET @col_qr := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'GatewayQrCodeId');
+SET @sql_qr := IF(@col_qr = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `GatewayQrCodeId` VARCHAR(100) NULL AFTER `OrderId`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_qr; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_cmp := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'CampusId');
+SET @sql_cmp := IF(@col_cmp = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `CampusId` INT NULL AFTER `StudentFeeId`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_cmp; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_exp := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'ExpiresAt');
+SET @sql_exp := IF(@col_exp = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ExpiresAt` DATETIME(6) NULL AFTER `SettledAt`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_exp; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_sync := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'LastGatewaySyncAtUtc');
+SET @sql_sync := IF(@col_sync = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `LastGatewaySyncAtUtc` DATETIME(6) NULL AFTER `ExpiresAt`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_sync; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 6. Create PaymentLedgerEntries table for cloud-ready immutable DB audit ledger
+CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
+    `Id` INT NOT NULL AUTO_INCREMENT,
+    `PaymentGatewayTransactionId` INT NULL,
+    `FeePaymentId` INT NULL,
+    `StudentId` INT NULL,
+    `CampusId` INT NULL,
+    `AcademicYearId` INT NULL,
+    `EntryType` VARCHAR(30) NOT NULL DEFAULT 'Credit',
+    `Amount` DECIMAL(18,2) NOT NULL,
+    `StudentName` VARCHAR(200) NOT NULL,
+    `AdmissionNo` VARCHAR(100) NOT NULL DEFAULT '',
+    `Course` VARCHAR(200) NOT NULL DEFAULT '',
+    `PaymentMethod` VARCHAR(50) NOT NULL,
+    `ReferenceNumber` VARCHAR(150) NOT NULL DEFAULT '',
+    `ReceiptNumber` VARCHAR(50) NOT NULL DEFAULT '',
+    `Status` VARCHAR(30) NOT NULL DEFAULT 'Captured',
+    `Remarks` VARCHAR(500) NULL,
+    `PaymentDateUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`Id`),
+    KEY `IX_PaymentLedgerEntries_TxnId` (`PaymentGatewayTransactionId`),
+    KEY `IX_PaymentLedgerEntries_Campus_Created` (`CampusId`, `CreatedAt`),
+    KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
+    KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

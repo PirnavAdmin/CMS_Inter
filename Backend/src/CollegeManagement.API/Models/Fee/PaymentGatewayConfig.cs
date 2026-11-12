@@ -39,11 +39,11 @@ public class PaymentGatewayConfig
 
     // ========================= UPI CONFIGURATION =========================
 
-    [Required, MaxLength(100)]
-    public string PayeeVpa { get; set; } = "pirnavcolleges@hdfcbank";
+    [MaxLength(100)]
+    public string PayeeVpa { get; set; } = string.Empty;
 
-    [Required, MaxLength(200)]
-    public string PayeeName { get; set; } = "Pirnav Educational Group";
+    [MaxLength(200)]
+    public string PayeeName { get; set; } = string.Empty;
 
     [Required, MaxLength(10)]
     public string Currency { get; set; } = "INR";
@@ -51,14 +51,14 @@ public class PaymentGatewayConfig
     [MaxLength(10)]
     public string Mcc { get; set; } = "8220"; // Colleges & Universities
 
-    public bool EnableCounterUpiQr { get; set; } = true;
+    public bool EnableCounterUpiQr { get; set; }
 
     // ========================= PAYMENT GATEWAY (RAZORPAY) =========================
 
     [Required, MaxLength(50)]
     public string Provider { get; set; } = "Razorpay";
 
-    public bool IsLiveMode { get; set; } = false;
+    public bool IsLiveMode { get; set; }
 
     [MaxLength(100)]
     public string? RazorpayKeyId { get; set; }
@@ -71,9 +71,9 @@ public class PaymentGatewayConfig
 
     public bool AutoCapture { get; set; } = true;
 
-    public bool EnableRazorpay { get; set; } = true;
+    public bool EnableRazorpay { get; set; }
 
-    public bool EnableOfflineUtr { get; set; } = true;
+    public bool EnableOfflineUtr { get; set; }
 
     // ========================= POLLING & NETWORK =========================
 

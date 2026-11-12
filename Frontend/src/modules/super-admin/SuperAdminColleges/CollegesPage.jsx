@@ -270,7 +270,7 @@ export default function CollegesPage() {
 
   // Export to CSV
   const handleExport = () => {
-    const csvHeader = "#,College Name,Code,College Admins,Students,Status\n";
+    const csvHeader = "#,College Name,Code,College Admins,Users,Status\n";
     const csvRows = filteredRows
       .map((r, i) =>
         `"${i + 1}","${(r.name || "").replace(/"/g, '""')}","${r.code || ""}","${(r.adminNames || "Not Assigned").replace(/"/g, '""')}","${r.students || 0}","${r.displayStatus}"`
@@ -541,7 +541,7 @@ export default function CollegesPage() {
                   </th>
                   <th style={{ textAlign: "center" }}>
                     <span className="rnp-th-content" onClick={() => handleSort("students")}>
-                      STUDENTS <ArrowUpDown size={12} />
+                      USERS COUNT <ArrowUpDown size={12} />
                     </span>
                   </th>
                   <th style={{ textAlign: "center" }}>
@@ -695,22 +695,6 @@ export default function CollegesPage() {
                                   <button
                                     type="button"
                                     className="rnp-popover-item"
-                                    onClick={() => { setOpenMoreId(null); openDetails(row); }}
-                                  >
-                                    <Eye size={13} color="#2563eb" />
-                                    <span>View Profile</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rnp-popover-item"
-                                    onClick={() => { setOpenMoreId(null); openEdit(row); }}
-                                  >
-                                    <Pencil size={13} color="#16a34a" />
-                                    <span>Edit College</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="rnp-popover-item"
                                     onClick={() => {
                                       setOpenMoreId(null);
                                       const cid = row.collegeId || row.id;
@@ -727,16 +711,6 @@ export default function CollegesPage() {
                                   >
                                     <RotateCcw size={13} color="#d97706" />
                                     <span>Reset Password</span>
-                                  </button>
-                                  <div className="rnp-popover-divider" />
-                                  <button
-                                    type="button"
-                                    className="rnp-popover-item"
-                                    style={{ color: isActive ? "#dc2626" : "#16a34a" }}
-                                    onClick={() => { setOpenMoreId(null); handleStatusToggle(row); }}
-                                  >
-                                    <Power size={13} />
-                                    <span>{isActive ? "Suspend College" : "Activate College"}</span>
                                   </button>
                                 </div>
                               )}

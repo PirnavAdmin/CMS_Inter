@@ -204,16 +204,15 @@ export default function SuperAdminProvider({ session, children }) {
         setLoading(false);
         return true;
       }
-      const firstError = entries.find(([, result]) => !result.ok)?.[1].error;
-      setMessage(getApiErrorMessage(firstError));
+      // Match the Admin notification bell behavior: background fetch failures
+      // should leave the page usable and the notification dropdown can show its
+      // normal empty state. Reserve the page banner for explicit user actions.
       setLoading(false);
       return false;
     }
     const normalized = normalizeLiveData(sources);
     latest.current = normalized;
     setData(normalized);
-    const failed = entries.filter(([, result]) => !result.ok).map(([key]) => key);
-    if (failed.length) setMessage(`Some platform data could not be loaded: ${failed.join(", ")}.`);
     setLoading(false);
     return true;
   }, [session?.preview]);
@@ -307,10 +306,9 @@ export default function SuperAdminProvider({ session, children }) {
     try {
       await Promise.all(ids.map((id) => superAdminApi.markNotificationRead(id)));
       return true;
-    } catch (error) {
-      latest.current = previous;
-      setData(previous);
-      setMessage(getApiErrorMessage(error));
+    } catch {
+      // Keep the optimistic read state, as the Admin bell does, and avoid
+      // turning a background notification request into a page-wide alert.
       return false;
     }
   };

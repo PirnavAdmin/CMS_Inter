@@ -14,8 +14,10 @@ import leaveTypesImage from "@/assets/settings-3d/leave-types.png";
 import attendanceTimingImage from "@/assets/settings-3d/attendance-timing.png";
 import auditLogsImage from "@/assets/settings-3d/audit-logs.png";
 import "./SettingsPage.css";
+import { usePaymentSettingsAccess } from "./PaymentGatewayConfigPage.jsx";
 
 export default function SettingsPage() {
+  const paymentSettingsAccess = usePaymentSettingsAccess();
   const navigate = useNavigate();
   const { palette, customColor, themePolicy, updateThemePolicy } = useTheme();
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -182,6 +184,10 @@ export default function SettingsPage() {
     >
       <main className="settings-dashboard-container">
         <section className="settings-grid">
+          {paymentSettingsAccess && <article className="settings-card is-featured">
+            <div className="settings-card-body"><div className="settings-card-header"><div className="settings-card-icon"><Landmark size={20} /></div><h3>Payment Gateway & Bank Accounts</h3></div><p>Configure campus receiving bank accounts, dynamic UPI QR, Razorpay credentials, and payment processing settings.</p></div>
+            <div className="settings-card-footer"><button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate("/dashboard/settings/payment-gateway")}>Configure Accounts <ArrowRight size={14} /></button></div>
+          </article>}
           {settingsCards.map((card) => {
             const Icon = card.icon;
             return (

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Inventory;
+using CollegeManagement.API.Models.Inventory;
 using CollegeManagement.API.Repositories.Interfaces.Inventory;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -654,6 +655,235 @@ namespace CollegeManagement.API.Repositories.Implementations.Inventory
             }
 
             return result;
+        }
+        #endregion
+
+        #region Purchase Orders
+        private static bool _poTableEnsured = false;
+        private async Task EnsurePurchaseOrdersTableAsync()
+        {
+            if (_poTableEnsured) return;
+            try
+            {
+                await _dbContext.Database.ExecuteSqlRawAsync(@"
+                    CREATE TABLE IF NOT EXISTS `InventoryPurchaseOrders` (
+                      `OrderId` INT NOT NULL AUTO_INCREMENT,
+                      `OrderNumber` VARCHAR(50) NOT NULL,
+                      `ItemId` INT NOT NULL,
+                      `SupplierId` INT NOT NULL,
+                      `Quantity` DECIMAL(12,2) NOT NULL DEFAULT 1.00,
+                      `UnitPrice` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+                      `TotalAmount` DECIMAL(14,2) NOT NULL DEFAULT 0.00,
+                      `Status` VARCHAR(30) NOT NULL DEFAULT 'Pending',
+                      `OrderDate` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      `ExpectedDeliveryDate` DATETIME NULL,
+                      `Remarks` VARCHAR(500) NULL,
+                      `CreatedBy` VARCHAR(150) NOT NULL DEFAULT 'Inventory Staff',
+                      `CreatedByUserId` INT NULL,
+                      `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      `UpdatedAt` DATETIME NULL,
+                      PRIMARY KEY (`OrderId`),
+                      UNIQUE KEY `UQ_InventoryPurchaseOrders_OrderNumber` (`OrderNumber`),
+                      KEY `IX_InventoryPurchaseOrders_ItemId` (`ItemId`),
+                      KEY `IX_InventoryPurchaseOrders_SupplierId` (`SupplierId`),
+                      KEY `IX_InventoryPurchaseOrders_Status` (`Status`),
+                      CONSTRAINT `FK_InventoryPurchaseOrders_Item` FOREIGN KEY (`ItemId`) REFERENCES `InventoryItems` (`ItemId`) ON DELETE RESTRICT,
+                      CONSTRAINT `FK_InventoryPurchaseOrders_Supplier` FOREIGN KEY (`SupplierId`) REFERENCES `InventorySuppliers` (`SupplierId`) ON DELETE RESTRICT
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                ");
+                _poTableEnsured = true;
+            }
+            catch { /* Table already exists or schema managed */ }
+        }
+
+        public async Task<IEnumerable<PurchaseOrderDto>> GetPurchaseOrdersAsync(string? status, string? search)
+        {
+            await EnsurePurchaseOrdersTableAsync();
+            var query = _dbContext.InventoryPurchaseOrders
+                .Include(po => po.Item)
+                .Include(po => po.Supplier)
+                .AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(po => po.Status == status);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                query = query.Where(po => po.OrderNumber.Contains(s) ||
+                                          po.Item.Name.Contains(s) ||
+                                          po.Supplier.Name.Contains(s));
+            }
+
+            var orders = await query.OrderByDescending(po => po.CreatedAt).ToListAsync();
+            return orders.Select(po => new PurchaseOrderDto
+            {
+                OrderId = po.OrderId,
+                OrderNumber = po.OrderNumber,
+                ItemId = po.ItemId,
+                ItemName = po.Item?.Name ?? string.Empty,
+                SupplierId = po.SupplierId,
+                SupplierName = po.Supplier?.Name ?? string.Empty,
+                Quantity = po.Quantity,
+                UnitPrice = po.UnitPrice,
+                TotalAmount = po.TotalAmount,
+                Status = po.Status,
+                OrderDate = po.OrderDate,
+                ExpectedDeliveryDate = po.ExpectedDeliveryDate,
+                Remarks = po.Remarks,
+                CreatedBy = po.CreatedBy,
+                CreatedAt = po.CreatedAt
+            });
+        }
+
+        public async Task<PurchaseOrderDto?> GetPurchaseOrderByIdAsync(int orderId)
+        {
+            await EnsurePurchaseOrdersTableAsync();
+            var po = await _dbContext.InventoryPurchaseOrders
+                .Include(po => po.Item)
+                .Include(po => po.Supplier)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.OrderId == orderId);
+
+            if (po == null) return null;
+
+            return new PurchaseOrderDto
+            {
+                OrderId = po.OrderId,
+                OrderNumber = po.OrderNumber,
+                ItemId = po.ItemId,
+                ItemName = po.Item?.Name ?? string.Empty,
+                SupplierId = po.SupplierId,
+                SupplierName = po.Supplier?.Name ?? string.Empty,
+                Quantity = po.Quantity,
+                UnitPrice = po.UnitPrice,
+                TotalAmount = po.TotalAmount,
+                Status = po.Status,
+                OrderDate = po.OrderDate,
+                ExpectedDeliveryDate = po.ExpectedDeliveryDate,
+                Remarks = po.Remarks,
+                CreatedBy = po.CreatedBy,
+                CreatedAt = po.CreatedAt
+            };
+        }
+
+        public async Task<PurchaseOrderDto> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, int userId, string userName)
+        {
+            await EnsurePurchaseOrdersTableAsync();
+
+            var item = await _dbContext.InventoryItems.FindAsync(request.ItemId);
+            if (item == null) throw new InvalidOperationException($"Inventory item with ID {request.ItemId} not found.");
+
+            var supplier = await _dbContext.InventorySuppliers.FindAsync(request.SupplierId);
+            if (supplier == null) throw new InvalidOperationException($"Supplier with ID {request.SupplierId} not found.");
+
+            var unitPrice = request.UnitPrice.HasValue && request.UnitPrice.Value > 0
+                ? request.UnitPrice.Value
+                : (item.OpeningCost > 0 ? item.OpeningCost : 0.00m);
+
+            var totalAmount = request.Quantity * unitPrice;
+            var orderNumber = $"PO-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}";
+
+            var po = new InventoryPurchaseOrder
+            {
+                OrderNumber = orderNumber,
+                ItemId = request.ItemId,
+                SupplierId = request.SupplierId,
+                Quantity = request.Quantity,
+                UnitPrice = unitPrice,
+                TotalAmount = totalAmount,
+                Status = "Pending",
+                OrderDate = DateTime.UtcNow,
+                ExpectedDeliveryDate = request.ExpectedDeliveryDate,
+                Remarks = request.Remarks,
+                CreatedBy = userName,
+                CreatedByUserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _dbContext.InventoryPurchaseOrders.Add(po);
+            await _dbContext.SaveChangesAsync();
+
+            try
+            {
+                _dbContext.InventoryActivities.Add(new InventoryActivity
+                {
+                    ActivityDate = DateTime.UtcNow.Date,
+                    ActivityText = $"{userName} created Purchase Order {po.OrderNumber} for {po.Quantity}x {item.Name} from {supplier.Name}.",
+                    UserId = userId,
+                    UserName = userName,
+                    CreatedAt = DateTime.UtcNow
+                });
+                await _dbContext.SaveChangesAsync();
+            }
+            catch { }
+
+            return new PurchaseOrderDto
+            {
+                OrderId = po.OrderId,
+                OrderNumber = po.OrderNumber,
+                ItemId = po.ItemId,
+                ItemName = item.Name,
+                SupplierId = po.SupplierId,
+                SupplierName = supplier.Name,
+                Quantity = po.Quantity,
+                UnitPrice = po.UnitPrice,
+                TotalAmount = po.TotalAmount,
+                Status = po.Status,
+                OrderDate = po.OrderDate,
+                ExpectedDeliveryDate = po.ExpectedDeliveryDate,
+                Remarks = po.Remarks,
+                CreatedBy = po.CreatedBy,
+                CreatedAt = po.CreatedAt
+            };
+        }
+
+        public async Task<bool> CancelPurchaseOrderAsync(int orderId, int userId, string userName, string? remarks = null)
+        {
+            await EnsurePurchaseOrdersTableAsync();
+
+            var po = await _dbContext.InventoryPurchaseOrders.FindAsync(orderId);
+            if (po == null) return false;
+
+            if (po.Status != "Pending")
+                throw new InvalidOperationException($"Cannot cancel purchase order with status '{po.Status}'.");
+
+            po.Status = "Cancelled";
+            if (!string.IsNullOrWhiteSpace(remarks)) po.Remarks = remarks;
+            po.UpdatedAt = DateTime.UtcNow;
+
+            try
+            {
+                _dbContext.InventoryActivities.Add(new InventoryActivity
+                {
+                    ActivityDate = DateTime.UtcNow.Date,
+                    ActivityText = $"{userName} cancelled Purchase Order {po.OrderNumber}.",
+                    UserId = userId,
+                    UserName = userName,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch { }
+
+            await _dbContext.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<bool> UpdatePurchaseOrderStatusAsync(int orderId, string status, int userId, string userName, string? remarks = null)
+        {
+            await EnsurePurchaseOrdersTableAsync();
+
+            var po = await _dbContext.InventoryPurchaseOrders.FindAsync(orderId);
+            if (po == null) return false;
+
+            po.Status = status;
+            if (!string.IsNullOrWhiteSpace(remarks)) po.Remarks = remarks;
+            po.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync();
+            return true;
         }
         #endregion
     }

@@ -14,6 +14,7 @@ import AccountantMyAttendance from "./pages/AccountantMyAttendance.jsx";
 import AccountantLeave from "./pages/AccountantLeave.jsx";
 import AccountantHolidays from "./pages/AccountantHolidays.jsx";
 import AccountantSettingsPage from "./pages/AccountantSettingsPage.jsx";
+import PaymentGatewayConfigPage from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 
 function AccessDeniedNotice({ moduleName = "this screen" }) {
@@ -64,6 +65,7 @@ export default function AccountantPortalRoutes() {
         <Route path="leave" element={<AccountantPermissionRoute moduleKey="staff-leave-management" screenKey="staff-leave" moduleName="Staff Leave"><AccountantLeave /></AccountantPermissionRoute>} />
         <Route path="holidays" element={<AccountantPermissionRoute moduleKey="holiday-management" moduleName="Holidays"><AccountantHolidays /></AccountantPermissionRoute>} />
         <Route path="settings" element={<AccountantSettingsPage />} />
+        <Route path="settings/payment-gateway" element={<AccountantPermissionRoute moduleKey="settings" screenKey="payment-gateway" moduleName="Payment Gateway Settings"><PaymentGatewayConfigPage embedded /></AccountantPermissionRoute>} />
         <Route path="*" element={<Navigate to="/accountant-dashboard" replace />} />
       </Route>
     </Routes>

@@ -37,6 +37,7 @@ import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage
 import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
 // Code-split Settings & Admin configurations for bundle optimization
 const SettingsPage = lazy(() => import("@/modules/admin/AdminSettings/SettingsPage.jsx"));
+import PaymentGatewayConfigPage from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 const LOPConfigurationPage = lazy(() => import("@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx"));
 const CampusImagesConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx"));
 const RolesPermissionsPage = lazy(() => import("@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx"));
@@ -206,6 +207,10 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>
+        <Route path="/dashboard/settings/payment-gateway" element={<Suspense fallback={<SettingsFallback />}><PaymentGatewayConfigPage /></Suspense>} />
       </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>

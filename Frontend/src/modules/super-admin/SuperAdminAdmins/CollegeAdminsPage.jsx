@@ -1043,40 +1043,6 @@ export default function CollegeAdminsPage() {
                                   type="button"
                                   className="cap-popover-item"
                                   onClick={() => {
-                                    setDetailAdmin(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Eye size={14} className="text-blue" />
-                                  <span>View Profile</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cap-popover-item"
-                                  onClick={() => {
-                                    setResetPwAdmin(row);
-                                    setNewPassword("CollegeAdmin@2026!");
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Key size={14} className="text-amber" />
-                                  <span>Reset Password</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cap-popover-item"
-                                  onClick={() => {
-                                    setEditAdmin({ ...row });
-                                    setActiveMenuId(null);
-                                  }}
-                                >
-                                  <Pencil size={14} className="text-green" />
-                                  <span>Edit Details</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cap-popover-item"
-                                  onClick={() => {
                                     handleToggleStatus(row);
                                     setActiveMenuId(null);
                                   }}

@@ -188,7 +188,7 @@ apiClient.interceptors.request.use(
     const isHostelRequest = /\/api\/v1\/hostel/i.test(config.url || "");
 
     if (
-      !config.requireRealBackend && !isHostelRequest &&
+      !config.requireRealBackend && !isHostelRequest && !/\/api\/v1\/fees(?:\/|\?|$)/i.test(config.url || "") &&
       (isExplicitMockToken || isExplicitMockForced) &&
       !/\/api\/(Auth|Admin)\/login/i.test(config.url || "") &&
       !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|leave-categories|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(config.url || "")
@@ -273,7 +273,7 @@ apiClient.interceptors.response.use(
     // Automatic fallback to mock adapter ONLY for explicit mock sessions or forced mock mode
     // When real backend is offline, do NOT return mock data - let the request fail cleanly
     if (
-      !originalRequest?.requireRealBackend && !isHostelRequest &&
+      !originalRequest?.requireRealBackend && !isHostelRequest && !/\/api\/v1\/fees(?:\/|\?|$)/i.test(originalRequest?.url || "") &&
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&

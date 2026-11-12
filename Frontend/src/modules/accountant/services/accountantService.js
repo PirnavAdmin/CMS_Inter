@@ -6,6 +6,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { readFee, feeStatus, scopedFeeMasters } from "../utils/feeViewData.js";
 import { PAYMENT_METHODS } from "../../../data/feeManagementData.js";
+import { assertFeeDetailIdentity, normalizeFeeDetails } from "@/features/fees/feeDetails.js";
 
 // Shared API modules retain their original clients, endpoints and contracts.
 // Payroll: reuse the project API without changing its contract.
@@ -422,6 +423,8 @@ export async function loadLedgerDetails(row, signal) {
   }
   const detail = checkedFeeData(response);
   if (!detail || typeof detail !== "object" || Array.isArray(detail)) throw invalid("Student fee details were not returned. Refresh the ledger and try again.");
+  try { assertFeeDetailIdentity(detail, row); }
+  catch (failure) { throw invalid(failure.message); }
   const identityKey = validId(readFee(row, "studentId")) ? "studentId" : "studentFeeId";
   if (!validId(readFee(detail, identityKey)) || Number(readFee(detail, identityKey)) !== Number(readFee(row, identityKey))) {
     throw invalid("The returned fee details do not match the selected student. Refresh the ledger before trying again.");
@@ -433,7 +436,7 @@ export async function loadLedgerDetails(row, signal) {
       throw invalid("The returned fee details do not match the selected student. Refresh the ledger before trying again.");
     }
   }
-  return detail;
+  return normalizeFeeDetails(detail);
 }
 
 export function ledgerPage(rows, pageNumber, search = "", filters = {}) {

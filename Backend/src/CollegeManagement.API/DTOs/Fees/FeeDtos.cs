@@ -66,6 +66,10 @@ public class UpdateFeeStructureRequest
 
     public string? Description { get; set; }
     public int? ProgramId { get; set; }
+    public int? AcademicLevelId { get; set; }
+    public string? YearFeeMode { get; set; }
+    public string? IncrementType { get; set; }
+    public decimal? IncrementValue { get; set; }
     public bool IsActive { get; set; } = true;
 }
 
@@ -98,6 +102,7 @@ public class FeeStructureResponse
     public int? ProgramId { get; set; }
     public string? ProgramName { get; set; }
     public string StructureName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public int AcademicLevelId { get; set; }
     public string AcademicLevelName { get; set; } = string.Empty;
     public string? YearFeeMode { get; set; }
@@ -482,6 +487,9 @@ public class StudentFeeDetailsResponse
 public class StudentFeeBreakdownResponse
 {
     public int StudentFeeId { get; set; }
+    public int StudentFeeComponentId { get; set; }
+    public int FeeStructureComponentId { get; set; }
+    public int FeeTypeId { get; set; }
     public string FeeType { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string? ConcessionScheme { get; set; }

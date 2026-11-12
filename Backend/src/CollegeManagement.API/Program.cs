@@ -403,6 +403,10 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
+builder.Services.AddHttpClient("RazorpayAssets", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
@@ -1236,19 +1240,19 @@ catch (Exception ex)
                 `IfscCode` VARCHAR(20) NULL,
                 `BranchName` VARCHAR(200) NULL,
                 `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
-                `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT 'pirnavcolleges@hdfcbank',
-                `PayeeName` VARCHAR(200) NOT NULL DEFAULT 'Pirnav Educational Group',
+                `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT '',
+                `PayeeName` VARCHAR(200) NOT NULL DEFAULT '',
                 `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
                 `Mcc` VARCHAR(10) NOT NULL DEFAULT '8220',
-                `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 0,
                 `Provider` VARCHAR(50) NOT NULL DEFAULT 'Razorpay',
                 `IsLiveMode` TINYINT(1) NOT NULL DEFAULT 0,
                 `RazorpayKeyId` VARCHAR(100) NULL,
                 `RazorpayKeySecret` VARCHAR(200) NULL,
                 `RazorpayWebhookSecret` VARCHAR(200) NULL,
                 `AutoCapture` TINYINT(1) NOT NULL DEFAULT 1,
-                `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 1,
-                `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 0,
+                `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 0,
                 `PollingIntervalMs` INT NOT NULL DEFAULT 1200,
                 `MonitoringTimeoutSeconds` INT NOT NULL DEFAULT 600,
                 `BaseAppUrl` VARCHAR(255) NULL,
@@ -1258,6 +1262,51 @@ catch (Exception ex)
                 `UpdatedByUserId` INT NULL,
                 PRIMARY KEY (`Id`),
                 KEY `IX_PaymentGatewayConfigs_CampusId` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+        var extraPgColumns = new (string ColName, string AlterSql)[]
+        {
+            ("GatewayQrCodeId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `GatewayQrCodeId` VARCHAR(100) NULL AFTER `OrderId`;"),
+            ("CampusId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `CampusId` INT NULL AFTER `StudentFeeId`;"),
+            ("ExpiresAt", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ExpiresAt` DATETIME(6) NULL AFTER `SettledAt`;"),
+            ("LastGatewaySyncAtUtc", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `LastGatewaySyncAtUtc` DATETIME(6) NULL AFTER `ExpiresAt`;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayTransactions' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `PaymentGatewayTransactionId` INT NULL,
+                `FeePaymentId` INT NULL,
+                `StudentId` INT NULL,
+                `CampusId` INT NULL,
+                `AcademicYearId` INT NULL,
+                `EntryType` VARCHAR(30) NOT NULL DEFAULT 'Credit',
+                `Amount` DECIMAL(18,2) NOT NULL,
+                `StudentName` VARCHAR(200) NOT NULL,
+                `AdmissionNo` VARCHAR(100) NOT NULL DEFAULT '',
+                `Course` VARCHAR(200) NOT NULL DEFAULT '',
+                `PaymentMethod` VARCHAR(50) NOT NULL,
+                `ReferenceNumber` VARCHAR(150) NOT NULL DEFAULT '',
+                `ReceiptNumber` VARCHAR(50) NOT NULL DEFAULT '',
+                `Status` VARCHAR(30) NOT NULL DEFAULT 'Captured',
+                `Remarks` VARCHAR(500) NULL,
+                `PaymentDateUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                KEY `IX_PaymentLedgerEntries_TxnId` (`PaymentGatewayTransactionId`),
+                KEY `IX_PaymentLedgerEntries_Campus_Created` (`CampusId`, `CreatedAt`),
+                KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
+                KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ");
     }

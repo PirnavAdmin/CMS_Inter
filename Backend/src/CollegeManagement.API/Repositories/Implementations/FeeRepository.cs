@@ -1,8 +1,11 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using MySqlConnector;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -31,6 +34,31 @@ public class FeeRepository : IFeeRepository
     private IDbConnection Connection()
     {
         return _db.Database.GetDbConnection();
+    }
+
+    private static Exception TranslateMySqlException(MySqlException ex)
+    {
+        if (ex.SqlState == "45000")
+        {
+            if (ex.Message.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+                return new ConflictException(ex.Message["CONFLICT:".Length..].Trim());
+            return new ArgumentException(ex.Message);
+        }
+        if (ex.Number == 1062)
+            return new ConflictException("A conflicting fee record already exists for this combination.");
+        if (ex.Number == 1452)
+            return new ArgumentException("Referenced master record or FeeTypeId does not exist.");
+        return ex;
+    }
+
+    private static async Task<FeeStructureResponse?> ReadFeeStructureWithItemsAsync(SqlMapper.GridReader multi)
+    {
+        var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
+        if (structure != null && !multi.IsConsumed)
+        {
+            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+        }
+        return structure;
     }
 
     // =========================================================
@@ -112,40 +140,38 @@ public class FeeRepository : IFeeRepository
     {
         var c = Connection();
         string itemsJson = JsonSerializer.Serialize(request.Items ?? new List<CreateFeeStructureItemRequest>(), _jsonOptions);
-
-        using var multi = await c.QueryMultipleAsync(
-            "sp_FeeStructure_Create",
-            new
-            {
-                p_CampusId = request.CampusId,
-                p_BoardId = request.BoardId,
-                p_AcademicYearId = request.AcademicYearId,
-                p_AcademicLevelId = request.AcademicLevelId ?? 1,
-                p_GroupId = request.GroupId,
-                p_ProgramId = request.ProgramId,
-                p_StructureName = request.StructureName,
-                p_Description = (string?)null,
-                p_YearFeeMode = request.YearFeeMode,
-                p_IncrementType = request.IncrementType,
-                p_IncrementValue = request.IncrementValue,
-                p_ItemsJson = itemsJson
-            },
-            commandType: CommandType.StoredProcedure);
-
-        var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
-        if (structure != null)
+        try
         {
-            if (!multi.IsConsumed)
+            FeeStructureResponse? structure;
+            using (var multi = await c.QueryMultipleAsync(
+                "sp_FeeStructure_Create",
+                new
+                {
+                    p_CampusId = request.CampusId,
+                    p_BoardId = request.BoardId,
+                    p_AcademicYearId = request.AcademicYearId,
+                    p_AcademicLevelId = request.AcademicLevelId,
+                    p_GroupId = request.GroupId,
+                    p_ProgramId = request.ProgramId,
+                    p_StructureName = request.StructureName,
+                    p_Description = (string?)null,
+                    p_YearFeeMode = request.YearFeeMode,
+                    p_IncrementType = request.IncrementType,
+                    p_IncrementValue = request.IncrementValue,
+                    p_ItemsJson = itemsJson
+                },
+                commandType: CommandType.StoredProcedure))
             {
-                structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
+                structure = await ReadFeeStructureWithItemsAsync(multi);
             }
-            if (structure.Items == null || structure.Items.Count == 0)
+            if (structure != null && (structure.Items == null || structure.Items.Count == 0))
             {
                 var full = await GetFeeStructureByIdAsync(structure.FeeStructureId);
                 if (full != null) return full;
             }
+            return structure;
         }
-        return structure;
+        catch (MySqlException ex) { throw TranslateMySqlException(ex); }
     }
 
     public async Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null)
@@ -175,28 +201,33 @@ public class FeeRepository : IFeeRepository
             "sp_FeeStructure_GetById",
             new { p_FeeStructureId = id },
             commandType: CommandType.StoredProcedure);
-
-        var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
-        if (structure != null && !multi.IsConsumed)
-        {
-            structure.Items = (await multi.ReadAsync<FeeStructureItemResponse>()).ToList();
-        }
-        return structure;
+        return await ReadFeeStructureWithItemsAsync(multi);
     }
 
     public async Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
-            "sp_FeeStructure_Update",
-            new
-            {
-                p_FeeStructureId = id,
-                p_StructureName = request.StructureName,
-                p_Description = request.Description,
-                p_IsActive = request.IsActive
-            },
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            using var multi = await c.QueryMultipleAsync(
+                "sp_FeeStructure_Update",
+                new
+                {
+                    p_FeeStructureId = id,
+                    p_CampusId = request.CampusId,
+                    p_StructureName = request.StructureName,
+                    p_Description = request.Description,
+                    p_ProgramId = request.ProgramId,
+                    p_AcademicLevelId = request.AcademicLevelId,
+                    p_YearFeeMode = request.YearFeeMode,
+                    p_IncrementType = request.IncrementType,
+                    p_IncrementValue = request.IncrementValue,
+                    p_IsActive = request.IsActive
+                },
+                commandType: CommandType.StoredProcedure);
+            return await ReadFeeStructureWithItemsAsync(multi);
+        }
+        catch (MySqlException ex) { throw TranslateMySqlException(ex); }
     }
 
     public async Task<bool> DeleteFeeStructureAsync(int id)
@@ -211,16 +242,20 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int id, CreateFeeStructureItemRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
-            "sp_FeeStructureComponent_Add",
-            new
-            {
-                p_FeeStructureId = id,
-                p_FeeTypeId = request.FeeTypeId,
-                p_Rule = request.Rule,
-                p_Amount = request.Amount
-            },
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
+                "sp_FeeStructureComponent_Add",
+                new
+                {
+                    p_FeeStructureId = id,
+                    p_FeeTypeId = request.FeeTypeId,
+                    p_Rule = request.Rule,
+                    p_Amount = request.Amount
+                },
+                commandType: CommandType.StoredProcedure);
+        }
+        catch (MySqlException ex) { throw TranslateMySqlException(ex); }
     }
 
     public async Task<IEnumerable<FeeStructureItemResponse>> GetFeeStructureItemsAsync(int id)
@@ -360,22 +395,10 @@ public class FeeRepository : IFeeRepository
         return studentFee;
     }
 
-    public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id)
+    private async Task<StudentFeeDetailsResponse?> ReadStudentFeeDetailsAsync(SqlMapper.GridReader multi)
     {
-        // ID could be StudentFeeId or StudentId directly; resolve via GetStudentFeeDetailsByStudentAsync
-        return await GetStudentFeeDetailsByStudentAsync(id);
-    }
-
-    public async Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId)
-    {
-        var c = Connection();
-        using var multi = await c.QueryMultipleAsync(
-            "sp_StudentFee_GetDetailsByStudent",
-            new { p_StudentId = studentId },
-            commandType: CommandType.StoredProcedure);
-
         var studentDetails = await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
-        if (studentDetails == null) return null;
+        if (studentDetails == null || studentDetails.StudentFeeId <= 0) return null;
 
         if (!multi.IsConsumed)
         {
@@ -386,6 +409,47 @@ public class FeeRepository : IFeeRepository
             studentDetails.Schedules = (await multi.ReadAsync<FeeScheduleResponse>()).ToList();
         }
         return studentDetails;
+    }
+
+    private async Task PopulatePaymentHistoryAsync(StudentFeeDetailsResponse? details)
+    {
+        if (details == null || details.StudentId <= 0) return;
+        var payments = await GetFeePaymentsAsync(details.StudentId);
+        details.PaymentHistory = payments
+            .Where(p => p.StudentFeeId == details.StudentFeeId)
+            .OrderByDescending(p => p.PaymentDate)
+            .ThenByDescending(p => p.FeePaymentId)
+            .ToList();
+    }
+
+    public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id)
+    {
+        var c = Connection();
+        StudentFeeDetailsResponse? details;
+        using (var multi = await c.QueryMultipleAsync(
+            "sp_StudentFee_GetDetailsById",
+            new { p_StudentFeeId = id },
+            commandType: CommandType.StoredProcedure))
+        {
+            details = await ReadStudentFeeDetailsAsync(multi);
+        }
+        await PopulatePaymentHistoryAsync(details);
+        return details;
+    }
+
+    public async Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId)
+    {
+        var c = Connection();
+        StudentFeeDetailsResponse? details;
+        using (var multi = await c.QueryMultipleAsync(
+            "sp_StudentFee_GetDetailsByStudent",
+            new { p_StudentId = studentId },
+            commandType: CommandType.StoredProcedure))
+        {
+            details = await ReadStudentFeeDetailsAsync(multi);
+        }
+        await PopulatePaymentHistoryAsync(details);
+        return details;
     }
 
     public async Task<Dictionary<int, StudentFeeDetailsResponse?>> GetBulkStudentFeeDetailsAsync(IEnumerable<int> studentIds)
@@ -451,20 +515,24 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeConcessionResponse>(
-            "sp_FeeConcession_Apply",
-            new
-            {
-                p_StudentId = request.StudentId,
-                p_StudentFeeId = request.StudentFeeId,
-                p_ScholarshipId = request.ScholarshipId,
-                p_ScholarshipName = request.ScholarshipName,
-                p_DiscountType = request.DiscountType,
-                p_DiscountValue = request.DiscountValue,
-                p_Reason = request.Reason,
-                p_ApprovedBy = request.ApprovedBy
-            },
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            return await c.QueryFirstOrDefaultAsync<FeeConcessionResponse>(
+                "sp_FeeConcession_Apply",
+                new
+                {
+                    p_StudentId = request.StudentId,
+                    p_StudentFeeId = request.StudentFeeId,
+                    p_ScholarshipId = request.ScholarshipId,
+                    p_ScholarshipName = request.ScholarshipName,
+                    p_DiscountType = request.DiscountType,
+                    p_DiscountValue = request.DiscountValue,
+                    p_Reason = request.Reason,
+                    p_ApprovedBy = request.ApprovedBy
+                },
+                commandType: CommandType.StoredProcedure);
+        }
+        catch (MySqlException ex) { throw TranslateMySqlException(ex); }
     }
 
     // =========================================================
@@ -538,25 +606,31 @@ public class FeeRepository : IFeeRepository
         }
 
         int collectedById = request.CollectedBy ?? 0;
+        var activeTx = _db.Database.CurrentTransaction?.GetDbTransaction();
 
-        return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
-            "sp_FeePayment_Collect",
-            new
-            {
-                p_StudentId = request.StudentId,
-                p_StudentFeeId = request.StudentFeeId,
-                p_FeeInstallmentIdsJson = instJson,
-                p_Amount = request.Amount,
-                p_Discount = request.Discount,
-                p_Fine = request.Fine,
-                p_PaymentMode = request.PaymentMode,
-                p_TransactionReference = request.TransactionReference,
-                p_Note = request.Note,
-                p_PaymentDate = request.PaymentDate ?? DateTime.UtcNow,
-                p_ReceiptNumber = finalReceiptNo,
-                p_CollectedBy = collectedById
-            },
-            commandType: CommandType.StoredProcedure);
+        try
+        {
+            return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
+                "sp_FeePayment_Collect",
+                new
+                {
+                    p_StudentId = request.StudentId,
+                    p_StudentFeeId = request.StudentFeeId,
+                    p_FeeInstallmentIdsJson = instJson,
+                    p_Amount = request.Amount,
+                    p_Discount = request.Discount,
+                    p_Fine = request.Fine,
+                    p_PaymentMode = request.PaymentMode,
+                    p_TransactionReference = request.TransactionReference,
+                    p_Note = request.Note,
+                    p_PaymentDate = request.PaymentDate ?? DateTime.UtcNow,
+                    p_ReceiptNumber = finalReceiptNo,
+                    p_CollectedBy = collectedById
+                },
+                transaction: activeTx,
+                commandType: CommandType.StoredProcedure);
+        }
+        catch (MySqlException ex) { throw TranslateMySqlException(ex); }
     }
 
     public async Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int studentId)
@@ -626,7 +700,7 @@ public class FeeRepository : IFeeRepository
             commandType: CommandType.StoredProcedure);
     }
 
-    private static async Task EnrichGatewayMetadataAsync(IDbConnection c, IEnumerable<FeePaymentResponse> payments)
+    private async Task EnrichGatewayMetadataAsync(IDbConnection c, IEnumerable<FeePaymentResponse> payments)
     {
         var list = payments?.ToList();
         if (list == null || !list.Any()) return;
@@ -636,9 +710,11 @@ public class FeeRepository : IFeeRepository
 
         try
         {
+            var activeTx = _db.Database.CurrentTransaction?.GetDbTransaction();
             var txns = await c.QueryAsync<(int FeePaymentId, int GatewayTransactionId, string GatewayStatus)>(
                 "SELECT FeePaymentId, Id AS GatewayTransactionId, Status AS GatewayStatus FROM PaymentGatewayTransactions WHERE FeePaymentId IN @Ids",
-                new { Ids = paymentIds });
+                new { Ids = paymentIds },
+                transaction: activeTx);
 
             var lookup = txns
                 .GroupBy(t => t.FeePaymentId)
