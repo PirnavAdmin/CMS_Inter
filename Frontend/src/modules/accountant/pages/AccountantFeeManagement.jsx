@@ -17,6 +17,10 @@ import { feeDate, feeMoney, feeStatus, feeText, pageOf, readFee, savedYearSummar
 import { feeDetailWarnings } from "@/features/fees/feeDetails.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import GatewayPaymentPanel from "@/modules/admin/AdminFees/components/GatewayPaymentPanel.jsx";
+import PaymentConfirmation from "@/modules/admin/AdminFees/components/PaymentConfirmation.jsx";
+import OfflineUtrQueueTab from "@/modules/admin/AdminFees/components/OfflineUtrQueueTab.jsx";
+import { paymentUiState } from "@/modules/admin/AdminFees/services/paymentGatewaySession.js";
+import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import AccountantFeeOverview from "../components/AccountantFeeOverview.jsx";
 import AccountantFeeSetupModal from "../components/AccountantFeeSetupModal.jsx";
 import { useAccountantViewParams, FeeBadge, FeeCard, FeeFilter, FeeLoadState, FeeNotice, FeePagination, FeeSearch, FeeTable, FeeTabs } from "../components/AccountantUI.jsx";
@@ -138,6 +142,11 @@ function CollectPayment({ account, authorize, onClose, onSaved }) {
     busy.current = true; setSaving(true); setError("");
     try {
       const saved = await collectStudentPayment(account, draft, authorize);
+      if (paymentUiState(saved) !== "PAYMENT_SUCCESSFUL") {
+        setUncertain(true);
+        setGatewayNotice("Payment details submitted successfully. Your payment is pending verification.");
+        return;
+      }
       onSaved(saved);
     } catch (failure) {
       setUncertain(Boolean(failure.feeSaveUncertain));
@@ -307,166 +316,8 @@ const printReceiptElement = async (receiptElement, signal) => {
 };
 
 function PaymentReceipt({ payment, account, onClose, autoPrint = false }) {
-  const paymentValue = (...keys) => keys.map(key => readFee(payment, key)).find(value => value !== undefined && value !== null && value !== "");
-  const studentValue = (...keys) => paymentValue(...keys) ?? keys.map(key => readFee(account, key)).find(value => value !== undefined && value !== null && value !== "");
-  // Only use context carried by this payment response (or the immediate
-  // collection account). Historical callers deliberately pass account=null.
-  const academicValue = (keys, relation, labels) => {
-    const text = value => typeof value === "string" && value.trim() && value !== "-" ? value : undefined;
-    for (const source of [payment, account]) {
-      for (const key of keys) {
-        const value = text(readFee(source, key));
-        if (value !== undefined) return value;
-      }
-      const nested = readFee(source, relation);
-      const direct = text(nested);
-      if (direct !== undefined) return direct;
-      for (const label of labels) {
-        const value = text(readFee(nested, label));
-        if (value !== undefined) return value;
-      }
-    }
-    return undefined;
-  };
-  const receipt = {
-    receiptNo: paymentValue("receiptNumber", "receiptNo"),
-    amount: paymentValue("amount", "paidAmount", "paymentAmount"),
-    date: paymentValue("receiptDate", "paymentDate", "paidDate", "date"),
-    status: paymentValue("status", "paymentStatus"),
-    reference: paymentValue("transactionReference", "transactionNumber", "reference"),
-    method: paymentValue("paymentMethod", "paymentMode", "method"),
-    remarks: paymentValue("remarks", "note"),
-    studentName: studentValue("studentName"),
-    admissionNo: studentValue("admissionNumber", "admissionNo"),
-    group: academicValue(["groupName"], "group", ["groupName", "name", "groupCode"]),
-    program: academicValue(["programName", "programmeName"], "program", ["programName", "programmeName", "name", "programCode"]),
-    section: academicValue(["sectionName"], "section", ["sectionName", "name"]),
-    academicYear: academicValue(["academicYearName"], "academicYear", ["academicYearName", "name"]),
-    campusName: academicValue(["campusName"], "campus", ["campusName", "name"]),
-    collegeName: studentValue("collegeName", "institutionName"),
-    collegeAddress: studentValue("collegeAddress"),
-    collegePhone: studentValue("collegePhone"),
-    collegeEmail: studentValue("collegeEmail"),
-    breakdown: rowsOf(paymentValue("feeBreakdown", "breakdown", "feeItems", "components", "details", "paymentBreakdown") || []).map((item, index) => ({
-      id: readFee(item, "id") ?? readFee(item, "feeTypeId") ?? index,
-      feeType: readFee(item, "feeTypeName") ?? readFee(item, "name") ?? (typeof readFee(item, "feeType") === "string" ? readFee(item, "feeType") : readFee(readFee(item, "feeType"), "feeTypeName")),
-      paidAmount: readFee(item, "paidAmount") ?? readFee(item, "amountPaid") ?? readFee(item, "paymentAmount") ?? readFee(item, "paid"),
-    })),
-  };
-
-  const receiptRef = useRef(null);
-  const printControllerRef = useRef(null);
-  const [printing, setPrinting] = useState(false);
-  const [printPrepared, setPrintPrepared] = useState(false);
-  const [printError, setPrintError] = useState("");
-  useEffect(() => {
-    setPrintError("");
-    setPrinting(false);
-    setPrintPrepared(false);
-    return () => { printControllerRef.current?.abort(); printControllerRef.current = null; };
-  }, [payment, account]);
-
-  const printReceipt = useCallback(async () => {
-    if (printControllerRef.current) return;
-    const controller = new AbortController();
-    printControllerRef.current = controller;
-    setPrinting(true);
-    setPrintPrepared(false);
-    setPrintError("");
-    try {
-      await printReceiptElement(receiptRef.current, controller.signal);
-      setPrintPrepared(true);
-    } catch (error) {
-      if (!controller.signal.aborted) setPrintError(error.message || "The receipt could not be printed. Please try again.");
-    } finally {
-      if (printControllerRef.current === controller) {
-        printControllerRef.current = null;
-        setPrinting(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (autoPrint) void printReceipt();
-  }, [autoPrint, payment, account, printReceipt]);
-
-  const paidAmount = receipt.amount === null || receipt.amount === undefined || receipt.amount === "" ? NaN : Number(receipt.amount);
-  const money = feeMoney;
-  const availableBreakdown = (receipt.breakdown || []).filter((item) => item.feeType && item.paidAmount !== null && item.paidAmount !== undefined && Number.isFinite(Number(item.paidAmount)) && Number(item.paidAmount) >= 0);
-  const breakdownTotal = availableBreakdown.reduce((sum, item) => sum + Number(item.paidAmount), 0);
-  const paymentItems = availableBreakdown.length && Number.isFinite(paidAmount) && Math.abs(breakdownTotal - paidAmount) < 0.005
-    ? availableBreakdown
-    : [{ id: "payment", feeType: "Fee Payment", paidAmount: receipt.amount }];
-  const words = Number.isFinite(paidAmount) ? amountToWords(paidAmount) : "";
-  const institutionName = receipt.collegeName || COLLEGE_NAME;
-  const studentRows = [
-    ["Student Name", receipt.studentName], ["Admission Number", receipt.admissionNo],
-    ["Group / Course", receipt.group], ["Program", receipt.program],
-    ["Section", receipt.section], ["Academic Year", receipt.academicYear], ["Campus", receipt.campusName],
-  ];
-  const contact = [receipt.collegeAddress, receipt.collegePhone ? 'Phone: ' + receipt.collegePhone : "", receipt.collegeEmail ? 'Email: ' + receipt.collegeEmail : ""].filter(Boolean);
-
-  const receiptContent = (
-    <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
-      <header className="cms-fee-receipt-head">
-        <img src={collegeLogo} alt={institutionName + " logo"} />
-        <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
-      </header>
-      <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
-      <div className="cms-fee-receipt-meta">
-        <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
-        <span><b>Payment Date</b> {receipt.date ? feeDate(receipt.date) : "-"}</span>
-        <span><b>Payment Status</b> {receipt.status || "-"}</span>
-        <span><b>Transaction Reference</b> {receipt.reference || "-"}</span>
-      </div>
-      <section className="cms-fee-receipt-section">
-        <h4>Student Information</h4>
-        <table className="cms-fee-receipt-info-table"><tbody>
-          {studentRows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value || "-"}</td></tr>)}
-        </tbody></table>
-      </section>
-      <section className="cms-fee-receipt-section cms-fee-receipt-payment-section">
-        <h4>Payment Details</h4>
-        <table className="cms-fee-receipt-payment-table">
-          <colgroup><col style={{ width: "10%" }} /><col style={{ width: "60%" }} /><col style={{ width: "30%" }} /></colgroup>
-          <thead><tr><th scope="col">S.No</th><th scope="col">Fee Particulars</th><th scope="col" className="num">Amount (INR)</th></tr></thead>
-          <tbody>{paymentItems.map((item, index) => <tr key={item.id + "-" + index}><td>{index + 1}</td><td>{item.feeType}</td><td className="num">{money(item.paidAmount)}</td></tr>)}</tbody>
-          <tfoot><tr><th colSpan={2} scope="row">Total Paid</th><td className="num">{money(receipt.amount)}</td></tr></tfoot>
-        </table>
-      </section>
-      <div className="cms-fee-receipt-payment-summary">
-        <div><span>Payment Mode</span><strong>{receipt.method || "-"}</strong></div>
-        {receipt.reference ? <div><span>Transaction Reference</span><strong>{receipt.reference}</strong></div> : null}
-      </div>
-      {receipt.remarks ? <div className="cms-fee-receipt-payment-summary"><div><span>Remarks</span><strong>{receipt.remarks}</strong></div></div> : null}
-      <div className="cms-fee-receipt-total"><span>Total Amount Paid</span><strong>{money(receipt.amount)}</strong></div>
-      {words ? <div className="cms-fee-receipt-words"><span>Amount in Words</span><strong>{words}</strong></div> : null}
-      <div className="cms-fee-signature"><span>Student / Parent Signature</span><span>Received By / Authorized Signatory</span></div>
-      <p className="cms-fee-receipt-note">This is a computer-generated fee payment receipt.<br />Thank you for your payment.</p>
-    </div>
-  );
-  const missingAcademicDetails = !account && [receipt.group, receipt.program, receipt.section, receipt.academicYear, receipt.campusName].some(value => !value);
-  if (autoPrint) {
-    return <>
-      <div className="cms-alert accountant-receipt-print-status" role={printError ? "alert" : "status"}>
-        {printError || (printPrepared ? "Receipt prepared. Use the browser print dialog to continue." : "Preparing receipt for printing...")}
-        {printError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={printReceipt} disabled={printing}>Retry Print</button> : null}
-        <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>{printing ? "Cancel" : "Close"}</button>
-      </div>
-      <div aria-hidden="true" style={{ position: "fixed", left: "-10000px", top: 0, width: "794px", pointerEvents: "none" }}>{receiptContent}</div>
-    </>;
-  }
-  return <Modal title="Payment Receipt" className="accountant-payment-receipt-modal" onClose={onClose} footer={<>
-    <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-    <button type="button" className="cms-btn cms-btn-primary" onClick={printReceipt} disabled={printing}><Printer size={14} />{printing ? "Preparing Receipt..." : "Print Receipt"}</button>
-  </>}>
-    {printError ? <p className="cms-error" role="alert">{printError}</p> : null}
-    {receiptContent}
-    {missingAcademicDetails ? <p className="cms-fee-year-helper">Some historical academic details are unavailable for this payment.</p> : null}
-    {!receipt.receiptNo ? <FeeNotice>The payment was confirmed, but no receipt number was returned. Contact your administrator with payment ID {feeText(payment, "feePaymentId")}.</FeeNotice> : null}
-  </Modal>;
+  return <PaymentConfirmation payment={payment} account={account} onClose={onClose} autoPrint={autoPrint} />;
 }
-
 
 export function FeeReceiptActions({ payment, onSelect, allowed = true }) {
   const unavailable = feeReceiptUnavailableReason(payment);
@@ -794,7 +645,7 @@ export default function AccountantFeeManagement() {
   useEffect(() => { collectionAccessRef.current = collectionAccess; return () => { collectionAccessRef.current = false; }; }, [collectionAccess]);
   const authorizeCollection = useCallback(() => collectionAccessRef.current, []);
   const [query, setQuery] = useSearchParams();
-  const tab = ["overview", "setup", "ledger", "collection"].includes(query.get("tab")) ? query.get("tab") : "overview";
+  const tab = ["overview", "setup", "ledger", "collection", "pending"].includes(query.get("tab")) ? query.get("tab") : "overview";
   const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
   const config = setupViews[setup];
   const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); ["studentId", "studentFeeId", "action", "receiptId", "setupAction", "recordId", "setupPage"].forEach((field) => next.delete(field)); return next; });
@@ -804,10 +655,11 @@ export default function AccountantFeeManagement() {
   const contextKey = JSON.stringify(params);
   return <div className="accountant-fee-page cms-fee-page">
     <header className="cms-page-head"><div className="cms-page-title"><img className="cms-page-title-icon" src={adminIconAssets.feeManagement} alt="" /><div className="cms-page-title-copy"><h1>Fee Management</h1><p>Manage fee structures, scholarships, student balances and collections.</p></div></div><div className="cms-fee-head-actions"><PaymentSettingsLink accountant /><Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments?tab=fees"><History size={15} /> Payment history</Link></div></header>
-    <FeeTabs items={[["overview", "Overview"], ["setup", "Fee Setup"], ["ledger", "Student Fee Ledger"], ["collection", "Fee Collection"]]} value={tab} onChange={(value) => change("tab", value)} label="Fee Management sections" />
+    <FeeTabs items={[["overview", "Overview"], ["setup", "Fee Setup"], ["ledger", "Student Fee Ledger"], ["collection", "Fee Collection"], ["pending", "Pending UTRs"]]} value={tab} onChange={(value) => change("tab", value)} label="Fee Management sections" />
     {tab === "setup" ? <FeeTabs secondary items={Object.entries(setupViews).map(([key, view]) => [key, view.title])} value={setup} onChange={(value) => change("setup", value)} label="Fee Setup sections" /> : null}
     {permissions.loading ? <FeeNotice>Checking finance permissions...</FeeNotice> : !allowed ? <FeeNotice>This section is unavailable with your current permissions. Please contact your administrator to verify finance view access.</FeeNotice>
       : tab === "overview" ? <AccountantFeeOverview key={contextKey} params={params} />
+        : tab === "pending" ? <OfflineUtrQueueTab key={contextKey} scope={params} canView={allowed} canReview={!permissions.error && !permissions.loading && permissions.canDo("fee-management", ACTIONS.APPROVE_REJECT, "fee-collection")} onSettled={() => {}} onToast={() => {}} Pagination={({ page, totalItems, onPageChange }) => <div className="cms-pagination"><button className="cms-btn cms-btn-ghost" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button><span>{page} / {Math.max(1, Math.ceil(totalItems / 5))}</span><button className="cms-btn cms-btn-ghost" disabled={page >= Math.ceil(totalItems / 5)} onClick={() => onPageChange(page + 1)}>Next</button></div>} />
         : tab === "ledger" ? <FeeLedger key={contextKey} params={params} />
           : tab === "collection" ? <FeeLedger key={`collection:${contextKey}`} params={params} collection authorize={authorizeCollection} />
             : setup === "hostel" && import.meta.env.VITE_USE_MOCK_DATA === "true" ? <FeeNotice>Hostel fees are unavailable while the hostel mock-data service is enabled. Connect the existing live hostel API to view financial records.</FeeNotice>
