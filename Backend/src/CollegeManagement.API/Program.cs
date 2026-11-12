@@ -96,6 +96,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+        options.Filters.Add<CollegeManagement.API.Filters.TenantIsolationActionFilter>();
     })
     .AddJsonOptions(options =>
     {

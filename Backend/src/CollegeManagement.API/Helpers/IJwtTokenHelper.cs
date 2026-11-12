@@ -44,6 +44,11 @@ namespace CollegeManagement.API.Helpers
         int? GetAdminId(ClaimsPrincipal? principal);
 
         /// <summary>
+        /// Extracts the tenant CollegeId from claims if present.
+        /// </summary>
+        int? GetCollegeId(ClaimsPrincipal? principal);
+
+        /// <summary>
         /// Extracts the Designation from claims if present.
         /// </summary>
         string? GetDesignation(ClaimsPrincipal? principal);

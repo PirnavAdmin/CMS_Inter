@@ -1,13 +1,19 @@
 using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
 using Asp.Versioning;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Board.Requests;
 using CollegeManagement.API.DTOs.Board.Responses;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using System.Security.Claims;
+using Dapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -24,16 +30,57 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IBoardService _boardService;
         private readonly ILogger<BoardController> _logger;
+        private readonly AppDbContext _db;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BoardController"/> class.
         /// </summary>
         /// <param name="boardService">The board service dependency.</param>
         /// <param name="logger">The controller logger dependency.</param>
-        public BoardController(IBoardService boardService, ILogger<BoardController> logger)
+        /// <param name="db">The database context.</param>
+        /// <param name="jwtTokenHelper">The JWT token helper.</param>
+        public BoardController(
+            IBoardService boardService,
+            ILogger<BoardController> logger,
+            AppDbContext db,
+            IJwtTokenHelper jwtTokenHelper)
         {
             _boardService = boardService;
             _logger = logger;
+            _db = db;
+            _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private async Task<HashSet<int>?> GetTenantOwnedBoardIdsAsync()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (!collegeId.HasValue || collegeId.Value <= 1)
+            {
+                return null;
+            }
+
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+
+            var boardIds = await conn.QueryAsync<int>(
+                @"SELECT DISTINCT cb.BoardId
+                  FROM CampusBoards cb
+                  INNER JOIN Campuses c ON cb.CampusId = c.CampusId
+                  WHERE c.CollegeId = @CollegeId AND cb.IsActive = 1 AND c.IsActive = 1;",
+                new { CollegeId = collegeId.Value });
+
+            return new HashSet<int>(boardIds);
         }
 
         /// <summary>
@@ -44,13 +91,35 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Boards searched successfully.</response>
         /// <response code="500">Internal server error.</response>
         [HttpGet]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(PagedResult<BoardListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<PagedResult<BoardListResponse>>> SearchBoards([FromQuery] BoardSearchRequest request)
         {
             _logger.LogInformation("Searching boards with criteria.");
+            var ownedBoards = await GetTenantOwnedBoardIdsAsync();
+            if (ownedBoards != null && ownedBoards.Count == 0)
+            {
+                return Ok(new PagedResult<BoardListResponse>
+                {
+                    Items = new List<BoardListResponse>(),
+                    TotalCount = 0,
+                    PageNumber = request.PageNumber,
+                    PageSize = request.PageSize
+                });
+            }
+
             var results = await _boardService.SearchBoardsAsync(request);
+            if (ownedBoards != null)
+            {
+                var filtered = results.Items.Where(b => ownedBoards.Contains(b.BoardId)).ToList();
+                results = new PagedResult<BoardListResponse>
+                {
+                    Items = filtered,
+                    TotalCount = filtered.Count,
+                    PageNumber = results.PageNumber,
+                    PageSize = results.PageSize
+                };
+            }
             return Ok(results);
         }
 
@@ -61,12 +130,17 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Active boards retrieved successfully.</response>
         /// <response code="500">Internal server error.</response>
         [HttpGet("active")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<BoardListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<BoardListResponse>>> GetActiveBoards()
         {
             _logger.LogInformation("Retrieving all active boards.");
+            var ownedBoards = await GetTenantOwnedBoardIdsAsync();
+            if (ownedBoards != null && ownedBoards.Count == 0)
+            {
+                return Ok(new List<BoardListResponse>());
+            }
+
             var searchRequest = new BoardSearchRequest
             {
                 Status = true,
@@ -74,7 +148,10 @@ namespace CollegeManagement.API.Controllers.V1
                 PageSize = 100
             };
             var results = await _boardService.SearchBoardsAsync(searchRequest);
-            return Ok(results.Items);
+            var items = ownedBoards != null
+                ? results.Items.Where(b => ownedBoards.Contains(b.BoardId)).ToList()
+                : results.Items;
+            return Ok(items);
         }
 
         /// <summary>
@@ -86,13 +163,18 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="404">Board not found.</response>
         /// <response code="500">Internal server error.</response>
         [HttpGet("{boardId:int}")]
-        [AllowAnonymous]
         [ProducesResponseType(typeof(BoardResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<BoardResponse>> GetBoardById(int boardId)
         {
             _logger.LogInformation("Retrieving board with ID: {BoardId}", boardId);
+            var ownedBoards = await GetTenantOwnedBoardIdsAsync();
+            if (ownedBoards != null && !ownedBoards.Contains(boardId))
+            {
+                return NotFound();
+            }
+
             var board = await _boardService.GetBoardByIdAsync(boardId);
             if (board == null)
             {

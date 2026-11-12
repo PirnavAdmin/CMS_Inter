@@ -203,23 +203,51 @@ namespace CollegeManagement.API.Repositories.Implementations
             });
         }
 
-        public async Task<int> CreateCollegeAdminAsync(CreateCollegeAdminRequest request, string defaultPasswordHash)
+        public async Task<int> CreateCollegeAdminAsync(CreateCollegeAdminRequest request, string passwordHash)
         {
+            var email = request.Email.Trim().ToLower();
+            var phone = !string.IsNullOrWhiteSpace(request.PhoneNumber ?? request.Phone)
+                ? (request.PhoneNumber ?? request.Phone)!.Trim()
+                : "+91 9000000000";
+
+            int existingCount = await Connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM Users WHERE LOWER(Email) = @Email;",
+                new { Email = email });
+
+            if (existingCount > 0)
+            {
+                throw new InvalidOperationException("DUPLICATE_USER_EMAIL: An account with this email already exists.");
+            }
+
+            int? adminRoleId = await Connection.QueryFirstOrDefaultAsync<int?>(
+                "SELECT RoleId FROM Roles WHERE RoleCode = 'COLLEGE_ADMIN' OR RoleName = 'Admin' ORDER BY RoleId ASC LIMIT 1;");
+
+            if (!adminRoleId.HasValue || adminRoleId.Value <= 0)
+            {
+                throw new InvalidOperationException("College Admin role is not configured in Roles table.");
+            }
+
             var p = new DynamicParameters();
-            p.Add("p_CollegeId", request.CollegeId);
-            p.Add("p_FullName", request.Name);
-            p.Add("p_Email", request.Email.Trim().ToLower());
-            p.Add("p_PhoneNumber", request.PhoneNumber ?? request.Phone ?? "+91 9000000000");
-            p.Add("p_PasswordHash", defaultPasswordHash);
-            p.Add("p_CreatedBy", 1);
-            p.Add("p_NewUserId", dbType: DbType.Int32, direction: ParameterDirection.Output);
+            p.Add("CollegeId", request.CollegeId);
+            p.Add("RoleId", adminRoleId.Value);
+            p.Add("Email", email);
+            p.Add("PhoneNumber", phone);
+            p.Add("PasswordHash", passwordHash);
+            p.Add("FullName", request.Name.Trim());
+            p.Add("IsActive", request.Active ? 1 : 0);
 
-            await Connection.ExecuteAsync(
-                "sp_SuperAdmin_CreateCollegeAdmin",
-                p,
-                commandType: CommandType.StoredProcedure);
+            int newUserId = await Connection.ExecuteScalarAsync<int>(@"
+                INSERT INTO Users (
+                    CollegeId, RoleId, Email, PhoneNumber, PasswordHash,
+                    FullName, IsActive, IsFirstLogin, CreatedAt
+                )
+                VALUES (
+                    @CollegeId, @RoleId, @Email, @PhoneNumber, @PasswordHash,
+                    @FullName, @IsActive, 1, CURRENT_TIMESTAMP(6)
+                );
+                SELECT LAST_INSERT_ID();", p);
 
-            return p.Get<int>("p_NewUserId");
+            return newUserId;
         }
         #endregion
 

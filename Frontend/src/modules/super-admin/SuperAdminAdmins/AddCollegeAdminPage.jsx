@@ -104,12 +104,26 @@ export default function AddCollegeAdminPage() {
     }
   };
 
-  const handleGeneratePassword = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
-    let gen = "";
-    for (let i = 0; i < 12; i++) {
-      gen += chars.charAt(Math.floor(Math.random() * chars.length));
+  const generateStrongPassword = () => {
+    const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lower = "abcdefghijkmnpqrstuvwxyz";
+    const digits = "23456789";
+    const symbols = "!@#$%&*";
+    const all = upper + lower + digits + symbols;
+    const chars = [
+      upper.charAt(Math.floor(Math.random() * upper.length)),
+      lower.charAt(Math.floor(Math.random() * lower.length)),
+      digits.charAt(Math.floor(Math.random() * digits.length)),
+      symbols.charAt(Math.floor(Math.random() * symbols.length)),
+    ];
+    for (let i = 4; i < 12; i++) {
+      chars.push(all.charAt(Math.floor(Math.random() * all.length)));
     }
+    return chars.sort(() => Math.random() - 0.5).join("");
+  };
+
+  const handleGeneratePassword = () => {
+    const gen = generateStrongPassword();
     setInitialPassword(gen);
     setConfirmPassword(gen);
     setShowInitialPw(true);
@@ -174,12 +188,17 @@ export default function AddCollegeAdminPage() {
     setSubmitting(true);
     setErrorMsg("");
 
+    const effectivePassword =
+      passwordSetupType === "auto" || !initialPassword.trim()
+        ? generateStrongPassword()
+        : initialPassword.trim();
+
     const payload = {
       name: fullName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim() ? (phone.startsWith("+91") ? phone.trim() : `+91 ${phone.trim()}`) : "+91 98765 43210",
       username: username.trim().toLowerCase(),
-      password: passwordSetupType === "auto" ? "AdminPassword@123" : (initialPassword || "AdminPassword@123"),
+      password: effectivePassword,
       collegeId: selectedCollege?.id || collegeId,
       active: accountStatus,
       loginEnabled: accountStatus,
