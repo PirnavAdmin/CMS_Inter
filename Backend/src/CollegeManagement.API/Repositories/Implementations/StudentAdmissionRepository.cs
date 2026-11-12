@@ -230,7 +230,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_FirstName", request.FirstName?.Trim(), DbType.String);
             parameters.Add("p_LastName", request.LastName?.Trim(), DbType.String);
             parameters.Add("p_Gender", request.Gender, DbType.String);
-            parameters.Add("DateOfBirth", request.DateOfBirth, DbType.DateTime);
+
             parameters.Add("p_DateOfBirth", request.DateOfBirth, DbType.DateTime);
             parameters.Add("p_BloodGroup", request.BloodGroup, DbType.String);
             parameters.Add("p_StudentEmail", request.StudentEmail?.Trim(), DbType.String);
@@ -606,12 +606,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_AdmissionId", admissionId, DbType.Int32);
             parameters.Add("p_SelectedComponentIds", json, DbType.String);
 
-            var result = await connection.QueryFirstOrDefaultAsync<dynamic>(
+            var count = await connection.ExecuteScalarAsync<int?>(
                 "sp_SaveAdmissionFeeSelections",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            return result?.SelectedOptionalFees ?? 0;
+            return count ?? 0;
         }
 
         // =========================================================

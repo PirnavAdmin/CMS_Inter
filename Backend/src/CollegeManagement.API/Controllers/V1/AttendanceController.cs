@@ -206,7 +206,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpPost("admin/students")]
         [HttpGet("admin/students")]
-        [Authorize(Roles = "Super Admin,Admin,Principal,Faculty,Staff,Teacher,Examination Cell,Exam Cell")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,HOD,Dean,Faculty,Teaching Staff,Staff,Teacher,Examination Cell,Exam Cell")]
         [BypassPermission]
         [ProducesResponseType(typeof(IEnumerable<StudentAttendanceResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]

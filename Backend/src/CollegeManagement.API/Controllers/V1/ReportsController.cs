@@ -34,7 +34,16 @@ public class ReportsController : ControllerBase
 
     private int? GetCampusIdFromRequest(int? queryCampusId)
     {
-        var resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, queryCampusId);
+        if ((!queryCampusId.HasValue || queryCampusId.Value <= 0) && User != null)
+        {
+            bool isGlobalAdmin = User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin")
+                || User.IsInRole("Admin") || User.IsInRole("Administrator")
+                || User.Claims.Any(c => (c.Type == System.Security.Claims.ClaimTypes.Role || c.Type == "role")
+                    && (c.Value == "Super Admin" || c.Value == "SuperAdmin" || c.Value == "Admin" || c.Value == "Administrator"));
+            if (isGlobalAdmin)
+                return null; // Honor explicit "All Campuses" selection for system/college admins
+        }
+        var resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User!, queryCampusId);
         return resolvedCampusId > 0 ? resolvedCampusId : null;
     }
 
@@ -143,7 +152,7 @@ public class ReportsController : ControllerBase
         var totalLate = data.Sum(x => x.Late);
         var totalLeave = data.Sum(x => x.Leave);
         var totalRecorded = totalPresent + totalAbsent + totalLate + totalLeave;
-        var overallPercentage = totalRecorded > 0 ? Math.Round((double)totalPresent * 100.0 / totalRecorded, 2) : 0;
+        var overallPercentage = totalRecorded > 0 ? Math.Round((double)(totalPresent + totalLate) * 100.0 / totalRecorded, 2) : 0;
         return Ok(new
         {
             totalDays = data.Count,
@@ -241,8 +250,8 @@ public class ReportsController : ControllerBase
     {
         filter = PrepareFilter(filter);
         var data = await _reportService.ResultsAsync(filter, ct);
-        var passed = data.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase));
-        var failed = data.Count(x => string.Equals(x.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Failed", StringComparison.OrdinalIgnoreCase));
+        var passed = data.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase));
+        var failed = data.Count - passed;
         var pct = data.Count > 0 ? Math.Round((double)passed * 100 / data.Count, 2) : 0;
         return Ok(new
         {
@@ -338,6 +347,62 @@ public class ReportsController : ControllerBase
     }
 
     // =========================================================================
+    // 12. Student Performance Details
+    [HttpGet("details/student-performance")]
+    public async Task<IActionResult> StudentPerformanceDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
+    {
+        filter = PrepareFilter(filter);
+        var data = await _reportService.StudentPerformanceAsync(filter, ct);
+        var avgPct = data.Any() ? Math.Round(data.Average(x => (double)x.AveragePercentage), 2) : 0;
+        var avgAtt = data.Any() ? Math.Round(data.Average(x => (double)x.AttendancePercentage), 2) : 0;
+        return Ok(new
+        {
+            totalStudents = data.Count,
+            averagePercentage = avgPct,
+            averageAttendance = avgAtt,
+            details = data
+        });
+    }
+
+    // 13. Subject-Wise Analytics Details
+    [HttpGet("details/subjects")]
+    public async Task<IActionResult> SubjectsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
+    {
+        filter = PrepareFilter(filter);
+        var data = await _reportService.SubjectsAsync(filter, ct);
+        return Ok(new
+        {
+            totalSubjects = data.Count,
+            details = data
+        });
+    }
+
+    // 14. Group-Wise Analytics Details
+    [HttpGet("details/groups")]
+    public async Task<IActionResult> GroupsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
+    {
+        filter = PrepareFilter(filter);
+        var data = await _reportService.GroupsAsync(filter, ct);
+        return Ok(new
+        {
+            totalGroups = data.Count,
+            details = data
+        });
+    }
+
+    // 15. Section-Wise Analytics Details
+    [HttpGet("details/sections")]
+    public async Task<IActionResult> SectionsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
+    {
+        filter = PrepareFilter(filter);
+        var data = await _reportService.SectionsAsync(filter, ct);
+        return Ok(new
+        {
+            totalSections = data.Count,
+            details = data
+        });
+    }
+
     // 4. AUDIT LOGS
     // =========================================================================
 

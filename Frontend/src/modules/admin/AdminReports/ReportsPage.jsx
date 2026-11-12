@@ -15,12 +15,16 @@ import {
   FileSpreadsheet,
   FileText,
   GraduationCap,
+  BookOpen,
   Layers,
+  LayoutGrid,
   Percent,
   Printer,
   RotateCcw,
   Search,
+  TrendingUp,
   Trophy,
+  UserCheck,
   Users,
   WalletCards,
   X,
@@ -43,6 +47,11 @@ import {
   getStudentStrengthDetails,
   getPassPercentageDetails,
   getToppersDetails,
+  getStaffAttendanceDetails,
+  getStudentPerformanceDetails,
+  getSubjectsDetails,
+  getGroupsDetails,
+  getSectionsDetails,
   getAuditLogs,
   exportReportPdf,
   exportReportExcel,
@@ -79,6 +88,11 @@ const DETAIL_API_MAP = {
   studentStrength: getStudentStrengthDetails,
   passPercentage: getPassPercentageDetails,
   toppers: getToppersDetails,
+  staffAttendance: getStaffAttendanceDetails,
+  studentPerformance: getStudentPerformanceDetails,
+  subjects: getSubjectsDetails,
+  groups: getGroupsDetails,
+  sections: getSectionsDetails,
 };
 
 // 10 Summary Cards Configuration
@@ -94,6 +108,16 @@ const summaryCardConfig = [
   { key: "passPercentage", sourceKey: "passPercentage", reportType: "pass-percentage", label: "Pass Percentage", icon: Percent, image: passPercentageImage, tone: "green", suffix: "%" },
   { key: "toppers", sourceKey: "toppersIdentified", reportType: "toppers", label: "Toppers Identified", icon: Trophy, image: toppersImage, tone: "amber" },
 ];
+
+const additionalReportConfig = [
+  { key: "staffAttendance", reportType: "staff-attendance", label: "Staff Attendance", icon: UserCheck },
+  { key: "studentPerformance", reportType: "student-performance", label: "Student Performance", icon: TrendingUp },
+  { key: "subjects", reportType: "subjects", label: "Subject Analysis", icon: BookOpen },
+  { key: "groups", reportType: "groups", label: "Group Analysis", icon: Layers },
+  { key: "sections", reportType: "sections", label: "Section Analysis", icon: LayoutGrid },
+];
+
+const allReportConfigs = [...summaryCardConfig, ...additionalReportConfig];
 
 function flagIsFalse(val) {
   if (val === undefined || val === null) return false;
@@ -467,7 +491,7 @@ function DetailDataTable({
         </tr>
       );
     } else if (cardKey === "feeCollection") {
-      headers = ["Receipt No", "Student Name", "Admission No", "Group", "Section", "Paid Amount", "Payment Mode", "Payment Date", "Status"];
+      headers = ["Receipt No", "Student Name", "Admission No", "Group", "Section", "Paid Amount", "Discount", "Fine", "Payment Mode", "Payment Date", "Status"];
       renderRow = (item, idx) => (
         <tr key={item.paymentId || idx}>
           <td>{item.receiptNo || "—"}</td>
@@ -476,23 +500,27 @@ function DetailDataTable({
           <td>{item.groupName || "—"}</td>
           <td>{item.sectionName || "—"}</td>
           <td><strong>₹{(item.paidAmount || item.collected || 0).toLocaleString("en-IN")}</strong></td>
+          <td>₹{(item.discount || 0).toLocaleString("en-IN")}</td>
+          <td>₹{(item.fine || 0).toLocaleString("en-IN")}</td>
           <td>{item.paymentMode || "Online"}</td>
           <td>{item.paymentDate ? new Date(item.paymentDate).toLocaleDateString("en-IN") : "—"}</td>
           <td><StatusPill value={item.status || "Paid"} /></td>
         </tr>
       );
     } else if (cardKey === "attendance") {
-      headers = ["Attendance Date", "Group", "Section", "Subject", "Total Students", "Present", "Absent", "Attendance %", "Compliance Status"];
+      headers = ["Attendance Date", "Group", "Section", "Subject", "Total Marked", "Present", "Absent", "Late", "Leave", "Attendance %", "Compliance Status"];
       renderRow = (item, idx) => (
-        <tr key={idx}>
+        <tr key={`${item.period || idx}-${item.groupName || ""}-${item.sectionName || ""}-${idx}`}>
           <td>{item.attendanceDate ? new Date(item.attendanceDate).toLocaleDateString("en-IN") : (item.period || "—")}</td>
           <td>{item.groupName || "—"}</td>
           <td>{item.sectionName || "—"}</td>
           <td>{item.subjectName || "All Subjects"}</td>
           <td>{item.totalStudents ?? "—"}</td>
-          <td>{item.present ?? "—"}</td>
-          <td>{item.absent ?? "—"}</td>
-          <td><strong>{(item.attendancePercentage || 0).toFixed(1)}%</strong></td>
+          <td>{item.present ?? 0}</td>
+          <td>{item.absent ?? 0}</td>
+          <td>{item.late ?? 0}</td>
+          <td>{item.leave ?? 0}</td>
+          <td><strong>{Number(item.attendancePercentage || 0).toFixed(1)}%</strong></td>
           <td><StatusPill value={item.statusCategory || ((item.attendancePercentage || 0) >= 75 ? "Eligible (>=75%)" : (item.attendancePercentage || 0) >= 65 ? "Condonation (65-74%)" : "Detained (<65%)")} /></td>
         </tr>
       );
@@ -512,30 +540,33 @@ function DetailDataTable({
         </tr>
       );
     } else if (cardKey === "examinations") {
-      headers = ["Exam Code", "Exam Name", "Board", "Group", "Exam Type", "Start Date", "End Date", "Eligible Students", "Status"];
+      headers = ["Exam Code", "Exam Name", "Board", "Group", "Start Date", "End Date", "Scheduled Subjects", "Eligible Students", "Published Results", "Pass %", "Status"];
       renderRow = (item, idx) => (
         <tr key={item.examinationId || idx}>
           <td>{item.examCode || "—"}</td>
           <td><strong>{item.examName || "—"}</strong></td>
           <td>{item.boardName || "—"}</td>
           <td>{item.groupName || "—"}</td>
-          <td>{item.examType || "Theory"}</td>
           <td>{item.startDate || "—"}</td>
           <td>{item.endDate || "—"}</td>
-          <td>{item.totalEligibleStudents ?? item.totalEligibleSubjects ?? "—"}</td>
-          <td><StatusPill value={item.status || "Completed"} /></td>
+          <td>{item.scheduledSubjectsCount ?? item.totalEligibleSubjects ?? 0}</td>
+          <td>{item.totalEligibleStudents ?? 0}</td>
+          <td>{item.publishedCount ?? 0}</td>
+          <td><strong>{Number(item.passPercentage || 0).toFixed(1)}%</strong></td>
+          <td><StatusPill value={item.status || "Scheduled"} /></td>
         </tr>
       );
     } else if (cardKey === "results") {
-      headers = ["Student Name", "Roll No", "Exam Name", "Subject", "Total Marks", "Marks Obtained", "Grade", "Result"];
+      headers = ["Student Name", "Roll No", "Exam Name", "Subject", "Marks Obtained", "Max Marks", "Percentage", "Grade", "Result"];
       renderRow = (item, idx) => (
         <tr key={item.resultId || idx}>
           <td><strong>{item.studentName || "—"}</strong></td>
           <td>{item.rollNo || "—"}</td>
           <td>{item.examName || "—"}</td>
           <td>{item.subjectName || "—"}</td>
-          <td>{item.totalMarks ?? "—"}</td>
-          <td><strong>{item.marksObtained ?? "—"}</strong></td>
+          <td><strong>{item.marksObtained ?? item.totalMarks ?? "—"}</strong></td>
+          <td>{item.maxMarks ?? 100}</td>
+          <td>{Number(item.averagePercentage || 0).toFixed(1)}%</td>
           <td>{item.grade || "—"}</td>
           <td><StatusPill value={item.resultStatus || "Pass"} /></td>
         </tr>
@@ -596,6 +627,68 @@ function DetailDataTable({
           <td><span className="reports-score">{(item.percentage || 0).toFixed(1)}%</span></td>
         </tr>
       );
+    } else if (cardKey === "staffAttendance") {
+      headers = ["Faculty Name", "Department", "Designation", "Total Days", "Present", "Late", "Absent", "Leave", "Attendance %"];
+      renderRow = (item, idx) => (
+        <tr key={item.facultyId || idx}>
+          <td><strong>{item.facultyName || "—"}</strong></td>
+          <td>{item.departmentName || "General"}</td>
+          <td>{item.designation || "Staff"}</td>
+          <td>{item.totalDays ?? 0}</td>
+          <td>{item.present ?? 0}</td>
+          <td>{item.late ?? 0}</td>
+          <td>{item.absent ?? 0}</td>
+          <td>{item.leave ?? 0}</td>
+          <td><strong>{Number(item.attendancePercentage || 0).toFixed(1)}%</strong></td>
+        </tr>
+      );
+    } else if (cardKey === "studentPerformance") {
+      headers = ["Admission No", "Roll No", "Student Name", "Group", "Section", "Academic %", "Passed", "Failed", "Attendance %", "Grade"];
+      renderRow = (item, idx) => (
+        <tr key={item.studentId || idx}>
+          <td>{item.admissionNo || "—"}</td>
+          <td>{item.rollNo || "—"}</td>
+          <td><strong>{item.studentName || "—"}</strong></td>
+          <td>{item.groupName || "—"}</td>
+          <td>{item.sectionName || "Unassigned"}</td>
+          <td><strong>{Number(item.averagePercentage || 0).toFixed(1)}%</strong></td>
+          <td>{item.passedSubjects ?? 0}</td>
+          <td>{item.failedSubjects ?? 0}</td>
+          <td>{Number(item.attendancePercentage || 0).toFixed(1)}%</td>
+          <td><StatusPill value={item.grade || "N/A"} /></td>
+        </tr>
+      );
+    } else if (cardKey === "subjects") {
+      headers = ["Subject", "Evaluated Students", "Average Marks", "Pass Percentage"];
+      renderRow = (item, idx) => (
+        <tr key={item.subjectId || idx}>
+          <td><strong>{item.subjectName || "—"}</strong></td>
+          <td>{item.students ?? 0}</td>
+          <td>{Number(item.averageMarks || 0).toFixed(2)}</td>
+          <td><strong style={{ color: (item.passPercentage || 0) >= 70 ? "#059669" : "#d97706" }}>{Number(item.passPercentage || 0).toFixed(1)}%</strong></td>
+        </tr>
+      );
+    } else if (cardKey === "groups") {
+      headers = ["Group", "Enrolled Students", "Average Percentage", "Pass Percentage"];
+      renderRow = (item, idx) => (
+        <tr key={item.groupId || idx}>
+          <td><strong>{item.groupName || "—"}</strong></td>
+          <td>{item.studentCount ?? 0}</td>
+          <td>{Number(item.averagePercentage || 0).toFixed(1)}%</td>
+          <td><strong style={{ color: (item.passPercentage || 0) >= 70 ? "#059669" : "#d97706" }}>{Number(item.passPercentage || 0).toFixed(1)}%</strong></td>
+        </tr>
+      );
+    } else if (cardKey === "sections") {
+      headers = ["Section", "Group", "Enrolled Students", "Average Percentage", "Pass Percentage"];
+      renderRow = (item, idx) => (
+        <tr key={item.sectionId || idx}>
+          <td><strong>{item.sectionName || "—"}</strong></td>
+          <td>{item.groupName || "—"}</td>
+          <td>{item.studentCount ?? 0}</td>
+          <td>{Number(item.averagePercentage || 0).toFixed(1)}%</td>
+          <td><strong style={{ color: (item.passPercentage || 0) >= 70 ? "#059669" : "#d97706" }}>{Number(item.passPercentage || 0).toFixed(1)}%</strong></td>
+        </tr>
+      );
     } else {
       const first = filteredItems[0] || {};
       const keys = Object.keys(first).filter((k) => !k.toLowerCase().endsWith("id") && typeof first[k] !== "object");
@@ -610,7 +703,7 @@ function DetailDataTable({
     }
 
     return (
-      <div className="reports-table-wrap">
+      <div className="reports-table-wrap" tabIndex={0} role="region" aria-label={`${cardConfig?.label || "Report"} details table`}>
         <table className="reports-top-students">
           <thead>
             <tr>
@@ -760,7 +853,10 @@ export default function ReportsPage() {
   const [reportGenerated, setReportGenerated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(null);
+  const showToast = useCallback((message, type = "success") => {
+    setToast(message ? { message, type } : null);
+  }, []);
 
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [yearsLoading, setYearsLoading] = useState(false);
@@ -826,18 +922,41 @@ export default function ReportsPage() {
     }
   }, []);
 
+  // Track previous global header values so manual Reports filter picks are never overwritten by header context
+  const syncedCampusRef = useRef(selectedCampusId || selectedCampus?.id || "");
+  const syncedBoardRef = useRef(selectedBoardId || selectedBoard?.id || "");
+  const syncedYearRef = useRef(selectedAcademicYearId || selectedAcademicYear?.id || "");
+  const lastAuditFilterKeyRef = useRef("");
+
+  // Load Boards scoped to currently chosen campus (directly from CampusBoards via API)
+  const loadBoardsForCampus = useCallback(async (campusVal) => {
+    const controller = beginRequest("boards");
+    setBoardsLoading(true);
+    try {
+      const campusId = positiveId(campusVal);
+      const res = await getReportBoards(campusId ? { campusId } : {}, { signal: controller.signal, skipGlobalLoader: true });
+      if (!mountedRef.current || controller.signal.aborted) return;
+      const boards = activeFilterOptions(res.data, ["boards", "Boards"], ["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]);
+      setMasterOptions((curr) => ({ ...curr, boards }));
+    } catch (err) {
+      if (!controller.signal.aborted && !isCanceledRequest(err)) showToast("Failed to load Boards.", "error");
+    } finally {
+      if (mountedRef.current && !controller.signal.aborted) setBoardsLoading(false);
+      finishRequest("boards", controller);
+    }
+  }, [beginRequest, finishRequest, showToast]);
+
   // Initial load of master options
   const loadMasterOptions = useCallback(async () => {
     const controller = beginRequest("masterOptions");
     setBoardsLoading(true);
     setYearsLoading(true);
     try {
-      const [boardsRes, yearsRes, levelsRes, groupsRes, sectionsRes] = await Promise.allSettled([
-        getReportBoards({}, { signal: controller.signal, skipGlobalLoader: true }),
-        getReportAcademicYears({}, { signal: controller.signal, skipGlobalLoader: true }),
-        getReportAcademicLevels({}, { signal: controller.signal, skipGlobalLoader: true }),
-        getReportGroups({}, { signal: controller.signal, skipGlobalLoader: true }),
-        getReportSections({}, { signal: controller.signal, skipGlobalLoader: true }),
+      const campusId = positiveId(selectedCampusId || selectedCampus?.id);
+      const boardId = positiveId(selectedBoardId || selectedBoard?.id);
+      const [boardsRes, yearsRes] = await Promise.allSettled([
+        getReportBoards(campusId ? { campusId } : {}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicYears(boardId ? { boardId } : {}, { signal: controller.signal, skipGlobalLoader: true }),
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
 
@@ -857,7 +976,7 @@ export default function ReportsPage() {
       }
       finishRequest("masterOptions", controller);
     }
-  }, [beginRequest, finishRequest]);
+  }, [beginRequest, finishRequest, selectedBoard?.id, selectedBoardId, selectedCampus?.id, selectedCampusId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -888,21 +1007,27 @@ export default function ReportsPage() {
       const years = activeAcademicYearOptions(res.data);
       setMasterOptions((curr) => ({ ...curr, years }));
     }).catch((err) => {
-      if (!controller.signal.aborted && !isCanceledRequest(err)) setToast("Failed to load Academic Years.");
+      if (!controller.signal.aborted && !isCanceledRequest(err)) showToast("Failed to load Academic Years.", "error");
     }).finally(() => {
       if (!controller.signal.aborted) setYearsLoading(false);
       finishRequest("academicYears", controller);
     });
   }, [beginRequest, filters.board, finishRequest]);
 
-  // Sync Board from global academic context
+  // Refresh campus boards whenever local or context campus changes
   useEffect(() => {
-    const rawBoardId = selectedBoardId || selectedBoard?.id || selectedBoard?.boardId;
-    if (rawBoardId) {
-      setFilters((prev) => {
-        if (prev.board === String(rawBoardId)) return prev;
-        return { ...prev, board: String(rawBoardId), level: "", group: "", section: "" };
-      });
+    if (!initialized.current) return;
+    loadBoardsForCampus(filters.campus);
+  }, [filters.campus, loadBoardsForCampus]);
+
+  // Sync Board ONLY when global academic context changes
+  useEffect(() => {
+    const rawBoardId = String(selectedBoardId || selectedBoard?.id || selectedBoard?.boardId || "");
+    if (rawBoardId && rawBoardId !== String(syncedBoardRef.current || "")) {
+      syncedBoardRef.current = rawBoardId;
+      setReportGenerated(false);
+      setDashboardData(null);
+      setFilters((prev) => ({ ...prev, board: rawBoardId, level: "", group: "", section: "" }));
     }
   }, [selectedBoardId, selectedBoard]);
 
@@ -935,7 +1060,7 @@ export default function ReportsPage() {
       setMasterOptions((current) => ({ ...current, levels }));
       setFilters((current) => current.level && !levels.some((level) => level.value === String(current.level)) ? { ...current, level: "", group: "", section: "" } : current);
     }).catch((error) => {
-      if (!controller.signal.aborted && !isCanceledRequest(error)) setToast(getApiErrorMessage(error) || "Failed to load Academic Levels.");
+      if (!controller.signal.aborted && !isCanceledRequest(error)) showToast(getApiErrorMessage(error) || "Failed to load Academic Levels.", "error");
     }).finally(() => {
       if (!controller.signal.aborted) setLevelLoading(false);
       finishRequest("academicLevels", controller);
@@ -983,7 +1108,7 @@ export default function ReportsPage() {
     }).catch((error) => {
       if (!controller.signal.aborted && !isCanceledRequest(error)) {
         const message = getApiErrorMessage(error) || "Failed to load Groups.";
-        setGroupsError(message); setToast(message);
+        setGroupsError(message); showToast(message, "error");
       }
     }).finally(() => {
       if (!controller.signal.aborted) setGroupsLoading(false);
@@ -1016,6 +1141,7 @@ export default function ReportsPage() {
     }
     setSectionsLoading(true);
     const params = {};
+    if (scope.campusId) params.campusId = scope.campusId;
     if (scope.groupId) params.groupId = scope.groupId;
     if (scope.boardId) params.boardId = scope.boardId;
     if (scope.academicYearId) params.academicYearId = scope.academicYearId;
@@ -1040,7 +1166,7 @@ export default function ReportsPage() {
     }).catch((error) => {
       if (!controller.signal.aborted && !isCanceledRequest(error)) {
         const message = getApiErrorMessage(error) || "Failed to load Sections.";
-        setSectionsError(message); setToast(message);
+        setSectionsError(message); showToast(message, "error");
       }
     }).finally(() => {
       if (!controller.signal.aborted) setSectionsLoading(false);
@@ -1059,14 +1185,14 @@ export default function ReportsPage() {
     }));
   }, [activeCampuses, contextCampuses]);
 
-  // Sync Campus from global campus context
+  // Sync Campus ONLY when global campus context changes
   useEffect(() => {
-    const rawCampusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
-    if (rawCampusId) {
-      setFilters((prev) => {
-        if (prev.campus === String(rawCampusId)) return prev;
-        return { ...prev, campus: String(rawCampusId), group: "", section: "" };
-      });
+    const rawCampusId = String(selectedCampusId || selectedCampus?.id || selectedCampus?.campusId || "");
+    if (rawCampusId && rawCampusId !== String(syncedCampusRef.current || "")) {
+      syncedCampusRef.current = rawCampusId;
+      setReportGenerated(false);
+      setDashboardData(null);
+      setFilters((prev) => ({ ...prev, campus: rawCampusId, board: "", level: "", group: "", section: "" }));
     }
   }, [selectedCampusId, selectedCampus]);
 
@@ -1124,35 +1250,31 @@ export default function ReportsPage() {
     return Array.from(unique.values());
   }, [filters.board, masterOptions.years, contextAcademicYears]);
 
-  // Sync Academic Year from global academic context whenever context or availableYears changes
+  // Sync Academic Year ONLY when global academic context changes or board options change
   useEffect(() => {
-    const rawYearId = selectedAcademicYearId || selectedAcademicYear?.id || selectedAcademicYear?.academicYearId;
+    const rawYearId = String(selectedAcademicYearId || selectedAcademicYear?.id || selectedAcademicYear?.academicYearId || "");
     const yearName = selectedAcademicYear?.name || selectedAcademicYear?.code || selectedAcademicYear?.label || selectedAcademicYear?.academicYearName;
-
     if (!rawYearId && !yearName) return;
 
-    // Find best match in availableYears
-    let match = null;
-    if (availableYears.length > 0) {
-      if (rawYearId) {
-        match = availableYears.find((y) => String(y.value) === String(rawYearId));
+    if (rawYearId !== String(syncedYearRef.current || "")) {
+      syncedYearRef.current = rawYearId;
+      let match = null;
+      if (availableYears.length > 0) {
+        match = availableYears.find((y) => String(y.value) === rawYearId)
+          || (yearName ? availableYears.find((y) => String(y.label).trim().toLowerCase() === String(yearName).trim().toLowerCase()) : null);
       }
-      if (!match && yearName) {
-        match = availableYears.find((y) => String(y.label).trim().toLowerCase() === String(yearName).trim().toLowerCase());
-      }
-    }
-
-    if (match) {
-      setFilters((prev) => (prev.year === String(match.value) ? prev : { ...prev, year: String(match.value), group: "", section: "" }));
+      const nextYear = match ? String(match.value) : rawYearId;
+      setReportGenerated(false);
+      setDashboardData(null);
+      setFilters((prev) => ({ ...prev, year: nextYear, group: "", section: "" }));
     } else if (availableYears.length > 0 && filters.board) {
-      const stillValid = availableYears.some((y) => String(y.value) === String(filters.year));
-      if (!stillValid) {
-        setFilters((prev) => ({ ...prev, year: String(availableYears[0].value), group: "", section: "" }));
-      }
-    } else if (rawYearId) {
-      setFilters((prev) => (prev.year === String(rawYearId) ? prev : { ...prev, year: String(rawYearId), group: "", section: "" }));
+      setFilters((prev) => {
+        if (!prev.year) return prev;
+        const stillValid = availableYears.some((y) => String(y.value) === String(prev.year));
+        return stillValid ? prev : { ...prev, year: "", group: "", section: "" };
+      });
     }
-  }, [selectedAcademicYearId, selectedAcademicYear, availableYears, filters.board, filters.year]);
+  }, [selectedAcademicYearId, selectedAcademicYear, availableYears, filters.board]);
 
   const filterFields = useMemo(() => [
     {
@@ -1224,7 +1346,7 @@ export default function ReportsPage() {
   };
 
   const loadDetailData = useCallback(async (cardKey, activeFilters = null) => {
-    const card = summaryCardConfig.find((c) => c.key === cardKey);
+    const card = allReportConfigs.find((c) => c.key === cardKey);
     if (!card) return;
     const apiFn = DETAIL_API_MAP[card.key] || DETAIL_API_MAP[card.reportType];
 
@@ -1247,12 +1369,14 @@ export default function ReportsPage() {
   }, [filters]);
 
   const loadAuditLogs = useCallback(async (customFilters = null) => {
+    const targetFilters = customFilters || filters;
+    const params = buildReportQuery(targetFilters);
+    lastAuditFilterKeyRef.current = JSON.stringify(params);
     auditRequested.current = true;
     setAuditLogLoading(true);
     setAuditLogError("");
     setAuditLogPage(1);
     try {
-      const params = buildReportQuery(customFilters || filters);
       const res = await getAuditLogs(params);
       const list = res.data?.records || res.data?.details || (Array.isArray(res.data) ? res.data : []);
       setAuditLogData(list);
@@ -1267,8 +1391,11 @@ export default function ReportsPage() {
   useEffect(() => {
     const previous = previousMainTab.current;
     previousMainTab.current = activeMainTab;
-    if (activeMainTab === "auditLogs" && previous !== activeMainTab && auditLogData.length === 0) loadAuditLogs();
-  }, [activeMainTab, auditLogData.length, loadAuditLogs]);
+    const currentKey = JSON.stringify(buildReportQuery(filters));
+    if (activeMainTab === "auditLogs" && (previous !== activeMainTab || lastAuditFilterKeyRef.current !== currentKey) && (!auditRequested.current || lastAuditFilterKeyRef.current !== currentKey)) {
+      loadAuditLogs(filters);
+    }
+  }, [activeMainTab, filters, loadAuditLogs]);
 
   const filteredAuditLogs = useMemo(() => {
     if (!Array.isArray(auditLogData)) return [];
@@ -1285,10 +1412,6 @@ export default function ReportsPage() {
   const pageAuditLogs = filteredAuditLogs.slice(auditStartIndex, auditStartIndex + auditLogPageSize);
 
   const selectDetailCard = (card) => {
-    if (card.key === "dueFees") {
-      setSelectedCardKey(card.key);
-      return;
-    }
     loadDetailData(card.key);
   };
 
@@ -1297,7 +1420,7 @@ export default function ReportsPage() {
     const activeFilters = customFilters || filters;
     if (activeFilters.from && activeFilters.to && validDateInput(activeFilters.from) && validDateInput(activeFilters.to)) {
       if (activeFilters.from > activeFilters.to) {
-        setToast("From Date must be earlier than or equal to To Date.");
+        showToast("From Date must be earlier than or equal to To Date.", "warning");
         return;
       }
     }
@@ -1307,19 +1430,22 @@ export default function ReportsPage() {
     }
     setLoading(true);
     setError("");
-    setPreviewFile(null);
+    setPreviewFile((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return null;
+    });
     try {
       const params = buildReportQuery(activeFilters);
       const res = await getReportsDashboard(params);
       setDashboardData(res.data);
       setReportGenerated(true);
-      if (selectedCardKey && selectedCardKey !== "dueFees") loadDetailData(selectedCardKey, activeFilters);
+      if (selectedCardKey) loadDetailData(selectedCardKey, activeFilters);
     } catch (err) {
       setError(getApiErrorMessage(err) || "Failed to generate report overview.");
     } finally {
       setLoading(false);
     }
-  }, [activeMainTab, filters, loadAuditLogs, loadDetailData, loading, selectedCardKey]);
+  }, [activeMainTab, filters, loadAuditLogs, loadDetailData, loading, selectedCardKey, showToast]);
 
   const resetReports = () => {
     const defaultFilters = {
@@ -1337,13 +1463,18 @@ export default function ReportsPage() {
     setReportGenerated(false);
     setSelectedCardKey("dueFees");
     setDetailData(null);
-    setPreviewFile(null);
+    setPreviewFile((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+    auditRequested.current = false;
+    lastAuditFilterKeyRef.current = "";
     setAuditLogData([]);
     setAuditLogError("");
     setAuditLogSearch("");
     setAuditLogPage(1);
     setError("");
-    setToast("Filters reset. Click 'Generate Report' to view metrics.");
+    showToast("Filters reset. Click 'Generate Report' to view metrics.", "info");
   };
 
   // Export Overview handlers
@@ -1364,9 +1495,15 @@ export default function ReportsPage() {
           { Metric: "Total Student Strength", Value: dashboardData.studentStrength },
           { Metric: "Overall Pass Percentage", Value: `${dashboardData.passPercentage?.toFixed(1)}%` },
           { Metric: "Toppers Identified", Value: dashboardData.toppersIdentified },
+          { Metric: "Staff Attendance Rate", Value: `${Number(dashboardData.staffAttendance || 0).toFixed(2)}%` },
+          { Metric: "Attendance Eligible (>=75%)", Value: dashboardData.attendanceEligibleCount ?? 0 },
+          { Metric: "Attendance Condonation (65-74.9%)", Value: dashboardData.attendanceCondonationCount ?? 0 },
+          { Metric: "Attendance Detained (<65%)", Value: dashboardData.attendanceDetainedCount ?? 0 },
+          { Metric: "Students With Dues", Value: dashboardData.studentsWithDuesCount ?? 0 },
+          { Metric: "Students Cleared", Value: dashboardData.studentsClearedCount ?? 0 },
         ];
         exportCsv(rows, ["Metric", "Value"], `Reports-Overview-${new Date().toISOString().slice(0, 10)}.csv`);
-        setToast("Overview CSV exported successfully.");
+        showToast("Overview CSV exported successfully.", "success");
       } else {
         const res = format === "pdf"
           ? await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters))
@@ -1374,10 +1511,10 @@ export default function ReportsPage() {
         const blob = responseBlob(res);
         const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
         downloadBlob(blob, filename);
-        setToast(`Reports Overview ${format.toUpperCase()} exported successfully.`);
+        showToast(`Reports Overview ${format.toUpperCase()} exported successfully.`, "success");
       }
     } catch (err) {
-      setToast(getApiErrorMessage(err) || "Export failed.");
+      showToast(getApiErrorMessage(err) || "Export failed.", "error");
     } finally {
       setExportingOverview("");
     }
@@ -1394,9 +1531,12 @@ export default function ReportsPage() {
       const filename = responseFilename(res, `Reports-Overview-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       const file = { blob, filename, format, title: "Reports Overview" };
       if (format === "excel") Object.assign(file, await excelPreview(blob));
-      setPreviewFile({ ...file, url: format === "pdf" ? URL.createObjectURL(blob) : "" });
+      setPreviewFile((prev) => {
+        if (prev?.url) URL.revokeObjectURL(prev.url);
+        return { ...file, url: format === "pdf" ? URL.createObjectURL(blob) : "" };
+      });
     } catch (err) {
-      setToast(getApiErrorMessage(err) || "Preview failed.");
+      showToast(getApiErrorMessage(err) || "Preview failed.", "error");
     } finally {
       setPreviewing("");
     }
@@ -1404,7 +1544,7 @@ export default function ReportsPage() {
 
   const printBackendReport = async () => {
     try {
-      setToast("Preparing document for printing...");
+      showToast("Preparing document for printing...", "info");
       const res = await exportReportPdf(OVERVIEW_REPORT_TYPE, buildReportQuery(filters));
       const blob = responseBlob(res);
       const url = URL.createObjectURL(blob);
@@ -1434,7 +1574,7 @@ export default function ReportsPage() {
         }, 500);
       };
     } catch (err) {
-      setToast(getApiErrorMessage(err) || "Print failed.");
+      showToast(getApiErrorMessage(err) || "Print failed.", "error");
     }
   };
 
@@ -1450,9 +1590,9 @@ export default function ReportsPage() {
       const blob = responseBlob(res);
       const filename = responseFilename(res, `${card.reportType}-report-${new Date().toISOString().slice(0, 10)}.${format === "pdf" ? "pdf" : "xlsx"}`);
       downloadBlob(blob, filename);
-      setToast(`${card.label} ${format.toUpperCase()} exported successfully.`);
+      showToast(`${card.label} ${format.toUpperCase()} exported successfully.`, "success");
     } catch (err) {
-      setToast(getApiErrorMessage(err) || "Export failed.");
+      showToast(getApiErrorMessage(err) || "Export failed.", "error");
     } finally {
       setExportingCards((prev) => {
         const next = { ...prev };
@@ -1485,7 +1625,7 @@ export default function ReportsPage() {
       subtitle="Live institution-wide analytics and performance reports."
       breadcrumb={["Reports", "Analytics"]}
     >
-      <Toast message={toast} onClose={() => setToast("")} />
+      <Toast message={toast?.message || ""} type={toast?.type || "info"} onClose={() => setToast(null)} />
 
       {/* Navigation Tabs: Reports Overview vs Audit Logs */}
       <div className="reports-tabs" role="tablist">
@@ -1666,6 +1806,18 @@ export default function ReportsPage() {
               <p>Live calculated statistics based on your selected filter criteria</p>
             </div>
             <div className="reports-summary-actions">
+              <button className="cms-btn cms-btn-ghost" type="button" onClick={() => previewReport("pdf")} disabled={Boolean(previewing)}>
+                <Eye size={14} /> {previewing === "pdf" ? "Loading..." : "Preview PDF"}
+              </button>
+              <button className="cms-btn cms-btn-ghost" type="button" onClick={() => previewReport("excel")} disabled={Boolean(previewing)}>
+                <Eye size={14} /> {previewing === "excel" ? "Loading..." : "Preview Excel"}
+              </button>
+              <button className="cms-btn cms-btn-ghost" type="button" onClick={printBackendReport} disabled={Boolean(exportingOverview)}>
+                <Printer size={14} /> Print
+              </button>
+              <button className="cms-btn cms-btn-ghost" type="button" onClick={() => exportOverview("csv")} disabled={Boolean(exportingOverview)}>
+                <FileText size={14} /> CSV
+              </button>
               <button className="cms-btn cms-btn-primary" type="button" onClick={() => exportOverview("pdf")} disabled={Boolean(exportingOverview)}>
                 <Download size={14} /> {exportingOverview === "pdf" ? "Exporting..." : "Export PDF"}
               </button>
@@ -1739,10 +1891,69 @@ export default function ReportsPage() {
             })}
           </div>
 
-          {/* Interactive In-Page Drilldown Table */}
-          {selectedCardKey !== "dueFees" && <DetailDataTable
+          {/* Live Institutional Compliance & Staff Health Strip */}
+          {dashboardData ? (
+            <div className="reports-compliance-section">
+              <div className="reports-compliance-title">
+                <span>Institutional Compliance &amp; Workforce Health</span>
+              </div>
+              <div className="reports-compliance-grid">
+                <div className="reports-compliance-card tone-success">
+                  <span>Attendance Eligible (&ge; 75%)</span>
+                  <strong>{dashboardData.attendanceEligibleCount ?? 0}</strong>
+                </div>
+                <div className="reports-compliance-card tone-warning">
+                  <span>Condonation (65% &ndash; 74.9%)</span>
+                  <strong>{dashboardData.attendanceCondonationCount ?? 0}</strong>
+                </div>
+                <div className="reports-compliance-card tone-danger">
+                  <span>Attendance Detained (&lt; 65%)</span>
+                  <strong>{dashboardData.attendanceDetainedCount ?? 0}</strong>
+                </div>
+                <div className="reports-compliance-card tone-blue">
+                  <span>Fee Dues / Cleared Students</span>
+                  <strong>{dashboardData.studentsWithDuesCount ?? 0} / {dashboardData.studentsClearedCount ?? 0}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="reports-compliance-card tone-success"
+                  style={{ textAlign: "left", cursor: "pointer" }}
+                  onClick={() => selectDetailCard(additionalReportConfig[0])}
+                  title="Click to inspect Staff Attendance detailed report"
+                >
+                  <span>Staff Attendance Rate</span>
+                  <strong>{Number(dashboardData.staffAttendance || 0).toFixed(1)}%</strong>
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Additional Analytical Reports Selector */}
+          <div className="reports-extra-tabs-wrap">
+            <span className="reports-extra-tabs-label">Specialized Analytical Reports</span>
+            <div className="reports-extra-tabs">
+              {additionalReportConfig.map((rep) => {
+                const Icon = rep.icon;
+                const isSelected = selectedCardKey === rep.key;
+                return (
+                  <button
+                    key={rep.key}
+                    type="button"
+                    className={`reports-extra-pill ${isSelected ? "is-active" : ""}`}
+                    onClick={() => selectDetailCard(rep)}
+                  >
+                    <Icon size={13} />
+                    {rep.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Interactive In-Page Drilldown Table (Unlocked for all 15 Reports including Due Fees) */}
+          <DetailDataTable
             cardKey={selectedCardKey}
-            cardConfig={summaryCardConfig.find((c) => c.key === selectedCardKey) || summaryCardConfig[3]}
+            cardConfig={allReportConfigs.find((c) => c.key === selectedCardKey) || summaryCardConfig[3]}
             items={detailData}
             loading={detailLoading}
             error={detailError}
@@ -1752,12 +1963,25 @@ export default function ReportsPage() {
             onPageChange={setDetailPage}
             pageSize={detailPageSize}
             onExport={(fmt) => {
-              const card = summaryCardConfig.find((c) => c.key === selectedCardKey);
+              const card = allReportConfigs.find((c) => c.key === selectedCardKey);
               if (card) exportCardReport(card, fmt);
             }}
             exportingPdf={Boolean(exportingCards[`${selectedCardKey}-pdf`])}
             exportingExcel={Boolean(exportingCards[`${selectedCardKey}-excel`])}
-          />}
+          />
+        </section>
+      ) : activeMainTab === "overview" && !loading ? (
+        <section className="cms-card reports-empty-callout">
+          <div className="cms-card-body">
+            <h3>Ready to Generate Institution Analytics</h3>
+            <p>
+              Adjust your Campus, Board, Academic Year, Level, Group, Section, or Date Range filters above and click
+              <strong> Generate Report</strong> to view live KPIs, compliance breakdowns, and detailed records.
+            </p>
+            <button className="cms-btn cms-btn-primary" type="button" onClick={() => generateReport()}>
+              Generate Report
+            </button>
+          </div>
         </section>
       ) : null}
 

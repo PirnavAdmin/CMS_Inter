@@ -135,12 +135,12 @@ export default function CheckInOut() {
   const authUser = useMemo(() => {
     const raw = getAuthUser() || {};
     return {
-      staffId: raw.staffId || raw.id || raw.userId || 1109,
-      employeeId: raw.employeeId || "MNT0043",
-      name: raw.fullName || raw.name || "Preethi Y",
-      designation: raw.designation || "Examination Incharge",
+      staffId: raw.staffId || raw.id || raw.userId || null,
+      employeeId: raw.employeeId || "",
+      name: raw.fullName || raw.name || "Staff Member",
+      designation: raw.designation || "",
       department: raw.departmentName || raw.department || "Examinations",
-      email: raw.email || "anusha987r@gmail.com",
+      email: raw.email || "",
       role: raw.role || "Examination Cell",
     };
   }, []);
@@ -170,9 +170,9 @@ export default function CheckInOut() {
   });
 
   const [shiftConfig, setShiftConfig] = useState({
-    startTime: "09:00 AM",
-    endTime: "05:00 PM",
-    graceMinutes: 15,
+    startTime: "--",
+    endTime: "--",
+    graceMinutes: null,
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -212,98 +212,47 @@ export default function CheckInOut() {
         const config = res.data?.data || res.data;
         if (config?.startTime) {
           setShiftConfig({
-            startTime: formatDisplayTime(config.startTime) || "09:00 AM",
-            endTime: formatDisplayTime(config.endTime) || "05:00 PM",
-            graceMinutes: Number(config.gracePeriodMinutes) || 15,
+            startTime: formatDisplayTime(config.startTime) || "--",
+            endTime: formatDisplayTime(config.endTime) || "--",
+            graceMinutes: config.gracePeriodMinutes != null ? Number(config.gracePeriodMinutes) : null,
           });
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (active) {
+          notify(getApiErrorMessage(err) || "Failed to load shift timing configuration.", "error");
+        }
+      });
     return () => {
       active = false;
     };
   }, []);
 
-  // Fetch today's staff attendance record
+  // Fetch today's staff attendance record strictly from self-service backend API
   const fetchTodayAttendance = useCallback(async () => {
-    let localPunch = null;
     try {
-      const stored = localStorage.getItem(`staff_today_punch_${authUser.staffId}_${date}`);
-      if (stored) localPunch = JSON.parse(stored);
-    } catch {}
-
-    if (localPunch?.inTime) {
-      setTodayRecord(localPunch);
-    }
-
-    try {
-      // 1. Try myToday self-service endpoint first
-      try {
-        const myRes = await apiClient.get(apiEndpoints.staffAttendance.myToday, { silent: true });
-        const myData = myRes.data?.data || myRes.data;
-        const rawIn = myData?.inTime || myData?.punchInTime || myData?.checkIn;
-        const rawOut = myData?.outTime || myData?.punchOutTime || myData?.checkOut;
-        if (myData && (rawIn || rawOut || myData.status === "punched_in" || myData.status === "punched_out")) {
-          const inT = rawIn && rawIn !== "--" ? formatDisplayTime(rawIn) : null;
-          const outT = rawOut && rawOut !== "--" ? formatDisplayTime(rawOut) : null;
-          const status = outT ? "Present" : inT ? "Present" : myData.todayStatus || (myData.status === "punched_in" ? "Present" : "Not Checked In");
-          const record = { inTime: inT, outTime: outT, status, remarks: myData.todayStatus || "" };
-          setTodayRecord(record);
-          try { localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(record)); } catch {}
-          return;
-        }
-      } catch {}
-
-      // 2. Try load endpoint
-      const res = await apiClient.post(apiEndpoints.staffAttendance.load, {
-        date,
-        facultyId: Number(authUser.staffId),
-        staffType: 1,
-        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
-        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-      }, { silent: true });
-
-      const payload = res.data?.data ?? res.data ?? [];
-      const rows = Array.isArray(payload) ? payload : payload?.items || payload?.records || [];
-
-      // Find record for this specific staff member
-      const myRow = rows.find(
-        (r) =>
-          Number(r.facultyId ?? r.staffId ?? r.id) === Number(authUser.staffId) ||
-          String(r.employeeId ?? r.staffCode ?? "").toUpperCase() === String(authUser.employeeId).toUpperCase()
-      ) || rows[0];
-
-      if (myRow) {
-        const inTime = myRow.inTime || myRow.InTime || myRow.checkInTime || null;
-        const outTime = myRow.outTime || myRow.OutTime || myRow.checkOutTime || null;
-        const rawStatus = myRow.status ?? myRow.Status;
-        const statusLabel =
-          STAFF_STATUS_LABEL[rawStatus] ||
-          (inTime && outTime ? "Present" : inTime ? "Present" : "Not Checked In");
-
-        if (inTime || !localPunch) {
-          const record = {
-            inTime: inTime ? formatDisplayTime(inTime) : null,
-            outTime: outTime ? formatDisplayTime(outTime) : null,
-            status: statusLabel,
-            remarks: myRow.remarks || myRow.Remarks || "",
-          };
-          setTodayRecord(record);
-          try { localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(record)); } catch {}
-        }
-      } else if (!localPunch) {
+      const myRes = await apiClient.get(apiEndpoints.staffAttendance.myToday, { silent: true });
+      const myData = myRes.data?.data || myRes.data;
+      if (myData) {
+        const rawIn = myData.inTime || myData.InTime;
+        const rawOut = myData.outTime || myData.OutTime;
+        const inT = rawIn && rawIn !== "--" ? formatDisplayTime(rawIn) : null;
+        const outT = rawOut && rawOut !== "--" ? formatDisplayTime(rawOut) : null;
+        const isMissed = Boolean(myData.isMissedCheckout ?? myData.IsMissedCheckout);
+        const status = myData.todayStatus || myData.TodayStatus || (inT ? "Present" : "Not Checked In");
         setTodayRecord({
-          inTime: null,
-          outTime: null,
-          status: "Not Checked In",
-          remarks: "",
+          inTime: inT,
+          outTime: outT,
+          status,
+          isMissedCheckout: isMissed,
+          isCheckOutAllowed: myData.isCheckOutAllowed !== undefined || myData.IsCheckOutAllowed !== undefined ? Boolean(myData.isCheckOutAllowed ?? myData.IsCheckOutAllowed) && !isMissed : Boolean(inT && !outT && !isMissed),
+          remarks: myData.regularizationState ? `Regularization: ${myData.regularizationState}` : "",
         });
       }
     } catch (err) {
-      console.warn("Could not load today's staff attendance record:", err);
+      notify(getApiErrorMessage(err) || "Could not load today's attendance status.", "error");
     }
-  }, [date, authUser.staffId, authUser.employeeId, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+  }, []);
 
   // Fetch monthly attendance history for the authenticated staff member
   const fetchMonthlyHistory = useCallback(async () => {
@@ -329,12 +278,11 @@ export default function CheckInOut() {
       const headers = payload.dayHeaders ?? payload.headers ?? [];
       const staffRows = payload.staffRows ?? payload.rows ?? [];
 
-      const myStaffRow =
-        staffRows.find(
-          (r) =>
-            Number(r.facultyId ?? r.staffId ?? r.id) === Number(authUser.staffId) ||
-            String(r.employeeId ?? "").toUpperCase() === String(authUser.employeeId).toUpperCase()
-        ) || staffRows[0];
+      const myStaffRow = staffRows.find(
+        (r) =>
+          Number(r.facultyId ?? r.staffId ?? r.id) === Number(authUser.staffId) ||
+          (authUser.employeeId && String(r.employeeId ?? "").toUpperCase() === String(authUser.employeeId).toUpperCase())
+      );
 
       if (myStaffRow && headers.length > 0) {
         const dailyStatuses = myStaffRow.dailyStatus ?? myStaffRow.statuses ?? [];
@@ -362,33 +310,27 @@ export default function CheckInOut() {
           else if (code === "HD" || code === "HALFDAY") status = "Half Day";
           else if (code === "H" || code === "HOLIDAY") status = "Holiday";
 
-          const isSunday = dateObj.getDay() === 0;
-          if (isSunday && status === "Not Marked") status = "Holiday";
-
-          // If date is today and we have live todayRecord, synchronize it
           const isToday = dateFormatted === date;
-          const inTime = isToday && todayRecord.inTime ? todayRecord.inTime : status === "Present" ? "08:55 AM" : status === "Late" ? "09:25 AM" : "--";
-          const outTime = isToday && todayRecord.outTime ? todayRecord.outTime : (status === "Present" || status === "Late") ? "05:05 PM" : "--";
+          const inTime = isToday && todayRecord.inTime ? todayRecord.inTime : "--";
+          const outTime = isToday && todayRecord.outTime ? todayRecord.outTime : "--";
           const hours = calculateDurationStr(inTime, outTime);
 
           return {
             date: dateFormatted,
             dayName: dateObj.toLocaleDateString("en-US", { weekday: "long" }),
             dayShort: dayName,
-            shift: `General (${shiftConfig.startTime} - ${shiftConfig.endTime})`,
+            shift: `${shiftConfig.startTime} - ${shiftConfig.endTime}`,
             inTime,
             outTime,
             hours,
             status: isToday && todayRecord.inTime ? todayRecord.status : status,
-            remarks: isToday && todayRecord.remarks ? todayRecord.remarks : status === "Holiday" ? "Weekly Off" : `${status} Shift`,
+            remarks: isToday && todayRecord.remarks ? todayRecord.remarks : status,
           };
         });
 
-        // Sort descending so recent dates show first
         builtHistory.sort((a, b) => b.date.localeCompare(a.date));
         setHistoryRows(builtHistory);
 
-        // Calculate summary statistics
         const present = myStaffRow.present ?? builtHistory.filter((r) => r.status === "Present" || r.status === "Late").length;
         const absent = myStaffRow.absent ?? builtHistory.filter((r) => r.status === "Absent").length;
         const leave = myStaffRow.leave ?? builtHistory.filter((r) => r.status === "Leave" || r.status === "Half Day").length;
@@ -403,63 +345,11 @@ export default function CheckInOut() {
           leaveDays: leave,
           lateDays: late,
           attendanceRate: rate,
-          totalHours: `${present * 8}h`,
+          totalHours: "--",
         });
       } else {
-        // Fallback: generate month days from scratch
-        const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-        const fallbackDays = [];
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dObj = new Date(yearNum, monthNum - 1, d);
-          const dStr = [
-            dObj.getFullYear(),
-            String(dObj.getMonth() + 1).padStart(2, "0"),
-            String(dObj.getDate()).padStart(2, "0"),
-          ].join("-");
-          const isSun = dObj.getDay() === 0;
-          const isToday = dStr === date;
-
-          let status = isSun ? "Holiday" : dStr > date ? "Upcoming" : "Present";
-          let inTime = status === "Present" ? "08:55 AM" : "--";
-          let outTime = status === "Present" ? "05:05 PM" : "--";
-
-          if (isToday) {
-            inTime = todayRecord.inTime || "--";
-            outTime = todayRecord.outTime || "--";
-            status = todayRecord.inTime ? todayRecord.status : "Not Checked In";
-          }
-
-          fallbackDays.push({
-            date: dStr,
-            dayName: dObj.toLocaleDateString("en-US", { weekday: "long" }),
-            dayShort: dObj.toLocaleDateString("en-US", { weekday: "short" }),
-            shift: `General (${shiftConfig.startTime} - ${shiftConfig.endTime})`,
-            inTime,
-            outTime,
-            hours: calculateDurationStr(inTime, outTime),
-            status,
-            remarks: isSun ? "Weekly Off" : `${status} Shift`,
-          });
-        }
-
-        fallbackDays.sort((a, b) => b.date.localeCompare(a.date));
-        setHistoryRows(fallbackDays);
-
-        const pastDays = fallbackDays.filter((d) => d.date <= date && d.status !== "Holiday");
-        const presentCount = pastDays.filter((d) => d.status === "Present" || d.status === "Late").length;
-        const absentCount = pastDays.filter((d) => d.status === "Absent").length;
-        const leaveCount = pastDays.filter((d) => d.status === "Leave").length;
-        const rate = pastDays.length > 0 ? Math.round((presentCount / pastDays.length) * 100) : 0;
-
-        setMonthlyStats({
-          totalDays: pastDays.length,
-          presentDays: presentCount,
-          absentDays: absentCount,
-          leaveDays: leaveCount,
-          lateDays: 0,
-          attendanceRate: rate,
-          totalHours: `${presentCount * 8}h`,
-        });
+        setHistoryRows([]);
+        setMonthlyStats({ totalDays: 0, presentDays: 0, absentDays: 0, leaveDays: 0, lateDays: 0, attendanceRate: 0, totalHours: "--" });
       }
     } catch (err) {
       console.warn("Could not load monthly staff attendance:", err);
@@ -510,55 +400,16 @@ export default function CheckInOut() {
     const timeStr = formatDisplayTime(timeStr24);
 
     try {
-      try {
-        await apiClient.post(apiEndpoints.staffAttendance.punchIn, {
-          verificationMethod: 1,
-          deviceId: "Exam Cell Portal",
-          remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
-        }, { silent: true, skipErrorLog: true });
-      } catch (punchErr) {
-        const payload = {
-          facultyId: Number(authUser.staffId),
-          attendanceDate: date,
-          campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
-          boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
-          academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-          status: 1, // Present
-          inTime: timeStr24,
-          outTime: null,
-          remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
-        };
-        await apiClient.put(apiEndpoints.staffAttendance.update, payload, { silent: true, skipErrorLog: true }).catch(() => {});
-      }
-
-      const updated = {
-        inTime: timeStr,
-        outTime: null,
-        status: "Present",
+      await apiClient.post(apiEndpoints.staffAttendance.punchIn, {
+        verificationMethod: 1,
+        deviceId: "Exam Cell Portal",
         remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
-      };
-      setTodayRecord(updated);
-      try {
-        localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(updated));
-      } catch {}
-
+      });
       notify(`Checked In successfully at ${timeStr}`, "success");
-      fetchMonthlyHistory();
+      await fetchTodayAttendance();
+      await fetchMonthlyHistory();
     } catch (err) {
-      // Local fallback preserves user check-in state
-      const updated = {
-        inTime: timeStr,
-        outTime: null,
-        status: "Present",
-        remarks: `Staff check-in at ${timeStr} via Exam Cell Portal`,
-      };
-      setTodayRecord(updated);
-      try {
-        localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(updated));
-      } catch {}
-
-      notify(`Checked In successfully at ${timeStr}`, "success");
-      fetchMonthlyHistory();
+      notify(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to record check-in.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -575,6 +426,10 @@ export default function CheckInOut() {
       notify("You have already completed check-out for today.", "error");
       return;
     }
+    if (todayRecord.isMissedCheckout || todayRecord.isCheckOutAllowed === false) {
+      notify("Check-out window has expired (Missed Checkout). Please apply for regularization.", "error");
+      return;
+    }
 
     setIsSubmitting(true);
     const now = new Date();
@@ -586,68 +441,16 @@ export default function CheckInOut() {
     const timeStr = formatDisplayTime(timeStr24);
 
     try {
-      try {
-        await apiClient.post(apiEndpoints.staffAttendance.punchOut, {
-          verificationMethod: 1,
-          deviceId: "Exam Cell Portal",
-          remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-        }, { silent: true, skipErrorLog: true });
-      } catch (punchErr) {
-        // If not checked in, auto check-in first then punch out
-        try {
-          await apiClient.post(apiEndpoints.staffAttendance.punchIn, {
-            verificationMethod: 1,
-            deviceId: "Exam Cell Portal",
-            remarks: `Auto check-in prior to punch out at ${timeStr}`,
-          }, { silent: true, skipErrorLog: true });
-          await apiClient.post(apiEndpoints.staffAttendance.punchOut, {
-            verificationMethod: 1,
-            deviceId: "Exam Cell Portal",
-            remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-          }, { silent: true, skipErrorLog: true });
-        } catch {
-          const payload = {
-            facultyId: Number(authUser.staffId),
-            attendanceDate: date,
-            campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
-            boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
-            academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
-            status: 1, // Present
-            inTime: parseTimeTo24h(todayRecord.inTime) || "09:00:00",
-            outTime: timeStr24,
-            remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-          };
-          await apiClient.put(apiEndpoints.staffAttendance.update, payload, { silent: true, skipErrorLog: true }).catch(() => {});
-        }
-      }
-
-      const updated = {
-        ...todayRecord,
-        outTime: timeStr,
-        status: "Present",
+      await apiClient.post(apiEndpoints.staffAttendance.punchOut, {
+        verificationMethod: 1,
+        deviceId: "Exam Cell Portal",
         remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-      };
-      setTodayRecord(updated);
-      try {
-        localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(updated));
-      } catch {}
-
+      });
       notify(`Punched Out successfully at ${timeStr}. Shift completed.`, "success");
-      fetchMonthlyHistory();
+      await fetchTodayAttendance();
+      await fetchMonthlyHistory();
     } catch (err) {
-      const updated = {
-        ...todayRecord,
-        outTime: timeStr,
-        status: "Present",
-        remarks: `Staff shift completed at ${timeStr} via Exam Cell Portal`,
-      };
-      setTodayRecord(updated);
-      try {
-        localStorage.setItem(`staff_today_punch_${authUser.staffId}_${date}`, JSON.stringify(updated));
-      } catch {}
-
-      notify(`Punched Out successfully at ${timeStr}. Shift completed.`, "success");
-      fetchMonthlyHistory();
+      notify(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Failed to record check-out.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -815,7 +618,7 @@ export default function CheckInOut() {
                     Shift Attendance & Punch
                   </h4>
                   <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "var(--cms-muted)" }}>
-                    Standard Shift: <b>{shiftConfig.startTime} - {shiftConfig.endTime}</b> · Grace: <b>{shiftConfig.graceMinutes}m</b>
+                    Standard Shift: <b>{shiftConfig.startTime} - {shiftConfig.endTime}</b> · Grace: <b>{shiftConfig.graceMinutes != null ? `${shiftConfig.graceMinutes}m` : "--"}</b>
                   </p>
                 </div>
                 <span className="cms-badge cms-badge-muted" style={{ fontSize: "11px" }}>
@@ -829,7 +632,7 @@ export default function CheckInOut() {
                 </div>
                 <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "12px", color: "var(--cms-text)", lineHeight: 1.6 }}>
                   <li>Punch in before <b>{shiftConfig.startTime}</b> to mark attendance as On Time.</li>
-                  <li>Check-in after grace period ({shiftConfig.graceMinutes}m) is automatically logged as Late.</li>
+                  <li>Check-in after grace period ({shiftConfig.graceMinutes != null ? `${shiftConfig.graceMinutes}m` : "--"}) is automatically logged as Late.</li>
                   <li>Punch out upon completing your daily Examination Cell duties.</li>
                 </ul>
               </div>
@@ -857,7 +660,7 @@ export default function CheckInOut() {
                 type="button"
                 className="cms-btn cms-btn-outline"
                 style={{ flex: 1, minHeight: "44px", fontWeight: 700 }}
-                disabled={!todayRecord.inTime || Boolean(todayRecord.outTime) || isSubmitting}
+                disabled={!todayRecord.inTime || Boolean(todayRecord.outTime) || Boolean(todayRecord.isMissedCheckout) || todayRecord.isCheckOutAllowed === false || isSubmitting}
                 onClick={handlePunchOut}
               >
                 <LogOut size={18} />

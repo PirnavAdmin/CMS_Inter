@@ -277,7 +277,7 @@ apiClient.interceptors.response.use(
       (isExplicitMockToken || isExplicitMockForced) &&
       originalRequest &&
       !/\/api\/(Auth|Admin)\/login\/?$/i.test(originalRequest.url || "") &&
-      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
+      !/\/api\/v1\/(?:transport|inventory|departments|designations|examinations|marks|evaluations|student-analysis|results|student-results|attendance|staff-attendance|attendance-timing-config|lop-configuration|notifications|certificates|promotions|campus-transfers|students|student-admissions|boards|academic-levels|academic-years|groups|programs|sections|holidays|staff|faculty)(?:\/|$)/i.test(originalRequest.url || "") &&
       !originalRequest._isMockFallback
     ) {
       originalRequest._isMockFallback = true;
