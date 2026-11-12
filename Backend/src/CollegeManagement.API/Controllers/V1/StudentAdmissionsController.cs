@@ -410,11 +410,13 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                var admission = await _service.GetByIdAsync(id);
+
                 if (_notificationService != null)
                 {
                     try
                     {
-                        var admission = await _service.GetByIdAsync(id);
+
                         var studentName = admission != null ? $"{admission.FirstName} {admission.LastName}".Trim() : $"Applicant #{id}";
                         await _notificationService.SendToRolesAsync(
                             new[] { "Admin", "Principal", "Accountant" },
@@ -432,7 +434,10 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     statusCode = 200,
                     message =
-                        "Student admission approved successfully."
+                        "Student admission approved successfully.",
+                    admissionId = id,
+                    studentId = admission?.StudentId,
+                    admissionNo = admission?.AdmissionNo
                 });
             }
             catch (ArgumentException ex)

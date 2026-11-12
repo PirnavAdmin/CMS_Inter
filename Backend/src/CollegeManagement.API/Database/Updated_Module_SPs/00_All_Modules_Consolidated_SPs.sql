@@ -8461,6 +8461,7 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
+        stu.StudentId,
         stu.SectionId,
         sec.SectionName,
         stu.RollNo,
@@ -8497,7 +8498,7 @@ BEGIN
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN (
-        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        SELECT s1.StudentId, s1.AdmissionId, s1.SectionId, s1.RollNo
         FROM `Students` s1
         INNER JOIN (
             SELECT AdmissionId, MAX(StudentId) AS MaxStudentId
@@ -8593,6 +8594,7 @@ BEGIN
         sa.IsActive,
         sa.CreatedAt,
         sa.UpdatedAt,
+        stu.StudentId,
         stu.SectionId,
         sec.SectionName,
         stu.RollNo,
@@ -8629,7 +8631,7 @@ BEGIN
     LEFT JOIN `Campuses` sc ON sa.SourceCampusId = sc.CampusId
     LEFT JOIN `Staffs` st ON sa.AdmittedById = st.Id
     LEFT JOIN (
-        SELECT s1.AdmissionId, s1.SectionId, s1.RollNo
+        SELECT s1.StudentId, s1.AdmissionId, s1.SectionId, s1.RollNo
         FROM `Students` s1
         WHERE s1.AdmissionId = p_AdmissionId AND s1.IsActive = 1
         ORDER BY s1.StudentId DESC

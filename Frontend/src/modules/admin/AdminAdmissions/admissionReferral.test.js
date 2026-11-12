@@ -223,3 +223,83 @@ test("the real response interceptor never replays admission creates and preserve
     assert.equal(replays.length, 1);
   }
 });
+
+
+test("approval student ID lookup uses returned studentId or searches /api/v1/students by admission number", async () => {
+  const helperSection = section(
+    admissionSource,
+    "const resolveApprovedStudentId = (...sources) => {",
+    "const admissionFeeApprovalBody =",
+  );
+  const callbackSection = section(
+    admissionSource,
+    "  const resolveApprovedStudentIdFromBackend = useCallback(",
+    "  const ensureApprovedStudentFeeAccount = useCallback(",
+  );
+
+  const runResolver = async ({ approvedPayload = {}, detailById = {}, admissionsList = [], studentsHandler }) => {
+    const studentCalls = [];
+    const context = vm.createContext({
+      useCallback: (fn) => fn,
+      getObject: (payload) => payload?.data ?? payload ?? {},
+      getCollection: (payload) => Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [],
+      normalizeAdmissionRow: (item) => ({ raw: item }),
+      numericId: (value) => {
+        const parsed = Number(value);
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+      },
+      read: (item, ...keys) => {
+        const key = keys.find((c) => item?.[c] !== undefined && item?.[c] !== null && item?.[c] !== "");
+        return key ? item[key] : undefined;
+      },
+      readId: (item, ...keys) => {
+        const key = keys.find((c) => item?.[c] !== undefined && item?.[c] !== null && item?.[c] !== "");
+        return key ? item[key] : "";
+      },
+      readText: (item, ...keys) => {
+        const key = keys.find((c) => item?.[c] !== undefined && item?.[c] !== null && item?.[c] !== "");
+        return key ? String(item[key]) : "";
+      },
+      apiEndpoints: {
+        admissions: { getById: (id) => `/api/v1/student-admissions/${id}`, getAll: "/api/v1/student-admissions" },
+        students: { getAll: "/api/v1/students" },
+      },
+      apiClient: {
+        get: async (url, config) => {
+          if (url.startsWith("/api/v1/student-admissions/")) return { data: detailById };
+          if (url === "/api/v1/student-admissions") return { data: admissionsList };
+          if (url === "/api/v1/students") {
+            studentCalls.push(config);
+            return studentsHandler(config);
+          }
+          throw new Error(`Unexpected URL ${url}`);
+        },
+      },
+    });
+    vm.runInContext(`${helperSection}\n${callbackSection}\nglobalThis.resolveApprovedStudentIdFromBackend = resolveApprovedStudentIdFromBackend;`, context);
+    const id = await context.resolveApprovedStudentIdFromBackend({
+      admissionId: 658,
+      approvedPayload,
+      detail: {},
+      detailRow: {},
+    });
+    return { id, studentCalls };
+  };
+
+  const direct = await runResolver({
+    approvedPayload: { statusCode: 200, studentId: 943 },
+    studentsHandler: () => { throw new Error("Should not query students"); },
+  });
+  assert.equal(direct.id, 943);
+  assert.equal(direct.studentCalls.length, 0);
+
+  const searched = await runResolver({
+    approvedPayload: { statusCode: 200 },
+    detailById: { admissionId: 658, admissionNo: "MADM-0106", firstName: "dora", lastName: "t" },
+    admissionsList: [{ admissionId: 658, admissionNo: "MADM-0106" }],
+    studentsHandler: () => ({ data: { items: [{ studentId: 943, admissionNo: "MADM-0106", studentName: "dora t" }] } }),
+  });
+  assert.equal(searched.id, 943);
+  assert.equal(searched.studentCalls.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(searched.studentCalls[0])), { params: { search: "MADM-0106", pageNumber: 1, pageSize: 50 } });
+});
