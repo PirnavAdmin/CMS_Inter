@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, Palette, ChevronDown } from "lucide-react";
+import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
-import ThemePalettePicker from "@/shared/components/ThemePalettePicker.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import SuperAdminNotificationPopover from "../components/SuperAdminNotificationPopover.jsx";
@@ -36,7 +35,6 @@ export default function SuperAdminLayout() {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [themePaletteOpen, setThemePaletteOpen] = useState(false);
   const profileRef = useRef(null);
   const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
 
@@ -86,15 +84,6 @@ export default function SuperAdminLayout() {
 
         <div className="sa-topbar-end">
           <ThemeToggle variant="dashboard"/>
-          <button
-            type="button"
-            className="sa-palette-btn"
-            onClick={() => setThemePaletteOpen(true)}
-            title="Theme Palette & Appearance"
-            aria-label="Choose Theme Palette"
-          >
-            <Palette size={18} />
-          </button>
           {/* Topbar Notification Bell with Popover */}
           <div className="sa-notif-btn-wrap" ref={notifRef}>
             <button
@@ -162,18 +151,6 @@ export default function SuperAdminLayout() {
                   className="sa-dropdown-item"
                   onClick={() => {
                     setProfileOpen(false);
-                    setThemePaletteOpen(true);
-                  }}
-                >
-                  <Palette size={15} className="sa-dd-icon" />
-                  <span>Theme Appearance</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="sa-dropdown-item"
-                  onClick={() => {
-                    setProfileOpen(false);
                     navigate("/super-admin/settings");
                   }}
                 >
@@ -210,12 +187,7 @@ export default function SuperAdminLayout() {
         <Outlet/>
       </main>
 
-      {/* Shared Theme Appearance Modal (5th image) */}
-      <ThemePalettePicker
-        open={themePaletteOpen}
-        onOpenChange={setThemePaletteOpen}
-        hideTrigger={true}
-      />
+
     </div>
   </div>;
 }
