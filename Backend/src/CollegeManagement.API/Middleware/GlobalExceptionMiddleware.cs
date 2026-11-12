@@ -60,6 +60,12 @@ namespace CollegeManagement.API.Middleware
 
                 ForbiddenException => (HttpStatusCode.Forbidden, exception.Message),
 
+                BadHttpRequestException badHttpRequest when badHttpRequest.StatusCode == StatusCodes.Status413PayloadTooLarge
+                    => (HttpStatusCode.RequestEntityTooLarge, "Request payload exceeds the maximum allowed size."),
+
+                BadHttpRequestException badHttpRequest
+                    => ((HttpStatusCode)badHttpRequest.StatusCode, badHttpRequest.Message),
+
                 _ => (HttpStatusCode.InternalServerError, "An unexpected server error occurred.")
             };
 

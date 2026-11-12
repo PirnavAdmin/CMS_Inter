@@ -5,6 +5,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
+using System.Net.Mail;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -19,14 +20,32 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
-            await SendEmailWithAttachmentAsync(toEmail, subject, body, null!, null!);
+            await SendEmailWithOptionsAsync(toEmail, subject, body);
         }
 
         public async Task SendEmailWithAttachmentAsync(string toEmail, string subject, string body, byte[] attachmentBytes, string attachmentFileName, string contentType = "application/pdf")
         {
+            await SendEmailWithOptionsAsync(toEmail, subject, body, attachmentBytes, attachmentFileName, contentType);
+        }
+
+        public async Task SendEmailWithOptionsAsync(
+            string toEmail,
+            string subject,
+            string body,
+            byte[]? attachmentBytes = null,
+            string? attachmentFileName = null,
+            string contentType = "application/pdf",
+            string? senderDisplayName = null,
+            string? replyToEmail = null)
+        {
             var email = new MimeMessage();
 
-            email.From.Add(new MailboxAddress(_settings.SenderName, _settings.SenderEmail));
+            var fromName = string.IsNullOrWhiteSpace(senderDisplayName) ? _settings.SenderName : senderDisplayName.Trim();
+            email.From.Add(new MailboxAddress(fromName, _settings.SenderEmail));
+            if (!string.IsNullOrWhiteSpace(replyToEmail) && MailAddress.TryCreate(replyToEmail.Trim(), out var parsedReplyTo))
+            {
+                email.ReplyTo.Add(MailboxAddress.Parse(parsedReplyTo.Address));
+            }
             email.To.Add(MailboxAddress.Parse(toEmail));
             email.Subject = subject;
 
@@ -42,7 +61,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             email.Body = builder.ToMessageBody();
 
-            using var smtp = new SmtpClient();
+            using var smtp = new MailKit.Net.Smtp.SmtpClient();
             smtp.CheckCertificateRevocation = false;
             smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
             smtp.Timeout = 15000;

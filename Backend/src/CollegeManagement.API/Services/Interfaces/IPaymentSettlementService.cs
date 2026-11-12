@@ -12,8 +12,8 @@ namespace CollegeManagement.API.Services.Interfaces;
 public interface IPaymentSettlementService
 {
     /// <summary>
-    /// Settles a gateway payment by calling the existing sp_FeePayment_Collect
-    /// stored procedure within a locked, idempotent transaction.
+    /// Settles a gateway or approved-UTR payment by calling the existing sp_FeePayment_Collect
+    /// stored procedure within a locked, idempotent transaction and queueing outbox confirmation emails.
     /// </summary>
     Task<SettlementResult> SettlePaymentAsync(
         string orderId,
@@ -26,6 +26,15 @@ public interface IPaymentSettlementService
         string? gatewayPaymentId,
         int? adminUserId,
         IEnumerable<int>? feeInstallmentIds = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Settles a counter/cash/manual payment atomically, guarantees official receipt creation,
+    /// records ledger credit, and enqueues reliable outbox confirmation emails.
+    /// </summary>
+    Task<SettlementResult> SettleManualPaymentAsync(
+        CreateFeePaymentRequest request,
+        int? collectedByUserId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

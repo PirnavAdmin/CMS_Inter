@@ -10,31 +10,42 @@ import { emailDeliveryState, gatewayData, paymentUiState } from "../services/pay
 export default function PaymentConfirmation({ payment: initialPayment, account = {}, onClose, autoPrint = false }) {
   const [details, setDetails] = useState(null);
   const initialId = initialPayment.feePaymentId || initialPayment.paymentId;
-  const payment = { ...initialPayment, ...(Number(details?.feePaymentId) === Number(initialId) ? details : null) };
+  const payment = { ...initialPayment, ...(Number(details?.feePaymentId) === Number(initialId) ? details : {}) };
+  const id = payment.feePaymentId || payment.paymentId;
+  const state = paymentUiState(payment);
+  const paid = state === "PAYMENT_SUCCESSFUL" || payment.isPaid === true || /^(settled|paid|captured|success)$/i.test(payment.status || "");
   const [pdf, setPdf] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
   const [freshBalance, setFreshBalance] = useState(null);
+  const [retryingEmail, setRetryingEmail] = useState(false);
+  const [retryFeedback, setRetryFeedback] = useState("");
   const frame = useRef(null);
-  const state = paymentUiState(payment);
-  const paid = state === "PAYMENT_SUCCESSFUL";
-  const id = payment.feePaymentId || payment.paymentId;
   const receiptNo = payment.receiptNumber || payment.receiptNo;
   const canRead = Boolean(id && receiptNo && (paid || /reversed|refunded/i.test(payment.status || "")));
+
   useEffect(() => {
     const controller = new AbortController();
     setDetails(null);
+    setRetryFeedback("");
     if (Number.isSafeInteger(Number(id)) && Number(id) > 0) {
-      apiClient.get(apiEndpoints.fee.paymentDetails(id), { signal: controller.signal, requireRealBackend: true, skipGlobalLoader: true })
-        .then(response => {
-          if (controller.signal.aborted) return;
-          const data = gatewayData(response.data);
-          if (Number(data.feePaymentId) === Number(id)) setDetails(data);
-        }).catch(() => { /* Keep the confirmed response; never invent missing date or email metadata. */ });
+      Promise.allSettled([
+        apiClient.get(apiEndpoints.fee.paymentDetails(id), { signal: controller.signal, requireRealBackend: true, skipGlobalLoader: true }),
+        typeof feePaymentGatewayApi.paymentStatus === "function"
+          ? feePaymentGatewayApi.paymentStatus(id, controller.signal)
+          : Promise.resolve(null),
+      ]).then(([paymentRes, notifRes]) => {
+        if (controller.signal.aborted) return;
+        const base = paymentRes.status === "fulfilled" ? gatewayData(paymentRes.value.data) : {};
+        const notif = notifRes.status === "fulfilled" && notifRes.value ? notifRes.value : {};
+        const merged = { ...base, ...notif };
+        if (Number(merged.feePaymentId) === Number(id)) setDetails(merged);
+      }).catch(() => { /* Keep the confirmed response; never invent missing date or email metadata. */ });
     }
     return () => controller.abort();
   }, [id]);
+
   useEffect(() => {
     const controller = new AbortController();
     let url;
@@ -45,6 +56,7 @@ export default function PaymentConfirmation({ payment: initialPayment, account =
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
   }, [id, canRead, version]);
+
   const feeId = payment.studentFeeId;
   useEffect(() => {
     const controller = new AbortController();
@@ -60,16 +72,49 @@ export default function PaymentConfirmation({ payment: initialPayment, account =
     }
     return () => controller.abort();
   }, [paid, feeId, id]);
+
   const email = emailDeliveryState(payment);
-  const emailLabels = { SENT: "Email Sent", QUEUED: "Email Queued", FAILED: "Email Failed — payment remains confirmed.", NOT_REQUESTED: "Email not requested.", UNKNOWN: "Payment confirmed. Email delivery status is unavailable." };
+  const emailLabels = {
+    SENT: "Email Sent",
+    QUEUED: "Email Queued",
+    FAILED: "Email Failed — payment remains confirmed.",
+    NOT_REQUESTED: "Email not requested.",
+    UNKNOWN: "Payment confirmed. Email delivery status is unavailable.",
+  };
+
+  const handleRetryEmail = async () => {
+    if (!id || retryingEmail) return;
+    setRetryingEmail(true);
+    setRetryFeedback("");
+    try {
+      const res = await feePaymentGatewayApi.retryEmail(id);
+      setDetails(prev => ({
+        ...(prev || {}),
+        feePaymentId: id,
+        emailNotificationStatus: res.emailNotificationStatus || "QUEUED",
+        emailDeliveryStatus: res.emailDeliveryStatus || "QUEUED",
+        emailFailureReason: null,
+      }));
+      setRetryFeedback(res.message || "Confirmation email re-queued for delivery.");
+    } catch (failure) {
+      setRetryFeedback(`Retry failed: ${getApiErrorMessage(failure)}`);
+    } finally {
+      setRetryingEmail(false);
+    }
+  };
+
   const balance = freshBalance ?? payment.outstandingBalance ?? payment.remainingBalance;
   const date = payment.paymentDate || payment.receiptDate || payment.date;
   const print = () => { try { frame.current?.contentWindow?.print(); } catch { setError("Use View Receipt to print the official PDF in your browser."); } };
+
   return <Modal title={paid ? "Payment Successful" : "Payment Details"} onClose={onClose} footer={<>
     <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
     {pdf ? <><a className="cms-btn cms-btn-ghost" href={pdf} target="_blank" rel="noopener noreferrer">View Receipt</a>
       <a className="cms-btn cms-btn-primary" href={pdf} download={`Fee_Receipt_${String(id)}.pdf`}>Download PDF Receipt</a>
       <button type="button" className="cms-btn cms-btn-ghost" onClick={print}>Print Receipt</button></> : null}
+    {paid && email === "FAILED" ? (
+      <button type="button" className="cms-btn cms-btn-ghost" disabled={retryingEmail} onClick={handleRetryEmail}>{retryingEmail ? "Retrying Email..." : "Retry Email"}</button>
+    ) : null}
     {error && canRead ? <button type="button" className="cms-btn cms-btn-ghost" disabled={loading} onClick={() => setVersion(value => value + 1)}>Retry Receipt</button> : null}
   </>}>
     <dl className="cms-fee-reversal-details">
@@ -80,7 +125,18 @@ export default function PaymentConfirmation({ payment: initialPayment, account =
         ["Remaining Balance", balance != null ? formatCurrency(balance) : "Unavailable — refresh the fee account"],
         ["Status", state.replaceAll("_", " ")]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Unavailable"}</dd></div>)}
     </dl>
-    {paid ? <p role="status" className="cms-fee-note">{emailLabels[email]}</p> : null}
+    {paid ? (
+      <div className="cms-fee-note" role="status">
+        <p style={{ margin: 0 }}>
+          {emailLabels[email] || emailLabels.UNKNOWN}
+          {payment.emailSentAt ? ` (${formatDate(payment.emailSentAt)})` : ""}
+        </p>
+        {email === "FAILED" && payment.emailFailureReason ? (
+          <p style={{ margin: "4px 0 0", color: "#b91c1c" }}>{payment.emailFailureReason}</p>
+        ) : null}
+        {retryFeedback ? <p style={{ margin: "4px 0 0", fontWeight: 600 }}>{retryFeedback}</p> : null}
+      </div>
+    ) : null}
     {!canRead ? <p className="cms-fee-note">An official receipt requires a confirmed saved payment ID and receipt number. Check Payment History.</p> : null}
     {loading ? <p role="status">Loading official PDF receipt...</p> : null}
     {error ? <p role="alert" className="cms-error">{error}</p> : null}

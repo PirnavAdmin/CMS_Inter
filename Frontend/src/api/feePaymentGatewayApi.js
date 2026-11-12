@@ -48,6 +48,16 @@ export const feePaymentGatewayApi = {
   },
   createOrder: (payload, signal) => post(apiEndpoints.feeGateway.createOrder, payload, signal),
   verify: (payload, signal) => post(apiEndpoints.feeGateway.verify, payload, signal),
+  paymentStatus: async (feePaymentId, signal) => {
+    const id = Number(feePaymentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid payment ID is required.");
+    return gatewayData((await apiClient.get(apiEndpoints.feeGateway.paymentStatus(id), { ...config, signal })).data);
+  },
+  retryEmail: async (feePaymentId, signal) => {
+    const id = Number(feePaymentId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error("A valid payment ID is required.");
+    return post(apiEndpoints.feeGateway.retryEmail(id), {}, signal);
+  },
   reverse: async (payload, signal) => {
     const data = await post(apiEndpoints.feeGateway.reverse, reversalPayload(payload), signal);
     if (data.success !== true)
@@ -213,6 +223,52 @@ export async function updatePaymentGatewayConfigApi(form, signal, section) {
   if (data.success !== true && Number(data.campusId) !== payload.campusId)
     throw new Error("The backend did not acknowledge the configuration update. Refresh before retrying.");
   return data;
+}
+
+export async function getCommunicationSettingsApi(campusId, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.get(apiEndpoints.feeGateway.communicationSettings, {
+    ...config,
+    params: { campusId: id },
+    signal,
+    headers: { "X-Campus-Id": String(id) },
+  });
+  return response.data;
+}
+
+export async function updateCommunicationSettingsApi(payload, signal) {
+  const id = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.put(
+    apiEndpoints.feeGateway.communicationSettings,
+    { ...payload, campusId: id },
+    { ...config, signal, headers: { "X-Campus-Id": String(id) } },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function restoreCommunicationSettingsApi(campusId, restoreCollegeDefault = false, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.restoreCommunicationSettings,
+    null,
+    {
+      ...config,
+      params: { campusId: id, restoreCollegeDefault },
+      signal,
+      headers: { "X-Campus-Id": String(id) },
+    },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function sendTestCommunicationEmailApi(payload, signal) {
+  const id = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.sendTestCommunicationEmail,
+    { ...payload, campusId: id },
+    { ...config, signal, headers: { "X-Campus-Id": String(id) } },
+  );
+  return response.data;
 }
 
 let checkoutPromise;

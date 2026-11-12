@@ -27,6 +27,7 @@ Frontend/.env
 # Local Uploads
 Backend/src/CollegeManagement.API/wwwroot/uploads/*/*
 Backend/src/CollegeManagement.API/Uploads/
+Backend/src/CollegeManagement.API/App_Data/
 !Backend/src/CollegeManagement.API/wwwroot/uploads/**/.gitkeep
 
 

@@ -336,6 +336,15 @@ public class FeePaymentResponse
     public string? Remarks { get => Note; set => Note = value; }
     public int? GatewayTransactionId { get; set; }
     public string? GatewayStatus { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = string.Empty;
+    public decimal? OutstandingBalance { get; set; }
+    public int? ReceiptId { get; set; }
+    public bool ReceiptAvailable { get; set; }
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public DateTime? EmailSentAt { get; set; }
+    public string? EmailFailureReason { get; set; }
 }
 
 public class FeeReceiptResponse

@@ -637,10 +637,14 @@ await describe("Admin payment gateway", async () => {
     let pdfReads = 0;
     const revoked = [];
     const payment = { status: "Paid", feePaymentId: 901, studentFeeId: 41, receiptNumber: "R901", amount: 300, emailStatus: "FAILED" };
+    let emailRetries = 0;
     const view = await mount(confirmationSource, "PaymentConfirmation", {
       apiClient: { get: async url => ({ data: url.includes("student-fees") ? { studentFeeId: 41, balanceAmount: 400 } : payment }) },
       apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}`, getAssignment: id => `/student-fees/${id}` } },
-      feePaymentGatewayApi: { receiptPdf: async id => { assert.equal(id, 901); pdfReads++; return {}; } },
+      feePaymentGatewayApi: {
+        receiptPdf: async id => { assert.equal(id, 901); pdfReads++; return {}; },
+        retryEmail: async id => { assert.equal(id, 901); emailRetries++; return { feePaymentId: 901, emailStatus: "QUEUED" }; },
+      },
       URL: { createObjectURL: () => "blob:private-receipt", revokeObjectURL: url => revoked.push(url) },
     }, { payment, onClose() {} });
     view.render(); await flush(); let tree = view.render(); await flush(); tree = view.render();
@@ -650,6 +654,11 @@ await describe("Admin payment gateway", async () => {
     const download = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "a" && node.props.download);
     assert.equal(download.props.href, "blob:private-receipt");
     assert.equal(pdfReads, 1);
+    const retryBtn = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Retry Email"));
+    assert.ok(retryBtn);
+    await retryBtn.props.onClick(); await flush(); tree = view.render();
+    assert.equal(emailRetries, 1);
+    assert.ok(tree.some(node => node.props.children.includes("Email Queued")));
     view.unmount(); assert.deepEqual(revoked, ["blob:private-receipt"]);
   });
   test("pending requests never retrieve paid receipts; receipt failure never reverses confirmed payment", async () => {
@@ -893,8 +902,15 @@ await describe("Admin payment gateway", async () => {
   };
   const configFixture = () => normalizePaymentConfig({ ...paymentSettings, enableRazorpay: false, hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false }, 2);
   const templateSource = await readFile(new URL("../../AdminSettings/PaymentTemplatesEditor.jsx", import.meta.url), "utf8");
-  const templateBindings = { PAYMENT_EMAIL_TYPES, PAYMENT_TEMPLATE_TOKENS, newPaymentTemplateDraft, paymentTemplateSample,
-    insertPaymentTemplateText, renderPaymentTemplateSample, ConfirmDialog: "ConfirmDialog" };
+  const templateBindings = {
+    PAYMENT_EMAIL_TYPES, PAYMENT_TEMPLATE_TOKENS, newPaymentTemplateDraft, paymentTemplateSample,
+    insertPaymentTemplateText, renderPaymentTemplateSample, ConfirmDialog: "ConfirmDialog",
+    getApiErrorMessage: e => e?.message || "error",
+    getCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    updateCommunicationSettingsApi: async payload => ({ ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }),
+    restoreCommunicationSettingsApi: async campusId => ({ ...newPaymentTemplateDraft(`Sample Campus ${campusId}`), activeSource: "System Default" }),
+    sendTestCommunicationEmailApi: async () => ({ success: true, status: "SENT", message: "Test email sent." }),
+  };
   const templateProps = () => ({ campusId: 2, campusName: "Sample Campus A", editable: true, drafts: new Map() });
   const inputById = (view, id) => view.render().find(node => node.props.id === id);
   const templateSection = (view, name) => inputById(view, `template-section-${name}`).props.onClick();
@@ -912,7 +928,7 @@ await describe("Admin payment gateway", async () => {
   });
   test("email types have independent edits and token insertion replaces the cursor selection", async () => {
     const props = templateProps();
-    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
     inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello NAME!", selectionStart: 6, selectionEnd: 10 } });
     let restoredCursor;
     inputById(view, "payment-email-subject").props.ref({ focus() {}, setSelectionRange: (start, end) => { restoredCursor = [start, end]; } });
@@ -927,11 +943,11 @@ await describe("Admin payment gateway", async () => {
     inputById(view, "payment-email-type").props.onChange({ target: { value: "successful" } });
     assert.equal(inputById(view, "payment-email-subject").props.value, "Hello {{studentName}}!");
     assert.equal(props.drafts.get(2).emails.pending.body, "**Pending** edit");
-    for (const label of ["Save Draft", "Publish Template"]) assert.equal(buttonNamed(view.render(), label).props.disabled, true);
+    assert.equal(buttonNamed(view.render(), "Publish Email Templates").props.disabled, false);
     view.unmount();
   });
   test("sample previews update safely, receipt financial fields cannot be edited, and visibility follows edits", async () => {
-    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, templateProps());
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, templateProps()); view.render(); await flush();
     inputById(view, "payment-email-subject").props.onChange({ target: { value: "Hello {{studentName}} <script>sample</script>", selectionStart: 0, selectionEnd: 0 } });
     buttonNamed(view.render(), "Live Preview").props.onClick();
     assert.ok(view.render().some(node => node.props.children.includes("Hello Sample Student <script>sample</script>")));
@@ -949,15 +965,15 @@ await describe("Admin payment gateway", async () => {
     assert.equal(tree.some(node => node.type === "dt" && node.props.children.includes("Remaining Balance")), false);
     assert.ok(tree.some(node => node.type === "dt" && node.props.children.includes("Amount Paid")));
     assert.equal(tree.some(node => ["amountPaid", "studentName", "receiptNumber", "transactionReference"].some(key => node.props.id === `payment-receipt-${key}`)), false);
-    assert.equal(buttonNamed(tree, "Preview PDF").props.disabled, true);
+    assert.equal(buttonNamed(tree, "Save Receipt Settings").props.disabled, false);
     view.unmount();
   });
   test("campus drafts survive remount without leaking to other campuses; restore requires confirmation", async () => {
     const props = templateProps();
-    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
+    const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props); view.render(); await flush();
     inputById(view, "payment-email-heading").props.onChange({ target: { value: "Campus A draft", selectionStart: 0, selectionEnd: 0 } });
     view.unmount();
-    const other = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, { ...props, campusId: 3, campusName: "Sample Campus B" });
+    const other = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, { ...props, campusId: 3, campusName: "Sample Campus B" }); other.render(); await flush();
     assert.notEqual(inputById(other, "payment-email-heading").props.value, "Campus A draft"); other.unmount();
     const back = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
     assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
@@ -966,18 +982,33 @@ await describe("Admin payment gateway", async () => {
     back.render().find(node => node.type === "ConfirmDialog").props.onCancel();
     assert.equal(inputById(back, "payment-email-heading").props.value, "Campus A draft");
     buttonNamed(back.render(), "Restore Default").props.onClick();
-    back.render().find(node => node.type === "ConfirmDialog").props.onConfirm();
+    await back.render().find(node => node.type === "ConfirmDialog").props.onConfirm();
+    await flush();
     assert.equal(inputById(back, "payment-email-heading").props.value, "Payment Successful"); back.unmount();
   });
-  test("delivery preferences remain local and readonly users cannot mutate or publish any template", async () => {
-    const props = templateProps(); const view = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, props);
+  test("delivery preferences call backend for editable admins and readonly users cannot mutate or publish any template", async () => {
+    let savedPayload = null;
+    let testEmailPayload = null;
+    const props = templateProps();
+    const view = await mount(templateSource, "PaymentTemplatesEditor", {
+      ...templateBindings,
+      updateCommunicationSettingsApi: async payload => { savedPayload = payload; return { ...newPaymentTemplateDraft("Sample Campus"), ...payload, activeSource: "Campus Custom" }; },
+      sendTestCommunicationEmailApi: async payload => { testEmailPayload = payload; return { success: true, status: "SENT", message: "Test email sent." }; },
+    }, props);
+    view.render(); await flush();
+    await buttonNamed(view.render(), "Publish Email Templates").props.onClick(); await flush();
+    assert.equal(savedPayload.campusId, 2);
     templateSection(view, "delivery");
     inputById(view, "payment-delivery-replyTo").props.onChange({ target: { value: "accounts@example.test" } });
+    inputById(view, "payment-delivery-testRecipient").props.onChange({ target: { value: "qa@example.test" } });
     assert.equal(props.drafts.get(2).delivery.replyTo, "accounts@example.test");
-    for (const label of ["Save Delivery Settings", "Send Test Email"]) assert.equal(buttonNamed(view.render(), label).props.disabled, true);
+    for (const label of ["Save Delivery Settings", "Send Test Email"]) assert.equal(buttonNamed(view.render(), label).props.disabled, false);
+    await buttonNamed(view.render(), "Send Test Email").props.onClick(); await flush();
+    assert.equal(testEmailPayload.campusId, 2);
+    assert.equal(testEmailPayload.testRecipient, "qa@example.test");
     view.unmount();
     const deniedProps = { ...templateProps(), editable: false };
-    const denied = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, deniedProps);
+    const denied = await mount(templateSource, "PaymentTemplatesEditor", templateBindings, deniedProps); denied.render(); await flush();
     const original = inputById(denied, "payment-email-subject").props.value;
     inputById(denied, "payment-email-subject").props.onChange({ target: { value: "Unauthorized", selectionStart: 0, selectionEnd: 0 } });
     assert.equal(inputById(denied, "payment-email-subject").props.value, original);

@@ -21,6 +21,9 @@ public interface IPaymentGatewayService
     /// <summary>Processes Razorpay webhook events (payment.captured, order.paid, qr_code.credited).</summary>
     Task<SettlementResult> ProcessWebhookAsync(string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId = null);
 
+    /// <summary>Processes Razorpay webhook events with currency &amp; failure reason validation.</summary>
+    Task<SettlementResult> ProcessWebhookAsync(string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId, string? currency, string? failureReason);
+
     /// <summary>Resolves the active webhook secret (database first, fallback appsettings) without placeholder bypasses.</summary>
     Task<string?> ResolveWebhookSecretAsync(int? campusId = null);
 
