@@ -319,8 +319,22 @@ export default function CollegeAdminsPage() {
     }
   };
 
-  const handleResendWelcome = (admin) => {
-    showToast(`Welcome email & credentials resent to ${admin.email}!`, "success");
+  const handleResendWelcome = async (admin) => {
+    const uid = admin?.userId || admin?.id;
+    if (!uid) {
+      showToast("Administrator ID not found.", "error");
+      return;
+    }
+    const ok = await update("Resend College Admin credentials", null, {
+      module: "College Admins",
+      actionType: "Resend credentials",
+      userId: uid,
+    });
+    if (ok) {
+      showToast(`New login credentials generated & emailed to ${admin.email}!`, "success");
+    } else {
+      showToast(`Failed to resend credentials email to ${admin.email}.`, "error");
+    }
   };
 
   const handleCopy = (text, key) => {

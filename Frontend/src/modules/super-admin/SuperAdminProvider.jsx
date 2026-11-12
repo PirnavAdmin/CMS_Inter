@@ -240,9 +240,21 @@ export default function SuperAdminProvider({ session, children }) {
         const rawCid = payload?.collegeId ?? details?.collegeId;
         const matchedCollege = latest.current.colleges.find((c) => String(c.id).toLowerCase() === String(rawCid).toLowerCase() || String(c.collegeId) === String(rawCid));
         const numericCollegeId = Number(matchedCollege?.collegeId) || Number(rawCid) || (parseInt(String(rawCid).replace(/\D/g, ""), 10) || 0);
-        if (act === "Create") result = await superAdminApi.createCollegeAdmin({ name: payload.name, email: payload.email, phone: payload.phone || payload.phoneNumber, collegeId: numericCollegeId });
+        if (act === "Create") {
+          result = await superAdminApi.createCollegeAdmin({
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone || payload.phoneNumber,
+            collegeId: numericCollegeId,
+            password: payload.password,
+            username: payload.username,
+            active: payload.active ?? true,
+            sendWelcomeEmail: payload.sendWelcomeEmail ?? true,
+          });
+        }
         else if (act === "Update") result = await superAdminApi.updateCollegeAdmin(details.userId ?? details.id, { name: payload.name, email: payload.email, phone: payload.phone || payload.phoneNumber, active: payload.active, collegeId: numericCollegeId });
         else if (act === "Access change") result = await superAdminApi.updateUserStatus(details.userId, payload.active ? "Active" : "Inactive");
+        else if (act === "Resend credentials") result = await superAdminApi.resendCollegeAdminCredentials(details.userId ?? details.id);
       } else if (mod === "Global Users") {
         if (act === "Status change") result = await superAdminApi.updateUserStatus(details.userId, details.status);
         else if (act === "Reset password") result = await superAdminApi.resetUserPassword(details.userId, details.newPassword);

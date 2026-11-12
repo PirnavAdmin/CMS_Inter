@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
+import { getAuthUser } from "../../auth/authStorage.js";
 
 export const campusImageFields = [
   ["dashboardLogo", "Dashboard Logo", "Logo in dashboard sidebars", "logo"],
@@ -28,6 +29,13 @@ export const headerBrandDefaults = {
   dashboardLogoSize: "48",
 };
 export function getHeaderBrand(configuration = {}) {
+  const u = getAuthUser();
+  const isTenantCollege = Boolean(u?.collegeId && Number(u.collegeId) > 1);
+  const tenantName = (u?.collegeName || "").trim();
+  const defaultTitle = isTenantCollege && tenantName ? tenantName.toUpperCase() : headerBrandDefaults.dashboardTitle;
+  const defaultSubtitle = isTenantCollege && tenantName ? "" : headerBrandDefaults.dashboardSubtitle;
+  const defaultTagline = isTenantCollege ? "COLLEGE MANAGEMENT SYSTEM" : headerBrandDefaults.dashboardTagline;
+
   const boundedSize = (key, min, max) => {
     const value = Number(configuration[key] ?? headerBrandDefaults[key]);
     return String(Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : Number(headerBrandDefaults[key]));
@@ -37,9 +45,9 @@ export function getHeaderBrand(configuration = {}) {
   // Preserve custom single-line names saved before the two-line title existed.
   const legacyTitle = configuration.dashboardTitle === "PIRNAV COLLEGE" && configuration.dashboardSubtitle == null;
   return {
-    dashboardTitle: String(legacyTitle ? "PIRNAV" : configuration.dashboardTitle ?? headerBrandDefaults.dashboardTitle),
-    dashboardSubtitle: String(configuration.dashboardSubtitle ?? (configuration.dashboardTitle && !legacyTitle ? "" : headerBrandDefaults.dashboardSubtitle)),
-    dashboardTagline: String(configuration.dashboardTagline ?? headerBrandDefaults.dashboardTagline),
+    dashboardTitle: String(legacyTitle ? "PIRNAV" : configuration.dashboardTitle ?? defaultTitle),
+    dashboardSubtitle: String(configuration.dashboardSubtitle ?? (configuration.dashboardTitle && !legacyTitle ? "" : defaultSubtitle)),
+    dashboardTagline: String(configuration.dashboardTagline ?? defaultTagline),
     dashboardTitleColor: color("dashboardTitleColor"),
     dashboardSubtitleColor: color("dashboardSubtitleColor"),
     dashboardTaglineColor: color("dashboardTaglineColor"),

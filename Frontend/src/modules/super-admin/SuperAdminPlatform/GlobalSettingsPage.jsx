@@ -34,8 +34,8 @@ import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import settingsIllustration from "@/assets/settings-3d/campus-configuration.png";
-import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
-import { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import {
   getCollegeCodeSeriesSettings,
   saveCollegeCodeSeriesSettings,
@@ -61,7 +61,8 @@ function Toast({ msg, type, onClose }) {
 
 export default function GlobalSettingsPage() {
   const { data, refresh } = useSuperAdmin?.() || { data: {} };
-  const { theme, toggleTheme, palette, setPalette } = useTheme();
+  const { theme, toggleTheme, palette, customColor } = useTheme();
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   // Active Navigation Tab
   const [activeTab, setActiveTab] = useState("platform_reminders");
@@ -790,38 +791,17 @@ export default function GlobalSettingsPage() {
                 </div>
               </div>
 
-              {/* Palette Selection Grid */}
+              {/* Admin-style theme colour picker */}
               <div className="gsp-palette-picker-section">
-                <label className="gsp-field-label">Active Theme Palette Accent:</label>
-                <div className="gsp-palettes-grid">
-                  {THEME_OPTIONS.map((opt) => {
-                    const isSelected = (palette || "olive") === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`gsp-palette-tile ${isSelected ? "is-selected" : ""}`}
-                        onClick={() => {
-                          setPalette(opt.id);
-                          showToast(`Applied ${opt.name} theme palette.`);
-                        }}
-                      >
-                        <div className="gsp-swatch-row">
-                          {opt.swatches.map((color, i) => (
-                            <span
-                              key={i}
-                              className="gsp-swatch-circle"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                        <div className="gsp-palette-name-row">
-                          <span>{opt.name}</span>
-                          {isSelected && <Check size={14} className="gsp-palette-check" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+                <label className="gsp-field-label">Active Theme</label>
+                <div className="gsp-active-theme-row">
+                  <div className="gsp-active-theme-summary">
+                    <span className="gsp-active-theme-swatch" style={{ backgroundColor: palette === "custom" ? customColor : THEME_OPTIONS.find((option) => option.id === palette)?.swatches?.[0] || "#647900" }} />
+                    <strong>{palette === "custom" ? "Custom" : THEME_OPTIONS.find((option) => option.id === palette)?.name || "Current Olive"}</strong>
+                  </div>
+                  <button type="button" className="gsp-mode-toggle-btn" onClick={() => setThemePickerOpen(true)}>
+                    <Palette size={15} /> Pick a theme colour
+                  </button>
                 </div>
               </div>
 
@@ -1078,6 +1058,12 @@ export default function GlobalSettingsPage() {
           )}
         </main>
       </div>
+      <ThemePalettePicker
+        open={themePickerOpen}
+        onOpenChange={setThemePickerOpen}
+        hideTrigger={true}
+        isAdmin={true}
+      />
     </div>
   );
 }

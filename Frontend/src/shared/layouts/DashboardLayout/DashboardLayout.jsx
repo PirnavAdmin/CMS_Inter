@@ -729,7 +729,7 @@ export default function DashboardLayout({
       if (!u) return;
       const isAdminUser = u.isAdmin || String(u.role || "").toLowerCase().includes("admin") || u.roleType === "admin";
       if (isAdminUser) {
-        apiClient.get("/api/Admin/1").then(res => {
+        apiClient.get("/api/Admin/profile").then(res => {
           if (!active) return;
           const dataObj = res.data?.data || res.data?.Data || res.data;
           const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
@@ -977,16 +977,19 @@ export default function DashboardLayout({
 
   const [adminPhotoError, setAdminPhotoError] = useState(false);
   const activeAdminPhoto = useMemo(() => {
+    const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
     let savedAdminProfile = null;
-    try {
-      savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
-    } catch { }
+    if (!isTenantCollege) {
+      try {
+        savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+      } catch { }
+    }
     const rawPhoto = (
       user?.photoUrl ||
       user?.photoPath ||
       user?.photo ||
-      savedAdminProfile?.photo ||
-      (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
+      (!isTenantCollege ? savedAdminProfile?.photo : null) ||
+      (!isTenantCollege && typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
       null
     );
     if (!rawPhoto || typeof rawPhoto !== "string" || isInvalidOrBrokenPhoto(rawPhoto)) return null;
@@ -1349,8 +1352,8 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
-                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code}>
-                      {selectedCampus?.name || selectedCampus?.code || "Main Campus"}
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No active campuses available"}>
+                      {selectedCampus?.name || selectedCampus?.code || "No active campuses available"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />

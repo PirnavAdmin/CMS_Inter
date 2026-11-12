@@ -172,7 +172,15 @@ export const clearAuthSession = () => {
     window.sessionStorage.removeItem("staff_profile_data");
     // Remove namespaced staff profiles but preserve user profile photos across logins/logouts
     Object.keys(window.localStorage || {}).forEach((k) => {
-      if (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) {
+      if (
+        (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) ||
+        k.startsWith("cms_campuses_data") ||
+        k.startsWith("cms_selected_campus_id") ||
+        k.startsWith("cms_cached_boards") ||
+        k.startsWith("cms_cached_academic_years") ||
+        k.startsWith("cms_selected_board") ||
+        k.startsWith("cms_selected_academic_year")
+      ) {
         window.localStorage.removeItem(k);
       }
     });

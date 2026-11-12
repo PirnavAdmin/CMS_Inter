@@ -62,9 +62,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 transaction: transaction,
                 commandType: CommandType.StoredProcedure);
 
-            if (user != null && user.RoleId > 0)
+            if (user != null)
             {
-                user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
+                if (user.RoleId > 0)
+                {
+                    user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
+                }
+                if (!user.CollegeId.HasValue)
+                {
+                    user.CollegeId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        "SELECT CollegeId FROM Users WHERE UserId = @UserId LIMIT 1;",
+                        new { UserId = user.UserId },
+                        transaction: transaction);
+                }
             }
             return user;
         }
@@ -215,9 +225,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 transaction: transaction,
                 commandType: CommandType.StoredProcedure);
 
-            if (user != null && user.RoleId > 0)
+            if (user != null)
             {
-                user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
+                if (user.RoleId > 0)
+                {
+                    user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
+                }
+                if (!user.CollegeId.HasValue)
+                {
+                    user.CollegeId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        "SELECT CollegeId FROM Users WHERE UserId = @UserId LIMIT 1;",
+                        new { UserId = user.UserId },
+                        transaction: transaction);
+                }
             }
             return user;
         }

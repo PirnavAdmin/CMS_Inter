@@ -45,14 +45,79 @@ public class CampusAuthorizationService : ICampusAuthorizationService
             };
         }
 
-        // 1. Unrestricted Multi-Campus Access for Platform Admins
-        bool isAdmin = user.IsInRole("Super Admin") 
-                    || user.IsInRole("Admin") 
-                    || string.Equals(_jwtTokenHelper.GetRole(user), "Super Admin", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(_jwtTokenHelper.GetRole(user), "Admin", StringComparison.OrdinalIgnoreCase);
+        // 1. Unrestricted Multi-Campus Access ONLY for Platform Super Admins
+        var roleName = _jwtTokenHelper.GetRole(user);
+        bool isSuperAdmin = user.IsInRole("Super Admin")
+                    || string.Equals(roleName, "Super Admin", StringComparison.OrdinalIgnoreCase);
 
-        if (isAdmin)
+        if (isSuperAdmin)
         {
+            return new CampusResolutionResult
+            {
+                IsAuthorized = true,
+                IsAdmin = true,
+                EffectiveCampusId = requestedCampusId
+            };
+        }
+
+        // 1B. Tenant-Scoped College Admin — restricted strictly to campuses of their own CollegeId
+        bool isCollegeAdmin = user.IsInRole("Admin")
+                    || string.Equals(roleName, "Admin", StringComparison.OrdinalIgnoreCase);
+
+        if (isCollegeAdmin)
+        {
+            int? collegeId = _jwtTokenHelper.GetCollegeId(user);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                var adminConn = _db.Database.GetDbConnection();
+                if (adminConn.State != System.Data.ConnectionState.Open)
+                {
+                    await adminConn.OpenAsync(ct);
+                }
+
+                var collegeCampuses = (await Dapper.SqlMapper.QueryAsync<int>(
+                    adminConn,
+                    "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1 ORDER BY IsHQ DESC, CampusId ASC;",
+                    new { CollegeId = collegeId.Value })).ToList();
+
+                if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+                {
+                    int ownsCampus = await Dapper.SqlMapper.ExecuteScalarAsync<int>(
+                        adminConn,
+                        "SELECT COUNT(*) FROM Campuses WHERE CampusId = @CampusId AND CollegeId = @CollegeId;",
+                        new { CampusId = requestedCampusId.Value, CollegeId = collegeId.Value });
+
+                    if (ownsCampus == 0)
+                    {
+                        _logger.LogWarning(
+                            "Tenant isolation block: College Admin (CollegeId {CollegeId}) attempted to access CampusId {CampusId}.",
+                            collegeId.Value, requestedCampusId.Value);
+                        return new CampusResolutionResult
+                        {
+                            IsAuthorized = false,
+                            ErrorMessage = "Access denied: You do not have authorization to view data for this campus."
+                        };
+                    }
+
+                    return new CampusResolutionResult
+                    {
+                        IsAuthorized = true,
+                        IsAdmin = true,
+                        EffectiveCampusId = requestedCampusId.Value,
+                        AuthorizedCampusIds = collegeCampuses
+                    };
+                }
+
+                return new CampusResolutionResult
+                {
+                    IsAuthorized = true,
+                    IsAdmin = true,
+                    EffectiveCampusId = collegeCampuses.FirstOrDefault() > 0 ? collegeCampuses.First() : 999999999,
+                    AuthorizedCampusIds = collegeCampuses
+                };
+            }
+
+            // Legacy single-tenant admin with no CollegeId
             return new CampusResolutionResult
             {
                 IsAuthorized = true,

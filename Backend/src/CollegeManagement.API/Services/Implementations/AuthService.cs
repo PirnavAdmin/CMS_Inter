@@ -390,17 +390,26 @@ namespace CollegeManagement.API.Services.Implementations
                     resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT PhotoPath FROM admins WHERE Email = @Email AND PhotoPath IS NOT NULL AND PhotoPath != '' LIMIT 1",
                         new { Email = user.Email });
-                    if (string.IsNullOrWhiteSpace(resolvedPhotoPath))
-                    {
-                        resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
-                            "SELECT PhotoPath FROM admins WHERE PhotoPath IS NOT NULL AND PhotoPath != '' ORDER BY id ASC LIMIT 1");
-                    }
                 }
                 if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.StudentId.HasValue && user.StudentId.Value > 0)
                 {
                     resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT Photo FROM Students WHERE StudentId = @Id",
                         new { Id = user.StudentId.Value });
+                }
+
+                string? collegeName = null;
+                string? collegeLogo = null;
+                if (user.CollegeId.HasValue && user.CollegeId.Value > 0)
+                {
+                    var collegeInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT CollegeName, LogoUrl FROM Colleges WHERE CollegeId = @CollegeId AND IsDeleted = 0 LIMIT 1;",
+                        new { CollegeId = user.CollegeId.Value });
+                    if (collegeInfo != null)
+                    {
+                        collegeName = (string?)collegeInfo.CollegeName;
+                        collegeLogo = (string?)collegeInfo.LogoUrl;
+                    }
                 }
 
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
@@ -424,6 +433,9 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
+                    CollegeId = user.CollegeId,
+                    CollegeName = collegeName,
+                    CollegeLogo = collegeLogo,
                     Designation = (string?)staffInfo?.Designation ?? user.Designation,
                     DesignationId = staffInfo?.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null,
                     Department = (string?)staffInfo?.Department ?? string.Empty,

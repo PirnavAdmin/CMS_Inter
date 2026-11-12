@@ -11,6 +11,9 @@ namespace CollegeManagement.API.DTOs.Authentication
         public int? StaffId { get; set; }
         public int? StudentId { get; set; }
         public int? AdminId { get; set; }
+        public int? CollegeId { get; set; }
+        public string? CollegeName { get; set; }
+        public string? CollegeLogo { get; set; }
         public string? Role { get; set; }
         public string? StaffType { get; set; }
         public string? Designation { get; set; }

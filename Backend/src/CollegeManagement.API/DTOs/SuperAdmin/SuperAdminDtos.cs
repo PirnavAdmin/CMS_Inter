@@ -66,6 +66,9 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
         public string? Logo { get; set; }
         public string? Admin { get; set; }
         public string? AdminEmail { get; set; }
+        public string? AdminPassword { get; set; }
+        public string? AdminPhone { get; set; }
+        public bool SendWelcomeEmail { get; set; } = true;
         public string Plan { get; set; } = "Free";
         public string Status { get; set; } = "Active";
     }
@@ -114,6 +117,10 @@ namespace CollegeManagement.API.DTOs.SuperAdmin
 
         public string? Phone { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? Password { get; set; }
+        public string? Username { get; set; }
+        public bool Active { get; set; } = true;
+        public bool SendWelcomeEmail { get; set; } = true;
     }
 
     public class SuperAdminUpdateUserRequest
