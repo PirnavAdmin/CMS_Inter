@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useParentPortal } from "../parentData.js";
+import { getShortSubjectName, renderStackedPeriodTime } from "@/utils/timetableDisplayUtils.js";
 import "@/components/pages/TimetablePage.css";
 import "../ParentDashboard.css";
 
@@ -261,14 +262,29 @@ export default function ParentTimetablePage() {
 
             {/* Timetable Table Grid */}
             <div className="ttm-grid-wrap">
-              <table className="ttm-grid">
+              <table
+                className="ttm-grid"
+                style={{
+                  minWidth: `${Math.max(1040, 110 + periodColumns.length * 125)}px`,
+                  tableLayout: "fixed",
+                  width: "100%",
+                }}
+              >
                 <thead>
                   <tr>
-                    <th>Day</th>
+                    <th style={{ width: "110px", minWidth: "110px", textAlign: "left" }}>Day</th>
                     {periodColumns.map((col) => (
-                      <th key={col.id}>
+                      <th
+                        key={col.id}
+                        style={{
+                          textAlign: "center",
+                          minWidth: "125px",
+                          width: "125px",
+                          padding: "8px 4px",
+                        }}
+                      >
                         {col.period}
-                        {col.time ? <small>{col.time}</small> : null}
+                        {col.time ? renderStackedPeriodTime(col.time) : null}
                       </th>
                     ))}
                   </tr>
@@ -328,7 +344,7 @@ export default function ParentTimetablePage() {
                                   onClick={(e) => handleSlotClick(e, slot, col, dayName)}
                                   title={`${slot.subject} • ${slot.faculty} (${slot.room})`}
                                 >
-                                  <b>{slot.subject}</b>
+                                  <b>{getShortSubjectName(slot.subject)}</b>
                                   <span>{slot.faculty}</span>
                                   <small>{slot.room}</small>
                                 </button>

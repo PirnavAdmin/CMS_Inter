@@ -222,67 +222,69 @@ const fetchAuthoritativeSectionStudents = async (filters = {}, campusId = null) 
 
   const addRecords = (records) => {
     (records || []).forEach((s) => {
-      const sId = normalizeId(s.studentId ?? s.id);
+      const sId = normalizeId(s.studentId ?? s.StudentId ?? s.id ?? s.Id);
       if (!sId) return;
-      if (s.isActive === false || String(s.status || "").toLowerCase() === "inactive") return;
+      if (s.isActive === false || s.IsActive === false || String(s.status || s.Status || "").toLowerCase() === "inactive") return;
+      const admNo = String(s.admissionNo ?? s.admissionNumber ?? s.AdmissionNo ?? s.AdmissionNumber ?? "").trim();
+      const admissionDate = s.admissionDate || s.AdmissionDate || s.dateOfAdmission || s.allocatedDate || null;
+
       if (!studentMap.has(sId)) {
         studentMap.set(sId, {
           studentId: sId,
-          admissionNo: s.admissionNo ?? s.admissionNumber ?? "",
-          rollNo: String(s.rollNumber ?? s.rollNo ?? s.roll ?? "").trim(),
-          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
+          admissionNo: admNo,
+          rollNo: String(s.rollNumber ?? s.rollNo ?? s.RollNo ?? s.RollNumber ?? s.roll ?? "").trim(),
+          studentName: s.studentName ?? s.StudentName ?? s.fullName ?? s.FullName ?? s.name ?? "Student",
           isActive: true,
-          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || s.createdAt || s.createdDate || s.admissionDate || null,
+          admissionDate: admissionDate ? String(admissionDate).slice(0, 10) : null,
+          allocatedDate: s.allocatedDate || s.allocationDate || s.assignedDate || admissionDate || null,
         });
       }
     });
   };
 
-  // Section Students API call matching Student Management (/api/v1/students)
+  // 1. First, call the dedicated authoritative section endpoint: /api/v1/students/section/{sectionId}
   try {
-    const fetchSize = 100;
-    for (let pageNumber = 1; ; pageNumber += 1) {
-      const params = {
-        boardId: filters.board ? Number(filters.board) : undefined,
-        academicYearId: filters.year ? Number(filters.year) : undefined,
-        ...(filters.level ? { academicLevelId: Number(filters.level) } : {}),
-        ...(filters.group ? { groupId: Number(filters.group) } : {}),
-        ...(filters.program ? { programId: Number(filters.program) } : {}),
-        sectionId: Number(sectionId) || sectionId,
-        campusId: campusId ? Number(campusId) : undefined,
-        pageNumber,
-        pageSize: fetchSize,
-      };
-      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
-        params,
-        skipGlobalLoader: true,
-      });
-      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
-      const batch = Array.isArray(payload)
-        ? payload
-        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
-      addRecords(batch);
-      const total = payload.totalCount ?? payload.TotalCount;
-      if (!batch.length || (total != null ? studentMap.size >= Number(total) : batch.length < fetchSize)) break;
-    }
+    const sectionEndpoint = apiEndpoints.students?.getBySection
+      ? apiEndpoints.students.getBySection(sectionId)
+      : `/api/v1/students/section/${sectionId}`;
+    const sectionRes = await apiClient.get(sectionEndpoint, {
+      params: campusId ? { campusId: Number(campusId) } : {},
+      skipGlobalLoader: true,
+    });
+    const sectionPayload = sectionRes.data?.data ?? sectionRes.data?.Data ?? sectionRes.data ?? [];
+    const sectionList = Array.isArray(sectionPayload)
+      ? sectionPayload
+      : (sectionPayload.items ?? sectionPayload.Items ?? sectionPayload.$values ?? []);
+    addRecords(sectionList);
   } catch (err) {
-    console.warn("Notice: could not query students endpoint:", err);
+    console.warn("Notice: could not query section endpoint:", err);
   }
 
-  // Resilient fallback: query students by sectionId if multi-param filter returned 0
-  if (studentMap.size === 0 && sectionId) {
+  // 2. Fallback to /api/v1/students if section endpoint returned 0 records
+  if (studentMap.size === 0) {
     try {
-      const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
-        params: { sectionId: Number(sectionId) || sectionId, pageSize: 100 },
-        skipGlobalLoader: true,
-      });
-      const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
-      const batch = Array.isArray(payload)
-        ? payload
-        : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
-      addRecords(batch);
+      const fetchSize = 100;
+      for (let pageNumber = 1; ; pageNumber += 1) {
+        const params = {
+          sectionId: Number(sectionId) || sectionId,
+          campusId: campusId ? Number(campusId) : undefined,
+          pageNumber,
+          pageSize: fetchSize,
+        };
+        const res = await apiClient.get(apiEndpoints.students?.list || "/api/v1/students", {
+          params,
+          skipGlobalLoader: true,
+        });
+        const payload = res.data?.data ?? res.data?.Data ?? res.data ?? {};
+        const batch = Array.isArray(payload)
+          ? payload
+          : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? payload.$values ?? [];
+        addRecords(batch);
+        const total = payload.totalCount ?? payload.TotalCount;
+        if (!batch.length || (total != null ? studentMap.size >= Number(total) : batch.length < fetchSize)) break;
+      }
     } catch (err) {
-      console.warn("Fallback student query failed:", err);
+      console.warn("Notice: could not query students endpoint:", err);
     }
   }
 
