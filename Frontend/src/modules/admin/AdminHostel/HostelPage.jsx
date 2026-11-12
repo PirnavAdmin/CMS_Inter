@@ -9725,7 +9725,7 @@ function StudentAttendanceModal({
         <div className="cms-student-att-filter-row">
           {activeMode === "daily" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Date:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Date:</label>
               <input
                 type="date"
                 value={selectedDate}
@@ -9745,7 +9745,7 @@ function StudentAttendanceModal({
               {/* Quick Roll Call Marker for this student on selectedDate if it's attendanceDate */}
               {selectedDate === attendanceDate && (
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-muted)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>
                     Mark for Today ({attendanceShift}):
                   </span>
                   <div className="cms-att-status-group" style={{ transform: "scale(0.9)", transformOrigin: "right center" }}>
@@ -9785,7 +9785,7 @@ function StudentAttendanceModal({
 
           {activeMode === "monthly" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Month:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Month:</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -9803,7 +9803,7 @@ function StudentAttendanceModal({
 
           {activeMode === "custom" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Date Range:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Date Range:</label>
               <input
                 type="date"
                 value={rangeStart}
@@ -13248,7 +13248,7 @@ function RoomModal({
                 }}
               >
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Floor Rooms Breakdown</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Floor Rooms Breakdown</span>
                   <strong style={{ fontSize: 12.5, color: "var(--cms-text)" }}>
                     <span style={{ color: "#2563eb" }}>❄️ {summaryStats.acRooms} AC</span>
                     {" / "}
@@ -13256,13 +13256,13 @@ function RoomModal({
                   </strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Total Bed Capacity</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Total Bed Capacity</span>
                   <strong style={{ fontSize: 13, color: "var(--cms-text)" }}>
                     {summaryStats.totalBeds} Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""}
                   </strong>
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--cms-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block", marginBottom: 3 }}>
                     Monthly Tariff
                   </label>
                   <input

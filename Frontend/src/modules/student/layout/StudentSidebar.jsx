@@ -41,7 +41,7 @@ export const studentMenuGroups = [
   ]],
 ];
 
-export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
+export default function StudentSidebar({ open, collapsed, mobile, onClose, onResizePointerDown, onResizePointerMove, onResizePointerUp, onResizePointerCancel }) {
   const { canView } = usePermissions();
   const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
 
@@ -92,6 +92,16 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
           );
         })}
       </nav>
+      {!mobile && !collapsed ? <div
+        className="sp-sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Student Portal sidebar"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={onResizePointerCancel}
+      /> : null}
     </aside>
   );
 }
