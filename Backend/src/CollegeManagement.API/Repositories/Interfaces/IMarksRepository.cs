@@ -43,5 +43,6 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> UpdateStudentMarksAsync(int subjectId, int sectionId, int examinationId, List<StudentMarkUpdateItemDto> updates, int userId);
         Task<IEnumerable<dynamic>> GetGroupSectionsAsync(int groupId);
         Task<IEnumerable<dynamic>> GetGroupSubjectsAsync(int groupId);
+        Task<(bool IsObjective, decimal MaxMarks, decimal InternalMax, decimal PracticalMax, decimal TheoryMax, decimal PassingMarks)> GetExamFormatAndComponentLimitsAsync(int examinationId, int subjectId, System.Threading.CancellationToken ct = default);
     }
 }

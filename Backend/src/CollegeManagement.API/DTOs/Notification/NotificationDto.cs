@@ -11,6 +11,12 @@ namespace CollegeManagement.API.DTOs.Notification
         public string Type { get; set; } = string.Empty;
         public int? ReferenceId { get; set; }
         public string? ActionUrl { get; set; }
+        public string? GroupKey { get; set; }
+        public int GroupCount { get; set; } = 1;
+        public bool IsRequestGroup { get; set; }
+        public bool IsGrouped => GroupCount > 1;
+        public System.Collections.Generic.List<int>? NotificationIds { get; set; }
+        public int? UnreadCount { get; set; }
         public bool IsRead { get; set; }
         public DateTime? ReadAt { get; set; }
         public DateTime CreatedAt { get; set; }

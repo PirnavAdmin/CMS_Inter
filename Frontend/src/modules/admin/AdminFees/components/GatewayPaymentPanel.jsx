@@ -43,6 +43,7 @@ export default function GatewayPaymentPanel({
   const proofValidationBusy = useRef(false);
   const selectedProof = useRef(null);
   const verificationRequest = useRef(null);
+  const verificationOrderId = useRef();
   const [draft, setDraft] = useState({
     utrNumber: "",
     bankName: "",
@@ -121,12 +122,16 @@ export default function GatewayPaymentPanel({
   const orderId = order?.orderId;
   const orderAmount = order?.amount;
   useEffect(() => {
-    if (!proofFile || !/^image\//.test(proofFile.type)) { setProofPreview(""); return; }
+    if (!proofFile) { setProofPreview(""); return; }
     const url = URL.createObjectURL(proofFile);
     setProofPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [proofFile]);
   useEffect(() => {
+    // Refreshing metadata for the same order must not discard form values or proof.
+    if (verificationOrderId.current === orderId) return;
+    verificationOrderId.current = orderId;
+    pendingSubmission.current = null;
     setLinkCopy({ busy: false, message: "", error: "" });
     setVerificationOpen(false);
     setVerificationErrors({});
@@ -385,7 +390,7 @@ export default function GatewayPaymentPanel({
   };
   const submitQrUtr = (event) => {
     event.preventDefault();
-    if (guard.current || submitted || uncertain || completed.current || proofValidationBusy.current) return;
+    if (guard.current || submitted || pendingSubmission.current || uncertain || completed.current || proofValidationBusy.current) return;
     let payload;
     try {
       if (!canReconcile) throw new Error("This QR order is no longer eligible for manual reconciliation.");
@@ -412,6 +417,8 @@ export default function GatewayPaymentPanel({
         if (failure.response?.status === 413) setVerificationErrors(current => ({ ...current, attachment: "The server rejected the upload size. Choose a payment proof of 5 MB or smaller." }));
         const fields = failure.response?.data?.errors;
         if (fields) setVerificationErrors(current => ({ ...current, attachment: fields.attachment?.join?.(" ") || fields.Attachment?.join?.(" ") || current.attachment }));
+        if (/^(?:EMPTY_FILE|FILE_|INVALID_FILE|MULTIPLE_FILES)/.test(failure.response?.data?.errorCode || ""))
+          setVerificationErrors(current => ({ ...current, attachment: getApiErrorMessage(failure) }));
         if (/already.*(?:submitted|settled)|duplicate/i.test(getApiErrorMessage(failure))) submittedReferences.current.add(payload.utrNumber);
         throw failure;
       }
@@ -422,80 +429,6 @@ export default function GatewayPaymentPanel({
       setNotice("Payment details submitted successfully. Your payment is pending verification.");
       if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(UTR_SUBMITTED_EVENT));
       onPending?.(pendingSubmission.current);
-    });
-  };
-  const submitInlineDirectUtr = (approveImmediately) => {
-    if (!canReconcile || guard.current || submitted || uncertain || completed.current) return;
-    const cleanUtr = draft.utrNumber.trim();
-    if (!order?.orderId) return;
-    if (!/^[A-Za-z0-9]{6,100}$/.test(cleanUtr)) {
-      setError("Enter a valid UPI Ref / UTR with 6–100 letters or digits.");
-      return;
-    }
-    let payload;
-    try {
-      payload = collectionPayload(account, target, selectedIds, amount);
-    } catch (failure) {
-      setError(failure.message);
-      return;
-    }
-    run(async (signal) => {
-      const submittedRes = await feePaymentGatewayApi.submitUtr(
-        {
-          studentId: payload.studentId,
-          studentFeeId: payload.studentFeeId,
-          feeInstallmentIds: payload.feeInstallmentIds,
-          amount: Number(order.amount),
-          orderId: order.orderId,
-          utrNumber: cleanUtr,
-          bankName: draft.bankName.trim() || null,
-          paymentDate: todayISO(),
-          remarks: draft.remarks.trim() || `Direct UPI QR (${order.orderId})`,
-        },
-        signal,
-      );
-      if (signal.aborted) return;
-      submittedReferences.current.add(cleanUtr);
-      pendingSubmission.current = submittedRes;
-      setSubmitted(true);
-      if (typeof window.dispatchEvent === "function") window.dispatchEvent(new Event(UTR_SUBMITTED_EVENT));
-      if (!approveImmediately) {
-        setSubmitted(true);
-        setNotice("UTR submitted for queue verification. Fees will be credited after approval.");
-        onPending?.(pendingSubmission.current);
-        return;
-      }
-      const txnId = Number(submittedRes.transactionId);
-      if (!Number.isSafeInteger(txnId) || txnId <= 0) {
-        setSubmitted(true);
-        setNotice("UTR submitted for verification. Approve it in the Pending UTR Queue to credit fees.");
-        onPending?.(pendingSubmission.current);
-        return;
-      }
-      let approved;
-      try {
-        approved = await feePaymentGatewayApi.approveUtr(
-          { transactionId: txnId, action: "Approve" },
-          signal,
-        );
-      } catch (failure) {
-        if (signal.aborted || !alive.current) return;
-        setNotice("UTR was submitted. Check the Pending UTR Queue and payment history before attempting approval again.");
-        onPending?.(pendingSubmission.current);
-        throw failure;
-      }
-      if (signal.aborted || completed.current) return;
-      if (approved.success === true && approved.receiptNumber && Number.isSafeInteger(Number(approved.feePaymentId)) && Number(approved.feePaymentId) > 0 && Math.abs(Number(approved.amount) - Number(order.amount)) < 0.005) {
-        complete({
-          ...approved,
-          amount: approved.amount ?? order.amount,
-          transactionId: cleanUtr,
-        });
-      } else {
-        setSubmitted(true);
-        setNotice("UTR submitted. Refresh Fee Management or check Pending UTR Queue.");
-        onPending?.(pendingSubmission.current);
-      }
     });
   };
   const copyUri = async () => {
@@ -609,8 +542,9 @@ export default function GatewayPaymentPanel({
                   aria-invalid={Boolean(verificationErrors.attachment)} aria-describedby={`qr-verification-proof-help${verificationErrors.attachment ? " qr-verification-proof-error" : ""}`} />
                 <p id="qr-verification-proof-help" className="cms-fee-note">JPG, JPEG, PNG or PDF, up to 5 MB. Proof is submitted for authorized verification; it does not confirm payment.</p>
                 {proofValidating ? <p role="status">Checking payment proof...</p> : null}
-                {proofFile ? <div className="cms-fee-proof-selection"><span>{proofFile.name}</span><button type="button" className="cms-btn cms-btn-ghost" onClick={removeProof}>Remove</button></div> : null}
-                {proofFile && proofPreview ? <img className="cms-fee-proof-preview" src={proofPreview} alt="Selected payment proof preview" /> : null}
+                {proofFile ? <div className="cms-fee-proof-selection"><span>{proofFile.name} ({(proofFile.size / 1024).toFixed(1)} KB)</span><button type="button" className="cms-btn cms-btn-ghost" onClick={removeProof}>Remove</button></div> : null}
+                {proofFile && proofPreview && proofFile.type.startsWith("image/") ? <img className="cms-fee-proof-preview" src={proofPreview} alt="Selected payment proof preview" /> : null}
+                {proofFile?.type === "application/pdf" && proofPreview ? <a className="cms-btn cms-btn-ghost" href={proofPreview} target="_blank" rel="noopener noreferrer">Open Selected PDF</a> : null}
                 {verificationErrors.attachment ? <span id="qr-verification-proof-error" className="cms-error" role="alert">{verificationErrors.attachment}</span> : null}
               </div>
               <div className="cms-field full">
@@ -701,21 +635,8 @@ export default function GatewayPaymentPanel({
                 <p className="cms-fee-note" role="note">
                   Direct Bank VPA Mode: Razorpay keys are not configured. Auto-settlement webhook is
                   unavailable. After paying, click Done to submit the transaction reference for
-                  verification, or use the inline UTR controls below.
+                  verification.
                 </p>
-              )}
-              {canReconcile && (
-                <fieldset className="cms-fee-gateway-fields" disabled={busy || uncertain || !authorize()}>
-                  <div className="cms-field">
-                    <label htmlFor="gateway-inline-utr">Paid UPI Ref / UTR Number <span className="req" aria-hidden="true">*</span></label>
-                    <input id="gateway-inline-utr" required maxLength={100} value={draft.utrNumber}
-                      onChange={event => setDraft(current => ({ ...current, utrNumber: event.target.value }))} />
-                  </div>
-                  <div className="cms-form-actions">
-                    <button type="button" className="cms-btn cms-btn-ghost" onClick={() => submitInlineDirectUtr(false)}>Submit UTR for Verification</button>
-                    <button type="button" className="cms-btn cms-btn-primary" onClick={() => submitInlineDirectUtr(true)}>Verify &amp; Credit Payment Now</button>
-                  </div>
-                </fieldset>
               )}
               {mode === "UPI_QR" && order.upiUri && !order.monitorOnly && !submitted && polling.status === "PENDING" && (
                 <>

@@ -109,6 +109,8 @@ BEGIN
         e.AssessmentTypeId,
         COALESCE(at.AssessmentTypeName, '') AS ExamType,
         COALESCE(e.ExamPattern, 'REGULAR_ACADEMIC') AS ExamPattern,
+        COALESCE((SELECT esm.ScheduleMode FROM ExamSchedules esm WHERE esm.ExamId = e.ExamId AND esm.IsActive = 1 ORDER BY (UPPER(COALESCE(esm.ExamMode, '')) = 'OBJECTIVE') DESC, esm.ScheduleId DESC LIMIT 1), '') AS ScheduleMode,
+        COALESCE((SELECT esm.ExamMode FROM ExamSchedules esm WHERE esm.ExamId = e.ExamId AND esm.IsActive = 1 ORDER BY (UPPER(COALESCE(esm.ExamMode, '')) = 'OBJECTIVE') DESC, esm.ScheduleId DESC LIMIT 1), '') AS ScheduleExamMode,
         e.TotalMarks,
         e.PassPercentage,
         e.StartDate,

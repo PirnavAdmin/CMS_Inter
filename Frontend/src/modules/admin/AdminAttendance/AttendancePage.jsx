@@ -99,29 +99,29 @@ const staffType = (v) => {
   return /non/i.test(String(v)) ? 2 : 1;
 };
 const ATTENDANCE_PAGE_SIZE = 5;
+const ATTENDANCE_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false, error }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select>{error && <small className="attendance-import-error" role="alert">{error}</small>}</Field>; }
 
-function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
-  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
+function AttendancePagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, unit = "records" }) {
+  const [customMode, setCustomMode] = useState(!ATTENDANCE_PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
-  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
-
-  return (
-    <nav className="att-pagination" aria-label="Attendance pages">
-      <span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span>
-      <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
-          Previous
-        </button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
-          Next
-        </button>
-      </div>
-    </nav>
-  );
+  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav className="att-pagination" aria-label={`Attendance ${unit} pagination`} style={navStyle}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
+      <select aria-label="Rows per page" value={customMode || !ATTENDANCE_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>{ATTENDANCE_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}<option value="custom">Custom</option></select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={currentPage <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: currentPage <= 1 ? 0.48 : 1 }} onClick={() => onPageChange(currentPage - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{currentPage} / {totalPages}</span>
+    <button type="button" disabled={currentPage >= totalPages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: currentPage >= totalPages ? 0.48 : 1 }} onClick={() => onPageChange(currentPage + 1)}>Next</button>
+  </nav>;
 }
 
 export default function AttendancePage({ area: areaProp } = {}) {
@@ -559,6 +559,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId, editLoadAttempt]);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
+ const [pageSize, setPageSize] = useState(ATTENDANCE_PAGE_SIZE);
+ const changePageSize = (size) => { setPageSize(size); setPage(1); };
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [holidayCheckedKey, setHolidayCheckedKey] = useState("");
@@ -913,9 +915,9 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const defaulterRows = f.view === "Defaulters"
    ? visible.filter((row) => attendancePercentage(row) < normalizedThreshold)
    : visible;
- const totalPages = Math.max(1, Math.ceil(defaulterRows.length / ATTENDANCE_PAGE_SIZE));
+ const totalPages = Math.max(1, Math.ceil(defaulterRows.length / pageSize));
  const currentPage = Math.min(page, totalPages);
- const pagedRows = defaulterRows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+ const pagedRows = defaulterRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
  useEffect(() => {
    if (skipInitialPageReset.current) {
@@ -988,9 +990,9 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
        <>
      {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
-     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
+     <Monthly data={report} staff={staff} monthValue={f.date} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
      ) : !staff && f.view === "Defaulters" ? (
-       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
+       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
      ) : (
        <>
          {activeHoliday && (
@@ -1049,7 +1051,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                });
              }}
            />
-           <AttendancePagination page={currentPage} totalRows={visible.length} onPageChange={setPage} />
+           <AttendancePagination page={currentPage} totalRows={visible.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} />
          </section>
        </>
      ))}
@@ -1435,7 +1437,7 @@ function MonthlyPill({ value, staff }) {
   return <span className={`att-month-status ${type}`}>{normalized}</span>;
 }
 
-function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onSearchChange = () => {}, admissionDates = new Map() }) {
+function Monthly({ data, staff, monthValue, page, pageSize, onPageChange, onPageSizeChange, search = "", onSearchChange = () => {}, admissionDates = new Map() }) {
   const headers = data?.dayHeaders ?? data?.headers ?? [], rawRows = data?.studentRows ?? data?.staffRows ?? data?.rows ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const rows = rawRows.filter((r) => {
@@ -1445,9 +1447,9 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
       .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
   });
   if (!staff) rows.sort((a, b) => compareAdmissionDates(a, b, admissionDates));
-  const totalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pagedRows = rows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+  const pagedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const monthlyLegend = (<div className="att-month-legend">
           <span><i className="att-month-p">P</i> Present</span>
           <span><i className="att-month-a">A</i> Absent</span>
@@ -1508,7 +1510,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           </tbody>
         </table>
       </div>
-      <AttendancePagination page={currentPage} totalRows={rows.length} onPageChange={onPageChange} />
+      <AttendancePagination page={currentPage} totalRows={rows.length} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
     </section>
   );
 }
@@ -1543,7 +1545,7 @@ function MonthRow({ r, headers, staff }) {
   );
 }
 
-function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThresholdChange }) {
+function Defaulters({ rows, totalRows, page, pageSize, onPageChange, onPageSizeChange, threshold, onThresholdChange }) {
   const normalizedThreshold = threshold === "" ? 0 : Number(threshold);
   return (
     <>
@@ -1606,7 +1608,7 @@ function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThreshol
           </tbody>
         </table>
       </div>
-      <AttendancePagination page={page} totalRows={totalRows} onPageChange={onPageChange} unit="students" />
+      <AttendancePagination page={page} totalRows={totalRows} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} unit="students" />
     </section>
     </>
   );

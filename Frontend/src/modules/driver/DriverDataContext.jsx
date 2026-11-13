@@ -87,10 +87,18 @@ export function DriverDataProvider({ children }) {
   useEffect(() => {
     mounted.current = true;
     refresh();
-    const refreshVisible = () => { if (document.visibilityState === "visible") refresh(); };
-    const timer = setInterval(refreshVisible, 30000);
-    window.addEventListener("focus", refreshVisible);
-    return () => { mounted.current = false; clearInterval(timer); window.removeEventListener("focus", refreshVisible); };
+    const refreshIfDisconnected = () => {
+      if (document.visibilityState === "visible" && notificationHubService.getStatus() !== "Connected") {
+        refresh();
+      }
+    };
+    const timer = setInterval(refreshIfDisconnected, 60000);
+    window.addEventListener("cms-notifications-resync", refresh);
+    return () => {
+      mounted.current = false;
+      clearInterval(timer);
+      window.removeEventListener("cms-notifications-resync", refresh);
+    };
   }, [refresh]);
 
   useEffect(() => {

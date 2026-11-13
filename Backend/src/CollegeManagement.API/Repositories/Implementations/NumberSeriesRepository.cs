@@ -112,7 +112,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_SeriesCode", seriesCode.Trim());
             parameters.Add("p_CampusId", campusId);
             parameters.Add("p_BaseSeriesCode", string.IsNullOrWhiteSpace(baseSeriesCode) ? null : baseSeriesCode.Trim());
-            parameters.Add("p_BaseCode", string.IsNullOrWhiteSpace(baseSeriesCode) ? null : baseSeriesCode.Trim());
 
             return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                 "sp_GenerateNextNumberSeries",
@@ -144,14 +143,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_BaseSeriesCode", baseSeriesCode.Trim());
-            parameters.Add("p_BaseCode", baseSeriesCode.Trim());
             parameters.Add("p_CampusId", campusId);
-            parameters.Add("p_Board", board);
-            parameters.Add("p_AcademicYear", academicYear);
 
             var maxSeq = await conn.ExecuteScalarAsync<int?>(
                 "sp_GetMaxSequenceForBaseSeries",
                 parameters,
+                transaction: _context.Database.CurrentTransaction?.GetDbTransaction(),
                 commandType: CommandType.StoredProcedure);
 
             return maxSeq ?? 0;

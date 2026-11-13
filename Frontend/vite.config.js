@@ -63,7 +63,6 @@ function examCellShieldPlugin(apiBaseUrl) {
         const isResultsAnalytics = urlStr.startsWith("/api/v1/results/analytics");
         const isEvaluationStudents = urlStr.startsWith("/api/v1/evaluations/") && urlStr.includes("/students");
         const isStudentAnalysisDetails = urlStr.startsWith("/api/v1/student-analysis/") && urlStr.includes("/details");
-        const isHubNegotiate = urlStr.startsWith("/hubs/") && urlStr.includes("/negotiate");
         const isUploads = urlStr.startsWith("/uploads/");
         const isFineRules = urlStr.startsWith("/api/v1/fee-setup/fine-rules");
         const isCertActiveTemplates = urlStr.startsWith("/api/v1/certificates/active-templates");
@@ -90,7 +89,7 @@ function examCellShieldPlugin(apiBaseUrl) {
           !isResultsAnalytics &&
           !isEvaluationStudents &&
           !isStudentAnalysisDetails &&
-          !isHubNegotiate &&
+          // Hub traffic must proxy directly instead of spoofing 200 empty transports
           !isUploads &&
           !isFineRules &&
           !isCertActiveTemplates &&
@@ -260,7 +259,7 @@ function examCellShieldPlugin(apiBaseUrl) {
             "Access-Control-Allow-Origin": "*",
           });
 
-          if (isHubNegotiate) {
+          if (false) { // dead negotiate block removed
             return res.end(JSON.stringify({
               negotiateVersion: 1,
               connectionId: "offline-hub-conn",

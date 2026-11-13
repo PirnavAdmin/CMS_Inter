@@ -32,13 +32,14 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Get notifications for the authenticated user (supports pagination & unread filter).
+        /// Get notifications for the authenticated user (supports pagination, unread filter, or latest-10 history mode).
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetNotifications(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
-            [FromQuery] bool? unreadOnly = null)
+            [FromQuery] bool? unreadOnly = null,
+            [FromQuery] string? section = null)
         {
             int? userId = GetCurrentUserId();
             if (!userId.HasValue)
@@ -48,6 +49,22 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                if (string.Equals(section, "history", StringComparison.OrdinalIgnoreCase))
+                {
+                    int limit = Math.Clamp(pageSize <= 0 ? 10 : pageSize, 1, 10);
+                    var (historyItems, historyUnreadCount) = await _notificationService.GetUserNotificationHistoryAsync(userId.Value, limit);
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Latest notification history retrieved successfully.",
+                        data = historyItems,
+                        total = historyItems.Count,
+                        unreadCount = historyUnreadCount,
+                        page = 1,
+                        pageSize = limit
+                    });
+                }
+
                 var (items, totalCount, unreadCount) = await _notificationService.GetUserNotificationsAsync(userId.Value, page, pageSize, unreadOnly);
                 return Ok(new
                 {
@@ -66,6 +83,43 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     success = false,
                     message = "An error occurred while retrieving notifications.",
+                    details = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get only the latest 10 notifications sorted newest-first for the History section.
+        /// </summary>
+        [HttpGet("history")]
+        public async Task<IActionResult> GetNotificationHistory([FromQuery] int limit = 10)
+        {
+            int? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "User identity not found in token." });
+            }
+
+            try
+            {
+                int effectiveLimit = Math.Clamp(limit, 1, 10);
+                var (items, unreadCount) = await _notificationService.GetUserNotificationHistoryAsync(userId.Value, effectiveLimit);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Latest notification history retrieved successfully.",
+                    data = items,
+                    total = items.Count,
+                    unreadCount = unreadCount,
+                    limit = effectiveLimit
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An error occurred while retrieving notification history.",
                     details = ex.Message
                 });
             }
@@ -130,6 +184,48 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     success = false,
                     message = "An error occurred while updating notification.",
+                    details = ex.Message
+                });
+            }
+        }
+
+        public class MarkGroupReadRequestDto
+        {
+            public string GroupKey { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Mark all active unread notifications belonging to a screen+action group as read.
+        /// </summary>
+        [HttpPut("group/read")]
+        public async Task<IActionResult> MarkGroupAsRead([FromBody] MarkGroupReadRequestDto dto)
+        {
+            int? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "User identity not found in token." });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto?.GroupKey))
+            {
+                return BadRequest(new { success = false, message = "GroupKey is required." });
+            }
+
+            try
+            {
+                bool success = await _notificationService.MarkGroupAsReadAsync(dto.GroupKey.Trim(), userId.Value);
+                return Ok(new
+                {
+                    success = success,
+                    message = success ? "Notification group marked as read." : "No unread notifications found in group."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An error occurred while updating notification group.",
                     details = ex.Message
                 });
             }

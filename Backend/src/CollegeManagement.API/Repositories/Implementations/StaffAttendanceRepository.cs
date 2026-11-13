@@ -487,6 +487,237 @@ LIMIT 1;";
             public DateTime? ReviewedAt { get; set; }
         }
 
+        private sealed class RegularizationEligibilityResult
+        {
+            public bool Eligible { get; init; }
+            public string? DefaultRequestType { get; init; }
+            public string? IneligibleReason { get; init; }
+        }
+
+        private static string NormalizeRegularizationType(string? rawType)
+        {
+            var t = (rawType ?? string.Empty).Trim();
+            if (t.Contains("missed", StringComparison.OrdinalIgnoreCase)) return "Missed Checkout";
+            if (t.Contains("late", StringComparison.OrdinalIgnoreCase)) return "Late Attendance";
+            if (t.Contains("absent", StringComparison.OrdinalIgnoreCase) || t.Contains("missing", StringComparison.OrdinalIgnoreCase)) return "Absent";
+            if (string.IsNullOrEmpty(t)) return "Other";
+            return t;
+        }
+
+        private static DateTime? AsUtcKind(DateTime? dt) =>
+            dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
+
+        /// <summary>
+        /// Canonical backend + frontend shared eligibility rule for staff attendance regularization.
+        /// Regularization is strictly restricted to the current attendance day within the permitted business window.
+        /// Previous days, future dates, completed Present days, holidays, weekly offs, and approved leaves are rejected.
+        /// </summary>
+        private static RegularizationEligibilityResult EvaluateRegularizationEligibility(
+            DateTime recordDate,
+            DateTime businessToday,
+            TimeSpan nowTime,
+            bool isSunday,
+            bool isHoliday,
+            bool isLeave,
+            TodayAttendanceRow? att,
+            StaffTimingRow timing,
+            IReadOnlyCollection<RegularizationCheckRow> regsForDay,
+            string? explicitRequestType = null)
+        {
+            if (recordDate.Date > businessToday.Date)
+            {
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "Attendance regularization cannot be requested for a future date."
+                };
+            }
+
+            if (recordDate.Date < businessToday.Date)
+            {
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "Regularization is only available for the current attendance day. Previous attendance days can no longer be regularized."
+                };
+            }
+
+            if (isSunday || isHoliday || att?.Status == 5)
+            {
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "Holidays and weekly off days cannot be regularized."
+                };
+            }
+
+            if (isLeave || att?.Status == 6)
+            {
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "Approved leave days cannot be regularized."
+                };
+            }
+
+            var shiftEnd = timing.ParsedWorkEndTime;
+            var lateThreshold = timing.ParsedLateThreshold;
+            var checkoutCutoff = shiftEnd.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes));
+
+            bool hasApprovedLateReg = regsForDay.Any(r =>
+                string.Equals(r.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(NormalizeRegularizationType(r.RequestType), "Missed Checkout", StringComparison.OrdinalIgnoreCase));
+            bool hasApprovedMissedReg = (att?.IsMissedCheckoutResolved ?? false) || regsForDay.Any(r =>
+                string.Equals(r.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(NormalizeRegularizationType(r.RequestType), "Missed Checkout", StringComparison.OrdinalIgnoreCase));
+
+            var inT = att?.ParsedInTime;
+            var outT = att?.ParsedOutTime;
+
+            bool isLate = false;
+            bool isMissedCheckout = false;
+            bool isAbsent = false;
+            bool isHalfDay = false;
+
+            if (att != null && inT.HasValue)
+            {
+                isLate = !hasApprovedLateReg
+                    && att.Status != 2 && att.Status != 5 && att.Status != 6 && att.Status != 4
+                    && (att.Status == 3 || (att.Status != 1 && inT.Value > lateThreshold));
+                isMissedCheckout = !outT.HasValue
+                    && !hasApprovedMissedReg
+                    && att.Status != 2 && att.Status != 5 && att.Status != 6
+                    && nowTime > checkoutCutoff;
+                isAbsent = att.Status == 2;
+                isHalfDay = att.Status == 4;
+            }
+            else if (att != null)
+            {
+                isAbsent = att.Status == 2;
+                isHalfDay = att.Status == 4;
+                isLate = !hasApprovedLateReg && att.Status == 3;
+            }
+            else
+            {
+                if (nowTime > shiftEnd)
+                {
+                    isAbsent = true;
+                }
+            }
+
+            bool HasExistingForType(string reqType)
+            {
+                var normTarget = NormalizeRegularizationType(reqType);
+                return regsForDay.Any(r =>
+                    string.Equals(NormalizeRegularizationType(r.RequestType), normTarget, StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(r.Status, "Pending", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(r.Status, "Approved", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(r.Status, "Rejected", StringComparison.OrdinalIgnoreCase)));
+            }
+
+            if (string.IsNullOrWhiteSpace(explicitRequestType))
+            {
+                if (isMissedCheckout && !HasExistingForType("Missed Checkout"))
+                {
+                    return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Missed Checkout" };
+                }
+                if (isLate && !HasExistingForType("Late Attendance"))
+                {
+                    return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Late Attendance" };
+                }
+                if ((isAbsent || isHalfDay) && !HasExistingForType("Absent"))
+                {
+                    return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Absent" };
+                }
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "This attendance record is not eligible for regularization."
+                };
+            }
+
+            var resolvedType = NormalizeRegularizationType(explicitRequestType);
+            if (HasExistingForType(resolvedType))
+            {
+                var existing = regsForDay
+                    .OrderByDescending(r => r.RegularizationId)
+                    .First(r => string.Equals(NormalizeRegularizationType(r.RequestType), resolvedType, StringComparison.OrdinalIgnoreCase));
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = $"A {existing.Status.ToLowerInvariant()} {resolvedType} regularization request already exists for {recordDate:dd MMM yyyy}."
+                };
+            }
+
+            if (resolvedType == "Missed Checkout")
+            {
+                if (att == null || !inT.HasValue)
+                {
+                    return new RegularizationEligibilityResult
+                    {
+                        Eligible = false,
+                        IneligibleReason = "Missed Checkout regularization requires an existing check-in attendance record for today."
+                    };
+                }
+                if (outT.HasValue || hasApprovedMissedReg)
+                {
+                    return new RegularizationEligibilityResult
+                    {
+                        Eligible = false,
+                        IneligibleReason = "Attendance checkout is already recorded or regularized for today."
+                    };
+                }
+                if (nowTime <= checkoutCutoff)
+                {
+                    return new RegularizationEligibilityResult
+                    {
+                        Eligible = false,
+                        IneligibleReason = $"Normal check-out window is open until {DateTime.Today.Add(checkoutCutoff):hh:mm tt}. Please use Check Out."
+                    };
+                }
+                return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Missed Checkout" };
+            }
+
+            if (resolvedType == "Late Attendance")
+            {
+                if (att == null || !isLate)
+                {
+                    return new RegularizationEligibilityResult
+                    {
+                        Eligible = false,
+                        IneligibleReason = "Late Attendance regularization is only permitted when today's attendance is marked Late."
+                    };
+                }
+                return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Late Attendance" };
+            }
+
+            if (resolvedType == "Absent")
+            {
+                if (!(isAbsent || isHalfDay))
+                {
+                    return new RegularizationEligibilityResult
+                    {
+                        Eligible = false,
+                        IneligibleReason = att == null && nowTime <= shiftEnd
+                            ? "Shift is still active; please Check In instead of submitting an Absent regularization."
+                            : "Completed or on-time attendance records cannot be regularized as Absent."
+                    };
+                }
+                return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = "Absent" };
+            }
+
+            // "Other": allow only when an anomaly exists on today's attendance and is not already complete
+            if (!isLate && !isMissedCheckout && !isAbsent && !isHalfDay)
+            {
+                return new RegularizationEligibilityResult
+                {
+                    Eligible = false,
+                    IneligibleReason = "Completed attendance records cannot be regularized."
+                };
+            }
+            return new RegularizationEligibilityResult { Eligible = true, DefaultRequestType = resolvedType };
+        }
+
         public async Task<MyAttendanceTodayResponse> GetMyTodayStatusAsync(int facultyId, DateTime date)
         {
             var targetDate = date.Date;
@@ -593,14 +824,23 @@ LIMIT 1;";
             {
                 if (holidayCheck?.IsHoliday > 0) todayStatus = "Holiday";
                 else if (leaveCheck?.IsLeave > 0) todayStatus = "Leave";
-                else todayStatus = "Absent";
+                else todayStatus = DateTime.Now.TimeOfDay > shiftEnd ? "Absent" : "Not Punched In";
             }
 
-            bool hasActiveReg = string.Equals(regStatus, "Pending", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(regStatus, "Approved", StringComparison.OrdinalIgnoreCase);
-
-            bool canRegularize = !hasActiveReg
-                && (isLate || isMissedCheckout || todayStatus == "Late" || todayStatus == "Absent" || todayStatus == "Half Day");
+            var todayRegs = regularization != null
+                ? new List<RegularizationCheckRow> { regularization }
+                : new List<RegularizationCheckRow>();
+            var eligibilityToday = EvaluateRegularizationEligibility(
+                targetDate,
+                DateTime.Today,
+                DateTime.Now.TimeOfDay,
+                targetDate.DayOfWeek == DayOfWeek.Sunday,
+                (holidayCheck?.IsHoliday ?? 0) > 0,
+                (leaveCheck?.IsLeave ?? 0) > 0,
+                attendance,
+                timing,
+                todayRegs);
+            bool canRegularize = eligibilityToday.Eligible;
 
             bool markedByAdmin = false;
             if (attendance != null && !inTime.HasValue)
@@ -645,6 +885,7 @@ WHERE sa.StaffAttendanceId = @AttId LIMIT 1;";
                 RegularizationType = regularization?.RequestType,
                 RegularizationReason = regularization?.Reason,
                 RegularizationAdminRemarks = regularization?.AdminRemarks,
+                ReviewedAt = AsUtcKind(regularization?.ReviewedAt),
                 MarkedByAdmin = markedByAdmin,
                 MarkedBy = markedByAdmin ? "Admin" : (attendance != null ? "Self" : null)
             };
@@ -671,7 +912,7 @@ LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1
                                      AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
                                      AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
 WHERE s.Id = @FacultyId AND s.IsDeleted = 0
-ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC, tc.Id DESC
 LIMIT 1;";
             var timingRowIn = await conn.QueryFirstOrDefaultAsync<dynamic>(timingSqlIn, new { FacultyId = facultyId });
             var startTs = TimeSpan.TryParse((string?)timingRowIn?.WorkStartTime, out var sTs) ? sTs : new TimeSpan(9, 0, 0);
@@ -890,7 +1131,7 @@ LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1
                                      AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(s.StaffType) LIKE '%non%', 2, 1))
                                      AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
 WHERE s.Id = @FacultyId AND s.IsDeleted = 0
-ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC, tc.Id DESC
 LIMIT 1;
 
 SELECT 
@@ -1115,12 +1356,6 @@ ORDER BY RegularizationId ASC;
                     if (isLate) lateCount++;
                     if (isMissedCheckout) missedCheckoutCount++;
 
-                    bool hasBlockingReg = string.Equals(reg?.Status, "Pending", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(reg?.Status, "Approved", StringComparison.OrdinalIgnoreCase);
-
-                    canRegularize = !hasBlockingReg
-                                 && (isLate || isMissedCheckout || status == "Absent" || status == "Half Day")
-                                 && d.Date <= now.Date;
                 }
                 else
                 {
@@ -1137,9 +1372,6 @@ ORDER BY RegularizationId ASC;
                     {
                         status = "Absent";
                         absentCount++;
-                        bool hasBlockingReg = string.Equals(reg?.Status, "Pending", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(reg?.Status, "Approved", StringComparison.OrdinalIgnoreCase);
-                        canRegularize = !hasBlockingReg;
                     }
                     else if (d.Date == now.Date)
                     {
@@ -1148,9 +1380,6 @@ ORDER BY RegularizationId ASC;
                         {
                             status = "Absent";
                             absentCount++;
-                            bool hasBlockingReg = string.Equals(reg?.Status, "Pending", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(reg?.Status, "Approved", StringComparison.OrdinalIgnoreCase);
-                            canRegularize = !hasBlockingReg;
                         }
                         else
                         {
@@ -1162,6 +1391,18 @@ ORDER BY RegularizationId ASC;
                         status = "--";
                     }
                 }
+
+                var rowEligibility = EvaluateRegularizationEligibility(
+                    d.Date,
+                    now.Date,
+                    DateTime.Now.TimeOfDay,
+                    isSunday,
+                    isHoliday,
+                    isLeave,
+                    att,
+                    timing,
+                    regsForDay ?? new List<RegularizationCheckRow>());
+                canRegularize = rowEligibility.Eligible;
 
                 logs.Add(new MyAttendanceLogItemDto
                 {
@@ -1186,7 +1427,7 @@ ORDER BY RegularizationId ASC;
                     RegularizationType = reg?.RequestType,
                     RegularizationReason = reg?.Reason,
                     RegularizationAdminRemarks = reg?.AdminRemarks,
-                    ReviewedAt = reg?.ReviewedAt,
+                    ReviewedAt = AsUtcKind(reg?.ReviewedAt),
                     HolidayName = holidayName,
                     MarkedByAdmin = markedByAdmin,
                     MarkedBy = markedBy
@@ -1277,10 +1518,23 @@ ORDER BY RegularizationId ASC;
                 throw new InvalidOperationException("Please provide a valid reason (at least 5 characters) for attendance regularization.");
             }
 
-            var targetDate = request.AttendanceDate.Date;
-            if (targetDate > DateTime.Today)
+            var targetDate = request.AttendanceDate.Kind == DateTimeKind.Utc
+                ? request.AttendanceDate.ToLocalTime().Date
+                : request.AttendanceDate.Date;
+            var businessToday = DateTime.Today;
+            var nowTime = DateTime.Now.TimeOfDay;
+
+            if (targetDate > businessToday)
             {
                 throw new InvalidOperationException("Attendance regularization cannot be requested for a future date.");
+            }
+            if (targetDate < businessToday)
+            {
+                throw new InvalidOperationException("Regularization is only available for the current attendance day. Previous attendance days can no longer be regularized.");
+            }
+            if (targetDate.DayOfWeek == DayOfWeek.Sunday)
+            {
+                throw new InvalidOperationException("Holidays and weekly off days cannot be regularized.");
             }
 
             TimeSpan? requestedIn = null;
@@ -1300,20 +1554,38 @@ ORDER BY RegularizationId ASC;
 
             try
             {
-                const string staffSql = "SELECT CampusId FROM `Staff` WHERE Id = @FacultyId AND IsDeleted = 0 LIMIT 1;";
-                int? staffCampusId = await conn.ExecuteScalarAsync<int?>(staffSql, new { FacultyId = facultyId }, tx);
+                const string timingSql = @"
+SELECT
+    s.Id AS FacultyId,
+    COALESCE(s.CampusId, 1) AS CampusId,
+    COALESCE(s.DepartmentId, 0) AS DepartmentId,
+    COALESCE(tc.WorkStartTime, '09:00:00') AS WorkStartTime,
+    COALESCE(tc.WorkEndTime, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')) AS WorkEndTime,
+    COALESCE(tc.LateThreshold, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '08:45:00', '09:15:00')) AS LateThreshold,
+    COALESCE(tc.EarlyCheckoutThreshold, IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', '17:30:00', '15:20:00')) AS EarlyCheckoutThreshold,
+    COALESCE(tc.GracePeriodMinutes, 15) AS GracePeriodMinutes
+FROM `Staff` s
+LEFT JOIN `AttendanceTimingConfigs` tc ON tc.IsActive = 1
+    AND (tc.StaffType IS NULL OR tc.StaffType = IF(LOWER(COALESCE(s.StaffType, 'Teaching')) LIKE '%non%', 2, 1))
+    AND (tc.DepartmentId IS NULL OR tc.DepartmentId = s.DepartmentId)
+WHERE s.Id = @FacultyId AND s.IsDeleted = 0
+ORDER BY (tc.DepartmentId IS NOT NULL) DESC, (tc.StaffType IS NOT NULL) DESC, tc.Id DESC
+LIMIT 1;";
+                var timing = await conn.QueryFirstOrDefaultAsync<StaffTimingRow>(timingSql, new { FacultyId = facultyId }, tx)
+                    ?? throw new InvalidOperationException($"Staff profile or attendance timing configuration was not found for staff ID {facultyId}.");
+                int? staffCampusId = timing.CampusId > 0 ? timing.CampusId : null;
 
                 const string duplicateSql = @"
-SELECT RegularizationId, Status, COALESCE(RequestType, 'Late Attendance') AS RequestType
+SELECT RegularizationId, AttendanceDate, COALESCE(RequestType, 'Late Attendance') AS RequestType, Status, Reason, AdminRemarks, RequestedInTime, RequestedOutTime, CreatedAt, ReviewedAt
 FROM `StaffAttendanceRegularizations`
 WHERE (FacultyId = @FacultyId OR StaffId = @FacultyId)
   AND DATE(AttendanceDate) = @AttDate
 FOR UPDATE;";
 
-                var existingRegs = (await conn.QueryAsync<dynamic>(duplicateSql, new { FacultyId = facultyId, AttDate = targetDate }, tx)).ToList();
+                var existingRegs = (await conn.QueryAsync<RegularizationCheckRow>(duplicateSql, new { FacultyId = facultyId, AttDate = targetDate }, tx)).ToList();
 
                 const string attSql = @"
-SELECT sa.StaffAttendanceId, sa.Status, sa.InTime, sa.OutTime, COALESCE(sa.IsMissedCheckoutResolved, 0) AS IsMissedCheckoutResolved
+SELECT DATE(sas.AttendanceDate) AS AttendanceDate, sa.StaffAttendanceId, sa.Status, sa.InTime, sa.OutTime, COALESCE(sa.IsMissedCheckoutResolved, 0) AS IsMissedCheckoutResolved
 FROM `StaffAttendances` sa
 INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
 WHERE sa.FacultyId = @FacultyId
@@ -1323,17 +1595,36 @@ WHERE sa.FacultyId = @FacultyId
 ORDER BY sa.StaffAttendanceId DESC
 LIMIT 1;";
 
-                var att = await conn.QueryFirstOrDefaultAsync<dynamic>(attSql, new { FacultyId = facultyId, AttDate = targetDate }, tx);
+                var att = await conn.QueryFirstOrDefaultAsync<TodayAttendanceRow>(attSql, new { FacultyId = facultyId, AttDate = targetDate }, tx);
 
-                int? attId = att?.StaffAttendanceId != null ? Convert.ToInt32(att.StaffAttendanceId) : (int?)null;
-                byte? origCode = att?.Status != null ? Convert.ToByte(att.Status) : (byte?)null;
-                TimeSpan? origIn = att?.InTime == null ? null : (att.InTime is TimeSpan it ? it : TimeSpan.TryParse(att.InTime.ToString(), out TimeSpan itp) ? itp : (TimeSpan?)null);
-                TimeSpan? origOut = att?.OutTime == null ? null : (att.OutTime is TimeSpan ot ? ot : TimeSpan.TryParse(att.OutTime.ToString(), out TimeSpan otp) ? otp : (TimeSpan?)null);
-                bool missedResolved = att != null && Convert.ToInt32(att.IsMissedCheckoutResolved ?? 0) == 1;
+                const string holidayLeaveSql = @"
+SELECT
+    (SELECT COUNT(1) FROM `Holidays`
+     WHERE IsDeleted = 0 AND Status = 'Active'
+       AND DATE(@AttDate) BETWEEN DATE(StartDate) AND DATE(EndDate)
+       AND (CampusId IS NULL OR CampusId = 0 OR CampusId = @CampusId)
+       AND (AppliesTo = 'All Students & Staff' OR AppliesTo = 'Staff Only' OR AppliesTo IS NULL)) AS IsHoliday,
+    (SELECT COUNT(1) FROM `StaffLeaveRequests`
+     WHERE StaffId = @FacultyId AND IsActive = 1 AND Status IN (1, 2)
+       AND DATE(@AttDate) BETWEEN DATE(StartDate) AND DATE(EndDate)) AS IsLeave;";
+                var exemptCheck = await conn.QueryFirstOrDefaultAsync<dynamic>(holidayLeaveSql, new
+                {
+                    AttDate = targetDate,
+                    CampusId = timing.CampusId,
+                    FacultyId = facultyId
+                }, tx);
+                bool isHoliday = Convert.ToInt32(exemptCheck?.IsHoliday ?? 0) > 0;
+                bool isLeave = Convert.ToInt32(exemptCheck?.IsLeave ?? 0) > 0;
+
+                int? attId = att != null && att.StaffAttendanceId > 0 ? att.StaffAttendanceId : (int?)null;
+                byte? origCode = att?.Status;
+                TimeSpan? origIn = att?.ParsedInTime;
+                TimeSpan? origOut = att?.ParsedOutTime;
+                bool missedResolved = att?.IsMissedCheckoutResolved ?? false;
 
                 string origStatusText = origCode switch
                 {
-                    1 when origIn.HasValue && !origOut.HasValue && !missedResolved => "Missed Checkout",
+                    1 when origIn.HasValue && !origOut.HasValue && !missedResolved && nowTime > timing.ParsedWorkEndTime.Add(TimeSpan.FromMinutes(timing.GracePeriodMinutes)) => "Missed Checkout",
                     1 => "Present",
                     2 => "Absent",
                     3 => "Late",
@@ -1344,48 +1635,32 @@ LIMIT 1;";
                 };
 
                 string resolvedReqType = !string.IsNullOrWhiteSpace(request.RequestType)
-                    ? request.RequestType.Trim()
+                    ? NormalizeRegularizationType(request.RequestType)
                     : (origCode == 3
                         ? "Late Attendance"
                         : (origIn.HasValue && !origOut.HasValue && !missedResolved ? "Missed Checkout" : "Absent"));
 
-                if (resolvedReqType.Contains("missed", StringComparison.OrdinalIgnoreCase))
+                var eligibility = EvaluateRegularizationEligibility(
+                    targetDate,
+                    businessToday,
+                    nowTime,
+                    targetDate.DayOfWeek == DayOfWeek.Sunday,
+                    isHoliday,
+                    isLeave,
+                    att,
+                    timing,
+                    existingRegs,
+                    resolvedReqType);
+
+                if (!eligibility.Eligible)
                 {
-                    resolvedReqType = "Missed Checkout";
-                    if (!attId.HasValue || !origIn.HasValue)
-                    {
-                        throw new InvalidOperationException("Missed Checkout regularization requires an existing check-in attendance record for this date.");
-                    }
-                    if (origOut.HasValue || missedResolved)
-                    {
-                        throw new InvalidOperationException("Attendance checkout is already recorded or regularized for this date.");
-                    }
+                    throw new InvalidOperationException(eligibility.IneligibleReason ?? "This attendance record is not eligible for regularization.");
+                }
+
+                if (resolvedReqType == "Missed Checkout")
+                {
                     // Never accept or store fabricated checkout time for Missed Checkout regularization
                     requestedOut = null;
-                }
-                else if (resolvedReqType.Contains("late", StringComparison.OrdinalIgnoreCase))
-                {
-                    resolvedReqType = "Late Attendance";
-                    if (!attId.HasValue)
-                    {
-                        throw new InvalidOperationException("Late Attendance regularization requires an existing attendance record for this date.");
-                    }
-                }
-                else if (resolvedReqType.Contains("absent", StringComparison.OrdinalIgnoreCase) || resolvedReqType.Contains("missing", StringComparison.OrdinalIgnoreCase))
-                {
-                    resolvedReqType = "Absent";
-                }
-
-                if (existingRegs.Any(r => string.Equals((string?)r.Status, "Pending", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals((string?)r.RequestType, resolvedReqType, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw new InvalidOperationException($"A pending {resolvedReqType} regularization request already exists for {targetDate:dd MMM yyyy}.");
-                }
-
-                if (existingRegs.Any(r => string.Equals((string?)r.Status, "Approved", StringComparison.OrdinalIgnoreCase)
-                    && string.Equals((string?)r.RequestType, resolvedReqType, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw new InvalidOperationException($"{resolvedReqType} regularization for {targetDate:dd MMM yyyy} has already been approved.");
                 }
 
                 const string insertSql = @"
@@ -1428,7 +1703,7 @@ SELECT LAST_INSERT_ID();";
         public async Task<IEnumerable<RegularizationItemDto>> GetRegularizationsAsync(string? status, int? departmentId, int? campusId = null, string? requestType = null, string? search = null)
         {
             var conn = await GetOpenConnectionAsync();
-            return await conn.QueryAsync<RegularizationItemDto>(
+            var rows = (await conn.QueryAsync<RegularizationItemDto>(
                 "sp_GetStaffRegularizations",
                 new
                 {
@@ -1438,7 +1713,60 @@ SELECT LAST_INSERT_ID();";
                     p_RequestType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim(),
                     p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim()
                 },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure)).ToList();
+
+            foreach (var r in rows)
+            {
+                r.CreatedAt = DateTime.SpecifyKind(r.CreatedAt, DateTimeKind.Utc);
+                r.ReviewedAt = AsUtcKind(r.ReviewedAt);
+                r.UpdatedAt = AsUtcKind(r.UpdatedAt);
+            }
+            return rows;
+        }
+
+        public async Task<RegularizationItemDto?> GetRegularizationByIdAsync(int regularizationId)
+        {
+            var conn = await GetOpenConnectionAsync();
+            const string sql = @"
+SELECT 
+    r.RegularizationId,
+    r.FacultyId,
+    COALESCE(r.StaffId, r.FacultyId) AS StaffId,
+    r.StaffAttendanceId,
+    TRIM(CONCAT(s.FirstName, ' ', COALESCE(s.LastName, ''))) AS StaffName,
+    COALESCE(NULLIF(s.EmployeeId, ''), CONCAT('STF', LPAD(s.Id, 3, '0'))) AS EmployeeId,
+    s.DepartmentId,
+    COALESCE(d.DepartmentName, 'General') AS DepartmentName,
+    r.AttendanceDate,
+    COALESCE(r.RequestType, 'Late Attendance') AS RequestType,
+    r.OriginalAttendanceStatus,
+    r.OriginalStatusCode,
+    TIME_FORMAT(r.OriginalInTime, '%H:%i:%s') AS OriginalInTime,
+    TIME_FORMAT(r.OriginalOutTime, '%H:%i:%s') AS OriginalOutTime,
+    TIME_FORMAT(r.RequestedInTime, '%H:%i:%s') AS RequestedInTime,
+    TIME_FORMAT(r.RequestedOutTime, '%H:%i:%s') AS RequestedOutTime,
+    r.Reason,
+    r.Status,
+    r.AdminRemarks,
+    r.ReviewedByUserId,
+    COALESCE(r.ReviewedByAdminName, rev.FullName) AS ReviewedByAdminName,
+    r.ReviewedAt,
+    r.CreatedAt,
+    r.UpdatedAt
+FROM `StaffAttendanceRegularizations` r
+LEFT JOIN `Staff` s ON COALESCE(r.StaffId, r.FacultyId) = s.Id
+LEFT JOIN `Departments` d ON s.DepartmentId = d.DepartmentId
+LEFT JOIN `Users` rev ON r.ReviewedByUserId = rev.UserId
+WHERE r.RegularizationId = @RegularizationId
+LIMIT 1;";
+            var row = await conn.QueryFirstOrDefaultAsync<RegularizationItemDto>(sql, new { RegularizationId = regularizationId });
+            if (row != null)
+            {
+                row.CreatedAt = DateTime.SpecifyKind(row.CreatedAt, DateTimeKind.Utc);
+                row.ReviewedAt = AsUtcKind(row.ReviewedAt);
+                row.UpdatedAt = AsUtcKind(row.UpdatedAt);
+            }
+            return row;
         }
 
         public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)

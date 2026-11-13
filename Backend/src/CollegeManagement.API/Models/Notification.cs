@@ -33,6 +33,9 @@ namespace CollegeManagement.API.Models
         [MaxLength(250)]
         public string? ActionUrl { get; set; }
 
+        [MaxLength(160)]
+        public string? GroupKey { get; set; }
+
         public bool IsRead { get; set; } = false;
 
         public DateTime? ReadAt { get; set; }
