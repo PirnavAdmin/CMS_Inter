@@ -187,39 +187,27 @@ const calculateStudentSubjectResult = (row, workspace) => {
 };
 
 const isObjectiveExamination = (schedule, exam) => {
-  // 1. Direct category / examCategory check (Primary Authority)
-  const cat = String(
-    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
-  ).trim().toUpperCase();
-  if (cat === "OBJECTIVE") return true;
-  if (cat === "REGULAR") return false;
-
-  // 2. Direct examMode check on schedule or exam
+  // 1. Direct schedule / examMode checks take highest precedence
   const schedExamMode = String(schedule?.examMode || "").trim().toUpperCase();
   if (schedExamMode === "OBJECTIVE") return true;
-  if (schedExamMode === "REGULAR") return false;
+
+  const schedMode = String(schedule?.scheduleMode || schedule?.mode || "").trim().toUpperCase();
+  if (["COMBINED_OBJECTIVE", "OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(schedMode)) return true;
+
+  const schedPattern = String(schedule?.patternName || schedule?.pattern || "").trim().toLowerCase();
+  if (schedPattern && !schedPattern.includes("regular")) return true;
 
   const examExamMode = String(exam?.examMode || "").trim().toUpperCase();
   if (examExamMode === "OBJECTIVE") return true;
-  if (examExamMode === "REGULAR") return false;
 
-  // 3. Schedule mode check on schedule
-  const schedMode = String(schedule?.scheduleMode || schedule?.mode || "").trim().toUpperCase();
-  if (["COMBINED_OBJECTIVE", "OBJECTIVE"].includes(schedMode)) return true;
-  if (schedMode === "SUBJECT_WISE" || schedMode === "REGULAR") return false;
-
-  // 4. Schedule mode check on exam
   const examSchedMode = String(exam?.scheduleMode || exam?.mode || "").trim().toUpperCase();
-  if (["COMBINED_OBJECTIVE", "OBJECTIVE"].includes(examSchedMode)) return true;
-  if (examSchedMode === "SUBJECT_WISE" || examSchedMode === "REGULAR") return false;
+  if (["COMBINED_OBJECTIVE", "OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(examSchedMode)) return true;
 
-  // 5. Pattern check (e.g. mains, neet, jee, bitsat, cuet, combined, objective)
+  // 2. Pattern check (e.g. mains, advance, eamcet, neet, jee, bitsat, cuet, objective)
   const patternStr = String(
     exam?.patternName ||
     exam?.pattern ||
     exam?.examPattern ||
-    schedule?.patternName ||
-    schedule?.pattern ||
     ""
   ).trim().toLowerCase();
 
@@ -228,6 +216,8 @@ const isObjectiveExamination = (schedule, exam) => {
     if (
       patternStr.includes("objective") ||
       patternStr.includes("mains") ||
+      patternStr.includes("advance") ||
+      patternStr.includes("eamcet") ||
       patternStr.includes("neet") ||
       patternStr.includes("jee") ||
       patternStr.includes("bitsat") ||
@@ -237,7 +227,12 @@ const isObjectiveExamination = (schedule, exam) => {
     }
   }
 
-  if (cat.includes("OBJECTIVE")) return true;
+  // 3. Direct category / examCategory fallback
+  const cat = String(
+    schedule?.examCategory || schedule?.category || exam?.examCategory || exam?.category || exam?.categoryName || ""
+  ).trim().toUpperCase();
+  if (cat === "OBJECTIVE" || cat.includes("OBJECTIVE")) return true;
+  if (cat === "REGULAR") return false;
 
   return false;
 };
@@ -4981,7 +4976,7 @@ function Entry({
                   `THEORY / ${workspace?.theoryMax ?? (Number(workspace?.maxMarks || 100) - Number(workspace?.internalMax || 20))}`,
                   `TOTAL / ${workspace?.maxMarks || 100}`,
                 ]
-                : [`Objective Marks / ${workspace?.maxMarks || 100}`]),
+                : [`Obtained Marks / ${workspace?.maxMarks || 100}`]),
               "PERCENTAGE",
               "ABSENT",
               "REMARKS",
@@ -5082,7 +5077,7 @@ function MarkRow({ row, workspace, locked, update }) {
           value={row.obtainedMarks}
           max={workspace.maxMarks}
           disabled={locked || row.absent}
-          title="Objective Marks"
+          title="Obtained Marks"
           onChange={(value) => update("obtainedMarks", value)}
         />
       )}

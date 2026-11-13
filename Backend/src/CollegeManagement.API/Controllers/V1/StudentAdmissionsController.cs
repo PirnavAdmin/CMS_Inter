@@ -42,28 +42,71 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            // Extract SourceCampusId if not explicitly provided
+            int? resolvedContextCampusId = null;
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+            {
+                resolvedContextCampusId = cId;
+            }
+            else
+            {
+                var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                {
+                    resolvedContextCampusId = claimCampusId;
+                }
+            }
+
             if (!request.SourceCampusId.HasValue || request.SourceCampusId.Value <= 0)
             {
-                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
-                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
-                {
-                    request.SourceCampusId = cId;
-                }
-                else
-                {
-                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
-                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
-                    {
-                        request.SourceCampusId = claimCampusId;
-                    }
-                }
+                request.SourceCampusId = resolvedContextCampusId;
+            }
+
+            if (!request.IsReferral && (!request.CampusId.HasValue || request.CampusId.Value <= 0))
+            {
+                request.CampusId = resolvedContextCampusId;
+            }
+
+            string? idempotencyKey = null;
+            if (Request.Headers.TryGetValue("Idempotency-Key", out var idemVals) && !string.IsNullOrWhiteSpace(idemVals.FirstOrDefault()))
+            {
+                idempotencyKey = idemVals.FirstOrDefault();
+            }
+            else if (Request.Headers.TryGetValue("X-Idempotency-Key", out var xIdemVals) && !string.IsNullOrWhiteSpace(xIdemVals.FirstOrDefault()))
+            {
+                idempotencyKey = xIdemVals.FirstOrDefault();
+            }
+            else if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+            {
+                idempotencyKey = request.IdempotencyKey;
+            }
+
+            int? createdByUserId = null;
+            var userIdClaim = User.Claims.FirstOrDefault(c =>
+                c.Type == "UserId" ||
+                c.Type == "sub" ||
+                c.Type == "nameid" ||
+                c.Type == System.Security.Claims.ClaimTypes.NameIdentifier);
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int parsedUid) && parsedUid > 0)
+            {
+                createdByUserId = parsedUid;
             }
 
             try
             {
-                var result =
-                    await _service.CreateAsync(request);
+                var createResult = await _service.CreateIdempotentAsync(request, idempotencyKey, createdByUserId);
+                var result = createResult.Admission;
+
+                if (!string.IsNullOrWhiteSpace(createResult.IdempotencyKey))
+                {
+                    Response.Headers["Idempotency-Key"] = createResult.IdempotencyKey;
+                }
+
+                if (createResult.IsIdempotentReplay)
+                {
+                    Response.Headers["X-Idempotency-Replayed"] = "true";
+                    return Ok(result);
+                }
 
                 if (_notificationService != null && result != null)
                 {
@@ -72,20 +115,41 @@ namespace CollegeManagement.API.Controllers.V1
                         var studentName = $"{request.FirstName} {request.LastName}".Trim();
                         await _notificationService.SendToRolesAsync(
                             new[] { "Admin", "Super Admin", "Principal" },
-                            request.SourceCampusId,
+                            request.SourceCampusId ?? request.CampusId,
                             "New Admission Application",
                             $"New admission application #{result.AdmissionId} submitted for {studentName}.",
                             "Admission",
                             result.AdmissionId,
-                            "/dashboard/admissions");
+                            $"/dashboard/admission?view=preview&admissionId={result.AdmissionId}");
                     }
                     catch { }
                 }
 
                 return CreatedAtAction(
                     nameof(GetById),
-                    new { id = result.AdmissionId },
+                    new { id = result!.AdmissionId },
                     result);
+            }
+            catch (AdmissionIdempotencyConflictException ex)
+            {
+                return Conflict(new
+                {
+                    statusCode = 409,
+                    status = "CONFLICT",
+                    idempotencyKey = ex.IdempotencyKey,
+                    message = ex.Message
+                });
+            }
+            catch (AdmissionIdempotencyInProgressException ex)
+            {
+                return Conflict(new
+                {
+                    statusCode = 409,
+                    status = "IN_PROGRESS",
+                    idempotencyKey = ex.IdempotencyKey,
+                    recoveryUrl = $"/api/v1/student-admissions/recovery/{Uri.EscapeDataString(ex.IdempotencyKey)}",
+                    message = ex.Message
+                });
             }
             catch (ArgumentException ex)
             {
@@ -425,7 +489,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Admission #{id} for {studentName} has been approved.",
                             "Admission",
                             id,
-                            "/dashboard/admissions");
+                            $"/dashboard/admission?view=preview&admissionId={id}");
                     }
                     catch { }
                 }
@@ -501,12 +565,58 @@ namespace CollegeManagement.API.Controllers.V1
             var effectiveBoardId = (boardId.HasValue && boardId > 0) ? boardId : request?.BoardId;
             var effectiveAcademicYearId = (academicYearId.HasValue && academicYearId > 0) ? academicYearId : request?.AcademicYearId;
 
-            var admissionNumber = await _service.GetAdmissionNumberPreviewAsync(effectiveCampusId, effectiveBoardId, effectiveAcademicYearId);
-
-            return Ok(new
+            try
             {
-                admissionNumber
-            });
+                var admissionNumber = await _service.GetAdmissionNumberPreviewAsync(effectiveCampusId, effectiveBoardId, effectiveAcademicYearId);
+                return Ok(new
+                {
+                    admissionNumber
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { statusCode = 400, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { statusCode = 500, message = "Unable to preview admission number.", details = ex.Message });
+            }
+        }
+
+        // =========================================================
+        // RECOVER ADMISSION SUBMISSION BY IDEMPOTENCY KEY
+        // GET: api/v1/student-admissions/recovery/{idempotencyKey}
+        // GET: api/v1/student-admissions/idempotency/{idempotencyKey}
+        // =========================================================
+
+        [HttpGet("recovery/{idempotencyKey}")]
+        [HttpGet("idempotency/{idempotencyKey}")]
+        public async Task<IActionResult> RecoverByIdempotencyKey(string idempotencyKey)
+        {
+            try
+            {
+                var result = await _service.RecoverByIdempotencyKeyAsync(idempotencyKey);
+                if (result == null)
+                {
+                    return NotFound(new
+                    {
+                        statusCode = 404,
+                        idempotencyKey,
+                        status = "NOT_FOUND",
+                        message = "No admission submission found for the supplied Idempotency-Key."
+                    });
+                }
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { statusCode = 400, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { statusCode = 500, message = "Unable to recover admission submission.", details = ex.Message });
+            }
         }
 
         // =========================================================
@@ -663,7 +773,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
         //optional check box//
-        // POST: api/v1/admissions/5/fee-selections
+        // POST: api/v1/student-admissions/{id}/fee-selections
         [HttpPost("{id:int}/fee-selections")]
         public async Task<IActionResult> SaveFeeSelections(
             int id,
@@ -672,17 +782,48 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var count =
-                await _service.SaveAdmissionFeeSelectionsAsync(
-                    id,
-                    request);
-
-            return Ok(new
+            try
             {
-                AdmissionId = id,
-                SelectedOptionalFees = count,
-                Message = "Admission fee selections saved successfully."
-            });
+                var count = await _service.SaveAdmissionFeeSelectionsAsync(id, request);
+                return Ok(new
+                {
+                    AdmissionId = id,
+                    SelectedOptionalFees = count,
+                    FeeSelectionSaved = true,
+                    Message = "Admission fee selections saved successfully."
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    statusCode = 404,
+                    admissionId = id,
+                    feeSelectionSaved = false,
+                    message = ex.Message
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    statusCode = 400,
+                    admissionId = id,
+                    feeSelectionSaved = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    statusCode = 500,
+                    admissionId = id,
+                    feeSelectionSaved = false,
+                    message = "Admission fee selections could not be saved.",
+                    details = ex.Message
+                });
+            }
         }
 
 

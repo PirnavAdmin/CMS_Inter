@@ -48,21 +48,32 @@ const extractId = (val) => {
   return str;
 };
 
-const isObjectiveExam = (exam) => {
+const isObjectiveExam = (exam, schedules = []) => {
+  const schedList = Array.isArray(schedules)
+    ? schedules
+    : (Array.isArray(exam?.schedules) ? exam.schedules : (Array.isArray(exam?.examinationSchedules) ? exam.examinationSchedules : []));
+
+  for (const sch of schedList) {
+    const schExamMode = String(sch?.examMode || "").trim().toUpperCase();
+    if (schExamMode === "OBJECTIVE") return true;
+    const schMode = String(sch?.scheduleMode || sch?.mode || "").trim().toUpperCase();
+    if (["OBJECTIVE", "COMBINED_OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(schMode)) return true;
+    const schPat = String(sch?.patternName || "").trim().toLowerCase();
+    if (schPat && !schPat.includes("regular")) return true;
+  }
+
   if (!exam) return false;
-  const cat = String(exam.examCategory || exam.category || "").trim().toUpperCase();
-  if (cat === "OBJECTIVE") return true;
-  if (cat === "REGULAR") return false;
 
   const mode = String(exam.scheduleMode || exam.mode || exam.examMode || "").trim().toUpperCase();
-  if (["OBJECTIVE", "COMBINED_OBJECTIVE"].includes(mode)) return true;
-  if (mode === "SUBJECT_WISE" || mode === "REGULAR") return false;
+  if (["OBJECTIVE", "COMBINED_OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(mode)) return true;
 
   const pat = String(exam.examPattern || exam.pattern || exam.patternName || "").trim().toLowerCase();
   if (pat.includes("regular")) return false;
   if (
     pat.includes("objective") ||
     pat.includes("mains") ||
+    pat.includes("advance") ||
+    pat.includes("eamcet") ||
     pat.includes("neet") ||
     pat.includes("jee") ||
     pat.includes("bitsat") ||
@@ -70,6 +81,11 @@ const isObjectiveExam = (exam) => {
   ) {
     return true;
   }
+
+  const cat = String(exam.examCategory || exam.category || "").trim().toUpperCase();
+  if (cat === "OBJECTIVE") return true;
+  if (cat === "REGULAR") return false;
+
   return false;
 };
 
@@ -403,9 +419,19 @@ export default function FacultyMarks() {
     maxTotal: 100,
     maxTheory: 100,
     maxInternal: 0,
+    maxPractical: 0,
+    showInternal: false,
+    showPractical: false,
+    showTheory: true,
+    showObtained: false,
     passingMarks: 35,
     examDate: null,
+    isObjective: false,
+    category: "REGULAR",
   });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const inputRefs = useRef({});
   const [evaluationStatus, setEvaluationStatus] = useState("NOT STARTED");
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [savingMarks, setSavingMarks] = useState(false);
@@ -477,6 +503,11 @@ export default function FacultyMarks() {
             empId: ev.facultyCode || ev.empId || (staffId ? `EMP-${staffId}` : ""),
             status: normalizedStatus,
             statusCode: normalizedStatus,
+            mode: String(ev.mode || "").toUpperCase() || null,
+            maxMarks: ev.maxMarks != null ? Number(ev.maxMarks) : null,
+            internalMax: ev.internalMax != null ? Number(ev.internalMax) : null,
+            practicalMax: ev.practicalMax != null ? Number(ev.practicalMax) : null,
+            theoryMax: ev.theoryMax != null ? Number(ev.theoryMax) : null,
             adminRemarks: ev.rejectionReason || ev.remarks || ev.adminRemarks || "",
             totalStudents: Number(ev.totalStudents || (Array.isArray(ev.students) ? ev.students.length : (Array.isArray(ev.rows) ? ev.rows.length : 0))),
             rows: ev.rows || ev.students || [],
@@ -988,14 +1019,14 @@ export default function FacultyMarks() {
         return (targetCode && aCode === targetCode) || (targetName && aName === targetName);
       });
 
+      setFieldErrors({});
+      setLiveAnnouncement("");
+
       // Strict validation: Verify faculty subject is officially included in the selected examination configuration
-      // For Regular: must have individual schedule (or in allocatedSubjectIds)
-      // For Objective: check in exam object in included subjects
       const inclusionCheck = validateSubjectExamInclusion(selectedExamObj, newSubject, targetSubj, altAlloc, schedules);
       if (!inclusionCheck.isValid) {
         setSubjectInclusionError(inclusionCheck.error);
         setCurrentStudents([]);
-        setSubjectInclusionError(null);
         setEvaluationStatus("NOT STARTED");
         setCurrentRejectionRemarks("");
         setLoadingStudents(false);
@@ -1003,48 +1034,140 @@ export default function FacultyMarks() {
       }
       setSubjectInclusionError(null);
 
-      // Resolve schedule config (examDate, maxTotal, maxTheory, maxInternal, passingMarks)
-      const isObjective = isObjectiveExam(selectedExamObj);
-      let examDate = null;
-      let passingMarks = 35;
-      let maxTotal = 100;
-      let maxTheory = 100;
-      let maxInternal = 0;
+      // Fetch authoritative evaluation header/maxima AND subject metadata from DB endpoints
+      const subjLookupBoard = cleanBoard || selectedExamObj?.boardId;
+      const subjLookupGroup = selectedGroup || selectedExamObj?.groupId;
+      const subjLookupLevel = selectedLevel || selectedExamObj?.academicLevelId;
+      const [evalStudentsRes, subjectsCtxRes] = await Promise.all([
+        apiClient
+          .get(`/api/v1/faculty/evaluations/${newSubject}_${targetSec}_${newExam}/students`, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+            skipGlobalLoader: true,
+          })
+          .catch(() => null),
+        (subjLookupGroup || (subjLookupBoard && subjLookupLevel))
+          ? apiClient
+              .get("/api/v1/subjects/context", {
+                params: {
+                  ...(subjLookupBoard ? { boardId: Number(subjLookupBoard) } : {}),
+                  ...(subjLookupGroup ? { groupId: Number(subjLookupGroup) } : {}),
+                  ...(subjLookupLevel ? { academicLevelId: Number(subjLookupLevel) } : {}),
+                },
+                skipGlobalLoader: true,
+              })
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
 
-      if (selectedExamObj) {
-        passingMarks = Number(selectedExamObj.passingMarks || selectedExamObj.passMarks || 35);
-        maxTotal = Number(selectedExamObj.maxMarks || selectedExamObj.totalMarks || 100);
+      const evalHeader = evalStudentsRes?.data?.data || evalStudentsRes?.data || null;
+      const subjectsCtxRaw = subjectsCtxRes?.data?.data || subjectsCtxRes?.data || [];
+      const subjectsCtxList = Array.isArray(subjectsCtxRaw) ? subjectsCtxRaw : [];
+      const subjectMeta = subjectsCtxList.find((sub) => {
+        const sid = String(sub.subjectId ?? sub.id ?? "").trim();
+        if (sid === String(newSubject).trim()) return true;
+        if (altAlloc?.subjectId && sid === String(altAlloc.subjectId).trim()) return true;
+        const sc = String(sub.subjectCode || "").trim().toLowerCase();
+        const sn = String(sub.subjectName || "").trim().toLowerCase();
+        if (targetCode && sc && sc === targetCode) return true;
+        if (targetName && sn && sn === targetName) return true;
+        return false;
+      }) || null;
 
-        const subjSchedule = schedules.find((sch) => {
-          const schId = String(sch.subjectId).trim();
-          if (schId === String(newSubject).trim()) return true;
-          if (altAlloc?.subjectId && schId === String(altAlloc.subjectId).trim()) return true;
-          if (Array.isArray(sch.includedSubjectIds)) {
-            if (sch.includedSubjectIds.map(String).includes(String(newSubject).trim())) return true;
-            if (altAlloc?.subjectId && sch.includedSubjectIds.map(String).includes(String(altAlloc.subjectId).trim())) return true;
-          }
-          const sCode = (sch.subjectCode || "").trim().toLowerCase();
-          const sName = (sch.subjectName || "").trim().toLowerCase();
-          if (targetCode && sCode === targetCode) return true;
-          if (targetName && sName === targetName) return true;
-          return false;
-        }) || (schedules.length > 0 ? schedules[0] : null);
-
-        if (subjSchedule) {
-          examDate = subjSchedule.examDate || subjSchedule.date || selectedExamObj.startDate || selectedExamObj.endDate;
-          if (subjSchedule.maxMarks) maxTotal = Number(subjSchedule.maxMarks);
-          if (subjSchedule.theoryMarks != null) maxTheory = Number(subjSchedule.theoryMarks);
-          if (subjSchedule.internalMarks != null) maxInternal = Number(subjSchedule.internalMarks);
-          if (subjSchedule.passingMarks != null) passingMarks = Number(subjSchedule.passingMarks);
-        } else {
-          examDate = selectedExamObj.startDate || selectedExamObj.examDate || selectedExamObj.endDate;
+      const subjSchedule = schedules.find((sch) => {
+        const schId = String(sch.subjectId).trim();
+        if (schId === String(newSubject).trim()) return true;
+        if (altAlloc?.subjectId && schId === String(altAlloc.subjectId).trim()) return true;
+        if (Array.isArray(sch.includedSubjectIds)) {
+          if (sch.includedSubjectIds.map((x) => String(x).trim()).includes(String(newSubject).trim())) return true;
+          if (altAlloc?.subjectId && sch.includedSubjectIds.map((x) => String(x).trim()).includes(String(altAlloc.subjectId).trim())) return true;
         }
+        const sCode = (sch.subjectCode || "").trim().toLowerCase();
+        const sName = (sch.subjectName || "").trim().toLowerCase();
+        if (targetCode && sCode === targetCode) return true;
+        if (targetName && sName === targetName) return true;
+        return false;
+      }) || (schedules.length > 0 ? schedules[0] : null);
+
+      const headerMode = String(evalHeader?.mode || "").trim().toUpperCase();
+      const isObjective = headerMode === "OBJECTIVE" || isObjectiveExam(selectedExamObj, schedules);
+
+      let examDate = subjSchedule?.examDate || subjSchedule?.date || selectedExamObj?.startDate || selectedExamObj?.examDate || selectedExamObj?.endDate || null;
+      let maxTotal = 100;
+      let maxInternal = 0;
+      let maxPractical = 0;
+      let maxTheory = 0;
+      let showInternal = false;
+      let showPractical = false;
+      let showTheory = false;
+      let showObtained = false;
+      let passingMarks = 35;
+
+      if (isObjective) {
+        maxInternal = 0;
+        maxPractical = 0;
+        maxTheory = 0;
+        showInternal = false;
+        showPractical = false;
+        showTheory = false;
+        showObtained = true;
+        maxTotal = Number(
+          (subjSchedule?.maxMarks && Number(subjSchedule.maxMarks) > 0 ? subjSchedule.maxMarks : null) ??
+          (evalHeader?.maxMarks && Number(evalHeader.maxMarks) > 0 ? evalHeader.maxMarks : null) ??
+          (selectedExamObj?.totalMarks && Number(selectedExamObj.totalMarks) > 0 ? selectedExamObj.totalMarks : null) ??
+          (subjectMeta?.totalMarks && Number(subjectMeta.totalMarks) > 0 ? subjectMeta.totalMarks : null) ??
+          100
+        );
+        const pct = Number(evalHeader?.passPercentage || selectedExamObj?.passPercentage || 0);
+        passingMarks = Number(
+          (subjSchedule?.passingMarks && Number(subjSchedule.passingMarks) > 0 ? subjSchedule.passingMarks : null) ??
+          (pct > 0 ? Math.round((pct / 100) * maxTotal) : null) ??
+          (subjectMeta?.passingMarks && Number(subjectMeta.passingMarks) > 0 ? subjectMeta.passingMarks : null) ??
+          35
+        );
+      } else {
+        const rawInt = Number(evalHeader?.internalMax ?? subjectMeta?.internalMarks ?? 0);
+        const rawPrac = Number(evalHeader?.practicalMax ?? subjectMeta?.practicalMarks ?? 0);
+        const rawTh = Number(evalHeader?.theoryMax ?? subjectMeta?.externalMarks ?? 0);
+        const schedExamMode = String(subjSchedule?.examMode || "").trim().toLowerCase();
+        const examTypeLower = String(selectedExamObj?.examType || selectedExamObj?.assessmentTypeName || "").trim().toLowerCase();
+        const examNameLower = String(selectedExamObj?.examName || selectedExamObj?.name || "").trim().toLowerCase();
+
+        if (rawInt + rawPrac + rawTh > 0) {
+          maxInternal = rawInt;
+          maxPractical = rawPrac;
+          maxTheory = rawTh;
+        } else if (schedExamMode === "practical" || examTypeLower.includes("practical") || examNameLower.includes("practical")) {
+          maxPractical = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        } else if (schedExamMode === "internal" || examTypeLower.includes("internal")) {
+          maxInternal = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        } else {
+          maxTheory = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        }
+
+        showInternal = maxInternal > 0;
+        showPractical = maxPractical > 0;
+        showTheory = maxTheory > 0;
+        showObtained = false;
+        maxTotal = (maxInternal + maxPractical + maxTheory) || Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || 100);
+        passingMarks = Number(
+          (subjSchedule?.passingMarks && Number(subjSchedule.passingMarks) > 0 ? subjSchedule.passingMarks : null) ??
+          (subjectMeta?.passingMarks && Number(subjectMeta.passingMarks) > 0 ? subjectMeta.passingMarks : null) ??
+          selectedExamObj?.passingMarks ??
+          selectedExamObj?.passMarks ??
+          35
+        );
       }
 
       setCurrentConfig({
         maxTotal,
         maxTheory,
         maxInternal,
+        maxPractical,
+        showInternal,
+        showPractical,
+        showTheory,
+        showObtained,
         passingMarks,
         examDate,
         isObjective,
@@ -1303,23 +1426,49 @@ export default function FacultyMarks() {
         });
       }
 
+      // Also hydrate marksMap from evalHeader.students if saved marks exist there
+      if (evalHeader && Array.isArray(evalHeader.students) && (evalHeader.evaluationId > 0 || String(evalHeader.status || "").toUpperCase() !== "DRAFT")) {
+        evalHeader.students.forEach((es) => {
+          const sId = String(es.studentId ?? "");
+          if (sId && !marksMap.has(sId)) {
+            marksMap.set(sId, es);
+          }
+        });
+      }
+
       // Map student rows
       const mappedRows = effectiveRoster.map((student) => {
         const mark = marksMap.get(String(student.studentId));
-        if (mark) {
+        const hasRecordedMark = Boolean(
+          mark && (
+            Number(mark.markId || 0) > 0 ||
+            Boolean(mark.isAbsent || mark.absent) ||
+            liveStatus !== "NOT STARTED" ||
+            Number(mark.totalMarks ?? mark.obtainedMarks ?? mark.total ?? 0) > 0 ||
+            Number(mark.internalMarks ?? mark.internal ?? 0) > 0 ||
+            Number(mark.practicalMarks ?? mark.practical ?? 0) > 0 ||
+            Number(mark.theoryMarks ?? mark.theory ?? 0) > 0 ||
+            Boolean(mark.remarks)
+          )
+        );
+        if (mark && hasRecordedMark) {
           const isAbsent = Boolean(mark.isAbsent || mark.absent);
-          const internal = Number(mark.internalMarks ?? mark.internal ?? 0);
-          const theory = Number(mark.theoryMarks ?? mark.theory ?? 0);
-          const obtainedMarks = Number(mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? (internal + theory));
-          const total = isAbsent ? 0 : (isObjective ? obtainedMarks : (internal + theory || obtainedMarks));
-          const percentage = isAbsent ? "0.00%" : `${((total / maxTotal) * 100).toFixed(2)}%`;
+          const internal = isObjective || !showInternal ? 0 : Number(mark.internalMarks ?? mark.internal ?? 0);
+          const practical = isObjective || !showPractical ? 0 : Number(mark.practicalMarks ?? mark.practical ?? 0);
+          const theory = isObjective || !showTheory ? 0 : Number(mark.theoryMarks ?? mark.theory ?? 0);
+          const obtainedRaw = mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? (internal + practical + theory);
+          const obtainedMarks = isAbsent ? "" : Number(obtainedRaw ?? 0);
+          const componentSum = (showInternal ? internal : 0) + (showPractical ? practical : 0) + (showTheory ? theory : 0);
+          const total = isAbsent ? 0 : (isObjective ? Number(obtainedMarks || 0) : (componentSum || Number(obtainedRaw || 0)));
+          const percentage = isAbsent ? "0.00%" : `${((total / (maxTotal || 1)) * 100).toFixed(2)}%`;
           return {
             studentId: student.studentId,
             rollNo: mark.rollNo || student.rollNo || "",
             name: mark.studentName || student.name || `Student #${student.studentId}`,
-            internal: isAbsent ? 0 : internal,
-            theory: isAbsent ? 0 : theory,
-            obtainedMarks: isAbsent ? 0 : obtainedMarks,
+            internal: isAbsent ? 0 : (isObjective ? 0 : (showInternal ? internal : 0)),
+            practical: isAbsent ? 0 : (isObjective ? 0 : (showPractical ? practical : 0)),
+            theory: isAbsent ? 0 : (isObjective ? 0 : (showTheory ? theory : 0)),
+            obtainedMarks: isAbsent ? "" : (isObjective ? obtainedMarks : total),
             totalScore: total,
             percentage: percentage,
             absent: isAbsent,
@@ -1330,9 +1479,10 @@ export default function FacultyMarks() {
             studentId: student.studentId,
             rollNo: student.rollNo || "",
             name: student.name || `Student #${student.studentId}`,
-            internal: 0,
-            theory: 0,
-            obtainedMarks: 0,
+            internal: isObjective || !showInternal ? 0 : "",
+            practical: isObjective || !showPractical ? 0 : "",
+            theory: isObjective || !showTheory ? 0 : "",
+            obtainedMarks: "",
             totalScore: 0,
             percentage: "0.00%",
             absent: false,
@@ -1352,27 +1502,75 @@ export default function FacultyMarks() {
     }
   };
 
-  // Student mark input change handlers with component limits & validation
+  const getMaxForField = (field) => {
+    if (field === "internal") return Number(currentConfig.maxInternal || 0);
+    if (field === "practical") return Number(currentConfig.maxPractical || 0);
+    if (field === "theory") return Number(currentConfig.maxTheory || 0);
+    return Number(currentConfig.maxTotal || 100);
+  };
+
+  const getFieldLabel = (field) => {
+    if (field === "internal") return "Internal";
+    if (field === "practical") return "Practical";
+    if (field === "theory") return "Theory";
+    return "Obtained";
+  };
+
+  const validateSingleMarkValue = (field, rawVal, { allowEmpty = true } = {}) => {
+    if (rawVal === "" || rawVal === null || rawVal === undefined) {
+      return allowEmpty ? null : `Please enter ${getFieldLabel(field).toLowerCase()} marks.`;
+    }
+    const num = Number(rawVal);
+    const maxAllowed = getMaxForField(field);
+    if (isNaN(num)) return "Enter a valid number.";
+    if (num < 0) return "Marks cannot be negative.";
+    if (num > maxAllowed) return `Marks cannot exceed ${maxAllowed}.`;
+    return null;
+  };
+
+  const handleStudentMarkBlur = (studentId, field, rawVal) => {
+    const err = validateSingleMarkValue(field, rawVal, { allowEmpty: true });
+    const errKey = `${studentId}_${field}`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (err) {
+        next[errKey] = err;
+        setLiveAnnouncement(`${getFieldLabel(field)} marks error: ${err}`);
+      } else {
+        delete next[errKey];
+      }
+      return next;
+    });
+  };
+
+  // Student mark input change handlers (validation runs on blur/submit; valid edits clear errors on input)
   const handleStudentMarkChange = (studentId, field, rawVal) => {
+    if (field === "internal" || field === "practical" || field === "theory" || field === "obtainedMarks") {
+      const errKey = `${studentId}_${field}`;
+      const err = validateSingleMarkValue(field, rawVal, { allowEmpty: true });
+      if (!err) {
+        setFieldErrors((prev) => {
+          if (!prev[errKey]) return prev;
+          const next = { ...prev };
+          delete next[errKey];
+          return next;
+        });
+      }
+    }
+
     setCurrentStudents((prev) =>
       prev.map((s) => {
         if (s.studentId !== studentId) return s;
 
         let val = rawVal;
-        if (field === "internal" || field === "theory" || field === "obtainedMarks") {
-          if (val === "" || val === null) {
+        if (field === "internal" || field === "practical" || field === "theory" || field === "obtainedMarks") {
+          if (val === "" || val === null || val === undefined) {
             val = "";
           } else {
-            let num = Number(val);
-            if (isNaN(num)) return s;
-            if (num < 0) num = 0;
-            const maxAllowed = field === "internal"
-              ? (currentConfig.maxInternal || 20)
-              : field === "theory"
-                ? (currentConfig.maxTheory || 100)
-                : (currentConfig.maxTotal || 100);
-            if (num > maxAllowed) num = maxAllowed;
-            val = num;
+            const num = Number(val);
+            if (!isNaN(num)) {
+              val = num;
+            }
           }
         }
 
@@ -1381,115 +1579,178 @@ export default function FacultyMarks() {
         let total = 0;
 
         if (currentConfig.isObjective) {
-          total = next.absent ? 0 : Number(next.obtainedMarks ?? val ?? 0);
-          next.obtainedMarks = next.absent ? 0 : val;
+          const parsedObj = next.obtainedMarks === "" || next.obtainedMarks === null || next.obtainedMarks === undefined ? 0 : Number(next.obtainedMarks);
+          total = next.absent ? 0 : (isNaN(parsedObj) ? 0 : parsedObj);
+          next.internal = 0;
+          next.practical = 0;
+          next.theory = 0;
           next.totalScore = total;
         } else {
-          const internal = Number(next.internal || 0);
-          const theory = Number(next.theory || 0);
-          total = next.absent ? 0 : internal + theory;
+          const internal = currentConfig.showInternal ? Number(next.internal || 0) : 0;
+          const practical = currentConfig.showPractical ? Number(next.practical || 0) : 0;
+          const theory = currentConfig.showTheory ? Number(next.theory || 0) : 0;
+          total = next.absent ? 0 : (internal + practical + theory);
+          next.obtainedMarks = total;
           next.totalScore = total;
         }
 
-        next.percentage = next.absent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`;
+        next.percentage = next.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`;
         return next;
       })
     );
   };
 
   const handleToggleAbsent = (studentId) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${studentId}_`)) delete next[k];
+      });
+      return next;
+    });
     setCurrentStudents((prev) =>
       prev.map((s) => {
         if (s.studentId !== studentId) return s;
         const nextAbsent = !s.absent;
-        const internal = nextAbsent ? 0 : Number(s.internal || 0);
-        const theory = nextAbsent ? 0 : Number(s.theory || 0);
-        const total = nextAbsent ? 0 : internal + theory;
         const max = currentConfig.maxTotal || 100;
+        if (nextAbsent) {
+          return {
+            ...s,
+            absent: true,
+            internal: 0,
+            practical: 0,
+            theory: 0,
+            obtainedMarks: "",
+            totalScore: 0,
+            percentage: "0.00%",
+            remarks: s.remarks || "Absent",
+          };
+        }
+        const total = currentConfig.isObjective
+          ? Number(s.obtainedMarks || 0)
+          : (currentConfig.showInternal ? Number(s.internal || 0) : 0) +
+            (currentConfig.showPractical ? Number(s.practical || 0) : 0) +
+            (currentConfig.showTheory ? Number(s.theory || 0) : 0);
         return {
           ...s,
-          absent: nextAbsent,
-          internal: nextAbsent ? 0 : s.internal,
-          theory: nextAbsent ? 0 : s.theory,
+          absent: false,
+          internal: currentConfig.isObjective || !currentConfig.showInternal ? 0 : (s.internal === 0 ? "" : s.internal),
+          practical: currentConfig.isObjective || !currentConfig.showPractical ? 0 : (s.practical === 0 ? "" : s.practical),
+          theory: currentConfig.isObjective || !currentConfig.showTheory ? 0 : (s.theory === 0 ? "" : s.theory),
+          obtainedMarks: currentConfig.isObjective ? (s.obtainedMarks || "") : total,
           totalScore: total,
-          percentage: nextAbsent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`,
-          remarks: nextAbsent ? "Absent" : "",
+          percentage: `${((total / (max || 1)) * 100).toFixed(2)}%`,
+          remarks: s.remarks === "Absent" ? "" : s.remarks,
         };
       })
     );
   };
 
-  // Save Draft handler - authorized faculty API
-  const handleSaveDraft = async () => {
-        if (!selectedExam || !selectedSubject || !selectedSection) return;
-    if (subjectInclusionError) {
-      notify(subjectInclusionError, "error");
-      return;
-    }
-    if (currentStudents.length === 0) {
-      notify("No eligible students to save marks for.", "error");
-      return;
-    }
+  const validateStudentsBeforeSave = ({ requireAll = false } = {}) => {
+    const errors = {};
+    let firstInvalidStudentId = null;
+    let firstInvalidField = null;
+    let firstMessage = null;
+
+    const activeFields = currentConfig.isObjective
+      ? ["obtainedMarks"]
+      : [
+          ...(currentConfig.showInternal ? ["internal"] : []),
+          ...(currentConfig.showPractical ? ["practical"] : []),
+          ...(currentConfig.showTheory ? ["theory"] : []),
+        ];
 
     for (const s of currentStudents) {
       if (s.absent) continue;
-      const internal = Number(s.internal || 0);
-      const theory = Number(s.theory || 0);
-      if (internal < 0 || theory < 0) {
-        notify(`Marks cannot be negative for student ${s.name}.`, "error");
-        return;
+      for (const field of activeFields) {
+        const err = validateSingleMarkValue(field, s[field], { allowEmpty: !requireAll });
+        if (err) {
+          const errKey = `${s.studentId}_${field}`;
+          errors[errKey] = err;
+          if (!firstMessage) {
+            firstInvalidStudentId = s.studentId;
+            firstInvalidField = field;
+            firstMessage = `${s.name} (${getFieldLabel(field)}): ${err}`;
+          }
+        }
       }
-      if (s.remarks && s.remarks.length > 250) {
-        notify(`Remarks cannot exceed 250 characters for student ${s.name}.`, "error");
-        return;
+      if (s.remarks && s.remarks.length > 250 && !firstMessage) {
+        firstMessage = `Remarks cannot exceed 250 characters for student ${s.name}.`;
       }
     }
 
-    setSavingMarks(true);
+    setFieldErrors(errors);
+    if (firstMessage) {
+      setLiveAnnouncement(firstMessage);
+      notify(firstMessage, "error");
+      if (firstInvalidStudentId && firstInvalidField) {
+        const targetIndex = currentStudents.findIndex((st) => st.studentId === firstInvalidStudentId);
+        if (targetIndex >= 0) {
+          const targetPage = Math.floor(targetIndex / pageSize) + 1;
+          if (targetPage !== currentPage) setCurrentPage(targetPage);
+        }
+        setTimeout(() => {
+          const el = inputRefs.current[`${firstInvalidStudentId}_${firstInvalidField}`];
+          if (el && typeof el.focus === "function") el.focus();
+        }, 40);
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const buildStudentMarkPayloads = (targetStatusLabel) => {
     const authUser = getAuthUser();
     const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
     const campusId = context?.profile?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
+    const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
+    const resolvedBoardName = timetableInfo.boardName || "BIEAP";
+    const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
+    const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
+    const resolvedLevelName = "Intermediate";
+    const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
     const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
-    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
 
-    const updatedEval = {
+    const draftPayload = {
       evaluationId: key,
-      section: selectedSectionCleanName,
-      sectionId: Number(selectedSection),
-      examId: selectedExam,
-      examinationId: Number(selectedExam),
-      examName: selectedExamName,
-      subjectId: selectedSubject,
-      subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Faculty",
-      empId: staffId ? `EMP-${staffId}` : "",
-      status: "DRAFT",
-      adminRemarks: "Draft saved by faculty.",
-      rows: currentStudents,
-    };
-
-    try {
-      const draftPayload = {
-        evaluationId: key,
-        students: currentStudents.map((s) => ({
+      students: currentStudents.map((s) => {
+        if (currentConfig.isObjective) {
+          const score = s.absent ? 0 : Math.round(Number(s.obtainedMarks || 0));
+          return {
+            studentId: Number(s.studentId),
+            internalMarks: 0,
+            practicalMarks: 0,
+            theoryMarks: 0,
+            obtainedMarks: score,
+            totalMarks: score,
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          };
+        }
+        const internal = s.absent || !currentConfig.showInternal ? 0 : Math.round(Number(s.internal || 0));
+        const practical = s.absent || !currentConfig.showPractical ? 0 : Math.round(Number(s.practical || 0));
+        const theory = s.absent || !currentConfig.showTheory ? 0 : Math.round(Number(s.theory || 0));
+        const total = s.absent ? 0 : (internal + practical + theory);
+        return {
           studentId: Number(s.studentId),
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          practicalMarks: 0,
-          totalMarks: Number(s.totalScore || 0),
+          internalMarks: internal,
+          practicalMarks: practical,
+          theoryMarks: theory,
+          obtainedMarks: total,
+          totalMarks: total,
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
-        })),
-      };
+        };
+      }),
+    };
 
-      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
-      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
-      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
-      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
-      const resolvedLevelName = "Intermediate";
-      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
-
-      const bulkPayload = currentStudents.map((s) => ({
+    const bulkPayload = currentStudents.map((s) => {
+      const isObj = currentConfig.isObjective;
+      const internal = s.absent || isObj || !currentConfig.showInternal ? 0 : Math.round(Number(s.internal || 0));
+      const practical = s.absent || isObj || !currentConfig.showPractical ? 0 : Math.round(Number(s.practical || 0));
+      const theory = s.absent || isObj || !currentConfig.showTheory ? 0 : Math.round(Number(s.theory || 0));
+      const obtained = s.absent ? 0 : (isObj ? Math.round(Number(s.obtainedMarks || 0)) : (internal + practical + theory));
+      return {
         campusId: Number(campusId) || 1,
         board: resolvedBoardName,
         boardId: resolvedBoardId,
@@ -1505,26 +1766,65 @@ export default function FacultyMarks() {
         facultyId: staffId ? Number(staffId) : undefined,
         rollNo: String(s.rollNo || ""),
         studentName: s.name || "",
-        internalMarks: Number(s.internal || 0),
-        practicalMarks: 0,
-        theoryMarks: Number(s.theory || 0),
-        totalMarks: Number(s.totalScore || 0),
-        obtainedMarks: Number(s.totalScore || 0),
+        internalMarks: internal,
+        practicalMarks: practical,
+        theoryMarks: theory,
+        totalMarks: obtained,
+        obtainedMarks: obtained,
         passingMarks: currentConfig.passingMarks || 35,
-        isPass: Number(s.totalScore || 0) >= (currentConfig.passingMarks || 35),
+        isPass: !s.absent && obtained >= (currentConfig.passingMarks || 35),
         isAbsent: Boolean(s.absent),
         remarks: s.remarks || "",
-        status: "DRAFT",
+        status: targetStatusLabel,
         isActive: true,
-      }));
+      };
+    });
 
-      await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
-        headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
-      }).catch(() => null);
+    return { draftPayload, bulkPayload, campusId, staffId, key };
+  };
 
+  // Save Draft handler - authorized faculty API
+  const handleSaveDraft = async () => {
+    if (!selectedExam || !selectedSubject || !selectedSection) return;
+    if (subjectInclusionError) {
+      notify(subjectInclusionError, "error");
+      return;
+    }
+    if (currentStudents.length === 0) {
+      notify("No eligible students to save marks for.", "error");
+      return;
+    }
+    if (!validateStudentsBeforeSave({ requireAll: false })) return;
+
+    setSavingMarks(true);
+    const authUser = getAuthUser();
+    const { draftPayload, staffId, key } = buildStudentMarkPayloads("DRAFT");
+    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+
+    const updatedEval = {
+      evaluationId: key,
+      section: selectedSectionCleanName,
+      sectionId: Number(selectedSection),
+      examId: selectedExam,
+      examinationId: Number(selectedExam),
+      examName: selectedExamName,
+      subjectId: selectedSubject,
+      subjectName: selectedSubjectName,
+      mode: currentConfig.isObjective ? "OBJECTIVE" : "REGULAR",
+      maxMarks: currentConfig.maxTotal,
+      internalMax: currentConfig.maxInternal,
+      practicalMax: currentConfig.maxPractical,
+      theoryMax: currentConfig.maxTheory,
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty",
+      empId: staffId ? `EMP-${staffId}` : "",
+      status: "DRAFT",
+      adminRemarks: "Draft saved by faculty.",
+      rows: currentStudents,
+    };
+
+    try {
       await apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload)
-        .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload))
-        .catch(() => null);
+        .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload));
 
       setEvaluationsLedger((prev) => ({
         ...prev,
@@ -1544,34 +1844,19 @@ export default function FacultyMarks() {
   // Submit Subject handler - authorized faculty API
   const handleSubmitSubject = async () => {
     if (!selectedExam || !selectedSubject || !selectedSection) return;
+    if (subjectInclusionError) {
+      notify(subjectInclusionError, "error");
+      return;
+    }
     if (currentStudents.length === 0) {
       notify("No eligible students to submit marks for.", "error");
       return;
     }
-
-    for (const s of currentStudents) {
-      if (s.absent) continue;
-      const internal = Number(s.internal || 0);
-      const theory = Number(s.theory || 0);
-      if (internal < 0 || theory < 0) {
-        notify(`Marks cannot be negative for student ${s.name}.`, "error");
-        return;
-      }
-      if (s.theory === "" || s.theory === null || isNaN(theory)) {
-        notify(`Please enter theory marks for ${s.name} before submitting.`, "error");
-        return;
-      }
-      if (s.remarks && s.remarks.length > 250) {
-        notify(`Remarks cannot exceed 250 characters for student ${s.name}.`, "error");
-        return;
-      }
-    }
+    if (!validateStudentsBeforeSave({ requireAll: true })) return;
 
     setSavingMarks(true);
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
-    const campusId = context?.profile?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
-    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
+    const { draftPayload, bulkPayload, campusId, staffId, key } = buildStudentMarkPayloads("SUBMITTED");
     const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
@@ -1584,6 +1869,11 @@ export default function FacultyMarks() {
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
+      mode: currentConfig.isObjective ? "OBJECTIVE" : "REGULAR",
+      maxMarks: currentConfig.maxTotal,
+      internalMax: currentConfig.maxInternal,
+      practicalMax: currentConfig.maxPractical,
+      theoryMax: currentConfig.maxTheory,
       faculty: context?.profile?.name || authUser?.fullName || "Faculty",
       empId: staffId ? `EMP-${staffId}` : "",
       status: "SUBMITTED",
@@ -1592,55 +1882,6 @@ export default function FacultyMarks() {
     };
 
     try {
-      const draftPayload = {
-        evaluationId: key,
-        students: currentStudents.map((s) => ({
-          studentId: Number(s.studentId),
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          practicalMarks: 0,
-          totalMarks: Number(s.totalScore || 0),
-          isAbsent: Boolean(s.absent),
-          remarks: s.remarks || "",
-        })),
-      };
-
-      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
-      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
-      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
-      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
-      const resolvedLevelName = "Intermediate";
-      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
-
-      const bulkPayload = currentStudents.map((s) => ({
-        campusId: Number(campusId) || 1,
-        board: resolvedBoardName,
-        boardId: resolvedBoardId,
-        academicYearId: resolvedYearId,
-        academicLevel: resolvedLevelName,
-        academicLevelId: resolvedLevelId,
-        groupId: resolvedGroupId,
-        programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(selectedSection) || 1,
-        examinationId: Number(selectedExam),
-        subjectId: Number(selectedSubject),
-        studentId: Number(s.studentId),
-        facultyId: staffId ? Number(staffId) : undefined,
-        rollNo: String(s.rollNo || ""),
-        studentName: s.name || "",
-        internalMarks: Number(s.internal || 0),
-        practicalMarks: 0,
-        theoryMarks: Number(s.theory || 0),
-        totalMarks: Number(s.totalScore || 0),
-        obtainedMarks: Number(s.totalScore || 0),
-        passingMarks: currentConfig.passingMarks || 35,
-        isPass: Number(s.totalScore || 0) >= (currentConfig.passingMarks || 35),
-        isAbsent: Boolean(s.absent),
-        remarks: s.remarks || "",
-        status: "SUBMITTED",
-        isActive: true,
-      }));
-
       await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
         headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
       });
@@ -1842,35 +2083,39 @@ export default function FacultyMarks() {
         return String(a.studentName || a.name || "").localeCompare(String(b.studentName || b.name || ""));
       });
 
+      const matchedExamObj = examinationsList.find((ex) => String(ex.examinationId || ex.id || ex.examId) === String(ev.examId || ev.examinationId));
+      const resolvedModalMode = String(resData?.mode || ev.mode || (isObjectiveExam(matchedExamObj) ? "OBJECTIVE" : "")).trim().toUpperCase();
+      const modalIsObjective = resolvedModalMode === "OBJECTIVE";
+
       if (rawStudents.length > 0) {
         const configuredMax = Number(
-          currentConfig?.maxTotal ||
-          (resData?.maxMarks && Number(resData.maxMarks) >= 100 ? resData.maxMarks : 0) ||
-          (ev.maxMarks && Number(ev.maxMarks) >= 100 ? ev.maxMarks : 0) ||
+          (resData?.subjectMaxMarks && Number(resData.subjectMaxMarks) > 0 ? resData.subjectMaxMarks : null) ||
+          (resData?.maxMarks && Number(resData.maxMarks) > 0 ? resData.maxMarks : null) ||
+          (ev.maxMarks && Number(ev.maxMarks) > 0 ? ev.maxMarks : null) ||
+          (currentConfig?.maxTotal && Number(currentConfig.maxTotal) > 0 ? currentConfig.maxTotal : null) ||
           100
         );
         const mappedRows = rawStudents.map((s, idx) => {
           const isAbsent = Boolean(s.isAbsent ?? s.absent);
-          const internal = s.internal !== undefined && s.internal !== null ? s.internal : (s.internalMarks ?? 0);
-          const practical = s.practical !== undefined && s.practical !== null ? s.practical : (s.practicalMarks ?? 0);
-          const theory = s.theory !== undefined && s.theory !== null ? s.theory : (s.theoryMarks ?? 0);
-          const totalVal = s.total !== undefined && s.total !== null ? s.total : (s.totalMarks !== undefined && s.totalMarks !== null ? s.totalMarks : (s.obtainedMarks ?? 0));
+          const internal = modalIsObjective ? 0 : (s.internal !== undefined && s.internal !== null ? s.internal : (s.internalMarks ?? 0));
+          const practical = modalIsObjective ? 0 : (s.practical !== undefined && s.practical !== null ? s.practical : (s.practicalMarks ?? 0));
+          const theory = modalIsObjective ? 0 : (s.theory !== undefined && s.theory !== null ? s.theory : (s.theoryMarks ?? 0));
+          const totalVal = s.obtainedMarks !== undefined && s.obtainedMarks !== null
+            ? s.obtainedMarks
+            : (s.total !== undefined && s.total !== null ? s.total : (s.totalMarks !== undefined && s.totalMarks !== null ? s.totalMarks : 0));
           const numTotal = Number(totalVal) || 0;
           const studentMax = Number(s.maxMarks || 0);
-          const maxM = Math.max(100, studentMax >= 100 ? studentMax : configuredMax, numTotal);
+          const maxM = studentMax > 0 ? studentMax : configuredMax;
           let pct = "—";
           if (!isAbsent) {
             if (s.percentage !== null && s.percentage !== undefined && s.percentage !== "") {
               const parsedPct = parseFloat(String(s.percentage));
               pct = !isNaN(parsedPct) ? `${Math.min(100, Math.max(0, parsedPct)).toFixed(2)}%` : String(s.percentage);
             } else {
-              const calcPct = Math.min(100, Math.max(0, (numTotal / maxM) * 100));
+              const calcPct = maxM > 0 ? Math.min(100, Math.max(0, (numTotal / maxM) * 100)) : 0;
               pct = `${calcPct.toFixed(2)}%`;
             }
           }
-
-
-
 
           return {
             studentId: s.studentId || idx,
@@ -1891,10 +2136,24 @@ export default function FacultyMarks() {
           };
         });
 
+        const hasPracticalMarks = !modalIsObjective && (
+          Number(resData?.practicalMax || ev.practicalMax || 0) > 0 ||
+          Boolean(resData?.isPractical || resData?.isPracticalApplicable) ||
+          mappedRows.some((r) => !r.absent && Number(r.practical || 0) > 0)
+        );
+        const hasInternalMarks = !modalIsObjective && (
+          Number(resData?.internalMax || ev.internalMax || 0) > 0 ||
+          mappedRows.some((r) => !r.absent && Number(r.internal || 0) > 0) ||
+          (!hasPracticalMarks && mappedRows.some((r) => !r.absent && Number(r.internal || 0) >= 0))
+        );
+
         setViewResultsEval((prev) => ({
           ...(prev || ev),
           ...(typeof resData === "object" ? resData : {}),
           rows: mappedRows,
+          isObjective: modalIsObjective,
+          showPractical: hasPracticalMarks,
+          showInternal: hasInternalMarks,
           totalStudents: mappedRows.length,
           subjectName: resData?.subjectName || ev.subjectName,
           examName: resData?.examinationName || ev.examName,
@@ -1937,11 +2196,13 @@ export default function FacultyMarks() {
       }
       const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
       const rollIdx = header.findIndex((h) => h.includes("roll"));
-      const theoryIdx = header.findIndex((h) => h.includes("theory") || h.includes("marks"));
+      const obtainedIdx = header.findIndex((h) => h.includes("obtained") || h.includes("objective") || h === "marks");
+      const theoryIdx = header.findIndex((h) => h.includes("theory") || (!h.includes("obtained") && !h.includes("internal") && !h.includes("practical") && h.includes("marks")));
       const internalIdx = header.findIndex((h) => h.includes("internal"));
+      const practicalIdx = header.findIndex((h) => h.includes("practical"));
 
-      if (theoryIdx === -1 && rollIdx === -1) {
-        notify("Spreadsheet must contain headers for 'Roll No' and 'Marks'.", "error");
+      if (rollIdx === -1 && obtainedIdx === -1 && theoryIdx === -1 && internalIdx === -1 && practicalIdx === -1) {
+        notify("Spreadsheet must contain valid headers ('Roll No' and Marks column).", "error");
         return;
       }
 
@@ -1952,19 +2213,38 @@ export default function FacultyMarks() {
             const cols = lines[i].split(",").map((c) => c.trim());
             const fileRoll = rollIdx !== -1 ? cols[rollIdx] : "";
             if (fileRoll && String(student.rollNo).toLowerCase() === fileRoll.toLowerCase()) {
-              const fileTheory = theoryIdx !== -1 ? Number(cols[theoryIdx]) : student.theory;
-              const fileInternal = internalIdx !== -1 ? Number(cols[internalIdx]) : student.internal;
               importedCount++;
-              const theory = isNaN(fileTheory) ? 0 : Math.min(Math.max(0, fileTheory), currentConfig.maxTheory || 100);
-              const internal = isNaN(fileInternal) ? 0 : Math.min(Math.max(0, fileInternal), currentConfig.maxInternal || 20);
-              const total = student.absent ? 0 : internal + theory;
               const max = currentConfig.maxTotal || 100;
+              if (currentConfig.isObjective) {
+                const rawSrc = obtainedIdx !== -1 ? cols[obtainedIdx] : (theoryIdx !== -1 ? cols[theoryIdx] : "");
+                const num = Number(rawSrc);
+                const obtained = isNaN(num) ? 0 : Math.min(Math.max(0, num), max);
+                const total = student.absent ? 0 : obtained;
+                return {
+                  ...student,
+                  internal: 0,
+                  practical: 0,
+                  theory: 0,
+                  obtainedMarks: student.absent ? "" : obtained,
+                  totalScore: total,
+                  percentage: student.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`,
+                };
+              }
+              const fileInternal = internalIdx !== -1 && currentConfig.showInternal ? Number(cols[internalIdx]) : Number(student.internal || 0);
+              const filePractical = practicalIdx !== -1 && currentConfig.showPractical ? Number(cols[practicalIdx]) : Number(student.practical || 0);
+              const fileTheory = theoryIdx !== -1 && currentConfig.showTheory ? Number(cols[theoryIdx]) : Number(student.theory || 0);
+              const internal = !currentConfig.showInternal || isNaN(fileInternal) ? 0 : Math.min(Math.max(0, fileInternal), currentConfig.maxInternal || 0);
+              const practical = !currentConfig.showPractical || isNaN(filePractical) ? 0 : Math.min(Math.max(0, filePractical), currentConfig.maxPractical || 0);
+              const theory = !currentConfig.showTheory || isNaN(fileTheory) ? 0 : Math.min(Math.max(0, fileTheory), currentConfig.maxTheory || 0);
+              const total = student.absent ? 0 : (internal + practical + theory);
               return {
                 ...student,
-                theory,
-                internal,
+                internal: currentConfig.showInternal ? internal : 0,
+                practical: currentConfig.showPractical ? practical : 0,
+                theory: currentConfig.showTheory ? theory : 0,
+                obtainedMarks: total,
                 totalScore: total,
-                percentage: student.absent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`,
+                percentage: student.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`,
               };
             }
           }
@@ -2393,6 +2673,11 @@ export default function FacultyMarks() {
                     </div>
                   </div>
 
+                  {/* Accessible Polite Live Region for Marks Validation */}
+                  <div className="cms-sr-only" aria-live="polite" role="status">
+                    {liveAnnouncement}
+                  </div>
+
                   {/* Student Table */}
                   <div className="cms-table-wrap" style={{ width: "100%", overflowX: "auto" }}>
                     <table className="cms-table" style={{ width: "100%", tableLayout: "auto" }}>
@@ -2401,19 +2686,28 @@ export default function FacultyMarks() {
                           <th className="cms-cell-center" style={{ width: 90 }}>ROLL NO</th>
                           <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
                           {currentConfig.isObjective ? (
-                            <th className="cms-cell-center" style={{ width: 180 }}>
-                              OBJECTIVE MARKS / {currentConfig.maxTotal || 100}
+                            <th className="cms-cell-center" style={{ width: 190 }}>
+                              OBTAINED MARKS / {currentConfig.maxTotal}
                             </th>
                           ) : (
                             <>
-                              <th className="cms-cell-center" style={{ width: 140 }}>
-                                INTERNAL / {currentConfig.maxInternal || 20}
-                              </th>
-                              <th className="cms-cell-center" style={{ width: 140 }}>
-                                THEORY / {currentConfig.maxTheory || 80}
-                              </th>
+                              {currentConfig.showInternal && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  INTERNAL / {currentConfig.maxInternal}
+                                </th>
+                              )}
+                              {currentConfig.showPractical && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  PRACTICAL / {currentConfig.maxPractical}
+                                </th>
+                              )}
+                              {currentConfig.showTheory && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  THEORY / {currentConfig.maxTheory}
+                                </th>
+                              )}
                               <th className="cms-cell-center" style={{ width: 120 }}>
-                                TOTAL / {currentConfig.maxTotal || 100}
+                                TOTAL / {currentConfig.maxTotal}
                               </th>
                             </>
                           )}
@@ -2435,40 +2729,141 @@ export default function FacultyMarks() {
                               </td>
                               {currentConfig.isObjective ? (
                                 <td className="cms-cell-center">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={currentConfig.maxTotal || 100}
-                                    className="cms-cell-input cms-num-input"
-                                    value={s.totalScore}
-                                    disabled={s.absent || isLocked}
-                                    onChange={(e) => handleStudentMarkChange(s.studentId, "obtainedMarks", e.target.value)}
-                                  />
+                                  {(() => {
+                                    const errKey = `${s.studentId}_obtainedMarks`;
+                                    const errMsg = fieldErrors[errKey];
+                                    const errId = `err-${s.studentId}-obtained`;
+                                    return (
+                                      <div className="cms-mark-input-cell">
+                                        <input
+                                          ref={(el) => { inputRefs.current[errKey] = el; }}
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="0"
+                                          max={currentConfig.maxTotal}
+                                          placeholder={`0–${currentConfig.maxTotal}`}
+                                          aria-label={`${s.name} Obtained Marks (Max ${currentConfig.maxTotal})`}
+                                          aria-invalid={errMsg ? "true" : "false"}
+                                          aria-describedby={errMsg ? errId : undefined}
+                                          className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                          value={s.absent ? "" : (s.obtainedMarks ?? "")}
+                                          disabled={s.absent || isLocked}
+                                          onChange={(e) => handleStudentMarkChange(s.studentId, "obtainedMarks", e.target.value)}
+                                          onBlur={(e) => handleStudentMarkBlur(s.studentId, "obtainedMarks", e.target.value)}
+                                        />
+                                        {errMsg && (
+                                          <div id={errId} className="cms-field-error-text">
+                                            {errMsg}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               ) : (
                                 <>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={currentConfig.maxInternal || 20}
-                                      className="cms-cell-input cms-num-input"
-                                      value={s.internal}
-                                      disabled={s.absent || isLocked}
-                                      onChange={(e) => handleStudentMarkChange(s.studentId, "internal", e.target.value)}
-                                    />
-                                  </td>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={currentConfig.maxTheory || 80}
-                                      className="cms-cell-input cms-num-input"
-                                      value={s.theory}
-                                      disabled={s.absent || isLocked}
-                                      onChange={(e) => handleStudentMarkChange(s.studentId, "theory", e.target.value)}
-                                    />
-                                  </td>
+                                  {currentConfig.showInternal && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_internal`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-internal`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxInternal}
+                                              placeholder={`0–${currentConfig.maxInternal}`}
+                                              aria-label={`${s.name} Internal Marks (Max ${currentConfig.maxInternal})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.internal ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "internal", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "internal", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
+                                  {currentConfig.showPractical && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_practical`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-practical`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxPractical}
+                                              placeholder={`0–${currentConfig.maxPractical}`}
+                                              aria-label={`${s.name} Practical Marks (Max ${currentConfig.maxPractical})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.practical ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "practical", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "practical", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
+                                  {currentConfig.showTheory && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_theory`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-theory`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxTheory}
+                                              placeholder={`0–${currentConfig.maxTheory}`}
+                                              aria-label={`${s.name} Theory Marks (Max ${currentConfig.maxTheory})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.theory ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "theory", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "theory", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
                                   <td className="cms-cell-center" style={{ fontWeight: 700 }}>
                                     {s.absent ? "—" : s.totalScore}
                                   </td>
@@ -2915,19 +3310,33 @@ export default function FacultyMarks() {
                     <tr>
                       <th className="cms-cell-center" style={{ width: "13%", minWidth: 70 }}>ROLL NO</th>
                       <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
-                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>INTERNAL</th>
-                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>THEORY</th>
-                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>TOTAL</th>
+                      {viewResultsEval.isObjective ? (
+                        <th className="cms-cell-center" style={{ width: "18%", minWidth: 110 }}>OBTAINED MARKS</th>
+                      ) : (
+                        <>
+                          {viewResultsEval.showInternal !== false && (
+                            <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>INTERNAL</th>
+                          )}
+                          {viewResultsEval.showPractical && (
+                            <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>PRACTICAL</th>
+                          )}
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>THEORY</th>
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>TOTAL</th>
+                        </>
+                      )}
                       <th className="cms-cell-center" style={{ width: "12%", minWidth: 80 }}>PERCENTAGE</th>
                       <th className="cms-cell-center" style={{ width: "12%", minWidth: 65 }}>ABSENT</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
+                      const colCount = viewResultsEval.isObjective
+                        ? 5
+                        : 5 + (viewResultsEval.showInternal !== false ? 1 : 0) + (viewResultsEval.showPractical ? 1 : 0) + 1;
                       if (resultsModalLoading) {
                         return (
                           <tr>
-                            <td colSpan={7} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
+                            <td colSpan={colCount} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
                               Loading student scores...
                             </td>
                           </tr>
@@ -2939,7 +3348,7 @@ export default function FacultyMarks() {
                       if (pagedRows.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={7} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
+                            <td colSpan={colCount} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
                               No student scores recorded for this evaluation.
                             </td>
                           </tr>
@@ -2949,9 +3358,22 @@ export default function FacultyMarks() {
                         <tr key={r.studentId || idx}>
                           <td className="cms-cell-center" style={{ fontWeight: 600 }}>{r.rollNo}</td>
                           <td style={{ fontWeight: 600 }}>{r.studentName || r.name}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
-                          <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : (r.totalScore ?? r.totalMarks ?? r.total ?? r.obtainedMarks ?? "—")}</td>
+                          {viewResultsEval.isObjective ? (
+                            <td className="cms-cell-center" style={{ fontWeight: 700 }}>
+                              {r.absent ? "—" : (r.obtainedMarks ?? r.totalScore ?? r.totalMarks ?? r.total ?? "—")}
+                            </td>
+                          ) : (
+                            <>
+                              {viewResultsEval.showInternal !== false && (
+                                <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
+                              )}
+                              {viewResultsEval.showPractical && (
+                                <td className="cms-cell-center">{r.absent ? "—" : r.practical}</td>
+                              )}
+                              <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
+                              <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : (r.totalScore ?? r.totalMarks ?? r.total ?? r.obtainedMarks ?? "—")}</td>
+                            </>
+                          )}
                           <td className="cms-cell-center">{r.absent ? "—" : r.percentage}</td>
                           <td className="cms-cell-center">{r.absent ? "Yes" : "No"}</td>
                         </tr>

@@ -42,21 +42,48 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<MarkResponseDto> SaveMarkAsync(SaveMarkDto dto)
         {
+            var limits = await _marksRepository.GetExamFormatAndComponentLimitsAsync(dto.ExaminationId, dto.SubjectId);
             if (dto.PassingMarks <= 0)
             {
-                dto.PassingMarks = 35;
+                dto.PassingMarks = limits.PassingMarks > 0 ? (int)Math.Round(limits.PassingMarks) : 35;
             }
 
             int finalScore;
             if (dto.IsAbsent)
             {
                 finalScore = 0;
+                dto.InternalMarks = 0;
+                dto.PracticalMarks = 0;
+                dto.TheoryMarks = 0;
+            }
+            else if (limits.IsObjective)
+            {
+                finalScore = dto.ObtainedMarks ?? dto.TotalMarks ?? (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks);
+                if (finalScore < 0 || finalScore > limits.MaxMarks)
+                {
+                    throw new ValidationException($"Obtained marks ({finalScore}) must be between 0 and {limits.MaxMarks}.");
+                }
+                dto.InternalMarks = 0;
+                dto.PracticalMarks = 0;
+                dto.TheoryMarks = 0;
             }
             else
             {
-                finalScore = dto.ObtainedMarks.HasValue
-                    ? dto.ObtainedMarks.Value
-                    : (dto.TotalMarks.HasValue ? dto.TotalMarks.Value : (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks));
+                if (dto.InternalMarks < 0 || dto.PracticalMarks < 0 || dto.TheoryMarks < 0)
+                {
+                    throw new ValidationException("Marks cannot be negative.");
+                }
+                if ((limits.InternalMax + limits.PracticalMax + limits.TheoryMax) > 0m)
+                {
+                    if (dto.InternalMarks > limits.InternalMax) throw new ValidationException($"Internal marks ({dto.InternalMarks}) exceed max ({limits.InternalMax}).");
+                    if (dto.PracticalMarks > limits.PracticalMax) throw new ValidationException($"Practical marks ({dto.PracticalMarks}) exceed max ({limits.PracticalMax}).");
+                    if (dto.TheoryMarks > limits.TheoryMax) throw new ValidationException($"Theory marks ({dto.TheoryMarks}) exceed max ({limits.TheoryMax}).");
+                }
+                finalScore = dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks;
+                if (finalScore == 0 && (dto.ObtainedMarks.HasValue || dto.TotalMarks.HasValue))
+                {
+                    finalScore = dto.ObtainedMarks ?? dto.TotalMarks ?? 0;
+                }
             }
 
             dto.TotalMarks = finalScore;
@@ -65,9 +92,9 @@ namespace CollegeManagement.API.Services.Implementations
             var existing = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, dto.StudentId);
             if (existing != null)
             {
-                existing.InternalMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
-                existing.PracticalMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
-                existing.TheoryMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
+                existing.InternalMarks = dto.InternalMarks;
+                existing.PracticalMarks = dto.PracticalMarks;
+                existing.TheoryMarks = dto.TheoryMarks;
                 existing.TotalMarks = finalScore;
                 if (dto.PassingMarks > 0)
                 {
@@ -139,10 +166,70 @@ namespace CollegeManagement.API.Services.Implementations
                 return result;
             }
 
-            var itemsToUpsert = dto.Marks.Select(item =>
+            var limitsCache = new Dictionary<string, (bool IsObjective, decimal MaxMarks, decimal InternalMax, decimal PracticalMax, decimal TheoryMax, decimal PassingMarks)>();
+            var itemsToUpsert = new List<object>();
+
+            foreach (var item in dto.Marks)
             {
-                int finalScore = item.IsAbsent ? 0 : (item.TotalMarks ?? (item.InternalMarks + item.PracticalMarks + item.TheoryMarks));
-                return new
+                var cacheKey = $"{item.ExaminationId}:{item.SubjectId}";
+                if (!limitsCache.TryGetValue(cacheKey, out var limits))
+                {
+                    limits = await _marksRepository.GetExamFormatAndComponentLimitsAsync(item.ExaminationId, item.SubjectId);
+                    limitsCache[cacheKey] = limits;
+                }
+
+                int internalVal;
+                int practicalVal;
+                int theoryVal;
+                int finalScore;
+
+                if (item.IsAbsent)
+                {
+                    internalVal = 0;
+                    practicalVal = 0;
+                    theoryVal = 0;
+                    finalScore = 0;
+                }
+                else if (limits.IsObjective)
+                {
+                    finalScore = item.ObtainedMarks ?? item.TotalMarks ?? (item.InternalMarks + item.PracticalMarks + item.TheoryMarks);
+                    if (finalScore < 0 || finalScore > limits.MaxMarks)
+                    {
+                        throw new ValidationException($"Obtained marks ({finalScore}) must be between 0 and {limits.MaxMarks} for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                    }
+                    internalVal = 0;
+                    practicalVal = 0;
+                    theoryVal = 0;
+                    item.InternalMarks = 0;
+                    item.PracticalMarks = 0;
+                    item.TheoryMarks = 0;
+                    item.TotalMarks = finalScore;
+                    item.ObtainedMarks = finalScore;
+                }
+                else
+                {
+                    internalVal = item.InternalMarks;
+                    practicalVal = item.PracticalMarks;
+                    theoryVal = item.TheoryMarks;
+                    if (internalVal < 0 || practicalVal < 0 || theoryVal < 0)
+                    {
+                        throw new ValidationException($"Marks cannot be negative for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                    }
+                    if ((limits.InternalMax + limits.PracticalMax + limits.TheoryMax) > 0m)
+                    {
+                        if (internalVal > limits.InternalMax) throw new ValidationException($"Internal marks ({internalVal}) exceed max ({limits.InternalMax}) for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                        if (practicalVal > limits.PracticalMax) throw new ValidationException($"Practical marks ({practicalVal}) exceed max ({limits.PracticalMax}) for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                        if (theoryVal > limits.TheoryMax) throw new ValidationException($"Theory marks ({theoryVal}) exceed max ({limits.TheoryMax}) for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                    }
+                    finalScore = internalVal + practicalVal + theoryVal;
+                    if (finalScore == 0 && (item.ObtainedMarks.HasValue || item.TotalMarks.HasValue))
+                    {
+                        finalScore = item.ObtainedMarks ?? item.TotalMarks ?? 0;
+                    }
+                }
+
+                int resolvedPass = item.PassingMarks > 0 ? item.PassingMarks : (limits.PassingMarks > 0 ? (int)Math.Round(limits.PassingMarks) : 35);
+                itemsToUpsert.Add(new
                 {
                     campusId = item.CampusId ?? 1,
                     board = item.Board ?? string.Empty,
@@ -158,16 +245,16 @@ namespace CollegeManagement.API.Services.Implementations
                     rollNo = item.RollNo ?? string.Empty,
                     studentName = item.StudentName ?? string.Empty,
                     facultyId = item.FacultyId,
-                    internalMarks = item.IsAbsent ? 0 : item.InternalMarks,
-                    practicalMarks = item.IsAbsent ? 0 : item.PracticalMarks,
-                    theoryMarks = item.IsAbsent ? 0 : item.TheoryMarks,
+                    internalMarks = internalVal,
+                    practicalMarks = practicalVal,
+                    theoryMarks = theoryVal,
                     totalMarks = finalScore,
-                    passingMarks = item.PassingMarks > 0 ? item.PassingMarks : 35,
+                    passingMarks = resolvedPass,
                     isAbsent = item.IsAbsent ? 1 : 0,
                     remarks = item.Remarks ?? string.Empty,
                     status = (int)EvaluationStatus.SUBMITTED
-                };
-            }).ToList();
+                });
+            }
 
             var json = System.Text.Json.JsonSerializer.Serialize(itemsToUpsert);
             await _marksRepository.BulkUpsertMarksAsync(json, 0, null);
@@ -214,13 +301,49 @@ return dto.Marks.Select(m => new MarkResponseDto
             if (existing == null) throw new NotFoundException($"Mark record with ID {id} not found.");
             if (existing.IsLocked || existing.Status == EvaluationStatus.APPROVED) throw new ConflictException("Cannot edit approved or locked marks.");
 
-            int finalScore = dto.IsAbsent ? 0 : (dto.TotalMarks ?? (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks));
+            var limits = await _marksRepository.GetExamFormatAndComponentLimitsAsync(existing.ExaminationId, existing.SubjectId);
+            int intMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
+            int pracMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
+            int thMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
+            int finalScore;
+
+            if (dto.IsAbsent)
+            {
+                finalScore = 0;
+            }
+            else if (limits.IsObjective)
+            {
+                finalScore = dto.ObtainedMarks ?? dto.TotalMarks ?? (intMarks + pracMarks + thMarks);
+                if (finalScore < 0 || finalScore > limits.MaxMarks)
+                {
+                    throw new ValidationException($"Obtained marks ({finalScore}) must be between 0 and {limits.MaxMarks}.");
+                }
+                intMarks = 0;
+                pracMarks = 0;
+                thMarks = 0;
+            }
+            else
+            {
+                if (intMarks < 0 || pracMarks < 0 || thMarks < 0)
+                    throw new ValidationException("Marks cannot be negative.");
+                if ((limits.InternalMax + limits.PracticalMax + limits.TheoryMax) > 0m)
+                {
+                    if (intMarks > limits.InternalMax) throw new ValidationException($"Internal marks ({intMarks}) exceed max ({limits.InternalMax}).");
+                    if (pracMarks > limits.PracticalMax) throw new ValidationException($"Practical marks ({pracMarks}) exceed max ({limits.PracticalMax}).");
+                    if (thMarks > limits.TheoryMax) throw new ValidationException($"Theory marks ({thMarks}) exceed max ({limits.TheoryMax}).");
+                }
+                finalScore = intMarks + pracMarks + thMarks;
+                if (finalScore == 0 && (dto.ObtainedMarks.HasValue || dto.TotalMarks.HasValue))
+                {
+                    finalScore = dto.ObtainedMarks ?? dto.TotalMarks ?? 0;
+                }
+            }
 
             _mapper.Map(dto, existing);
             existing.TotalMarks = finalScore;
-            existing.InternalMarks = dto.IsAbsent ? 0 : dto.InternalMarks;
-            existing.PracticalMarks = dto.IsAbsent ? 0 : dto.PracticalMarks;
-            existing.TheoryMarks = dto.IsAbsent ? 0 : dto.TheoryMarks;
+            existing.InternalMarks = intMarks;
+            existing.PracticalMarks = pracMarks;
+            existing.TheoryMarks = thMarks;
             existing.IsAbsent = dto.IsAbsent;
             existing.UpdatedAt = DateTime.UtcNow;
 

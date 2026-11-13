@@ -513,12 +513,6 @@ function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
 
-// Module-level notifications cache to prevent duplicate backend requests on route navigation
-let cachedLiveNotifications = [];
-let lastNotifFetchTimestamp = 0;
-let lastNotifCampus = null;
-const NOTIF_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
-
 export default function DashboardLayout({
   title,
   subtitle,
@@ -563,8 +557,6 @@ export default function DashboardLayout({
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [liveNotifications, setLiveNotifications] = useState([]);
-  const [hasViewedNotifications, setHasViewedNotifications] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
   const campusRef = useRef(null);
@@ -727,135 +719,7 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
-  const userRoleStr = String(user?.role || "").trim().toLowerCase();
-  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
-  const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
-  const fetchLiveNotifsRef = useRef(null);
-  useEffect(() => {
-    let disposed = false;
-    if (canReviewReimbursements || canReviewCertificates) {
-      const fetchLiveNotifications = async (force = false) => {
-        const now = Date.now();
-        if (
-          !force &&
-          lastNotifCampus === reimbursementCampusId &&
-          now - lastNotifFetchTimestamp < NOTIF_CACHE_TTL_MS
-        ) {
-          if (!disposed && cachedLiveNotifications.length > 0) {
-            setLiveNotifications(cachedLiveNotifications);
-          }
-          return;
-        }
 
-        const notifs = [];
-        try {
-          if (canReviewReimbursements) {
-            const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
-            if (fetchFn) {
-              const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
-              if (!disposed) {
-                const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
-                const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
-                if (claims.length > 0) {
-                  notifs.push({
-                    id: "admin-notif-reimbursement",
-                    title: "New Staff Reimbursement Request",
-                    count: claims.length,
-                    to: "/dashboard/reimbursements",
-                    label: "reimbursements"
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        try {
-          if (canReviewCertificates) {
-            const certRes = await apiClient.get("/api/v1/certificates/workflow-stats", { skipGlobalLoader: true });
-            if (!disposed) {
-              const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
-              const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
-              const isCurrentlyOnCertPage = window.location.pathname.startsWith("/dashboard/certificates");
-              if (reqCount > 0 && !isCurrentlyOnCertPage) {
-                notifs.push({
-                  id: "admin-notif-certificate",
-                  title: "Student Certificate Requests",
-                  count: reqCount,
-                  to: "/dashboard/certificates?tab=actions&status=Requested",
-                  label: "certificates"
-                });
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        if (!disposed) {
-          cachedLiveNotifications = notifs;
-          lastNotifFetchTimestamp = Date.now();
-          lastNotifCampus = reimbursementCampusId;
-          setLiveNotifications(notifs);
-        }
-      };
-
-      fetchLiveNotifsRef.current = fetchLiveNotifications;
-      fetchLiveNotifications();
-
-      
-
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
-      let channel = null;
-      try {
-        channel = new BroadcastChannel("cms_notifications");
-        channel.onmessage = (event) => {
-          if (
-            event.data?.type === "NEW_REIMBURSEMENT" ||
-            event.data?.type === "NEW_CERTIFICATE_REQUEST" ||
-            event.data?.type === "CERTIFICATE_STATUS_UPDATED" ||
-            event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
-          ) {
-            setHasViewedNotifications(false);
-            fetchLiveNotifications(true);
-          }
-        };
-      } catch {
-        // Fallback
-      }
-
-      // Listen for same-tab local events so badges update immediately upon action
-      const handleLocalAction = () => {
-        setHasViewedNotifications(false);
-        fetchLiveNotifications(true);
-      };
-      window.addEventListener("cms-reimbursements-updated", handleLocalAction);
-      window.addEventListener("cms-certificates-updated", handleLocalAction);
-
-      return () => {
-        disposed = true;
-        if (channel) channel.close();
-        
-        window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
-        window.removeEventListener("cms-certificates-updated", handleLocalAction);
-      };
-    }
-    setLiveNotifications([]);
-  }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
-
-  // SignalR Push Connection: Subscribed via singleton notificationHubService
-  useEffect(() => {
-    if (!canReviewReimbursements && !canReviewCertificates) return;
-
-    const unsubscribe = notificationHubService.subscribe(() => {
-      setHasViewedNotifications(false);
-      fetchLiveNotifsRef.current?.(true);
-    });
-
-    return unsubscribe;
-  }, [canReviewReimbursements, canReviewCertificates]);
 
   // Synchronize Campus Join dynamically without tearing down SignalR socket
   useEffect(() => {
@@ -864,15 +728,10 @@ export default function DashboardLayout({
     }
   }, [reimbursementCampusId]);
 
-  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
-
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isExamCell ? "Exam Cell" : "CMS Admin"));
   const profileRole = isWarden ? (user?.designation || "Hostel Warden") : isExamCell ? (user?.designation || "Exam Cell") : (user?.designation || user?.role || "admin");
-  
-  const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
-  const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
 
   const [adminPhotoError, setAdminPhotoError] = useState(false);
   const activeAdminPhoto = useMemo(() => {
@@ -953,14 +812,6 @@ export default function DashboardLayout({
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
-  }, [pathname]);
-  useEffect(() => {
-    if (pathname.startsWith("/dashboard/certificates")) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
-    }
-    if (pathname.startsWith("/dashboard/reimbursements")) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
-    }
   }, [pathname]);
 
   useEffect(() => {

@@ -8,6 +8,14 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<StudentAdmissionResponseDto> CreateAsync(
             CreateStudentAdmissionRequest request);
 
+        Task<StudentAdmissionCreateResultDto> CreateIdempotentAsync(
+            CreateStudentAdmissionRequest request,
+            string? idempotencyKey = null,
+            int? createdByUserId = null);
+
+        Task<StudentAdmissionRecoveryResponseDto?> RecoverByIdempotencyKeyAsync(
+            string idempotencyKey);
+
         Task<StudentAdmissionResponseDto?> GetByIdAsync(
             int admissionId);
 

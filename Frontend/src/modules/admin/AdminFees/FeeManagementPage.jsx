@@ -2067,7 +2067,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
         receiptNumber: "",
         discount: discountValue,
         fine: fineValue,
-        transactionReference: reference,
+        transactionReference: method === "Cash" ? null : reference,
         note,
       }, { requireRealBackend: true, skipNetworkRetry: true, signal: controller.signal });
       if (controller.signal.aborted) return null;
@@ -2132,7 +2132,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
           {[["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"], ["CASH", "Cash / Manual"]].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={mode === id} className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`} disabled={gatewayLocked || saving || cashUncertain} onClick={() => { setMode(id); setError(""); }}>{label}</button>)}
         </div>
         <fieldset className="cms-fee-gateway-fields" disabled={gatewayLocked || saving || cashUncertain}>
-        <div className="cms-form-grid cols-3">
+        <div className={`cms-form-grid ${mode === "CASH" && method === "Cash" ? "cols-2" : "cols-3"}`}>
           <div className="cms-field full">
             <label>Pay Towards</label>
             <details className="cms-fee-pay-towards">
@@ -2172,12 +2172,15 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
             <label htmlFor="collect-date">Payment Date</label>
             <input id="collect-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
-          <div className="cms-field">
+          {method !== "Cash" && <div className="cms-field">
             <label htmlFor="collect-method">Payment Method <span className="req">*</span></label>
-            <select id="collect-method" value={method} onChange={(event) => setMethod(event.target.value)}>
+            <select id="collect-method" value={method} onChange={(event) => {
+              setMethod(event.target.value);
+              if (event.target.value === "Cash" && error === "Transaction / Reference Number is required for this payment method") setError("");
+            }}>
               {PAYMENT_METHODS.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-          </div>
+          </div>}
           <div className="cms-field">
             <label htmlFor="collect-discount">Discount</label>
             <input id="collect-discount" type="number" min="0" value={discount} onChange={(event) => setDiscount(event.target.value)} />
@@ -2186,16 +2189,20 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
             <label htmlFor="collect-fine">Fine</label>
             <input id="collect-fine" type="number" min="0" value={fine} onChange={(event) => setFine(event.target.value)} />
           </div>
-          <div className="cms-field">
+          {method !== "Cash" && <div className="cms-field">
             <label htmlFor="collect-ref">Transaction / Reference Number {isReferenceRequired ? <span className="req">*</span> : null}</label>
             <input id="collect-ref" value={reference} placeholder={method === "Cash" ? "Optional for cash" : "Reference number"} onChange={(event) => setReference(event.target.value)} />
-          </div>
+          </div>}
           <div className="cms-field full">
             <label htmlFor="collect-note">Note</label>
             <textarea id="collect-note" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
           </> : null}
         </div>
+        {mode === "CASH" && method === "Cash" ? <details>
+          <summary className="cms-fee-note">Other manual payment methods</summary>
+          <div className="cms-form-actions">{PAYMENT_METHODS.filter(item => item !== "Cash").map(item => <button key={item} type="button" className="cms-btn cms-btn-ghost" onClick={() => { setMethod(item); setError(""); }}>{item}</button>)}</div>
+        </details> : null}
         </fieldset>
         {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
@@ -5079,13 +5086,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       }
       if (tab === "Overview") loadOverviewData();
     };
+    const refreshOnFocus = () => {
+      // The native file picker restores window focus. Reloading here clears
+      // selectedDetail and unmounts the active payment form and its File state.
+      if (!collecting) refreshFeeAccounts();
+    };
     window.addEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
-    window.addEventListener("focus", refreshFeeAccounts);
+    window.addEventListener("focus", refreshOnFocus);
     return () => {
       window.removeEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
-      window.removeEventListener("focus", refreshFeeAccounts);
+      window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
+  }, [collecting, ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;

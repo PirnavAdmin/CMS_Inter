@@ -330,7 +330,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Your reimbursement claim #{id} for ₹{claim.Amount} ({claim.Category}) has been approved.",
                             "Reimbursement",
                             id,
-                            "/dashboard/reimbursements");
+                            $"/faculty-dashboard/reimbursements?claimId={id}");
                     }
                 }
                 catch { }
@@ -370,7 +370,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Clarification needed for claim #{id}: {request?.ClarificationNotes ?? "Please provide more details."}",
                             "Reimbursement",
                             id,
-                            "/dashboard/reimbursements");
+                            $"/faculty-dashboard/reimbursements?claimId={id}");
                     }
                 }
                 catch { }
@@ -410,7 +410,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Your reimbursement claim #{id} for ₹{claim.Amount} was rejected. Reason: {request?.RejectionReason ?? "Not specified"}.",
                             "Reimbursement",
                             id,
-                            "/dashboard/reimbursements");
+                            $"/faculty-dashboard/reimbursements?claimId={id}");
                     }
                 }
                 catch { }
@@ -450,7 +450,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Your reimbursement claim #{id} for ₹{claim.Amount} has been marked as Paid.",
                             "Reimbursement",
                             id,
-                            "/dashboard/reimbursements");
+                            $"/faculty-dashboard/reimbursements?claimId={id}");
                     }
                 }
                 catch { }

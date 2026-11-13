@@ -415,6 +415,7 @@ builder.Services.AddHttpClient("RazorpayAssets", client =>
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.NotificationHistoryCleanupWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeePaymentEmailDispatcherWorker>();
 #endregion
 
