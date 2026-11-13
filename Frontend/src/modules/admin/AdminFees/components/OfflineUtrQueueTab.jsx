@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Check, Eye, RefreshCw, X } from "lucide-react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Modal, SkeletonRow } from "@/shared/components/Ui.jsx";
 import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
@@ -265,13 +266,19 @@ export default function OfflineUtrQueueTab({
                         </span>
                       </td>
                       <td>
+                        <Tooltip.Provider delayDuration={200}>
                         <div className="cms-actions">
-                          {Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0 ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={!canView} onClick={() => viewProof(row)}>View Payment Proof</button> : null}
+                          {Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0 ? <Tooltip.Root>
+                            <Tooltip.Trigger asChild><button type="button" className="cms-action-btn view" aria-label="View Payment Proof" disabled={!canView} onClick={() => viewProof(row)}><Eye size={15} aria-hidden="true" /></button></Tooltip.Trigger>
+                            <Tooltip.Portal><Tooltip.Content className="cms-fee-utr-tooltip" side="top" sideOffset={6} collisionPadding={8} hideWhenDetached>View Payment Proof</Tooltip.Content></Tooltip.Portal>
+                          </Tooltip.Root> : null}
                           {["Approve", "Reject"].map((action) => (
+                            <Tooltip.Root key={action}>
+                            <Tooltip.Trigger asChild>
                             <button
-                              key={action}
                               type="button"
-                              className="cms-btn cms-btn-ghost cms-fee-mini-btn"
+                              className={`cms-action-btn ${action === "Approve" ? "edit" : "danger"}`}
+                              aria-label={action === "Approve" ? "Approve & Credit" : "Reject"}
                               disabled={
                                 !canReview ||
                                 processing ||
@@ -287,11 +294,14 @@ export default function OfflineUtrQueueTab({
                                 if (Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0) viewProof(row);
                               }}
                             >
-                              {action === "Approve" ? <Check size={14} /> : <X size={14} />}
-                              {action === "Approve" ? "Approve & Credit" : "Reject"}
+                              {action === "Approve" ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
                             </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal><Tooltip.Content className="cms-fee-utr-tooltip" side="top" sideOffset={6} collisionPadding={8} hideWhenDetached>{action === "Approve" ? "Approve & Credit" : "Reject"}</Tooltip.Content></Tooltip.Portal>
+                            </Tooltip.Root>
                           ))}
                         </div>
+                        </Tooltip.Provider>
                       </td>
                     </tr>
                   )) : null}

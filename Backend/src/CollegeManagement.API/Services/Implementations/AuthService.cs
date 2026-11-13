@@ -225,14 +225,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!selfHealed)
                     {
-                        await _auditService.LogAsync(
-                            action: "Failed login attempt",
-                            module: "Authentication",
-                            target: normalizedEmail,
-                            severity: "Warning",
-                            status: "Failed",
-                            details: "Invalid password provided during login."
-                        );
+                        _logger.LogWarning("Failed login attempt for {Email}: Invalid password provided.", normalizedEmail);
 
                         return new AuthResult
                         {
@@ -414,13 +407,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
-                await _auditService.LogAsync(
-                    action: "User logged in",
-                    module: "Authentication",
-                    target: user.Email,
-                    severity: "Info",
-                    status: "Success",
-                    details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
+                _logger.LogInformation("Successful login for {Email} ({Role})", user.Email, user.Role?.RoleName ?? "Unknown");
 
                 return new AuthResult
                 {
