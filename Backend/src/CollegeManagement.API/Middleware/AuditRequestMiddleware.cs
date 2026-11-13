@@ -47,10 +47,16 @@ namespace CollegeManagement.API.Middleware
                 stopwatch.Stop();
                 var statusCode = context.Response.StatusCode;
 
-                // Log security failures (401 Unauthorized, 403 Forbidden) and server errors (500)
-                if (statusCode == StatusCodes.Status401Unauthorized || 
-                    statusCode == StatusCodes.Status403Forbidden || 
-                    statusCode >= 500)
+                // Log severe HTTP failures in persistent AuditLogs:
+                // 1. Server errors (500+)
+                // 2. Unauthorized (401) or Forbidden (403) on mutating operations (POST, PUT, DELETE, PATCH).
+                // Safe read methods (GET/HEAD/OPTIONS) returning 401/403 are logged to structured logs to avoid flooding AuditLogs with UI polling noise.
+                var isSafeRead = HttpMethods.IsGet(context.Request.Method) ||
+                                 HttpMethods.IsHead(context.Request.Method) ||
+                                 HttpMethods.IsOptions(context.Request.Method);
+
+                if (statusCode >= 500 || 
+                    ((statusCode == StatusCodes.Status401Unauthorized || statusCode == StatusCodes.Status403Forbidden) && !isSafeRead))
                 {
                     try
                     {

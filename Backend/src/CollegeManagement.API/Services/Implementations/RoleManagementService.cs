@@ -73,7 +73,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Description = request.Description?.Trim(),
                 StaffType = string.IsNullOrWhiteSpace(request.StaffType) ? "Both" : request.StaffType.Trim(),
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
 
             await _roleRepository.AddAsync(role);

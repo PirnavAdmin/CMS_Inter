@@ -30,6 +30,7 @@ import {
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
+import { isValidSuperAdminEmail, isStrongSuperAdminPassword } from "../superAdminValidation.js";
 import profileIllustration from "@/assets/settings-3d/roles-permissions.png";
 import "./MyProfilePage.css";
 
@@ -76,12 +77,18 @@ function EditProfileModal({ currentName, currentEmail, onClose, onSave }) {
   const [name, setName] = useState(currentName);
   const [email, setEmail] = useState(currentEmail);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    if (cleanName.length < 2 || cleanName.length > 100) { setError("Name must be between 2 and 100 characters."); return; }
+    if (!isValidSuperAdminEmail(cleanEmail)) { setError("Enter a valid email address."); return; }
+    if (saving) return;
     setSaving(true);
     setTimeout(() => {
-      onSave({ name, email });
+      onSave({ name: cleanName, email: cleanEmail.toLowerCase() });
       setSaving(false);
       onClose();
     }, 400);
@@ -106,6 +113,7 @@ function EditProfileModal({ currentName, currentEmail, onClose, onSave }) {
         </div>
 
         <form className="mpp-modal-body" onSubmit={handleSubmit}>
+          {error && <div className="mpp-modal-error" role="alert"><AlertCircle size={14} /><span>{error}</span></div>}
           <div className="mpp-field-group">
             <label className="mpp-field-label">Full Name</label>
             <div className="mpp-input-wrap">
@@ -114,7 +122,9 @@ function EditProfileModal({ currentName, currentEmail, onClose, onSave }) {
                 type="text"
                 className="mpp-input"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                minLength={2}
+                maxLength={100}
+                onChange={(e) => { setName(e.target.value); setError(""); }}
                 required
               />
             </div>
@@ -128,7 +138,8 @@ function EditProfileModal({ currentName, currentEmail, onClose, onSave }) {
                 type="email"
                 className="mpp-input"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                maxLength={254}
+                onChange={(e) => { setEmail(e.target.value); setError(""); }}
                 required
               />
             </div>
@@ -177,7 +188,8 @@ function ChangePasswordModal({ onClose, onSuccess }) {
     e.preventDefault();
     setError("");
     if (!current.trim()) { setError("Current password is required."); return; }
-    if (next.length < 8) { setError("New password must be at least 8 characters."); return; }
+    if (!isStrongSuperAdminPassword(next)) { setError("New password must be at least 8 characters and include uppercase, lowercase, number, and special character."); return; }
+    if (loading) return;
     if (next !== confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
     try {

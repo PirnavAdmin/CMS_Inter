@@ -518,7 +518,7 @@ async function loadFacilityFee(studentId) {
   };
 }
 
-export default function StudentFeeTab({ student, compactContext = false }) {
+export default function StudentFeeTab({ student, compactContext = false, hideCourseFeeSchedule = false }) {
   const studentId = student.studentId;
   const [state, setState] = useState({ loading: true, payload: null, error: "" });
   const [retry, setRetry] = useState(0);
@@ -786,8 +786,8 @@ export default function StudentFeeTab({ student, compactContext = false }) {
               </div>
             </section>
           ) : null}
-          <section className="cms-fee-block">
-            <h3>Course Fee Payment Plan</h3>
+          {!hideCourseFeeSchedule && <section className="cms-fee-block">
+           
             <strong>
               {plan === "Full Payment"
                 ? "Full Course Payment"
@@ -795,8 +795,8 @@ export default function StudentFeeTab({ student, compactContext = false }) {
                   ? "Course Fee Schedule"
                   : "Not provided"}
             </strong>
-          </section>
-          {plan === "Installment Payment" && schedules.length > 0 ? (
+          </section>}
+          {!hideCourseFeeSchedule && plan === "Installment Payment" && schedules.length > 0 ? (
             <section className="cms-fee-block">
               <h3>Course Fee Schedule</h3>
               <div className="cms-fee-scroll">

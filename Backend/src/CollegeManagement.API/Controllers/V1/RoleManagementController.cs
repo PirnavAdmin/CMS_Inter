@@ -147,7 +147,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                var msg = ex.GetBaseException().Message;
+                return BadRequest(new { success = false, message = msg });
             }
         }
 
@@ -167,7 +168,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                var msg = ex.GetBaseException().Message;
+                return BadRequest(new { success = false, message = msg });
             }
         }
 

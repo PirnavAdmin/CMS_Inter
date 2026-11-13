@@ -10,6 +10,61 @@
   animation: rnpFadeIn 0.25s ease;
 }
 
+.rnp-status-toast {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 11px 14px;
+  border: 1px solid var(--cms-border, #dbe4d0);
+  border-radius: 10px;
+  background: var(--cms-surface, #fff);
+  color: var(--cms-text, #1f2937);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  font-size: 13px;
+  font-weight: 650;
+  animation: rnpToastIn 0.2s ease;
+}
+
+.rnp-status-toast.is-success { border-color: #16a34a; }
+.rnp-status-toast.is-success > svg { color: #16a34a; flex-shrink: 0; }
+.rnp-status-toast.is-error { border-color: #dc2626; }
+.rnp-status-toast.is-error > svg { color: #dc2626; flex-shrink: 0; }
+.rnp-status-toast > span { flex: 1; }
+.rnp-status-toast > button {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+}
+.rnp-status-toast > button:hover { color: var(--cms-text, #1f2937); }
+
+.rnp-processing-spinner { animation: rnpSpin 0.8s linear infinite; }
+.rnp-status-confirm .cms-modal-foot .cms-btn:disabled,
+.rnp-status-confirm .cms-modal-head .cms-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.rnp-status-confirm .cms-modal-foot .cms-btn-primary:disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@keyframes rnpToastIn {
+  from { opacity: 0; transform: translateY(-7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes rnpSpin { to { transform: rotate(360deg); } }
+
 @keyframes rnpFadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }

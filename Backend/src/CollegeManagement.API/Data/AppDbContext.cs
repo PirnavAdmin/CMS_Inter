@@ -406,6 +406,7 @@ namespace CollegeManagement.API.Data
         public DbSet<PaymentProofAttachment> PaymentProofAttachments { get; set; }
         public DbSet<FeePaymentAllocation> FeePaymentAllocations { get; set; }
         public DbSet<PaymentGatewayConfig> PaymentGatewayConfigs { get; set; }
+        public DbSet<CampusBankAccount> CampusBankAccounts { get; set; } = null!;
         public DbSet<PaymentLedgerEntryRecord> PaymentLedgerEntries { get; set; }
         public DbSet<FeePaymentEmailOutbox> FeePaymentEmailOutboxes { get; set; }
         public DbSet<PaymentCommunicationSetting> PaymentCommunicationSettings { get; set; }
@@ -520,9 +521,12 @@ namespace CollegeManagement.API.Data
             #endregion
 
             #region Role
-            modelBuilder.Entity<Role>()
-                .HasIndex(r => r.RoleName)
-                .IsUnique();
+            modelBuilder.Entity<Role>(entity =>
+            {
+                entity.HasIndex(r => r.RoleName).IsUnique();
+                entity.Property(r => r.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(r => r.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
             #endregion
             #region Subject
 
@@ -1020,6 +1024,19 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.PayeeName).IsRequired().HasMaxLength(200);
                 entity.Property(x => x.Currency).IsRequired().HasMaxLength(10);
                 entity.Property(x => x.Provider).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+            });
+
+            modelBuilder.Entity<CampusBankAccount>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.CampusId);
+                entity.HasIndex(x => new { x.CampusId, x.IsActive });
+                entity.Property(x => x.BankName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.AccountHolderName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.AccountNumber).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.IfscCode).IsRequired().HasMaxLength(20);
+                entity.Property(x => x.AccountType).IsRequired().HasMaxLength(50);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
             });
 

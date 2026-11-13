@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
-import { getAuthUser } from "../../auth/authStorage.js";
+import { getAuthUser, getAuthToken } from "../../auth/authStorage.js";
+import { landingPageApi } from "../../../api/landingPageApi.js";
 
 export const campusImageFields = [
   ["dashboardLogo", "Dashboard Logo", "Logo in dashboard sidebars", "logo"],
@@ -70,6 +71,31 @@ const openDatabase = () => new Promise((resolve, reject) => {
   request.onerror = () => reject(new Error("Browser image storage is unavailable."));
 });
 export async function readCampusImages(campusId) {
+  try {
+    const token = getAuthToken();
+    const serverData = token
+      ? await landingPageApi.getConfig()
+      : await landingPageApi.getPublicConfig();
+
+    if (serverData && typeof serverData === "object" && Object.keys(serverData).length > 0) {
+      try {
+        const db = await openDatabase();
+        await new Promise((resolve, reject) => {
+          const transaction = db.transaction("images", "readwrite");
+          transaction.objectStore("images").put(serverData, String(campusId));
+          transaction.oncomplete = resolve;
+          transaction.onerror = transaction.onabort = reject;
+        });
+        db.close();
+      } catch {
+        // Cache error ignored
+      }
+      return serverData;
+    }
+  } catch (err) {
+    // Fall back to local storage if server is unavailable
+  }
+
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
@@ -81,6 +107,21 @@ export async function readCampusImages(campusId) {
 }
 export async function saveCampusImages(campusId, images) {
   if (campusId == null || campusId === "") throw new Error("Select a campus before saving images.");
+
+  // Save to backend database API
+  if (getAuthToken()) {
+    try {
+      await landingPageApi.saveConfig({
+        ...images,
+        campusId: Number(campusId) || null,
+      });
+    } catch (apiErr) {
+      console.error("Failed to save landing page configuration to backend API:", apiErr);
+      const apiMessage = apiErr?.response?.data?.message || apiErr?.message || "Failed to save configuration to database.";
+      throw new Error(apiMessage);
+    }
+  }
+
   const db = await openDatabase();
   try {
     await new Promise((resolve, reject) => {
