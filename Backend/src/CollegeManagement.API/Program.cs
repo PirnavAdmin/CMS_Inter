@@ -236,6 +236,7 @@ builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocati
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
+builder.Services.AddScoped<ILandingPageRepository, LandingPageRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
@@ -402,6 +403,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
+builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>

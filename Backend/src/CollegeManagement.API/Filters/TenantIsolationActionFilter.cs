@@ -32,7 +32,8 @@ namespace CollegeManagement.API.Filters
             "Campus",
             "Location",
             "ThemePolicy",
-            "Health"
+            "Health",
+            "LandingPage"
         };
 
         private readonly AppDbContext _db;
