@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { createServer, transformWithOxc } from "vite";
-import { feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "../../../../features/fees/feeDetails.js";
+import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "../../../../features/fees/feeDetails.js";
 import {
   collectionPayload,
   directQrUtrPayload,
@@ -575,6 +575,8 @@ await describe("Admin payment gateway", async () => {
       Modal: "Modal",
       SkeletonRow: "SkeletonRow",
       Check: "Check",
+      Eye: "Eye",
+      Tooltip: { Provider: "TooltipProvider", Root: "TooltipRoot", Trigger: "TooltipTrigger", Portal: "TooltipPortal", Content: "TooltipContent" },
       X: "X",
       RefreshCw: "RefreshCw",
       CheckCircle: "CheckCircle",
@@ -582,6 +584,8 @@ await describe("Admin payment gateway", async () => {
       CreditCard: "CreditCard",
       QrCode: "QrCode",
       Upload: "Upload",
+      Download: "Download",
+      FileText: "FileText",
       ChevronDown: "ChevronDown",
       PAYMENT_METHODS: ["Cash", "UPI", "Card", "Net Banking", "Cheque"],
       useState: (initial) => {
@@ -644,7 +648,7 @@ await describe("Admin payment gateway", async () => {
     let pdfReads = 0;
     const revoked = [];
     const payment = { status: "Paid", feePaymentId: 901, studentFeeId: 41, receiptNumber: "R901", amount: 300, emailStatus: "FAILED" };
-    let emailRetries = 0;
+    let emailRetries = 0, closes = 0, prints = 0, focuses = 0;
     const view = await mount(confirmationSource, "PaymentConfirmation", {
       apiClient: { get: async url => ({ data: url.includes("student-fees") ? { studentFeeId: 41, balanceAmount: 400 } : payment }) },
       apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}`, getAssignment: id => `/student-fees/${id}` } },
@@ -653,13 +657,30 @@ await describe("Admin payment gateway", async () => {
         retryEmail: async id => { assert.equal(id, 901); emailRetries++; return { feePaymentId: 901, emailStatus: "QUEUED" }; },
       },
       URL: { createObjectURL: () => "blob:private-receipt", revokeObjectURL: url => revoked.push(url) },
-    }, { payment, onClose() {} });
+    }, { payment, onClose() { closes++; } });
     view.render(); await flush(); let tree = view.render(); await flush(); tree = view.render();
     assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
-    assert.ok(tree.some(node => node.props.children.includes("Email Failed — payment remains confirmed.")));
+    assert.ok(tree.some(node => node.props.children.includes("Email Sending Failed")));
     assert.ok(tree.some(node => node.props.children.includes("INR 400")));
-    const download = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "a" && node.props.download);
+    assert.equal(tree.some(node => ["iframe", "object", "embed"].includes(node.type)), false);
+    assert.ok(tree.some(node => node.props.children.includes("Official payment receipt")));
+    const download = tree.find(node => node.type === "a" && node.props.download);
     assert.equal(download.props.href, "blob:private-receipt");
+    assert.equal(download.props.download, "Fee_Receipt_R901.pdf");
+    assert.equal(download.props["aria-label"], "Download Fee_Receipt_R901.pdf");
+    const footer = nodes(tree.find(node => node.type === "Modal").props.footer);
+    assert.equal(footer.some(node => node.props.download), false);
+    assert.equal(footer.find(node => node.type === "a").props.href, download.props.href);
+    assert.equal(footer.find(node => node.type === "a").props.target, "_blank");
+    footer.find(node => node.type === "button" && node.props.children.includes("Close")).props.onClick();
+    assert.equal(closes, 1);
+    tree.find(node => node.type === "Modal").props.onClose(); assert.equal(closes, 2);
+    footer.find(node => node.type === "button" && node.props.children.includes("Print Receipt")).props.onClick();
+    const printFrame = view.render().find(node => node.type === "iframe");
+    assert.equal(printFrame.props.src, download.props.href);
+    assert.equal(printFrame.props["aria-hidden"], "true");
+    printFrame.props.ref.current = { contentWindow: { focus() { focuses++; }, print() { prints++; } } };
+    printFrame.props.onLoad(); assert.equal(prints, 1); assert.equal(focuses, 1);
     assert.equal(pdfReads, 1);
     const retryBtn = nodes(tree.find(node => node.type === "Modal").props.footer).find(node => node.type === "button" && node.props.children.includes("Retry Email"));
     assert.ok(retryBtn);
@@ -681,27 +702,90 @@ await describe("Admin payment gateway", async () => {
       assert.equal(tree.some(node => node.type === "a" && node.props.download), false);
       if (status === "Paid") {
         assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
-        assert.ok(tree.some(node => node.props.children.includes("Payment confirmed. Email delivery status is unavailable.")));
+        assert.ok(tree.some(node => node.props.children.includes("Email Status Unavailable")));
         assert.ok(tree.some(node => node.props.role === "alert"));
+        assert.ok(tree.some(node => node.props["aria-label"] === "Download receipt unavailable" && node.props.disabled));
+        assert.equal(tree.some(node => node.type === "iframe"), false);
       }
       view.unmount();
     }
   });
+  test("email labels and timestamps reflect the refreshed backend state without inferring delivery", async () => {
+    for (const [status, label] of [["SENT", "Email Sent"], ["QUEUED", "Email Queued"], ["FAILED", "Email Sending Failed"], ["NOT_REQUESTED", "Email Not Requested"], [undefined, "Email Status Unavailable"]]) {
+      let reads = 0;
+      const payment = { status: "Paid", feePaymentId: 901, receiptNumber: "R901", amount: 300, emailDeliveryStatus: "SENT", emailSentAt: "old-date" };
+      const view = await mount(confirmationSource, "PaymentConfirmation", {
+        apiClient: { get: async () => ({ data: payment }) },
+        apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}` } },
+        feePaymentGatewayApi: {
+          paymentStatus: async () => { reads++; return { feePaymentId: 901, emailDeliveryStatus: status, ...(status ? { emailSentAt: "2026-11-12" } : {}) }; },
+          receiptPdf: async () => ({}),
+        },
+        URL: { createObjectURL: () => "blob:official", revokeObjectURL() {} },
+      }, { payment, onClose() {} });
+      view.render(); await flush(); const tree = view.render();
+      const statusLine = tree.find(node => node.type === "p" && node.props.children.includes(label));
+      assert.ok(statusLine);
+      assert.equal(statusLine.props.children.join("").includes("2026-11-12"), status === "SENT");
+      assert.equal(tree.some(node => node.type === "p" && node.props.children.join("") === "Last sent: 2026-11-12"), ["QUEUED", "FAILED"].includes(status));
+      assert.equal(tree.some(node => node.props.children.includes("Email sent through the configured mail service. Inbox delivery is not confirmed.")), status === "SENT");
+      assert.equal(tree.some(node => node.props.children.join("").includes("old-date")), false);
+      assert.equal(tree.some(node => node.props.children.includes("Unable to refresh email status. The displayed information may be outdated.")), false);
+      assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
+      assert.ok(tree.some(node => node.props.children.includes("INR 300")));
+      view.render(); view.render(); assert.equal(reads, 1);
+      view.unmount();
+    }
+  });
+  test("email refresh failure labels retained status as old and a later successful load clears the warning", async () => {
+    const warning = "Unable to refresh email status. The displayed information may be outdated.";
+    const props = { payment: { status: "Paid", feePaymentId: 901, receiptNumber: "R901", amount: 300, emailDeliveryStatus: "SENT", emailSentAt: "2026-11-12" }, onClose() {} };
+    const reads = [];
+    const view = await mount(confirmationSource, "PaymentConfirmation", {
+      apiClient: { get: async () => { throw new Error("Details temporarily unavailable"); } },
+      apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}` } },
+      feePaymentGatewayApi: {
+        paymentStatus: async id => { reads.push(id); if (id === 901) throw new Error("Status temporarily unavailable"); return { feePaymentId: id, emailDeliveryStatus: "QUEUED" }; },
+        receiptPdf: async () => ({}),
+      },
+      URL: { createObjectURL: () => "blob:official", revokeObjectURL() {} },
+    }, props);
+    view.render(); await flush(); let tree = view.render();
+    assert.ok(tree.some(node => node.props.role === "alert" && node.props.children.includes(warning)));
+    assert.ok(tree.some(node => node.props.children.includes(" (previously retrieved information)")));
+    assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
+    assert.ok(tree.some(node => node.props.children.includes("R901")));
+    assert.ok(tree.some(node => node.props.children.includes("INR 300")));
+    assert.equal(tree.find(node => node.props.download).props.href, "blob:official");
+    view.render(); view.render(); assert.deepEqual(reads, [901]);
+    props.payment = { ...props.payment, feePaymentId: 902, receiptNumber: "R902" };
+    view.render(); await flush(); tree = view.render();
+    assert.ok(tree.some(node => node.props.children.includes("Email Queued")));
+    assert.equal(tree.some(node => node.props.children.includes(warning)), false);
+    assert.equal(tree.some(node => node.props.children.includes(" (previously retrieved information)")), false);
+    assert.equal(tree.find(node => node.type === "Modal").props.title, "Payment Successful");
+    assert.deepEqual(reads, [901, 902]);
+    view.unmount();
+  });
   test("switching receipts cannot reuse another payment's loaded metadata", async () => {
     const props = { payment: { status: "Paid", feePaymentId: 901, receiptNumber: "R901", amount: 300 }, onClose() {} };
-    const ids = [];
+    const ids = [], revoked = [];
     const view = await mount(confirmationSource, "PaymentConfirmation", {
       apiClient: { get: async url => ({ data: { feePaymentId: Number(url.split("/").at(-1)), status: "Paid" } }) },
       apiEndpoints: { fee: { paymentDetails: id => `/payments/${id}` } },
-      feePaymentGatewayApi: { receiptPdf: async id => { ids.push(id); throw new Error("Test PDF unavailable"); } },
+      feePaymentGatewayApi: { receiptPdf: async id => { ids.push(id); return { id }; } },
+      URL: { createObjectURL: blob => `blob:receipt-${blob.id}`, revokeObjectURL: url => revoked.push(url) },
     }, props);
     view.render(); await flush(); view.render();
     props.payment = { status: "Paid", feePaymentId: 902, receiptNumber: "R902", amount: 400 };
-    view.render(); await flush(); const tree = view.render();
+    assert.equal(view.render().some(node => node.props.href === "blob:receipt-901"), false);
+    await flush(); const tree = view.render();
     assert.deepEqual(ids, [901, 902]);
     assert.ok(tree.some(node => node.props.children.includes("R902")));
     assert.equal(tree.some(node => node.props.children.includes("R901")), false);
-    view.unmount();
+    assert.equal(tree.find(node => node.props.download).props.href, "blob:receipt-902");
+    assert.equal(tree.find(node => node.props.download).props.download, "Fee_Receipt_R902.pdf");
+    view.unmount(); assert.deepEqual(revoked, ["blob:receipt-901", "blob:receipt-902"]);
   });
   const directOrder = { ...order, studentId: 11, currency: "INR", requiresManualUtr: true, qrCodeBase64: "data:image/png;base64,AAAA", upiUri: "upi://pay?pa=fixture@bank" };
   const pngProof = (name = "payment.png") => new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0])], name, { type: "image/png", lastModified: 1 });
@@ -749,7 +833,7 @@ await describe("Admin payment gateway", async () => {
     await assert.rejects(api.paymentProof(6));
   });
   const utrDraft = { utrNumber: "  UPI-99887766  ", bankName: " Fixture App ", paymentDate: "2026-11-09", amountPaid: "300", remarks: "Fixture transfer" };
-  const buttonNamed = (tree, label) => tree.find(node => node.type === "button" && node.props.children.includes(label));
+  const buttonNamed = (tree, label) => tree.find(node => node.type === "button" && (node.props["aria-label"] === label || node.props.children.includes(label)));
   test("Direct QR reconciliation uses only supported DTO fields and preserves the original order in remarks", () => {
     const payload = directQrUtrPayload(directOrder, account, utrDraft, "2026-11-09");
     assert.deepEqual(Object.keys(payload).sort(), ["studentId", "studentFeeId", "amount", "utrNumber", "bankName", "paymentDate", "remarks"].sort());
@@ -1094,8 +1178,9 @@ await describe("Admin payment gateway", async () => {
     }, { campusId: 2, campusName: "Fixture", editable: true });
     view.render(); await flush();
     const count = () => view.render().find((node) => Object.hasOwn(node.props, "data-bank-account-count")).props.children[0];
-    assert.equal(count(), 1);
+    assert.equal(count(), "Unavailable");
     let tree = view.render();
+    assert.equal(tree.find(node => node.type === "form").props.hidden, true);
     const add = tree.find((node) => node.type === "button" && node.props.children.includes("+ Add Bank Account"));
     assert.equal(add.props.disabled, true); assert.equal(add.props.onClick, undefined);
     tree.find((node) => node.props.id === "payment-config-bankName").props.onChange({ target: { value: "Unsaved Bank" } });
@@ -1109,27 +1194,37 @@ await describe("Admin payment gateway", async () => {
     assert.ok(detailText.includes(paymentSettings.bankName)); assert.equal(detailText.includes("Unsaved Bank"), false);
     assert.ok(detailText.includes("Not reported by the backend"));
     assert.equal(tree.find((node) => node.type === "button" && node.props.children.includes("Set as Active Receiving Account")).props.disabled, true);
+    buttonNamed(tree, "Edit Bank Account").props.onClick(); tree = view.render();
+    assert.equal(tree.find(node => node.type === "form").props.hidden, false);
     assert.equal(tree.find((node) => node.props.id === "payment-config-bankName").props.value, "Unsaved Bank");
     assert.equal(tree.find((node) => node.props.id === "payment-config-accountNumber").props.type, "password");
     assert.equal(tree.find((node) => node.props.id === "payment-config-confirmAccountNumber").props.value, "");
-    assert.equal(count(), 1); assert.equal(writes, 0);
+    assert.equal(count(), "Unavailable"); assert.equal(writes, 0);
+    buttonNamed(tree, "Cancel").props.onClick(); tree = view.render();
+    assert.equal(tree.find(node => node.type === "form").props.hidden, true);
+    assert.equal(tree.find(node => node.props.id === "payment-config-bankName").props.value, paymentSettings.bankName);
+    assert.equal(writes, 0);
     view.unmount();
   });
-  test("configured count excludes drafts and updates only after confirmed configuration save", async () => {
-    let persisted = { ...PAYMENT_CONFIG_DEFAULTS, campusId: 2 }, finish;
+  test("account inventory count remains unavailable without a listing API even after configuration save", async () => {
+    let persisted = configFixture(), finish;
     const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings,
       getPaymentGatewayConfigApi: async () => persisted,
       updatePaymentGatewayConfigApi: (form) => new Promise((resolve) => { finish = () => { persisted = form; resolve({ success: true }); }; }),
     }, { campusId: 2, campusName: "Fixture", editable: true });
     const count = () => view.render().find((node) => Object.hasOwn(node.props, "data-bank-account-count")).props.children[0];
-    view.render(); await flush(); assert.equal(count(), 0);
-    for (const [key, value] of Object.entries({ bankName: "Fixture Bank", accountHolderName: "Fixture College", accountNumber: "0012345678", confirmAccountNumber: "0012345678", ifscCode: "ABCD0123456" })) {
+    view.render(); await flush(); assert.equal(count(), "Unavailable");
+    view.render().find(node => node.props.name === "payment-bank-view").props.onChange();
+    buttonNamed(view.render(), "Edit Bank Account").props.onClick(); view.render();
+    for (const [key, value] of Object.entries({ bankName: "Updated Fixture Bank", accountHolderName: "Fixture College", accountNumber: "0012345678", confirmAccountNumber: "0012345678", ifscCode: "ABCD0123456" })) {
       view.render().find((node) => node.props.id === `payment-config-${key}`).props.onChange({ target: { value } }); view.render();
     }
-    assert.equal(count(), 0);
+    assert.equal(count(), "Unavailable");
     view.render().find((node) => node.type === "form").props.onSubmit({ preventDefault() {} });
     view.render().find((node) => node.type === "ConfirmDialog").props.onConfirm();
-    assert.equal(count(), 0); finish(); await flush(); assert.equal(count(), 1);
+    assert.equal(count(), "Unavailable"); finish(); await flush(); assert.equal(count(), "Unavailable");
+    assert.equal(view.render().find(node => node.type === "form").props.hidden, true);
+    assert.equal(view.render().find(node => node.props.name === "payment-bank-view").props.checked, true);
     view.unmount();
   });
   test("bank overview hides stale data after refresh failure and isolates campus details", async () => {
@@ -1166,7 +1261,9 @@ await describe("Admin payment gateway", async () => {
     assert.equal(writes, 0);
     assert.ok(view.render().some((node) => node.props.role === "alert" && node.props.children.join("").includes("masked or incomplete")));
     view.render().find((node) => node.props.id === "payment-tab-bank").props.onClick();
-    assert.equal(view.render().find((node) => node.props.id === "payment-config-accountNumber").props.value, "XXXXXXXX5678");
+    view.render().find(node => node.props.name === "payment-bank-view").props.onChange();
+    buttonNamed(view.render(), "Edit Bank Account").props.onClick();
+    assert.equal(view.render().find((node) => node.props.id === "payment-config-accountNumber").props.value, "");
     assert.equal(view.render().find((node) => node.props.id === "payment-config-confirmAccountNumber").props.value, "");
     view.unmount();
   });
@@ -1940,6 +2037,27 @@ await describe("Admin payment gateway", async () => {
   });
 
   const pageSource = await readFile(new URL("../FeeManagementPage.jsx", import.meta.url), "utf8");
+  test("academic refresh preserves the selected year ID when multiple years share its name", async () => {
+    const source = await readFile(new URL("../../../../context/AcademicContext.jsx", import.meta.url), "utf8");
+    const sameYear = vm.runInNewContext(source.slice(source.indexOf("const valueOf ="), source.indexOf("export function AcademicProvider")) + ";sameYear");
+    const years = [17, 18, 9].map(id => ({id: String(id), academicYearId: id, name: "2026-2027", code: "2026-2027"}));
+    for (const selected of years) {
+      assert.equal(years.find(year => sameYear(year, selected)).academicYearId, selected.academicYearId);
+      assert.equal(years.filter(year => sameYear(year, selected)).length, 1);
+    }
+    assert.equal(sameYear(years[2], {academicYearId: 9, name: "2026–2027"}), true);
+    assert.equal(sameYear(years[2], {name: "2026-2027"}), true);
+    assert.equal(sameYear(null, null), false);
+    assert.equal(sameYear({}, {}), false);
+  });
+  test("the academic year selector highlights only the selected backend ID, not every matching label", async () => {
+    const source = await readFile(new URL("../../../../shared/layouts/DashboardLayout/DashboardLayout.jsx", import.meta.url), "utf8");
+    const start = source.indexOf('const normalize = (s)', source.indexOf('academicYears.map((y)'));
+    const selection = source.slice(start, source.indexOf('return (', start));
+    for (const id of [9, 17, 18]) {
+      assert.equal(vm.runInNewContext(selection + ";isSelected", {selectedAcademicYear: {id: "9", name: "2026-2027", code: "2026-2027", label: "2026-2027"}, y: {id: String(id), name: "2026-2027", code: "2026-2027", label: "2026-2027"}}), id === 9);
+    }
+  });
   const feeFocusEffect = pageSource.match(/ {2}useEffect\(\(\) => \{\r?\n {4}const refreshFeeAccounts = [\s\S]*?\r?\n {2}\}, \[[^\]]+\]\);/)?.[0];
   assert.ok(feeFocusEffect, "Use the actual Fee Management focus-refresh effect in regression tests");
   const feeFocusSource = `function FeeFocusHarness(props) {
@@ -2262,6 +2380,36 @@ await describe("Admin payment gateway", async () => {
     date: "2026-11-09",
     status: "PendingVerification",
   };
+  test("UTR row actions use accessible Admin icon buttons and portalled tooltips without changing pagination or submitting on hover", async () => {
+    let writes = 0;
+    const props = { scope: {campusId: 2}, canView: true, canReview: true, onSettled() {}, onToast() {}, Pagination: "Pagination" };
+    const view = await mount(queueSource, "OfflineUtrQueueTab", {
+      feePaymentGatewayApi: { pendingUtrs: async () => Array.from({length: 6}, (_,i) => ({...queueRow, id: i+89, ...(i === 0 ? {attachmentId: 6} : {})})), approveUtr: async () => {writes++;} },
+    }, props);
+    view.render(); await flush(); let tree = view.render();
+    const labels = ["View Payment Proof", "Approve & Credit", "Reject"];
+    for (const [i, label] of labels.entries()) {
+      const button = buttonNamed(tree, label);
+      assert.match(button.props.className, /^cms-action-btn /);
+      assert.equal(button.props.children.filter(child => typeof child === "string" && child.trim()).length, 0);
+      assert.equal(button.props.children[0].type, ["Eye", "Check", "X"][i]);
+      assert.equal(button.props.children[0].props["aria-hidden"], "true");
+      const portal = tree.find(node => node.type === "TooltipPortal" && nodes(node).some(child => child.type === "TooltipContent" && child.props.children.includes(label)));
+      assert.ok(portal);
+      const tooltip = nodes(portal).find(node => node.type === "TooltipContent");
+      assert.equal(tooltip.props.side, "top"); assert.equal(tooltip.props.hideWhenDetached, true);
+      assert.ok(tree.some(node => node.type === "TooltipTrigger" && node.props.asChild && node.props.children.includes(button)));
+      assert.equal(button.props.onMouseEnter, undefined);
+    }
+    assert.equal(tree.filter(node => node.type === "button" && node.props["aria-label"] === "Approve & Credit").length, 5);
+    assert.equal(tree.filter(node => node.type === "button" && node.props["aria-label"] === "View Payment Proof").length, 1);
+    assert.equal(tree.find(node => node.type === "Pagination").props.totalItems, 6);
+    assert.equal(writes, 0);
+    buttonNamed(tree, "Approve & Credit").props.onClick(); tree = view.render();
+    assert.equal(tree.find(node => node.type === "Modal").props.title, "Approve Bank Transfer");
+    assert.equal(writes, 0);
+    view.unmount();
+  });
   test("queue approval review embeds private image/PDF proof and payment details before any settlement", async () => {
     for (const type of ["image/png", "application/pdf"]) {
       const reads = [], revoked = []; let approvals = 0;
@@ -2446,7 +2594,7 @@ await describe("Admin payment gateway", async () => {
     assert.equal(params.campusId, 2);
     assert.equal(params.academicYearId, 3);
     tree
-      .find((node) => node.type === "button" && node.props.children.includes("Reject"))
+      .find((node) => node.type === "button" && node.props["aria-label"] === "Reject")
       .props.onClick();
     tree = view.render();
     let review = tree.find((node) => node.type === "Modal");
@@ -2494,7 +2642,7 @@ await describe("Admin payment gateway", async () => {
     await flush();
     view
       .render()
-      .find((node) => node.type === "button" && node.props.children.includes("Approve & Credit"))
+      .find((node) => node.type === "button" && node.props["aria-label"] === "Approve & Credit")
       .props.onClick();
     const review = view.render().find((node) => node.type === "Modal");
     await review.props.footer.props.children[1].props.onClick();
@@ -2509,7 +2657,7 @@ await describe("Admin payment gateway", async () => {
     await flush();
     const button = denied
       .render()
-      .find((node) => node.type === "button" && node.props.children.includes("Approve & Credit"));
+      .find((node) => node.type === "button" && node.props["aria-label"] === "Approve & Credit");
     assert.equal(button.props.disabled, true);
     button.props.onClick();
     const blockedReview = denied.render().find((node) => node.type === "Modal");
@@ -2873,6 +3021,7 @@ await describe("Admin payment gateway", async () => {
   const { deriveAccount } = await server.ssrLoadModule("/src/data/feeManagementData.js");
   const normalizationContext = vm.createContext({
     deriveAccount,
+    PAGE_SIZE: 5,
     feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues,
     COLLEGE_NAME: "Fixture College",
     todayISO: () => "2026-11-09",
@@ -2886,10 +3035,117 @@ await describe("Admin payment gateway", async () => {
       pageSource.indexOf("const getCollection ="),
       pageSource.indexOf("const printFeeTarget ="),
     ) +
-      ";globalThis.normalizers = { normalizeTransactionRows, normalizeFeeAccountRows, normalizeReceipt, paymentHistoryIdentity, applyFineRulesToAccount };",
+      ";globalThis.normalizers = { feeAccountRows, getObject, cleanParams, pageItems, applyFineRulesToAccounts, normalizeFeeAccountDataset, normalizeTransactionRows, normalizeFeeAccountRows, normalizeReceipt, paymentHistoryIdentity, applyFineRulesToAccount };",
     normalizationContext,
   );
   const normalizers = normalizationContext.normalizers;
+  const accountLoader = pageSource.slice(pageSource.indexOf("  const loadFeeAccounts = useCallback"), pageSource.indexOf("  const loadOverviewData = useCallback"));
+  const accountScopeEffect = pageSource.match(/ {2}useEffect\(\(\) => \{\r?\n {4}\/\/ Retain rows during same-scope refreshes[\s\S]*?\r?\n {2}\}, \[selectedCampusValue, selectedBoardId, selectedAcademicYearId\]\);/)?.[0];
+  assert.ok(accountScopeEffect);
+  const accountLoaderSource = `function AccountLoaderHarness(props) {
+    const { campusId: selectedCampusValue = 1, boardId: selectedBoardId = 2, academicYearId: selectedAcademicYearId = 9 } = props;
+    const [ledgerAccounts, setLedgerAccounts] = useState([]);
+    const [collectionAccounts, setCollectionAccounts] = useState([]);
+    const [accountLoading, setAccountLoading] = useState({});
+    const [accountErrors, setAccountErrors] = useState({});
+    const accountRequestRef = useRef({ledger: 0, collection: 0});
+    const feeDetailCacheRef = useRef(new Map());
+    const loadAccountContext = async () => ({});
+    ${accountScopeEffect}
+    ${accountLoader}
+    return React.createElement('account-state', {ledgerAccounts, collectionAccounts, accountLoading, accountErrors, loadFeeAccounts});
+  }`;
+  const accountLoaderBindings = {
+    ...normalizers, assertFeeDetailIdentity,
+    apiEndpoints: { fee: { ledger: "/ledger", collection: "/collection", studentFeeDetails: id => `/student-fees/${id}`, studentFeeDetailsByStudent: id => `/students/${id}/details` } },
+  };
+  test("Fee Collection keeps five-row pagination, search and stale-data warnings without a false zero count", async () => {
+    const source = pageSource.slice(pageSource.indexOf("function FeeCollectionTab("), pageSource.indexOf("function FeeCollectionTab(") + pageSource.slice(pageSource.indexOf("function FeeCollectionTab(")).indexOf("\nfunction ", 1));
+    const props = {accounts: normalizers.normalizeFeeAccountRows(Array.from({length: 7}, (_,i) => ({studentFeeId: i+41, studentId: i+11, studentName: `Fixture ${i}`, admissionNumber: `TEST-${i}`, totalPayable: 700, totalPaid: 300, balance: 400}))), onCollect() {}};
+    const view = await mount(source, "FeeCollectionTab", {...normalizers, PAGE_SIZE: 5, Search3DIcon: "Search3DIcon", TablePagination: "TablePagination", StatusBadge: "StatusBadge", WalletCards: "WalletCards"}, props);
+    let tree = view.render();
+    assert.equal(tree.filter(node => node.type === "tr").length, 6);
+    assert.equal(tree.find(node => node.type === "TablePagination").props.totalItems, 7);
+    tree.find(node => node.type === "TablePagination").props.onPageChange(2); tree = view.render();
+    assert.equal(tree.filter(node => node.type === "tr").length, 3);
+    props.error = "Network unavailable"; tree = view.render();
+    assert.ok(tree.some(node => node.props.role === "alert"));
+    assert.equal(tree.find(node => node.type === "TablePagination").props.totalItems, 7);
+    tree.find(node => node.type === "input").props.onChange({target: {value: "Fixture 3"}}); tree = view.render();
+    assert.equal(tree.find(node => node.type === "TablePagination").props.totalItems, 1);
+    props.accounts = []; tree = view.render();
+    assert.ok(tree.some(node => node.props.children.includes("Unavailable")));
+    assert.equal(tree.some(node => node.props.children.includes("No fee accounts match the current search and filters.")), false);
+    view.unmount();
+  });
+  test("Fine Rules uses the selected context and bypasses the dev middleware's fabricated responses", async () => {
+    const fineRequest = pageSource.match(/apiClient\.get\(apiEndpoints\.fee\.fineRules, [^\r\n]+\)/)?.[0];
+    assert.ok(fineRequest);
+    let captured;
+    vm.runInNewContext(fineRequest, {
+      apiClient: { get: (url, config) => { captured = {url, config}; } },
+      apiEndpoints: {fee: {fineRules: "/api/v1/fee-setup/fine-rules"}},
+      cleanParams: normalizers.cleanParams,
+      selectedCampusValue: 1, selectedBoardId: 2, selectedAcademicYearId: 9,
+    });
+    assert.equal(captured.config.requireRealBackend, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(captured.config.params)), {campusId: 1, boardId: 2, academicYearId: 9});
+    const viteSource = await readFile(new URL("../../../../../vite.config.js", import.meta.url), "utf8");
+    const factory = vm.runInNewContext(viteSource.slice(viteSource.indexOf("function examCellShieldPlugin("), viteSource.indexOf("export default")) + ";examCellShieldPlugin", {console});
+    let middleware, forwarded = 0;
+    factory("http://unused.invalid").configureServer({middlewares: {use(fn) {middleware = fn;}}});
+    for (const method of ["GET", "POST"]) await middleware({url: "/api/v1/fee-setup/fine-rules?campusId=1", method}, {end() {assert.fail("Fine Rules must reach the real backend");}}, () => {forwarded++;});
+    assert.equal(forwarded, 2);
+  });
+  test("fee lists distinguish empty API data from malformed or failed responses", () => {
+    for (const payload of [[], { data: [] }, { items: [] }]) assert.equal(normalizers.feeAccountRows(payload).length, 0);
+    for (const payload of [{}, null, { data: {} }, { success: false, data: [] }, "not JSON"]) assert.throws(() => normalizers.feeAccountRows(payload), /fee account/i);
+  });
+  test("both account loaders preserve same-scope rows on failure and clear them on scope change", async () => {
+    for (const source of ["ledger", "collection"]) {
+      let fail = false, finish;
+      const requests = [];
+      const raw = { studentFeeId: 41, studentId: 11, studentName: "Fixture Student", admissionNumber: "TEST-11", paymentPlan: "Full Payment", totalPayable: 700, totalPaid: 300, balance: 400 };
+      const props = {campusId: 1, boardId: 2, academicYearId: 9};
+      const view = await mount(accountLoaderSource, "AccountLoaderHarness", { ...accountLoaderBindings,
+        apiClient: { get: async (url, config) => { requests.push({url,config}); if (fail) throw new Error("Network unavailable"); return new Promise(resolve => {finish = rows => resolve({data: rows});}); } },
+      }, props);
+      view.render(); const state = () => view.render()[0].props;
+      const first = state().loadFeeAccounts(source); finish([raw]); await first;
+      assert.equal(state()[`${source}Accounts`].length, 1);
+      assert.deepEqual(JSON.parse(JSON.stringify(requests[0].config.params)), {campusId: 1, boardId: 2, academicYearId: 9});
+      assert.equal(requests[0].config.requireRealBackend, true);
+      fail = true; await state().loadFeeAccounts(source);
+      assert.equal(state()[`${source}Accounts`][0].balance, 400);
+      assert.match(state().accountErrors[source], /Network unavailable/);
+      fail = false;
+      const stale = state().loadFeeAccounts(source);
+      props.academicYearId = 10; view.render();
+      assert.equal(state()[`${source}Accounts`].length, 0);
+      finish([raw]); await stale;
+      assert.equal(state()[`${source}Accounts`].length, 0);
+      const empty = state().loadFeeAccounts(source); finish([]); await empty;
+      assert.equal(state()[`${source}Accounts`].length, 0);
+      assert.equal(state().accountErrors[source], "");
+      view.unmount();
+    }
+  });
+  test("optional account enrichment requests the saved account ID and cannot erase a successful list", async () => {
+    const requests = [];
+    const view = await mount(accountLoaderSource, "AccountLoaderHarness", { ...accountLoaderBindings,
+      apiClient: { get: async url => { requests.push(url); return {data: url === "/collection"
+        ? [{ studentFeeId: 41, studentId: 11, totalPayable: 700, totalPaid: 300, balance: 400 }]
+        : { studentFeeId: 99, studentId: 11, totalPayable: 9999 } }; } },
+    }, {});
+    view.render(); await view.render()[0].props.loadFeeAccounts("collection");
+    const state = view.render()[0].props;
+    assert.deepEqual(requests, ["/collection", "/student-fees/41"]);
+    assert.equal(state.collectionAccounts.length, 1);
+    assert.equal(state.collectionAccounts[0].studentFeeId, 41);
+    assert.equal(state.collectionAccounts[0].balance, 400);
+    assert.match(state.accountErrors.collection, /do not match/);
+    view.unmount();
+  });
   test("backend installment balances and overdue statuses survive Admin normalization", () => {
     const raw = {
       studentId: 11,

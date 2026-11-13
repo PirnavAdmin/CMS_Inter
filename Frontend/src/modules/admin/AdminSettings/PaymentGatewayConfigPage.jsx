@@ -75,6 +75,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
   const [confirmation, setConfirmation] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [bankSelected, setBankSelected] = useState(false);
+  const [bankEditing, setBankEditing] = useState(false);
   const alive = useRef(false);
   const request = useRef(null);
   const guard = useRef(false);
@@ -88,7 +89,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     alive.current = true;
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true); setReady(false); setBankSelected(false);
+    setLoading(true); setReady(false); setBankSelected(false); setBankEditing(false);
     getPaymentGatewayConfigApi(campusId, controller.signal).then((data) => {
       if (!controller.signal.aborted) {
         // A late response or explicit refresh must not overwrite an entered draft.
@@ -122,6 +123,24 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     });
   };
   const validateField = (key) => setErrors((current) => ({ ...current, [key]: paymentConfigErrors(form, tab)[key] || "" }));
+  const editBank = () => {
+    if (!ready || !editable || saving || confirmation || accessDenied) return;
+    // Resume a campus draft, but never put a masked number into an editable input.
+    setForm((current) => ({ ...current,
+      accountNumber: /^\d{6,34}$/.test(current.accountNumber) ? current.accountNumber : "",
+      confirmAccountNumber: current.confirmAccountNumber || "",
+    }));
+    setErrors({}); setRevealed({}); setBankEditing(true);
+  };
+  const cancelBank = () => {
+    if (saving || confirmation) return;
+    PAYMENT_CONFIG_SECTIONS.bank.forEach((key) => editedFields.current.delete(key));
+    dirty.current = editedFields.current.size > 0;
+    setForm((current) => ({ ...current, ...Object.fromEntries(
+      PAYMENT_CONFIG_SECTIONS.bank.map((key) => [key, saved?.[key] ?? PAYMENT_CONFIG_DEFAULTS[key]]),
+    ) }));
+    setErrors({}); setRevealed({}); setBankEditing(false);
+  };
   const save = async () => {
     if (guard.current || !ready || !editable || !saved || Number(saved.campusId) !== Number(campusId)) return;
     const section = tab;
@@ -151,6 +170,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
         [...editedFields.current].map((key) => [key, current[key]]),
       ) }));
       setSaved(persisted); setErrors({});
+      if (section === "bank") { setBankEditing(false); setBankSelected(true); }
       setMessage({ error: false, text: `${tabs.find(([id]) => id === section)[1]} settings saved successfully.` });
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -199,7 +219,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     pollingIntervalMs: true, monitoringTimeoutSeconds: true, frontendPort: true,
   };
   // The config API returns one object, not a bank-account list or an active-account ID.
-  // Count only bank data in the successfully loaded campus configuration, never a draft.
+  // Its single config object cannot establish the total number of saved accounts.
   const bankAvailable = ready && !loading && !accessDenied && Number(saved?.campusId) === Number(campusId);
   const hasConfiguredBank = bankAvailable && Boolean(saved.bankName || saved.accountNumber || saved.accountHolderName || saved.ifscCode);
   return <section className="cms-payment-config">
@@ -214,29 +234,30 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     </div>
     {tab === "bank" && <section className="cms-payment-bank-accounts" aria-labelledby="payment-bank-accounts-title">
       <div className="cms-payment-bank-summary">
-        <div><h3 id="payment-bank-accounts-title">College Bank Accounts</h3><p>Configured account: <strong data-bank-account-count>{bankAvailable ? hasConfiguredBank ? 1 : 0 : "Unavailable"}</strong></p></div>
+        <div><h3 id="payment-bank-accounts-title">College Bank Accounts</h3><p>Configured Accounts: <strong data-bank-account-count>Unavailable</strong></p></div>
         <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">+ Add Bank Account</button>
       </div>
       <p id="payment-bank-support" className="cms-payment-config-note">Only one bank account is exposed by the current campus configuration API. A full account list, total saved-account count, and active-account status are not available. Adding another account or activating one requires backend support.</p>
       {!bankAvailable ? <p>Load this campus's configuration to view its saved bank details.</p>
-        : !hasConfiguredBank ? <p>No bank details are configured for this campus. Use the existing form below to configure its receiving account.</p>
+        : !hasConfiguredBank ? <p>No bank details are configured for this campus. Adding an independently managed bank account requires backend support.</p>
           : <>
             <h4>Saved Bank Account</h4>
             <label className={`cms-payment-bank-card${bankSelected ? " is-selected" : ""}`}>
               <input type="radio" name="payment-bank-view" checked={bankSelected} onChange={() => setBankSelected(true)} aria-controls="payment-bank-details" />
-              <span><strong>{saved.bankName || "Bank name not supplied"}</strong><span>{saved.accountType || "Account type not supplied"} · {maskedBankAccount(saved.accountNumber)}</span><span>{saved.accountHolderName || "Beneficiary not supplied"}</span><small>Configured · Active status not supplied</small></span>
+              <span><strong>{saved.bankName || "Bank name not supplied"}</strong><span>{saved.accountType || "Account type not supplied"} · {maskedBankAccount(saved.accountNumber)}</span><span>{saved.accountHolderName || "Beneficiary not supplied"}</span>{saved.branchName && <span>{saved.branchName}</span>}<small>Configured · Active status not supplied</small></span>
             </label>
             {bankSelected && <div id="payment-bank-details" className="cms-payment-bank-details">
               <h4>Selected Account Details</h4>
               <dl>{[["Bank", saved.bankName], ["Beneficiary", saved.accountHolderName], ["Account", maskedBankAccount(saved.accountNumber)], ["IFSC", saved.ifscCode], ["Branch", saved.branchName], ["Account Type", saved.accountType], ["Offline UTR", saved.enableOfflineUtr ? "Enabled" : "Disabled"], ["Active Receiving Account", "Not reported by the backend"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not supplied"}</dd></div>)}</dl>
               <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">Set as Active Receiving Account</button>
+              {!bankEditing && <button type="button" className="cms-btn cms-btn-primary" disabled={!editable || saving || Boolean(confirmation)} onClick={editBank}>Edit Bank Account</button>}
               <p className="cms-payment-config-note">Selecting this card only shows saved details. It does not change the receiving account or discard your draft.</p>
             </div>}
           </>}
       <p className="cms-payment-config-note">Changing bank details does not change the bank linked to a UPI ID or Razorpay's merchant settlement account. Those must be verified with the bank or payment provider.</p>
-      <h4>{hasConfiguredBank ? "Update Configured Bank Account" : "Bank Account Form"}</h4>
+      {bankEditing && <h4>Edit Bank Account</h4>}
     </section>}
-    {tab === "templates" ? <PaymentTemplatesEditor campusId={campusId} campusName={campusName} editable={templatesEditable && !accessDenied} drafts={templateDrafts} /> : <form noValidate onSubmit={submit}>
+    {tab === "templates" ? <PaymentTemplatesEditor campusId={campusId} campusName={campusName} editable={templatesEditable && !accessDenied} drafts={templateDrafts} /> : <form hidden={tab === "bank" && !bankEditing} noValidate onSubmit={submit}>
       <fieldset disabled={saving || !editable || accessDenied || Boolean(confirmation)}>
         <div id="payment-settings-panel" role="tabpanel" aria-labelledby={`payment-tab-${tab}`}>
           {tab === "razorpay" && <div className="cms-payment-config-mode"><span>Environment</span>{[[false, "Test / Sandbox"], [true, "Live / Production"]].map(([live, label]) => <label key={label}><input type="radio" name="payment-mode" checked={form.isLiveMode === live} onChange={() => update("isLiveMode", live)} /> {label}</label>)}</div>}
@@ -260,7 +281,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
         : tab === "upi" ? "Displaying or scanning a QR never confirms payment. The backend must verify settlement before updating fees. Note: If Razorpay Gateway is also enabled with valid keys for this campus, UPI QR orders route through Razorpay's Merchant Account (auto-settlement) instead of the Payee VPA above."
           : tab === "razorpay" ? "Leave stored secrets blank to preserve them. Enter a replacement only when changing credentials; saved secrets are never displayed."
             : "These settings do not change the Vite proxy, API base URL or workstation network. Mobile checkout and backend LAN resolution must be supported separately."}</p>
-      <div className="cms-payment-config-actions"><button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : "Save Settings"}</button></div>
+      <div className="cms-payment-config-actions">{tab === "bank" && <button type="button" className="cms-btn cms-btn-ghost" disabled={saving || Boolean(confirmation)} onClick={cancelBank}>Cancel</button>}<button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : tab === "bank" ? "Save Changes" : "Save Settings"}</button></div>
     </form>}
     {confirmation && <ConfirmDialog title="Confirm payment settings" message={confirmation} confirmLabel="Confirm & Save" onCancel={() => setConfirmation("")} onConfirm={save} loading={saving} />}
   </section>;
