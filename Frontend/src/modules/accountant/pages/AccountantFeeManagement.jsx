@@ -1,3 +1,4 @@
+import FeeManagementPage from "@/modules/admin/AdminFees/FeeManagementPage.jsx";
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -636,33 +637,59 @@ function SetupRecords({ kind, config, params, access }) {
   </div>;
 }
 
+// Translate existing Accountant bookmarks to the shared Admin tab identifiers.
+export function accountantFeeViewParams(query) {
+  const next = new URLSearchParams(query);
+  const ledgerTabs = { ledger: "fee-accounts", collection: "fee-collection", pending: "pending-utrs" };
+  const setupTabs = { types: "fee-types", structures: "fee-structure", hostel: "hostel-fees", transport: "transport-fees", scholarships: "scholarships", fine: "fine" };
+  if (Object.hasOwn(ledgerTabs, next.get("tab"))) {
+    next.set("subtab", ledgerTabs[next.get("tab")]);
+    next.set("tab", "student-ledger");
+  }
+  if (next.get("tab") === "setup" && !next.has("subtab") && Object.hasOwn(setupTabs, next.get("setup"))) {
+    next.set("subtab", setupTabs[next.get("setup")]);
+  }
+  if (next.get("studentFeeId") && !next.has("account")) {
+    next.set("account", next.get("studentFeeId"));
+    next.set("source", next.get("subtab") === "fee-collection" ? "collection" : "ledger");
+    next.delete("studentFeeId");
+    next.delete("studentId");
+  }
+  next.delete("setup");
+  return next;
+}
+
 export default function AccountantFeeManagement() {
-  const params = useFinanceParams();
   const permissions = useEffectivePermissions();
-  const collectionAccess = feeCollectionAccess(permissions);
-  const collectionAccessRef = useRef(collectionAccess);
-  collectionAccessRef.current = collectionAccess;
-  useEffect(() => { collectionAccessRef.current = collectionAccess; return () => { collectionAccessRef.current = false; }; }, [collectionAccess]);
-  const authorizeCollection = useCallback(() => collectionAccessRef.current, []);
+  const permissionsRef = useRef(permissions);
+  permissionsRef.current = permissions;
+  useEffect(() => {
+    permissionsRef.current = permissions;
+    return () => { permissionsRef.current = null; };
+  }, [permissions]);
+  const authorize = useCallback((action, screen) => {
+    const current = permissionsRef.current;
+    if (!current || current.loading || current.error) return false;
+    if (action === "collect") return current.canView("fee-management", "fee-collection") && feeCollectionAccess(current);
+    const kinds = { "Fee Types": "types", "Fee Structure": "structures", "Hostel Fees": "hostel", "Transport Fees": "transport", Scholarships: "scholarships", Fine: "fine" };
+    const kind = kinds[screen];
+    const setupScreens = { types: "fee-types", structures: "fee-structure", hostel: "hostel-fees", transport: "transport-fees", scholarships: "scholarships", fine: "fine-rules" };
+    const screenKey = kind ? setupScreens[kind] : screen === "overview" ? null : screen;
+    const view = current.canView("fee-management", screenKey);
+    if (!view) return false;
+    if (kind === "hostel" && import.meta.env.VITE_USE_MOCK_DATA === "true") return false;
+    if (action === "view") return true;
+    const actionKeys = { create: ACTIONS.CREATE, edit: ACTIONS.EDIT, delete: ACTIONS.DELETE };
+    return Boolean(kind && actionKeys[action] && !(kind === "transport" && action === "delete")
+      && current.canDo("fee-management", actionKeys[action], screenKey));
+  }, []);
   const [query, setQuery] = useSearchParams();
-  const tab = ["overview", "setup", "ledger", "collection", "pending"].includes(query.get("tab")) ? query.get("tab") : "overview";
-  const setup = Object.hasOwn(setupViews, query.get("setup")) ? query.get("setup") : "types";
-  const config = setupViews[setup];
-  const change = (key, value) => setQuery((previous) => { const next = new URLSearchParams(previous); next.set(key, value); ["studentId", "studentFeeId", "action", "receiptId", "setupAction", "recordId", "setupPage"].forEach((field) => next.delete(field)); return next; });
-  const canView = (screen) => !permissions.error && (permissions.canView("fee-management", screen) || permissions.canView("fee-management") || permissions.isAccountant || permissions.isSuperOrAdmin);
-  const setupAccess = feeSetupAccess(permissions, setup);
-  const allowed = tab === "ledger" ? canView("student-fees") : tab === "setup" ? setupAccess.view : canView("fee-collection");
-  const contextKey = JSON.stringify(params);
-  return <div className="accountant-fee-page cms-fee-page">
-    <header className="cms-page-head"><div className="cms-page-title"><img className="cms-page-title-icon" src={adminIconAssets.feeManagement} alt="" /><div className="cms-page-title-copy"><h1>Fee Management</h1><p>Manage fee structures, scholarships, student balances and collections.</p></div></div><div className="cms-fee-head-actions"><PaymentSettingsLink accountant /><Link className="cms-btn cms-btn-ghost" to="/accountant-dashboard/payments?tab=fees"><History size={15} /> Payment history</Link></div></header>
-    <FeeTabs items={[["overview", "Overview"], ["setup", "Fee Setup"], ["ledger", "Student Fee Ledger"], ["collection", "Fee Collection"], ["pending", "Pending UTRs"]]} value={tab} onChange={(value) => change("tab", value)} label="Fee Management sections" />
-    {tab === "setup" ? <FeeTabs secondary items={Object.entries(setupViews).map(([key, view]) => [key, view.title])} value={setup} onChange={(value) => change("setup", value)} label="Fee Setup sections" /> : null}
-    {permissions.loading ? <FeeNotice>Checking finance permissions...</FeeNotice> : !allowed ? <FeeNotice>This section is unavailable with your current permissions. Please contact your administrator to verify finance view access.</FeeNotice>
-      : tab === "overview" ? <AccountantFeeOverview key={contextKey} params={params} />
-        : tab === "pending" ? <OfflineUtrQueueTab key={contextKey} scope={params} canView={allowed} canReview={!permissions.error && !permissions.loading && permissions.canDo("fee-management", ACTIONS.APPROVE_REJECT, "fee-collection")} onSettled={() => {}} onToast={() => {}} Pagination={({ page, totalItems, onPageChange }) => <div className="cms-pagination"><button className="cms-btn cms-btn-ghost" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>Previous</button><span>{page} / {Math.max(1, Math.ceil(totalItems / 5))}</span><button className="cms-btn cms-btn-ghost" disabled={page >= Math.ceil(totalItems / 5)} onClick={() => onPageChange(page + 1)}>Next</button></div>} />
-        : tab === "ledger" ? <FeeLedger key={contextKey} params={params} />
-          : tab === "collection" ? <FeeLedger key={`collection:${contextKey}`} params={params} collection authorize={authorizeCollection} />
-            : setup === "hostel" && import.meta.env.VITE_USE_MOCK_DATA === "true" ? <FeeNotice>Hostel fees are unavailable while the hostel mock-data service is enabled. Connect the existing live hostel API to view financial records.</FeeNotice>
-              : <SetupRecords key={`${setup}:${contextKey}`} kind={setup} config={config} params={params} access={setupAccess} />}
-  </div>;
+  const canonicalQuery = accountantFeeViewParams(query).toString();
+  const needsRedirect = canonicalQuery !== query.toString();
+  useEffect(() => {
+    if (needsRedirect) setQuery(new URLSearchParams(canonicalQuery), { replace: true });
+  }, [canonicalQuery, needsRedirect, setQuery]);
+  if (permissions.loading || needsRedirect) return <FeeNotice>Loading Fee Management...</FeeNotice>;
+  if (permissions.error) return <FeeNotice error>Unable to check finance permissions. Refresh before continuing.</FeeNotice>;
+  return <FeeManagementPage embedded authorize={authorize} />;
 }

@@ -362,15 +362,15 @@
   font-size: 13px;
 }
 
-.cms-content:has(> .cms-fee-tabs) .cms-table .num, .cms-fee-table .num { text-align: right; }
-.cms-content:has(> .cms-fee-tabs) .cms-table-wrap { max-width: 100%; overflow-x: auto; }
-.cms-content:has(> .cms-fee-tabs) .cms-table { min-width: max-content; }
-.cms-content:has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col {
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .num, .cms-fee-table .num { text-align: right; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table-wrap { max-width: 100%; overflow-x: auto; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table { min-width: max-content; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col {
   width: 132px;
   min-width: 132px;
   text-align: left;
 }
-.cms-content:has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col .cms-actions {
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col .cms-actions {
   justify-content: flex-start;
   gap: 8px;
   flex-wrap: nowrap;

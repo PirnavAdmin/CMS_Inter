@@ -3423,4 +3423,194 @@ await describe("Admin payment gateway", async () => {
     assert.equal(networkCalls, 1);
     assert.equal(response.config.requireRealBackend, undefined);
   });
+  test("Accountant bookmarks resolve to the Admin screen identifiers and survive refresh unchanged", async () => {
+    const source = await readFile(new URL("../../../accountant/pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
+    const normalize = vm.runInNewContext(source.slice(source.indexOf("export function accountantFeeViewParams"), source.indexOf("export default function AccountantFeeManagement")).replace("export ", "") + ";accountantFeeViewParams", { URLSearchParams });
+    const resolverSource = pageSource.slice(pageSource.indexOf("const TABS ="), pageSource.indexOf("const FEE_TYPE_CATEGORIES"));
+    const resolve = vm.runInNewContext(resolverSource + ";params => resolveFeeView(params, TABS[0], FEE_SETUP_TABS[0], LEDGER_TABS[0].id)");
+    for (const [legacy, expected] of [["collection", "Fee Collection"], ["ledger", "Student Fee Ledger"], ["pending", "Pending UTRs"]]) {
+      const result = normalize(new URLSearchParams(`tab=${legacy}&studentFeeId=41&studentId=11`));
+      assert.equal(result.get("tab"), "student-ledger");
+      assert.equal(result.get("account"), "41");
+      assert.equal(resolve(result).ledgerTab, expected);
+      assert.equal(normalize(result).toString(), result.toString());
+    }
+    for (const [legacy, expected] of [["types", "Fee Types"], ["structures", "Fee Structure"], ["hostel", "Hostel Fees"], ["transport", "Transport Fees"], ["scholarships", "Scholarships"], ["fine", "Fine"]]) {
+      assert.equal(resolve(normalize(new URLSearchParams(`tab=setup&setup=${legacy}`))).setupTab, expected);
+    }
+    for (const subtab of ["fee-collection", "fee-accounts", "pending-utrs", "payment-history"]) {
+      const params = new URLSearchParams(`tab=student-ledger&subtab=${subtab}&account=41&source=collection`);
+      assert.equal(normalize(params).toString(), params.toString());
+      assert.equal(resolve(normalize(params)).ledgerTab, resolve(params).ledgerTab);
+    }
+  });
+
+  test("Accountant embeds the shared page and checks live collection and setup permissions", async () => {
+    const source = await readFile(new URL("../../../accountant/pages/AccountantFeeManagement.jsx", import.meta.url), "utf8");
+    const component = source.slice(source.indexOf("export function accountantFeeViewParams")).replaceAll("import.meta.env.VITE_USE_MOCK_DATA", '"false"');
+    let permissions = { loading: false, error: "", canView: () => true, canDo: () => false };
+    const query = new URLSearchParams("tab=student-ledger&subtab=pending-utrs");
+    const view = await mount(component, "AccountantFeeManagement", {
+      FeeManagementPage: "SharedFeePage", FeeNotice: "FeeNotice",
+      ACTIONS: { CREATE: "create", EDIT: "edit", DELETE: "delete" },
+      useEffectivePermissions: () => permissions, useSearchParams: () => [query, () => assert.fail("Canonical URL must not be replaced")],
+      feeCollectionAccess: value => value.canDo("fee-management", "create", "fee-collection"),
+    }, {});
+    let shared = view.render().find(node => node.type === "SharedFeePage");
+    assert.equal(shared.props.embedded, true);
+    const authorize = shared.props.authorize;
+    assert.equal(authorize("view", "Fee Structure"), true);
+    assert.equal(authorize("create", "Fee Structure"), false);
+    assert.equal(authorize("collect", "fee-collection"), false);
+    permissions = { ...permissions, canDo: () => true };
+    view.render();
+    assert.equal(authorize("create", "Fee Structure"), true);
+    assert.equal(authorize("collect", "fee-collection"), true);
+    assert.equal(authorize("delete", "Transport Fees"), false);
+    permissions = { ...permissions, canDo: (_module, _action, screen) => !screen };
+    view.render();
+    assert.equal(authorize("edit", "Fee Types"), false);
+    assert.equal(authorize("create", "Fee Structure"), false);
+    assert.equal(authorize("collect", "fee-collection"), false);
+    permissions = { ...permissions, loading: true };
+    assert.equal(view.render().some(node => node.type === "SharedFeePage"), false);
+    assert.equal(authorize("collect", "fee-collection"), false);
+    permissions = { ...permissions, loading: false, error: "Permission lookup failed" };
+    assert.equal(view.render().some(node => node.type === "SharedFeePage"), false);
+    assert.equal(authorize("edit", "Fee Structure"), false);
+    permissions = { ...permissions, error: "", canView: (_module, screen) => !screen };
+    view.render();
+    assert.equal(authorize("view", "student-fees"), false);
+    view.unmount();
+    assert.equal(authorize("collect", "fee-collection"), false);
+  });
+
+  test("shared ledger uses Admin tab order, pagination and the same queue/history components", async () => {
+    const source = pageSource.slice(pageSource.indexOf("function StudentFeeLedgerSection"), pageSource.indexOf("function HistoryTab"));
+    const tabs = [{ id: "Fee Collection", label: "Fee Collection" }, { id: "Student Fee Ledger", label: "Fee Accounts" }, { id: "Pending UTRs", label: "Pending UTR Queue" }, { id: "Payment History", label: "Payment History" }];
+    const props = { ledgerTab: "Fee Collection", gatewayAccess: { view: true, review: false, export: false }, loading: {}, errors: {}, onLedgerTabChange(value) { props.ledgerTab = value; } };
+    const bindings = { LEDGER_TABS: tabs, LedgerTab: "Accounts", FeeCollectionTab: "Collection", HistoryTab: "History", OfflineUtrQueueTab: "Queue", TablePagination: "AdminPagination" };
+    const view = await mount(source, "StudentFeeLedgerSection", bindings, props);
+    assert.deepEqual(view.render().filter(node => node.props.role === "tab").map(node => node.props.children[0]), tabs.map(tab => tab.label));
+    for (const [label, screen] of [["Fee Collection", "Collection"], ["Fee Accounts", "Accounts"], ["Pending UTR Queue", "Queue"], ["Payment History", "History"]]) {
+      buttonNamed(view.render(), label).props.onClick();
+      const tree = view.render();
+      assert.ok(tree.some(node => node.type === screen));
+      assert.equal(tree.filter(node => node.props.role === "tab" && node.props["aria-selected"]).length, 1);
+      if (screen === "Queue") {
+        assert.equal(tree.find(node => node.type === screen).props.Pagination, "AdminPagination");
+        assert.equal(tree.find(node => node.type === screen).props.canReview, false);
+      }
+    }
+    props.ledgerTab = "Fee Collection"; props.collectionAuthorized = false;
+    assert.equal(view.render().find(node => node.type === "Collection").props.collectionAuthorized, false);
+    props.viewAuthorized = false;
+    assert.equal(view.render().some(node => ["Accounts", "Collection", "Queue", "History"].includes(node.type)), false);
+    assert.equal(view.render().filter(node => node.props.role === "tab").length, 4);
+    assert.ok(view.render().some(node => node.props.role === "alert"));
+    view.unmount();
+  });
+
+  test("shared setup passes Accountant guards to all six existing Admin editors", async () => {
+    const source = pageSource.slice(pageSource.indexOf("function FeeSetupTab"), pageSource.indexOf("function StudentFeeLedgerSection"));
+    const tabs = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
+    const components = ["FeeTypesTab", "StructureTab", "HostelFeesTab", "TransportFeesTab", "ScholarshipsTab", "FineTab"];
+    let allowed = true;
+    const props = { setupTab: tabs[0], authorize: () => allowed, hostelFees: { masters: {} }, transportFees: {}, fineRules: {}, onSetupTabChange(value) { props.setupTab = value; } };
+    const view = await mount(source, "FeeSetupTab", { FEE_SETUP_TABS: tabs, ...Object.fromEntries(components.map(name => [name, name])) }, props);
+    for (const [index, label] of tabs.entries()) {
+      buttonNamed(view.render(), label).props.onClick();
+      const child = view.render().find(node => node.type === components[index]);
+      assert.ok(child, label); assert.equal(child.props.authorize("create"), true);
+      allowed = false;
+      assert.equal(child.props.authorize("edit"), false);
+      assert.equal(view.render().some(node => components.includes(node.type)), false);
+      assert.ok(view.render().some(node => node.props.role === "alert"));
+      allowed = true;
+    }
+    view.unmount();
+  });
+
+  test("shared setup cannot mutate after Accountant authorization is revoked", async () => {
+    const source = pageSource.slice(pageSource.indexOf("function FeeTypesTab"), pageSource.indexOf("function ScholarshipFormModal"));
+    let allowed = true, writes = 0;
+    const props = { feeTypes: [{ id: 7, name: "Tuition", status: "Active" }], authorize: () => allowed, onToast() {}, onRefresh() {} };
+    const view = await mount(source, "FeeTypesTab", {
+      Plus: "Plus", Pencil: "Pencil", Trash2: "Trash2", TablePagination: "Pagination", FeeTypeFormModal: "Editor", PAGE_SIZE: 5,
+      pageItems: (rows, page) => rows.slice((page - 1) * 5, page * 5), feeTypePayload: value => value,
+      apiClient: { post: async () => { writes++; }, put: async () => { writes++; }, delete: async () => { writes++; } },
+      apiEndpoints: { fee: { createFeeType: "/types", updateFeeType: id => `/types/${id}`, deleteFeeType: id => `/types/${id}` } },
+    }, props);
+    view.render().find(node => node.type === "button" && node.props.children.some(child => typeof child === "string" && child.trim() === "Add Fee Type")).props.onClick();
+    const editor = view.render().find(node => node.type === "Editor");
+    allowed = false;
+    assert.ok(buttonNamed(view.render(), "Edit fee type").props.disabled);
+    assert.ok(buttonNamed(view.render(), "Delete fee type").props.disabled);
+    await assert.rejects(editor.props.onSaved({ name: "Blocked" }, "Saved"), /permission/);
+    await buttonNamed(view.render(), "Delete fee type").props.onClick();
+    assert.equal(writes, 0);
+    allowed = true;
+    await editor.props.onSaved({ name: "Allowed" }, "Saved");
+    assert.equal(writes, 1);
+    view.unmount();
+  });
+
+  test("shared cash and gateway use the same live Accountant collection guard", async () => {
+    let allowed = true, writes = 0;
+    const view = await mount(cashSource, "CollectPaymentModal", {
+      GatewayPaymentPanel: "GatewayPanel", apiClient: { post: async () => { writes++; } },
+    }, { account, authorize: () => allowed, onClose() {}, onSaved() {} });
+    const gateway = view.render().find(node => node.type === "GatewayPanel");
+    assert.equal(gateway.props.authorize(), true);
+    allowed = false;
+    assert.equal(gateway.props.authorize(), false);
+    buttonNamed(view.render(), "Cash / Manual").props.onClick();
+    await buttonNamed(nodes(view.render().find(node => node.type === "Modal").props.footer), "Save Payment").props.onClick();
+    assert.equal(writes, 0);
+    assert.ok(view.render().some(node => node.props.children.includes("Fee collection permission is required.")));
+    view.unmount();
+  });
+
+  test("shared page embeds without a second dashboard, preserves Admin defaults and renders every canonical view", async () => {
+    let query = new URLSearchParams();
+    const bindings = {
+      useEffect() {}, // Read-only render test: prevent loaders, timers and browser listeners.
+      useAcademicContext: () => ({ boards: [], academicYears: [], selectedBoardId: 2, selectedAcademicYearId: 9 }),
+      useCampusContext: () => ({ selectedCampusId: 1 }),
+      useSearchParams: () => [query, value => { query = new URLSearchParams(value); }],
+      DashboardLayout: "AdminLayout", PaymentSettingsLink: "SettingsLink", Toast: "Toast", collegeLogo: "fixture-logo",
+      ...Object.fromEntries(["AlertCircle", "CalendarClock", "CheckCircle", "ChevronDown", "Copy", "Eye", "Pencil", "Plus", "Printer", "ReceiptText", "Search", "Trash2", "Users", "WalletCards"].map(name => [name, name])),
+      STUDENT_FEES_UPDATED_EVENT: "fixture-updated", uniqueAcademicYearsByName: rows => rows,
+    };
+    const props = { embedded: true, authorize: () => true };
+    const view = await mount(pageSource, "FeeManagementPage", bindings, props);
+    let tree = view.render();
+    assert.equal(tree[0].type.name, "EmbeddedFeeLayout");
+    assert.equal(tree[0].props.actions.props.accountant, true);
+    assert.equal(tree.some(node => node.type === "AdminLayout"), false);
+    assert.deepEqual(tree.filter(node => node.props.role === "tab").map(node => node.props.children[0]), ["Overview", "Fee Setup", "Student Fee Ledger"]);
+    buttonNamed(tree, "Fee Setup").props.onClick();
+    assert.equal(query.get("tab"), "setup");
+    assert.equal(query.get("subtab"), "fee-types");
+    buttonNamed(view.render(), "Student Fee Ledger").props.onClick();
+    assert.equal(query.get("tab"), "student-ledger");
+    assert.equal(query.get("subtab"), "fee-collection");
+    buttonNamed(view.render(), "Overview").props.onClick();
+    assert.equal(query.has("tab"), false);
+    for (const [tab, subtab, component] of [
+      ["overview", "recent", "OverviewTab"],
+      ...["fee-types", "fee-structure", "hostel-fees", "transport-fees", "scholarships", "fine"].map(subtab => ["setup", subtab, "FeeSetupTab"]),
+      ...["fee-collection", "fee-accounts", "pending-utrs", "payment-history"].map(subtab => ["student-ledger", subtab, "StudentFeeLedgerSection"]),
+    ]) {
+      query = new URLSearchParams({ tab, subtab });
+      tree = view.render();
+      assert.ok(tree.some(node => node.type?.name === component), `${tab}/${subtab}`);
+      assert.equal(query.get("subtab"), subtab);
+    }
+    props.embedded = false; props.authorize = undefined;
+    assert.equal(view.render()[0].type, "AdminLayout");
+    assert.equal(view.render()[0].props.actions.props.accountant, false);
+    view.unmount();
+  });
+
 });
