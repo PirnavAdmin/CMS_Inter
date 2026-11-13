@@ -211,6 +211,9 @@ export const apiEndpoints = {
     communicationSettings: "/api/v1/fee-payments/gateway/communication-settings",
     restoreCommunicationSettings: "/api/v1/fee-payments/gateway/communication-settings/restore-default",
     sendTestCommunicationEmail: "/api/v1/fee-payments/gateway/communication-settings/send-test-email",
+    bankAccounts: "/api/v1/fee-payments/gateway/bank-accounts",
+    bankAccountById: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}`,
+    activateBankAccount: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}/activate`,
   },
   fee: {
     feeTypes: "/api/v1/fees/types",
@@ -677,6 +680,12 @@ export const apiEndpoints = {
     delete: (id) => `/api/v1/settings/templates/${id}`,
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
+  },
+  landingPage: {
+    getConfig: "/api/v1/landing-page/config",
+    saveConfig: "/api/v1/landing-page/config",
+    uploadImage: "/api/v1/landing-page/upload-image",
+    getPublic: "/api/v1/landing-page/public",
   },
   holidays: {
     list: "/api/v1/holidays",

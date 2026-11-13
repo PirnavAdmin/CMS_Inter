@@ -518,18 +518,11 @@ export default function TransportManagerNavbar({ onOpenThemePalette }) {
         {/* Theme Toggle */}
         <ThemeToggle variant="dashboard" />
 
-        {/* Notifications Button */}
-        <button
-          className="cms-icon-btn"
-          type="button"
-          onClick={() => {
-            if (context?.showToast) context.showToast("No new transport notifications", "info");
-          }}
-          title="Notifications"
-          aria-label="Notifications"
-        >
-          <NavbarIcon src={navbarNotificationsIcon} />
-        </button>
+        {/* Notifications Bell (Real SignalR + History) */}
+        <NotificationBell
+          customIcon={<NavbarIcon src={navbarNotificationsIcon} />}
+          className="cms-icon-btn-wrap"
+        />
 
         {/* Profile Avatar Capsule Pill & Dropdown matching Reference 2 & 3 */}
         <div style={{ position: "relative" }} ref={profileDropRef}>

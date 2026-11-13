@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
@@ -38,6 +38,11 @@ export default function SuperAdminLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 760px)").matches);
+  const location = useLocation();
+  const activeChildren = {
+    colleges: ["/super-admin/college-management", "/super-admin/register-college"],
+    "college-admins": ["/super-admin/add-college-admin"],
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -70,7 +75,7 @@ export default function SuperAdminLayout() {
   };
   return <div className={`cms-shell sa-shell ${open ? "sa-nav-open" : ""} ${collapsed ? "sa-nav-collapsed" : ""}`} data-dashboard-palette={palette || "olive"}>
     {open ? <button type="button" className="sa-backdrop" aria-label="Close navigation" onClick={() => setOpen(false)}/> : null}
-    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label={`${platformName} Super Admin Dashboard`}><img src={collegeLogo} alt="Pirnav College"/><small title={platformName}>{platformName}</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
+    <aside className="sa-sidebar"><NavLink to="/super-admin/dashboard" className="sa-brand" aria-label={`${platformName} Super Admin Dashboard`}><img src={collegeLogo} alt="Pirnav College"/><small title={platformName}>{platformName}</small></NavLink><nav id="sa-navigation" aria-label="Super Admin navigation">{groups.map(([label, links], groupIndex) => <section key={label}><h2>{label}</h2>{links.map(([path, name, Icon], index) => <NavLink key={path} to={`/super-admin/${path}`} title={name} aria-label={name} onClick={() => setOpen(false)} className={({ isActive }) => isActive || (activeChildren[path] || []).includes(location.pathname) ? "active" : undefined} aria-current={(activeChildren[path] || []).includes(location.pathname) ? "page" : undefined}><span className={`sa-nav-icon sa-icon-tone-${(groupIndex + index) % 6}`}><ThreeDIcon name={navigationIcons[path] || Icon} size={22}/></span><span className="sa-nav-text">{name}</span></NavLink>)}</section>)}</nav></aside>
     <div className="sa-workspace">
       <header className="sa-topbar">
         <div className="sa-topbar-start">

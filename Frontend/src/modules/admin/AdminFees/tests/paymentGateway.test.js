@@ -1048,7 +1048,7 @@ await describe("Admin payment gateway", async () => {
   });
   const configSource = await readFile(new URL("../../AdminSettings/PaymentGatewayConfigPage.jsx", import.meta.url), "utf8");
   const configBindings = {
-    Building2: "Building2", Clock: "Clock", Eye: "Eye", EyeOff: "EyeOff", RefreshCw: "RefreshCw", Save: "Save", ConfirmDialog: "ConfirmDialog",
+    Building2: "Building2", Clock: "Clock", Eye: "Eye", EyeOff: "EyeOff", RefreshCw: "RefreshCw", Save: "Save", ConfirmDialog: "ConfirmDialog", Modal: "Modal",
   };
   const configFixture = () => normalizePaymentConfig({ ...paymentSettings, enableRazorpay: false, hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false }, 2);
   const templateSource = await readFile(new URL("../../AdminSettings/PaymentTemplatesEditor.jsx", import.meta.url), "utf8");
@@ -1182,7 +1182,13 @@ await describe("Admin payment gateway", async () => {
     let tree = view.render();
     assert.equal(tree.find(node => node.type === "form").props.hidden, true);
     const add = tree.find((node) => node.type === "button" && node.props.children.includes("+ Add Bank Account"));
-    assert.equal(add.props.disabled, true); assert.equal(add.props.onClick, undefined);
+    assert.equal(Boolean(add.props.disabled), false);
+    assert.equal(typeof add.props.onClick, "function");
+    add.props.onClick();
+    tree = view.render();
+    const cancelModal = tree.find((node) => node.type === "button" && node.props.children === "Cancel");
+    if (cancelModal) cancelModal.props.onClick();
+    tree = view.render();
     tree.find((node) => node.props.id === "payment-config-bankName").props.onChange({ target: { value: "Unsaved Bank" } });
     tree = view.render(); tree.find((node) => node.props.name === "payment-bank-view").props.onChange();
     tree = view.render();
@@ -1204,6 +1210,77 @@ await describe("Admin payment gateway", async () => {
     assert.equal(tree.find(node => node.type === "form").props.hidden, true);
     assert.equal(tree.find(node => node.props.id === "payment-config-bankName").props.value, paymentSettings.bankName);
     assert.equal(writes, 0);
+    view.unmount();
+  });
+  test("supports multiple campus bank accounts, active account designation, and activation api", async () => {
+    let activatedId = null;
+    let activatedCampus = null;
+    const accountsFixture = {
+      ...configFixture(),
+      activeBankAccountId: 10,
+      bankAccounts: [
+        { id: 10, campusId: 2, bankName: "Active ICICI Bank", accountHolderName: "College HQ", accountNumber: "067401003844", ifscCode: "ICIC0000674", accountType: "Current", isActive: true },
+        { id: 11, campusId: 2, bankName: "Secondary HDFC Bank", accountHolderName: "College Hostel", accountNumber: "50100234567890", ifscCode: "HDFC0000123", accountType: "Savings", isActive: false },
+      ],
+    };
+    const view = await mount(configSource, "CampusPaymentConfig", {
+      ...configBindings,
+      getPaymentGatewayConfigApi: async () => accountsFixture,
+      activateCampusBankAccountApi: async (id, campusId) => {
+        activatedId = id;
+        activatedCampus = campusId;
+        return { success: true };
+      },
+    }, { campusId: 2, campusName: "Fixture", editable: true });
+    view.render(); await flush();
+    const count = () => view.render().find((node) => Object.hasOwn(node.props, "data-bank-account-count")).props.children[0];
+    assert.equal(count(), 2);
+    let tree = view.render();
+    const cards = tree.filter((node) => node.type === "label" && node.props.className?.includes("cms-payment-bank-card"));
+    assert.equal(cards.length, 2);
+    const activeBadge = tree.find((node) => node.props.className?.includes("cms-badge-active"));
+    assert.ok(nodes(activeBadge).some((n) => n.props.children?.includes("Active Receiving Account")));
+    const inactiveBadge = tree.find((node) => node.props.className?.includes("cms-badge-inactive"));
+    assert.ok(nodes(inactiveBadge).some((n) => n.props.children?.includes("Inactive")));
+    const setActiveBtn = tree.find((node) => node.type === "button" && node.props.children?.includes?.("Set as Active"));
+    assert.ok(setActiveBtn);
+    await setActiveBtn.props.onClick({ preventDefault() {}, stopPropagation() {} });
+    assert.equal(activatedId, 11);
+    assert.equal(activatedCampus, 2);
+    view.unmount();
+  });
+  test("merged bank settings keep independent account creation and secure edit/cancel alongside legacy configuration drafts", async () => {
+    let persisted = { ...configFixture(), activeBankAccountId: 10, bankAccounts: [{id: 10, campusId: 2, bankName: "Existing Bank", accountNumber: "XXXX5678", isActive: true}] };
+    const writes = [];
+    const view = await mount(configSource, "CampusPaymentConfig", { ...configBindings,
+      getPaymentGatewayConfigApi: async () => persisted,
+      createCampusBankAccountApi: async payload => {
+        writes.push(payload);
+        const added = {...payload, id: 11};
+        persisted = {...persisted, bankAccounts: [...persisted.bankAccounts, added]};
+        return added;
+      },
+    }, {campusId: 2, campusName: "Fixture", editable: true});
+    view.render(); await flush();
+    buttonNamed(view.render(), "+ Add Bank Account").props.onClick();
+    for (const [key, value] of Object.entries({bankName: "New Bank", accountHolderName: "College", accountNumber: "0012345678", confirmAccountNumber: "0012345678", ifscCode: "ABCD0123456"})) {
+      const input = inputById(view, `modal-${key}`);
+      assert.equal(input.props.value, "");
+      input.props.onChange({target: {value}}); view.render();
+    }
+    let modal = view.render().find(node => node.type === "Modal");
+    await buttonNamed(nodes(modal.props.footer), "Add Account").props.onClick();
+    assert.equal(writes.length, 1); assert.equal(writes[0].campusId, 2);
+    let tree = view.render();
+    assert.equal(tree.find(node => Object.hasOwn(node.props, "data-bank-account-count")).props.children[0], 2);
+    assert.equal(tree.some(node => node.type === "Modal"), false);
+    buttonNamed(tree, "Edit").props.onClick({preventDefault() {}, stopPropagation() {}});
+    assert.equal(inputById(view, "modal-accountNumber").props.value, "");
+    assert.equal(inputById(view, "modal-confirmAccountNumber").props.value, "");
+    modal = view.render().find(node => node.type === "Modal");
+    buttonNamed(nodes(modal.props.footer), "Cancel").props.onClick();
+    assert.equal(view.render().some(node => node.type === "Modal"), false);
+    assert.equal(writes.length, 1);
     view.unmount();
   });
   test("account inventory count remains unavailable without a listing API even after configuration save", async () => {

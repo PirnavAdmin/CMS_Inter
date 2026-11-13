@@ -126,8 +126,8 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var staffName = User.Identity?.Name ?? "Faculty";
                 var examId = dto?.Marks?.FirstOrDefault()?.ExaminationId;
-                await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
-                await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, "/dashboard/results");
+                await _notificationService.SendToRoleAsync("Admin", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, examId.HasValue ? $"/dashboard/results?examinationId={examId.Value}" : "/dashboard/results");
+                await _notificationService.SendToRoleAsync("Principal", null, "Marks Submitted", $"{staffName} submitted marks for examination {(examId.HasValue ? $"#{examId.Value}" : "")}.", "Marks", examId, examId.HasValue ? $"/dashboard/results?examinationId={examId.Value}" : "/dashboard/results");
                 // Check for student absent during examination
                 var absentMarks = dto?.Marks?.Where(m => m.IsAbsent && m.StudentId > 0).ToList();
                 if (absentMarks != null && absentMarks.Any())
@@ -141,7 +141,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"You were marked ABSENT for examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
                             "Examination",
                             absent.ExaminationId,
-                            "/student/examinations");
+                            $"/student-dashboard/examinations?examinationId={absent.ExaminationId}");
 
                         await _notificationService.SendToRolesAsync(
                             new[] { "Parent" },
@@ -150,7 +150,7 @@ namespace CollegeManagement.API.Controllers.V1
                             $"Alert: Your ward {studentName} was marked ABSENT for Examination #{absent.ExaminationId} (Subject #{absent.SubjectId}).",
                             "Examination",
                             absent.ExaminationId,
-                            "/parent/dashboard");
+                            $"/parent-dashboard/examinations?examinationId={absent.ExaminationId}");
                     }
                 }
             }
@@ -209,7 +209,7 @@ namespace CollegeManagement.API.Controllers.V1
             var count = await _marksService.VerifyMarksAsync(dto);
             try
             {
-                await _notificationService.SendToRoleAsync("Faculty", null, "Marks Approved", $"Examination #{dto.ExaminationId} marks have been verified & approved by Admin.", "Marks", dto.ExaminationId, "/dashboard/faculty/marks");
+                await _notificationService.SendToRoleAsync("Faculty", null, "Marks Approved", $"Examination #{dto.ExaminationId} marks have been verified & approved by Admin.", "Marks", dto.ExaminationId, $"/faculty-dashboard/marks?examinationId={dto.ExaminationId}");
             }
             catch { }
             return Ok(new { Count = count });
@@ -222,8 +222,8 @@ namespace CollegeManagement.API.Controllers.V1
             var count = await _marksService.PublishMarksAsync(dto);
             try
             {
-                await _notificationService.SendToRoleAsync("Student", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published. Check your grades in student portal.", "Marks", dto.ExaminationId, "/student/results");
-                await _notificationService.SendToRoleAsync("Parent", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published.", "Marks", dto.ExaminationId, "/parent/dashboard");
+                await _notificationService.SendToRoleAsync("Student", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published. Check your grades in student portal.", "Marks", dto.ExaminationId, $"/student-dashboard/results?examinationId={dto.ExaminationId}");
+                await _notificationService.SendToRoleAsync("Parent", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published.", "Marks", dto.ExaminationId, $"/parent-dashboard/academics?tab=results&examinationId={dto.ExaminationId}");
             }
             catch { }
             return Ok(new { Count = count });
@@ -254,7 +254,7 @@ namespace CollegeManagement.API.Controllers.V1
                         message,
                         "Marks",
                         examinationId,
-                        "/dashboard/faculty/marks");
+                        $"/faculty-dashboard/marks?examinationId={examinationId}");
                 }
                 else
                 {
@@ -265,7 +265,7 @@ namespace CollegeManagement.API.Controllers.V1
                         message,
                         "Marks",
                         examinationId,
-                        "/dashboard/faculty/marks");
+                        $"/faculty-dashboard/marks?examinationId={examinationId}");
                 }
 
                 return Ok(new { success = true, message = "Marks submission pending reminder sent successfully." });

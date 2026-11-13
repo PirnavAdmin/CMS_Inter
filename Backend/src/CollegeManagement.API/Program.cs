@@ -236,6 +236,7 @@ builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocati
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
+builder.Services.AddScoped<ILandingPageRepository, LandingPageRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
@@ -402,6 +403,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
+builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -415,6 +417,7 @@ builder.Services.AddHttpClient("RazorpayAssets", client =>
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.NotificationHistoryCleanupWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeePaymentEmailDispatcherWorker>();
 #endregion
 
@@ -1410,6 +1413,25 @@ catch (Exception ex)
                 `UpdatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
                 PRIMARY KEY (`Id`),
                 UNIQUE KEY `UX_PaymentCommSettings_Campus` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `CampusBankAccounts` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NOT NULL,
+                `BankName` VARCHAR(200) NOT NULL,
+                `AccountHolderName` VARCHAR(200) NOT NULL,
+                `AccountNumber` VARCHAR(50) NOT NULL,
+                `IfscCode` VARCHAR(20) NOT NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 0,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `CreatedByUserId` INT NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
+                KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ");
     }

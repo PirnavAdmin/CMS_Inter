@@ -1232,9 +1232,70 @@
   border: 1px solid rgba(16, 185, 129, 0.35);
 }
 .acct-att-reg-badge.rejected {
-  background: rgba(239, 68, 68, 0.15);
-  color: #dc2626;
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+[data-theme="dark"] .acct-att-reg-badge.pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+[data-theme="dark"] .acct-att-reg-badge.approved {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+[data-theme="dark"] .acct-att-reg-badge.rejected {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+.acct-att-checkout-missed-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  white-space: nowrap;
+}
+.acct-att-checkout-resolved-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  white-space: nowrap;
+}
+[data-theme="dark"] .acct-att-checkout-missed-pill {
+  background: rgba(234, 88, 12, 0.2);
+  color: #fdba74;
+  border-color: rgba(251, 146, 60, 0.4);
+}
+[data-theme="dark"] .acct-att-checkout-resolved-pill {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.acct-att-reg-decision-by {
+  font-size: 11px;
+  font-weight: 600;
+}
+.acct-att-reg-decision-by.approved { color: #047857; }
+.acct-att-reg-decision-by.rejected { color: #b91c1c; }
+[data-theme="dark"] .acct-att-reg-decision-by.approved { color: #6ee7b7; }
+[data-theme="dark"] .acct-att-reg-decision-by.rejected { color: #fca5a5; }
+.acct-att-reg-row-highlight {
+  background: rgba(245, 158, 11, 0.14) !important;
+  box-shadow: inset 3px 0 0 #d97706;
 }
 
 /* Modal Backdrop */
@@ -1490,4 +1551,105 @@
   .acct-att-punch-foot-hint { margin: 0; white-space: normal; }
   .acct-att-accountant-attendance-page .acct-att-metric-kpi-card { padding: 12px !important; }
   .acct-att-kpi-content { min-width: 0; overflow-wrap: anywhere; }
+}
+
+/* =========================================================
+   Accountant Regularization Apply Modal – Responsive & Accessible UX
+   ========================================================= */
+.acct-att-reg-modal {
+  width: min(560px, 100%);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+}
+.acct-att-reg-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  overflow-y: auto;
+}
+.acct-att-reg-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.acct-att-reg-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.acct-att-reg-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #1e293b);
+}
+.acct-att-reg-input,
+.acct-att-reg-textarea {
+  font: inherit;
+  font-size: max(0.9375rem, 15px);
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--cms-border, #cbd5e1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.acct-att-reg-input {
+  min-height: 44px;
+}
+.acct-att-reg-textarea {
+  min-height: 116px;
+  resize: vertical;
+}
+.acct-att-reg-input:focus-visible,
+.acct-att-reg-textarea:focus-visible {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+.acct-att-reg-input:user-invalid,
+.acct-att-reg-textarea:user-invalid {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+.acct-att-reg-hint {
+  font-size: 12px;
+  color: var(--cms-muted, #64748b);
+  line-height: 1.4;
+}
+.acct-att-reg-modal-footer {
+  padding: 14px 20px;
+  gap: 12px;
+}
+.acct-att-reg-cancel-btn,
+.acct-att-reg-submit-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  justify-content: center;
+}
+.acct-att-reg-submit-btn:hover:not(:disabled) {
+  background: #047857;
+}
+[data-theme="dark"] .acct-att-reg-label {
+  color: #e2e8f0;
+}
+[data-theme="dark"] .acct-att-reg-hint {
+  color: #94a3b8;
+}
+@media (max-width: 600px) {
+  .acct-att-reg-form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .acct-att-reg-modal-body {
+    padding: 16px;
+  }
+  .acct-att-reg-modal-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
 }

@@ -1,9 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import { CalendarCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import notificationHubService from "@/services/notificationHubService.js";
-import notificationApi from "@/services/notificationApi.js";
+import notificationStore from "@/services/notificationStore.js";
+import { resolveNotificationTarget } from "@/services/notificationRouting.js";
+import { getAuthUser } from "@/features/authStorage.js";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
 import "./NotificationBell.css";
+
+const HISTORY_LIMIT = 10;
 
 const getCategoryIcon = (type = "") => {
   const t = String(type).toLowerCase();
@@ -13,144 +17,140 @@ const getCategoryIcon = (type = "") => {
   if (t.includes("exam") || t.includes("mark") || t.includes("result")) return { icon: "📝", className: "exam" };
   if (t.includes("transport") || t.includes("trip") || t.includes("bus")) return { icon: "🚌", className: "transport" };
   if (t.includes("leave") || t.includes("holiday")) return { icon: "🏖️", className: "leave" };
-  if (t.includes("attend") || t.includes("regulariz")) return { icon: "📋", className: "attendance" };
+  if (t.includes("attend") || t.includes("regulariz")) return { icon: <CalendarCheck size={17} strokeWidth={2.1} />, className: "attendance" };
   return { icon: "🔔", className: "general" };
+};
+
+const formatNotifTimestamp = (createdAt, timeAgo) => {
+  if (!createdAt) return timeAgo || "Recently";
+  try {
+    const dt = new Date(createdAt);
+    if (Number.isNaN(dt.getTime())) return timeAgo || "Recently";
+    const formatted = dt.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return timeAgo ? `${timeAgo} · ${formatted}` : formatted;
+  } catch {
+    return timeAgo || "Recently";
+  }
 };
 
 export default function NotificationBell({ className = "", customIcon = null, customBadge = null }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifications, setNotifications] = useState([]);
-  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'unread'
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState("");
+  const [activeTab, setActiveTab] = useState("all"); // 'all' | 'history'
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Load initial unread count
-  const refreshUnreadCount = useCallback(async () => {
-    try {
-      const count = await notificationApi.getUnreadCount();
-      setUnreadCount(count);
-    } catch (err) {
-      console.warn("[NotificationBell] Failed to refresh unread count:", err);
-    }
+  const storeState = useSyncExternalStore(
+    notificationStore.subscribe,
+    notificationStore.getSnapshot,
+    notificationStore.getSnapshot
+  );
+
+  const {
+    unreadCount,
+    allNotifications,
+    allTotal,
+    allLoaded,
+    loadingAll,
+    errorAll,
+    historyNotifications,
+    historyLoaded,
+    loadingHistory,
+    errorHistory,
+  } = storeState;
+
+  // Single-flight initialization once per user session; navigating across pages stays completely idle
+  useEffect(() => {
+    notificationStore.initialize();
   }, []);
 
-  // Fetch full notification list
-  const loadNotifications = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const res = await notificationApi.getNotifications({ page: 1, pageSize: 20 });
-      if (res?.success) {
-        setNotifications(res.items || []);
-        setUnreadCount(res.unreadCount ?? 0);
-      } else {
-        setLoadError(res?.error || "Unable to load notifications.");
-      }
-    } catch (err) {
-      setLoadError(err?.message || "Unable to load notifications.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // On mount: fetch count, listen for SignalR reconnect resync, and subscribe to live SignalR events
+  // Close on click outside or Escape key
   useEffect(() => {
-    refreshUnreadCount();
-    const seenIds = new Set();
-
-    const handleResync = () => {
-      refreshUnreadCount();
-    };
-    window.addEventListener("cms-notifications-resync", handleResync);
-
-    // Subscribe to centralized SignalR notification broadcasts
-    const unsubscribe = notificationHubService.subscribe((payload) => {
-      if (payload?.notificationId) {
-        if (seenIds.has(payload.notificationId)) return;
-        seenIds.add(payload.notificationId);
-      }
-
-      setUnreadCount((prev) => prev + 1);
-
-      if (payload) {
-        const newNotif = {
-          notificationId: payload.notificationId || Date.now(),
-          title: payload.title || "New Notification",
-          message: payload.message || "",
-          type: payload.type || "General",
-          actionUrl: payload.actionUrl || null,
-          isRead: false,
-          createdAt: payload.createdAt || new Date().toISOString(),
-          timeAgo: "Just now",
-        };
-
-        setNotifications((prev) => [newNotif, ...prev.filter((n) => n.notificationId !== newNotif.notificationId)]);
-      }
-    });
-
-    return () => {
-      window.removeEventListener("cms-notifications-resync", handleResync);
-      if (typeof unsubscribe === "function") unsubscribe();
-    };
-  }, [refreshUnreadCount]);
-
-  // Click outside to close dropdown
-  useEffect(() => {
+    if (!isOpen) return undefined;
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen]);
 
   const toggleDropdown = () => {
-    if (!isOpen) {
-      loadNotifications();
+    const nextOpen = !isOpen;
+    setIsOpen(nextOpen);
+    if (nextOpen) {
+      if (activeTab === "history" && !historyLoaded) {
+        notificationStore.loadHistoryNotifications();
+      } else if (activeTab === "all" && !allLoaded) {
+        notificationStore.loadActiveNotifications();
+      }
     }
-    setIsOpen((prev) => !prev);
   };
 
-  const handleMarkAsRead = async (notif, e) => {
+  const handleSelectTab = (tab) => {
+    setActiveTab(tab);
+    if (tab === "history") {
+      if (!historyLoaded) {
+        notificationStore.loadHistoryNotifications();
+      }
+    } else if (!allLoaded) {
+      notificationStore.loadActiveNotifications();
+    }
+  };
+
+  const handleMarkAsReadAndNavigate = async (notif, e) => {
     e?.stopPropagation();
+    const targetRoute = resolveNotificationTarget(notif, getAuthUser());
+    setIsOpen(false);
+
     if (!notif.isRead) {
-      await notificationApi.markAsRead(notif.notificationId);
-      setNotifications((prev) =>
-        prev.map((n) => (n.notificationId === notif.notificationId ? { ...n, isRead: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      await notificationStore.markAsRead(notif);
     }
 
-    if (notif.actionUrl) {
-      setIsOpen(false);
-      navigate(notif.actionUrl);
+    if (targetRoute) {
+      navigate(targetRoute);
+      window.dispatchEvent(
+        new CustomEvent("cms-notification-navigate", {
+          detail: {
+            notificationId: notif.notificationId,
+            actionUrl: targetRoute,
+            referenceId: notif.referenceId ?? null,
+            type: notif.type || "",
+          },
+        })
+      );
+      window.dispatchEvent(new CustomEvent("cms-attendance-resync"));
     }
   };
 
   const handleMarkAllRead = async (e) => {
     e?.stopPropagation();
-    await notificationApi.markAllAsRead();
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setUnreadCount(0);
+    await notificationStore.markAllAsRead();
   };
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (activeTab === "unread") return !n.isRead;
-    return true;
-  });
+  const isHistoryTab = activeTab === "history";
+  const currentList = isHistoryTab ? historyNotifications : allNotifications;
+  const currentLoading = isHistoryTab ? loadingHistory : loadingAll;
+  const currentError = isHistoryTab ? errorHistory : errorAll;
+  const allCountLabel = allTotal > allNotifications.length ? `${allTotal}` : `${allNotifications.length}`;
 
   return (
     <div className={`cms-notif-bell-container ${className}`} ref={dropdownRef}>
-      {/* Bell Trigger Button */}
       <button
         type="button"
         className={`cms-notif-bell-trigger ${isOpen ? "active" : ""}`}
@@ -161,87 +161,133 @@ export default function NotificationBell({ className = "", customIcon = null, cu
         {customIcon ? (
           customIcon
         ) : (
-          <img src={navbarNotificationsIcon} alt="Notifications" className="cms-notif-bell-icon" />
+          <img src={navbarNotificationsIcon} alt="" aria-hidden="true" className="cms-notif-bell-icon" />
         )}
 
         {unreadCount > 0 ? (
           customBadge ? (
             customBadge(unreadCount)
           ) : (
-            <span className="cms-notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+            <span className="cms-notif-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>
           )
         ) : null}
       </button>
 
-      {/* Dropdown Menu */}
       {isOpen && (
-        <div className="cms-notif-dropdown">
-          {/* Header */}
+        <div className="cms-notif-dropdown" role="region" aria-label="Notifications">
           <div className="cms-notif-header">
             <div className="cms-notif-title-wrap">
               <h4>Notifications</h4>
-              {unreadCount > 0 && <span className="cms-notif-count-tag">{unreadCount} new</span>}
+              {!isHistoryTab && allNotifications.some((n) => Number(n.groupCount || 1) > 1) && (
+                <span className="cms-notif-count-tag">
+                  {allNotifications.length} {allNotifications.length === 1 ? "grouped" : "groups"}
+                </span>
+              )}
             </div>
-            {unreadCount > 0 && (
+            {allNotifications.length > 0 && (
               <button type="button" className="cms-notif-mark-all-btn" onClick={handleMarkAllRead}>
                 Mark all read
               </button>
             )}
           </div>
 
-          {/* Filter Tabs */}
-          <div className="cms-notif-tabs">
+          <div className="cms-notif-tabs" role="tablist" aria-label="Notification sections">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "all"}
               className={`cms-notif-tab ${activeTab === "all" ? "active" : ""}`}
-              onClick={() => setActiveTab("all")}
+              onClick={() => handleSelectTab("all")}
             >
-              All ({notifications.length})
+              All ({allCountLabel})
             </button>
             <button
               type="button"
-              className={`cms-notif-tab ${activeTab === "unread" ? "active" : ""}`}
-              onClick={() => setActiveTab("unread")}
+              role="tab"
+              aria-selected={activeTab === "history"}
+              className={`cms-notif-tab ${activeTab === "history" ? "active" : ""}`}
+              onClick={() => handleSelectTab("history")}
             >
-              Unread ({unreadCount})
+              History{historyLoaded ? ` (${Math.min(historyNotifications.length, HISTORY_LIMIT)})` : ""}
             </button>
           </div>
 
-          {/* Notification Items List */}
-          <div className="cms-notif-list">
-            {loading && notifications.length === 0 ? (
+          {isHistoryTab && (
+            <div className="cms-notif-section-caption">
+              Showing latest {HISTORY_LIMIT} opened notifications (newest first)
+            </div>
+          )}
+
+          <div className="cms-notif-list" role="tabpanel">
+            {currentLoading && currentList.length === 0 ? (
               <div className="cms-notif-empty">
-                <p>Loading notifications...</p>
+                <p>Loading {isHistoryTab ? "notification history" : "notifications"}...</p>
               </div>
-            ) : loadError && filteredNotifications.length === 0 ? (
+            ) : currentError && currentList.length === 0 ? (
               <div className="cms-notif-empty">
-                <p>{loadError}</p>
-                <button type="button" className="cms-notif-mark-all-btn" onClick={loadNotifications}>
+                <p>{currentError}</p>
+                <button
+                  type="button"
+                  className="cms-notif-mark-all-btn"
+                  onClick={() =>
+                    isHistoryTab
+                      ? notificationStore.loadHistoryNotifications({ force: true })
+                      : notificationStore.loadActiveNotifications({ force: true })
+                  }
+                >
                   Retry
                 </button>
               </div>
-            ) : filteredNotifications.length === 0 ? (
+            ) : currentList.length === 0 ? (
               <div className="cms-notif-empty">
-                <span style={{ fontSize: 28 }}>🔔</span>
-                <p>{activeTab === "unread" ? "No unread notifications" : "No notifications yet"}</p>
+                <span aria-hidden="true" style={{ fontSize: 28 }}>🔔</span>
+                <p>{isHistoryTab ? "No notification history yet" : "No active notifications"}</p>
               </div>
             ) : (
-              filteredNotifications.map((notif) => {
+              currentList.map((notif) => {
                 const meta = getCategoryIcon(notif.type);
+                const groupCount = Number(notif.groupCount || 1);
+                const showRequestBadge = !isHistoryTab && (groupCount > 1 || notif.isRequestGroup);
+                const badgeLabel =
+                  groupCount > 1
+                    ? `${groupCount} Requests`
+                    : notif.isRequestGroup
+                    ? "1 Request"
+                    : null;
+
                 return (
-                  <div
-                    key={notif.notificationId}
-                    className={`cms-notif-item ${!notif.isRead ? "is-unread" : ""}`}
-                    onClick={(e) => handleMarkAsRead(notif, e)}
+                  <button
+                    key={`${activeTab}-${notif.groupKey || notif.notificationId}`}
+                    type="button"
+                    className={`cms-notif-item ${!notif.isRead ? "is-unread" : "is-read"} ${groupCount > 1 ? "is-grouped" : ""}`}
+                    onClick={(e) => handleMarkAsReadAndNavigate(notif, e)}
                   >
-                    <div className={`cms-notif-icon-box ${meta.className}`}>{meta.icon}</div>
-                    <div className="cms-notif-content">
-                      <h5 className="cms-notif-item-title">{notif.title}</h5>
-                      <p className="cms-notif-item-msg">{notif.message}</p>
-                      <span className="cms-notif-item-time">{notif.timeAgo || "Recently"}</span>
+                    <div className={`cms-notif-icon-box ${meta.className}`} aria-hidden="true">
+                      {meta.icon}
                     </div>
-                    {!notif.isRead && <div className="cms-notif-unread-dot" />}
-                  </div>
+                    <div className="cms-notif-content">
+                      <div className="cms-notif-item-top">
+                        <h5 className="cms-notif-item-title">{notif.title}</h5>
+                        {showRequestBadge && badgeLabel ? (
+                          <span className={`cms-notif-group-badge ${groupCount > 1 ? "multiple" : "single"}`}>
+                            {badgeLabel}
+                          </span>
+                        ) : isHistoryTab ? (
+                          <span className="cms-notif-state-pill read">Opened</span>
+                        ) : null}
+                      </div>
+                      <p className="cms-notif-item-msg">{notif.message}</p>
+                      <div className="cms-notif-item-meta">
+                        <span className="cms-notif-item-time">
+                          {formatNotifTimestamp(notif.createdAt, notif.timeAgo)}
+                        </span>
+                        {groupCount > 1 && !isHistoryTab && (
+                          <span className="cms-notif-group-hint">Click to review all</span>
+                        )}
+                      </div>
+                    </div>
+                    {!notif.isRead && <span className="cms-notif-unread-dot" aria-hidden="true" />}
+                  </button>
                 );
               })
             )}
@@ -251,4 +297,3 @@ export default function NotificationBell({ className = "", customIcon = null, cu
     </div>
   );
 }
-

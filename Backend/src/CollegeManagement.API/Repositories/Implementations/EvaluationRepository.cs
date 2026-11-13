@@ -146,10 +146,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (!rows.Any()) return null;
 
             var first = rows.First();
+            var firstDict = (IDictionary<string, object>)first;
+            string scheduleMode = firstDict.ContainsKey("ScheduleMode") && firstDict["ScheduleMode"] != null ? firstDict["ScheduleMode"].ToString() ?? string.Empty : string.Empty;
+            string scheduleExamMode = firstDict.ContainsKey("ScheduleExamMode") && firstDict["ScheduleExamMode"] != null ? firstDict["ScheduleExamMode"].ToString() ?? string.Empty : string.Empty;
+            string examPattern = (string)(first.ExamPattern ?? string.Empty);
+            string examType = (string)(first.ExamType ?? string.Empty);
+            string subjectType = (string)(first.SubjectType ?? "Theory");
+            bool isObjective = Helpers.ExaminationFormatHelper.IsObjectiveConfiguration(examPattern, examType, subjectType, scheduleMode, scheduleExamMode);
+            decimal scheduleMaxMarks = firstDict.ContainsKey("ScheduleMaxMarks") && firstDict["ScheduleMaxMarks"] != null ? Convert.ToDecimal(firstDict["ScheduleMaxMarks"]) : 0m;
+            decimal subjectMaxMarks = first.SubjectMaxMarks != null ? Convert.ToDecimal(first.SubjectMaxMarks) : 100m;
+            decimal effectiveMaxMarks = isObjective && scheduleMaxMarks > 0m ? scheduleMaxMarks : subjectMaxMarks;
+
             var students = new List<StudentEvaluationMarkRecordDto>();
 
             foreach (var r in rows)
             {
+                bool isAbsentRow = r.IsAbsent != null && Convert.ToBoolean(r.IsAbsent);
+                decimal? totalVal = r.TotalMarks != null ? Convert.ToDecimal(r.TotalMarks) : null;
                 students.Add(new StudentEvaluationMarkRecordDto
                 {
                     MarkId = (int)(r.MarkId ?? 0),
@@ -157,13 +170,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                     AdmissionNo = (string)(r.AdmissionNo ?? string.Empty),
                     RollNo = (string)(r.FullRollNo ?? r.RollNo ?? string.Empty),
                     StudentName = (string)(r.FullStudentName ?? r.StudentName ?? string.Empty),
-                    Internal = (decimal?)(r.InternalMarks != null ? Convert.ToDecimal(r.InternalMarks) : null),
-                    Practical = (decimal?)(r.PracticalMarks != null ? Convert.ToDecimal(r.PracticalMarks) : null),
-                    Theory = (decimal?)(r.TheoryMarks != null ? Convert.ToDecimal(r.TheoryMarks) : null),
-                    TotalMarks = (decimal?)(r.TotalMarks != null ? Convert.ToDecimal(r.TotalMarks) : null),
-                    ObtainedMarks = (decimal?)(r.TotalMarks != null ? Convert.ToDecimal(r.TotalMarks) : null),
-                    MaxMarks = (decimal?)(r.SubjectMaxMarks != null ? Convert.ToDecimal(r.SubjectMaxMarks) : null),
-                    IsAbsent = r.IsAbsent != null && Convert.ToBoolean(r.IsAbsent),
+                    Internal = isObjective ? 0m : (decimal?)(r.InternalMarks != null ? Convert.ToDecimal(r.InternalMarks) : null),
+                    Practical = isObjective ? 0m : (decimal?)(r.PracticalMarks != null ? Convert.ToDecimal(r.PracticalMarks) : null),
+                    Theory = isObjective ? 0m : (decimal?)(r.TheoryMarks != null ? Convert.ToDecimal(r.TheoryMarks) : null),
+                    TotalMarks = totalVal,
+                    ObtainedMarks = isAbsentRow ? 0m : totalVal,
+                    MaxMarks = effectiveMaxMarks,
+                    IsAbsent = isAbsentRow,
                     Remarks = (string)(r.Remarks ?? null)
                 });
             }
@@ -188,13 +201,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 GroupName = (string)(first.GroupName ?? string.Empty),
                 SectionName = (string)(first.SectionName ?? string.Empty),
                 ExaminationName = (string)(first.ExamName ?? string.Empty),
-                ExamPattern = (string)(first.ExamPattern ?? string.Empty),
-                ExamType = (string)(first.ExamType ?? string.Empty),
+                ExamPattern = examPattern,
+                ExamType = examType,
+                ScheduleMode = scheduleMode,
+                ScheduleExamMode = scheduleExamMode,
                 ExamTotalMarks = (int)(first.ExamTotalMarks != null ? Convert.ToInt32(first.ExamTotalMarks) : 600),
                 ExamPassPercentage = (decimal)(first.ExamPassPercentage != null ? Convert.ToDecimal(first.ExamPassPercentage) : 35m),
-                SubjectMaxMarks = (decimal)(first.SubjectMaxMarks != null ? Convert.ToDecimal(first.SubjectMaxMarks) : 100m),
-                IsPractical = first.IsPractical != null && Convert.ToBoolean(first.IsPractical),
-                SubjectType = (string)(first.SubjectType ?? "Theory"),
+                SubjectMaxMarks = effectiveMaxMarks,
+                IsPractical = !isObjective && first.IsPractical != null && Convert.ToBoolean(first.IsPractical),
+                SubjectType = subjectType,
                 TotalStudents = total,
                 AverageMarks = Math.Round(avg, 2),
                 HighestMarks = max,
@@ -270,20 +285,57 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             if (updates == null || !updates.Any()) return false;
 
-            var items = updates.Select(u => new
+            var limits = await Helpers.ExaminationFormatHelper.ResolveFormatAndComponentLimitsAsync(Connection, examinationId, subjectId, ct);
+            var items = updates.Select(u =>
             {
-                studentId = u.StudentId,
-                subjectId = subjectId,
-                sectionId = sectionId,
-                examinationId = examinationId,
-                internalMarks = (int)Math.Round(u.Internal ?? 0),
-                practicalMarks = (int)Math.Round(u.Practical ?? 0),
-                theoryMarks = (int)Math.Round(u.Theory ?? (u.TotalMarks ?? 0)),
-                totalMarks = (int)Math.Round(u.TotalMarks ?? ((u.Internal ?? 0) + (u.Practical ?? 0) + (u.Theory ?? 0))),
-                passingMarks = 35,
-                isAbsent = (u.IsAbsent == true) ? 1 : 0,
-                remarks = u.Remarks ?? string.Empty,
-                status = (int)EvaluationStatus.SUBMITTED
+                bool absent = u.IsAbsent == true;
+                if (limits.IsObjective)
+                {
+                    int score = absent ? 0 : (int)Math.Round(u.ObtainedMarks ?? u.TotalMarks ?? u.Theory ?? 0m, MidpointRounding.AwayFromZero);
+                    if (!absent && (score < 0 || score > limits.MaxMarks))
+                    {
+                        throw new Exceptions.ValidationException($"Obtained marks ({score}) must be between 0 and {limits.MaxMarks}.");
+                    }
+                    return new
+                    {
+                        studentId = u.StudentId,
+                        subjectId = subjectId,
+                        sectionId = sectionId,
+                        examinationId = examinationId,
+                        internalMarks = 0,
+                        practicalMarks = 0,
+                        theoryMarks = 0,
+                        totalMarks = score,
+                        passingMarks = (int)Math.Round(limits.PassingMarks),
+                        isAbsent = absent ? 1 : 0,
+                        remarks = u.Remarks ?? string.Empty,
+                        status = (int)EvaluationStatus.SUBMITTED
+                    };
+                }
+
+                int intVal = absent ? 0 : (int)Math.Round(u.Internal ?? 0m, MidpointRounding.AwayFromZero);
+                int pracVal = absent ? 0 : (int)Math.Round(u.Practical ?? 0m, MidpointRounding.AwayFromZero);
+                int thVal = absent ? 0 : (int)Math.Round(u.Theory ?? 0m, MidpointRounding.AwayFromZero);
+                int totVal = absent ? 0 : (int)Math.Round(u.TotalMarks ?? (intVal + pracVal + thVal), MidpointRounding.AwayFromZero);
+                if (!absent && (intVal < 0 || pracVal < 0 || thVal < 0 || totVal > limits.MaxMarks))
+                {
+                    throw new Exceptions.ValidationException($"Marks ({totVal}) exceed maximum configured limit ({limits.MaxMarks}) or contain negative values.");
+                }
+                return new
+                {
+                    studentId = u.StudentId,
+                    subjectId = subjectId,
+                    sectionId = sectionId,
+                    examinationId = examinationId,
+                    internalMarks = intVal,
+                    practicalMarks = pracVal,
+                    theoryMarks = thVal,
+                    totalMarks = totVal,
+                    passingMarks = (int)Math.Round(limits.PassingMarks),
+                    isAbsent = absent ? 1 : 0,
+                    remarks = u.Remarks ?? string.Empty,
+                    status = (int)EvaluationStatus.SUBMITTED
+                };
             }).ToList();
 
             var json = System.Text.Json.JsonSerializer.Serialize(items);
@@ -302,16 +354,36 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (inputList == null || !inputList.Any()) return false;
 
-                var marksPayload = inputList.Select(s => new
+                var limits = await Helpers.ExaminationFormatHelper.ResolveFormatAndComponentLimitsAsync(Connection, examinationId, subjectId);
+                var marksPayload = inputList.Select(s =>
                 {
-                    studentId = s.StudentId,
-                    internalMarks = s.InternalMarks,
-                    practicalMarks = s.PracticalMarks,
-                    theoryMarks = s.TheoryMarks,
-                    totalMarks = s.TotalMarks ?? (s.InternalMarks + s.PracticalMarks + s.TheoryMarks),
-                    passingMarks = 35,
-                    isAbsent = s.IsAbsent,
-                    remarks = s.Remarks
+                    if (limits.IsObjective)
+                    {
+                        int score = s.IsAbsent ? 0 : (s.ObtainedMarks ?? s.TotalMarks ?? (s.InternalMarks + s.PracticalMarks + s.TheoryMarks));
+                        return new
+                        {
+                            studentId = s.StudentId,
+                            internalMarks = 0,
+                            practicalMarks = 0,
+                            theoryMarks = 0,
+                            totalMarks = score,
+                            passingMarks = (int)Math.Round(limits.PassingMarks),
+                            isAbsent = s.IsAbsent,
+                            remarks = s.Remarks
+                        };
+                    }
+                    int total = s.IsAbsent ? 0 : (s.InternalMarks + s.PracticalMarks + s.TheoryMarks);
+                    return new
+                    {
+                        studentId = s.StudentId,
+                        internalMarks = s.IsAbsent ? 0 : s.InternalMarks,
+                        practicalMarks = s.IsAbsent ? 0 : s.PracticalMarks,
+                        theoryMarks = s.IsAbsent ? 0 : s.TheoryMarks,
+                        totalMarks = s.IsAbsent ? 0 : ((s.TotalMarks.HasValue && total == 0) ? s.TotalMarks.Value : total),
+                        passingMarks = (int)Math.Round(limits.PassingMarks),
+                        isAbsent = s.IsAbsent,
+                        remarks = s.Remarks
+                    };
                 });
 
                 var json = JsonSerializer.Serialize(marksPayload);

@@ -113,6 +113,7 @@ export function paymentConfigCampusId(value) {
 export const PAYMENT_CONFIG_DEFAULTS = Object.freeze({
   bankName: "", accountHolderName: "", accountNumber: "", confirmAccountNumber: "",
   ifscCode: "", branchName: "", accountType: "Current", enableOfflineUtr: false,
+  bankAccounts: [], activeBankAccountId: null,
   payeeVpa: "", payeeName: "", currency: "INR", mcc: "8220", enableCounterUpiQr: false,
   provider: "Razorpay", isLiveMode: false, razorpayKeyId: "", razorpayKeySecret: "",
   razorpayWebhookSecret: "", hasRazorpayKeySecret: false, hasRazorpayWebhookSecret: false,
@@ -121,6 +122,7 @@ export const PAYMENT_CONFIG_DEFAULTS = Object.freeze({
 });
 const paymentConfigFields = Object.keys(PAYMENT_CONFIG_DEFAULTS).filter((key) => ![
   "confirmAccountNumber", "hasRazorpayKeySecret", "hasRazorpayWebhookSecret", "webhookUrl",
+  "bankAccounts", "activeBankAccountId",
 ].includes(key));
 
 export function normalizePaymentConfig(payload, campusId) {
@@ -139,6 +141,12 @@ export function normalizePaymentConfig(payload, campusId) {
   const result = { ...PAYMENT_CONFIG_DEFAULTS, campusId: id };
   for (const key of Object.keys(PAYMENT_CONFIG_DEFAULTS))
     if (data[key] != null && !["razorpayKeySecret", "razorpayWebhookSecret", "confirmAccountNumber"].includes(key)) result[key] = data[key];
+  if (Array.isArray(data.bankAccounts)) {
+    result.bankAccounts = data.bankAccounts;
+  }
+  if (data.activeBankAccountId !== undefined) {
+    result.activeBankAccountId = data.activeBankAccountId;
+  }
   // Secret values from a faulty response are never put into form state.
   return result;
 }

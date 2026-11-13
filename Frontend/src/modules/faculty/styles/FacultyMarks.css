@@ -1392,3 +1392,37 @@
     display: inline-flex !important;
   }
 }
+
+/* Examination-wise mark validation & accessibility states */
+.cms-sr-only {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+.cms-mark-input-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.cms-cell-input.cms-input-error,
+.cms-cell-input:user-invalid {
+  border-color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+
+.cms-field-error-text {
+  font-size: 11px;
+  line-height: 1.2;
+  color: #dc2626;
+  font-weight: 600;
+  text-align: center;
+}

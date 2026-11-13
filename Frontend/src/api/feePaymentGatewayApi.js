@@ -201,6 +201,11 @@ export const feePaymentGatewayApi = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
+  getBankAccounts: (campusId, signal) => getCampusBankAccountsApi(campusId, signal),
+  createBankAccount: (payload, signal) => createCampusBankAccountApi(payload, signal),
+  updateBankAccount: (id, payload, signal) => updateCampusBankAccountApi(id, payload, signal),
+  deleteBankAccount: (id, campusId, signal) => deleteCampusBankAccountApi(id, campusId, signal),
+  activateBankAccount: (id, campusId, signal) => activateCampusBankAccountApi(id, campusId, signal),
 };
 
 export const reversePaymentApi = (payload, signal) => feePaymentGatewayApi.reverse(payload, signal);
@@ -269,6 +274,69 @@ export async function sendTestCommunicationEmailApi(payload, signal) {
     { ...config, signal, headers: { "X-Campus-Id": String(id) } },
   );
   return response.data;
+}
+
+export async function getCampusBankAccountsApi(campusId, signal) {
+  const id = paymentConfigCampusId(campusId);
+  const response = await apiClient.get(apiEndpoints.feeGateway.bankAccounts, {
+    ...config,
+    params: { campusId: id },
+    signal,
+    headers: { "X-Campus-Id": String(id) },
+  });
+  return response.data?.data ?? response.data;
+}
+
+export async function createCampusBankAccountApi(payload, signal) {
+  const id = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.bankAccounts,
+    { ...payload, campusId: id },
+    { ...config, signal, headers: { "X-Campus-Id": String(id) } },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function updateCampusBankAccountApi(id, payload, signal) {
+  const accountId = Number(id);
+  const campusId = paymentConfigCampusId(payload?.campusId);
+  const response = await apiClient.put(
+    apiEndpoints.feeGateway.bankAccountById(accountId),
+    { ...payload, campusId },
+    { ...config, signal, headers: { "X-Campus-Id": String(campusId) } },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function deleteCampusBankAccountApi(id, campusId, signal) {
+  const accountId = Number(id);
+  const cId = paymentConfigCampusId(campusId);
+  const response = await apiClient.delete(
+    apiEndpoints.feeGateway.bankAccountById(accountId),
+    {
+      ...config,
+      params: { campusId: cId },
+      signal,
+      headers: { "X-Campus-Id": String(cId) },
+    },
+  );
+  return response.data?.data ?? response.data;
+}
+
+export async function activateCampusBankAccountApi(id, campusId, signal) {
+  const accountId = Number(id);
+  const cId = paymentConfigCampusId(campusId);
+  const response = await apiClient.post(
+    apiEndpoints.feeGateway.activateBankAccount(accountId),
+    null,
+    {
+      ...config,
+      params: { campusId: cId },
+      signal,
+      headers: { "X-Campus-Id": String(cId) },
+    },
+  );
+  return response.data?.data ?? response.data;
 }
 
 let checkoutPromise;

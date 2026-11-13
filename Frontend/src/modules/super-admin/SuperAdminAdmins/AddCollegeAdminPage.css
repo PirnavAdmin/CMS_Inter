@@ -63,6 +63,19 @@
   padding-bottom: 4px;
 }
 
+.aca-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 2px 0;
+  color: var(--cms-primary, #1e4529);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.aca-back-link:hover { text-decoration: underline; }
+
 .aca-header-icon {
   width: 50px;
   height: 50px;
