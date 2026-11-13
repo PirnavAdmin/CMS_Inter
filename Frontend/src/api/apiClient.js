@@ -233,8 +233,9 @@ apiClient.interceptors.response.use(
   (response) => {
     finishApiLoading(response.config);
     if (!isHtmlResponse(response.data)) {
-      if (!response.config?._isMockFallback && typeof window !== "undefined") {
+      if (!response.config?._isMockFallback && !response.data?._isMock && typeof window !== "undefined") {
         try { window.localStorage.removeItem("cms_backend_offline"); } catch { }
+        window.dispatchEvent(new CustomEvent("cms-backend-reachable", { detail: { url: response.config?.url || "" } }));
       }
       return response;
     }

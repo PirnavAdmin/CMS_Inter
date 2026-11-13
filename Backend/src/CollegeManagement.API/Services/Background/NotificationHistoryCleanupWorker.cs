@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Implementations;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -44,7 +45,8 @@ namespace CollegeManagement.API.Services.Background
                         int deleted = await repo.PurgeAllExpiredHistoryAsync();
                         if (deleted > 0)
                         {
-                            NotificationService.InvalidateAllUserCaches();
+                            var distributedCache = scope.ServiceProvider.GetService<IDistributedCache>();
+                            await NotificationService.InvalidateAllUserCachesAsync(distributedCache);
                             _logger.LogInformation(
                                 "NotificationHistoryCleanupWorker purged {DeletedCount} expired or excess notification history records.",
                                 deleted);

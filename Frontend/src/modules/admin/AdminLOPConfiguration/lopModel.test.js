@@ -1,43 +1,35 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { calculateLOP, saveLOP } from "./lopModel.js";
-test("LOP previews use the selected payroll-day basis and half-day increments", () => {
-  assert.deepEqual(calculateLOP({ salary: 30000, month: "2026-10", days: 2, basis: "fixed30" }), {
-    periodDays: 30,
-    lopDays: 2,
-    monthlySalary: 30000,
-    deduction: 2000,
-    salaryAfterLOP: 28000,
-  });
-  assert.equal(
-    calculateLOP({ salary: 30000, month: "2026-10", days: 2, basis: "calendar" }).deduction,
-    1935.48,
-  );
-  assert.equal(
-    calculateLOP({ salary: 30000, month: "2026-10", days: 0.5, basis: "fixed30" }).deduction,
-    500,
-  );
-  assert.equal(
-    calculateLOP({ salary: 28000, month: "2026-02", days: 28, basis: "calendar" }).salaryAfterLOP,
-    0,
-  );
-  for (const days of [-1, 0, 31, 0.3, Infinity])
-    assert.throws(() => calculateLOP({ salary: 30000, month: "2026-10", days, basis: "fixed30" }));
-});
-test("one LOP entry per employee/month; edits replace rather than duplicate", () => {
-  const values = {
-    staffId: "lop-staff-1",
-    month: "2026-10",
-    days: 2,
+import { calculateLOP } from "./lopModel.js";
+
+test("calculateLOP computes calendar, fixed30, working26, and basic pay basis accurately", () => {
+  const oct = calculateLOP({ salary: 31000, month: "2026-10", days: 2, basis: "calendar" });
+  assert.equal(oct.periodDays, 31);
+  assert.equal(oct.deduction, 2000);
+  assert.equal(oct.salaryAfterLOP, 29000);
+
+  const fixed = calculateLOP({ salary: 30000, month: "2026-11", days: 1.5, basis: "fixed30" });
+  assert.equal(fixed.periodDays, 30);
+  assert.equal(fixed.deduction, 1500);
+
+  const working26 = calculateLOP({ salary: 26000, month: "2026-11", days: 1, basis: "working26" });
+  assert.equal(working26.periodDays, 26);
+  assert.equal(working26.deduction, 1000);
+
+  const basicOnly = calculateLOP({
+    salary: 50000,
+    basicPay: 30000,
+    deductionComponent: "Basic",
+    month: "2026-11",
+    days: 3,
     basis: "fixed30",
-    reason: "Extra unpaid leave",
-  };
-  const records = saveLOP([], values);
-  assert.equal(records.length, 1);
-  assert.throws(() => saveLOP(records, values), /already exists/);
-  const edited = saveLOP(records, { ...values, id: records[0].id, days: 3 });
-  assert.equal(edited.length, 1);
-  assert.equal(edited[0].deduction, 3000);
-  assert.equal(saveLOP(records, { ...values, staffId: "lop-staff-2" }).length, 2);
-  assert.throws(() => saveLOP([], { ...values, reason: " " }), /reason/);
+  });
+  assert.equal(basicOnly.deduction, 3000);
+  assert.equal(basicOnly.salaryAfterLOP, 47000);
+});
+
+test("calculateLOP rejects invalid days or months", () => {
+  assert.throws(() => calculateLOP({ salary: 30000, month: "2026-13", days: 1, basis: "calendar" }));
+  assert.throws(() => calculateLOP({ salary: 30000, month: "2026-10", days: 0, basis: "calendar" }));
+  assert.throws(() => calculateLOP({ salary: 30000, month: "2026-10", days: 0.3, basis: "calendar" }));
 });

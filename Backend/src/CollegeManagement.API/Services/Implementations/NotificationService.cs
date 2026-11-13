@@ -13,6 +13,8 @@ using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
@@ -27,14 +29,38 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly INotificationRepository _notificationRepo;
         private readonly AppDbContext _context;
         private readonly IHubContext<NotificationHub> _hubContext;
-        private readonly IMemoryCache _cache;
+        private readonly IDistributedCache _cache;
         private readonly ILogger<NotificationService> _logger;
+
+        private sealed class CachedNotificationList
+        {
+            public List<NotificationDto> Items { get; set; } = new();
+            public int TotalCount { get; set; }
+            public int UnreadCount { get; set; }
+        }
+
+        private sealed class CachedHistoryList
+        {
+            public List<NotificationDto> Items { get; set; } = new();
+            public int UnreadCount { get; set; }
+        }
+
+        private const string GlobalEpochDistributedKey = "notif:global:epoch";
+        private static string UserVerDistributedKey(int userId) => $"notif:user:ver:{userId}";
+        private static readonly DistributedCacheEntryOptions NotificationCacheOptions = new()
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(2)
+        };
+        private static readonly DistributedCacheEntryOptions VersionMarkerCacheOptions = new()
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(12)
+        };
 
         public NotificationService(
             INotificationRepository notificationRepo,
             AppDbContext context,
             IHubContext<NotificationHub> hubContext,
-            IMemoryCache cache,
+            IDistributedCache cache,
             ILogger<NotificationService> logger)
         {
             _notificationRepo = notificationRepo;
@@ -75,15 +101,67 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
-        private static MemoryCacheEntryOptions BuildCacheOptions(int userId, TimeSpan absoluteExpiration)
+        public static async Task InvalidateUserCacheAsync(IDistributedCache? cache, int userId)
         {
-            return new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(absoluteExpiration)
-                .AddExpirationToken(GetUserChangeToken(userId));
+            InvalidateUserCache(userId);
+            if (cache == null) return;
+            try
+            {
+                var nextVer = Guid.NewGuid().ToString("N")[..12];
+                await cache.SetStringAsync(UserVerDistributedKey(userId), nextVer, VersionMarkerCacheOptions);
+            }
+            catch { }
         }
 
-        private static string BuildCacheKey(string kind, int userId, string suffix) =>
-            $"notif:v{Volatile.Read(ref GlobalCacheEpoch)}:{kind}:{userId}:{suffix}";
+        public static async Task InvalidateAllUserCachesAsync(IDistributedCache? cache)
+        {
+            InvalidateAllUserCaches();
+            if (cache == null) return;
+            try
+            {
+                await cache.SetStringAsync(GlobalEpochDistributedKey, DateTime.UtcNow.Ticks.ToString(), VersionMarkerCacheOptions);
+            }
+            catch { }
+        }
+
+        private async Task<string> BuildDistributedCacheKeyAsync(string kind, int userId, string suffix)
+        {
+            string globalVer = Volatile.Read(ref GlobalCacheEpoch).ToString();
+            string userVer = "0";
+            try
+            {
+                var g = await _cache.GetStringAsync(GlobalEpochDistributedKey);
+                if (!string.IsNullOrEmpty(g)) globalVer = g;
+                var u = await _cache.GetStringAsync(UserVerDistributedKey(userId));
+                if (!string.IsNullOrEmpty(u)) userVer = u;
+            }
+            catch { }
+            return $"notif:g{globalVer}:u{userId}:v{userVer}:{kind}:{suffix}";
+        }
+
+        private async Task<T?> TryGetCachedAsync<T>(string key)
+        {
+            try
+            {
+                var raw = await _cache.GetStringAsync(key);
+                if (string.IsNullOrEmpty(raw)) return default;
+                return JsonSerializer.Deserialize<T>(raw);
+            }
+            catch
+            {
+                return default;
+            }
+        }
+
+        private async Task TrySetCachedAsync<T>(string key, T value)
+        {
+            try
+            {
+                var raw = JsonSerializer.Serialize(value);
+                await _cache.SetStringAsync(key, raw, NotificationCacheOptions);
+            }
+            catch { }
+        }
 
         public async Task<int> PublishEventNotificationsAsync(int eventId)
         {
@@ -282,11 +360,12 @@ namespace CollegeManagement.API.Services.Implementations
         {
             bool activeOnly = unreadOnly ?? true;
             string filterTag = activeOnly ? "active" : "all";
-            string key = BuildCacheKey("list", userId, $"{filterTag}:{page}:{pageSize}");
+            string key = await BuildDistributedCacheKeyAsync("list", userId, $"{filterTag}:{page}:{pageSize}");
 
-            if (_cache.TryGetValue(key, out (List<NotificationDto> Items, int TotalCount, int UnreadCount) cached))
+            var cached = await TryGetCachedAsync<CachedNotificationList>(key);
+            if (cached != null)
             {
-                return cached;
+                return (cached.Items, cached.TotalCount, cached.UnreadCount);
             }
 
             if (activeOnly)
@@ -297,44 +376,49 @@ namespace CollegeManagement.API.Services.Implementations
                 int ps = Math.Clamp(pageSize > 0 ? pageSize : 20, 1, 100);
                 var paged = groupedAll.Skip((p - 1) * ps).Take(ps).ToList();
                 int totalGrouped = groupedAll.Count;
-                var groupedResult = (paged, totalGrouped, totalGrouped);
-                _cache.Set(key, groupedResult, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
-                return groupedResult;
+                await TrySetCachedAsync(key, new CachedNotificationList { Items = paged, TotalCount = totalGrouped, UnreadCount = totalGrouped });
+                return (paged, totalGrouped, totalGrouped);
             }
 
             var (items, totalCount, unreadCount) = await _notificationRepo.GetUserNotificationsAsync(userId, page, pageSize, unreadOnly);
-            var result = (items.Select(MapToDto).ToList(), totalCount, unreadCount);
-            _cache.Set(key, result, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
-            return result;
+            var dtoList = items.Select(MapToDto).ToList();
+            await TrySetCachedAsync(key, new CachedNotificationList { Items = dtoList, TotalCount = totalCount, UnreadCount = unreadCount });
+            return (dtoList, totalCount, unreadCount);
         }
 
         public async Task<(List<NotificationDto> Items, int UnreadCount)> GetUserNotificationHistoryAsync(
             int userId, int limit = 10)
         {
             int clampedLimit = Math.Clamp(limit, 1, 10);
-            string key = BuildCacheKey("history", userId, $"{clampedLimit}");
+            string key = await BuildDistributedCacheKeyAsync("history", userId, $"{clampedLimit}");
 
-            if (_cache.TryGetValue(key, out (List<NotificationDto> Items, int UnreadCount) cached))
+            var cached = await TryGetCachedAsync<CachedHistoryList>(key);
+            if (cached != null)
             {
-                return cached;
+                return (cached.Items, cached.UnreadCount);
             }
 
             var (items, unreadCount) = await _notificationRepo.GetLatestNotificationHistoryAsync(userId, clampedLimit);
-            var result = (items.Select(MapToDto).ToList(), unreadCount);
-            _cache.Set(key, result, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
-            return result;
+            var dtoList = items.Select(MapToDto).ToList();
+            await TrySetCachedAsync(key, new CachedHistoryList { Items = dtoList, UnreadCount = unreadCount });
+            return (dtoList, unreadCount);
         }
 
         public async Task<int> GetUnreadCountAsync(int userId)
         {
-            string key = BuildCacheKey("unread", userId, "cnt");
-            if (_cache.TryGetValue(key, out int cachedCount))
+            string key = await BuildDistributedCacheKeyAsync("unread", userId, "cnt");
+            try
             {
-                return cachedCount;
+                var cachedRaw = await _cache.GetStringAsync(key);
+                if (!string.IsNullOrEmpty(cachedRaw) && int.TryParse(cachedRaw, out int cachedCount))
+                {
+                    return cachedCount;
+                }
             }
+            catch { }
 
             int count = await _notificationRepo.GetUnreadCountAsync(userId);
-            _cache.Set(key, count, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+            try { await _cache.SetStringAsync(key, count.ToString(), NotificationCacheOptions); } catch { }
             return count;
         }
 
@@ -343,11 +427,11 @@ namespace CollegeManagement.API.Services.Implementations
             var (updated, groupKey, markedIds) = await _notificationRepo.MarkNotificationOrGroupAsReadAsync(notificationId, userId);
             if (updated)
             {
-                InvalidateUserCache(userId);
+                await InvalidateUserCacheAsync(_cache, userId);
                 try
                 {
                     int unreadCount = await _notificationRepo.GetUnreadCountAsync(userId);
-                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), unreadCount, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    try { await _cache.SetStringAsync(await BuildDistributedCacheKeyAsync("unread", userId, "cnt"), unreadCount.ToString(), NotificationCacheOptions); } catch { }
                     await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationRead", new
                     {
                         notificationId,
@@ -371,11 +455,11 @@ namespace CollegeManagement.API.Services.Implementations
             var (updated, markedIds) = await _notificationRepo.MarkGroupAsReadAsync(groupKey, userId);
             if (updated)
             {
-                InvalidateUserCache(userId);
+                await InvalidateUserCacheAsync(_cache, userId);
                 try
                 {
                     int unreadCount = await _notificationRepo.GetUnreadCountAsync(userId);
-                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), unreadCount, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    try { await _cache.SetStringAsync(await BuildDistributedCacheKeyAsync("unread", userId, "cnt"), unreadCount.ToString(), NotificationCacheOptions); } catch { }
                     await _hubContext.Clients.Group($"User_{userId}").SendAsync("NotificationRead", new
                     {
                         notificationId = markedIds.FirstOrDefault(),
@@ -399,10 +483,10 @@ namespace CollegeManagement.API.Services.Implementations
             bool updated = await _notificationRepo.MarkAllAsReadAsync(userId);
             if (updated)
             {
-                InvalidateUserCache(userId);
+                await InvalidateUserCacheAsync(_cache, userId);
                 try
                 {
-                    _cache.Set(BuildCacheKey("unread", userId, "cnt"), 0, BuildCacheOptions(userId, TimeSpan.FromMinutes(2)));
+                    try { await _cache.SetStringAsync(await BuildDistributedCacheKeyAsync("unread", userId, "cnt"), "0", NotificationCacheOptions); } catch { }
                     await _hubContext.Clients.Group($"User_{userId}").SendAsync("AllNotificationsRead", new
                     {
                         userId,
@@ -453,7 +537,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
 
             var created = await _notificationRepo.CreateNotificationAsync(notification);
-            InvalidateUserCache(userId);
+            await InvalidateUserCacheAsync(_cache, userId);
 
             var dto = await BuildRealtimeGroupedDtoAsync(created);
 
@@ -494,7 +578,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             foreach (var notif in notifications)
             {
-                InvalidateUserCache(notif.UserId);
+                await InvalidateUserCacheAsync(_cache, notif.UserId);
                 try
                 {
                     var groupedDto = await BuildRealtimeGroupedDtoAsync(notif);

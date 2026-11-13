@@ -1,10 +1,11 @@
-﻿namespace CollegeManagement.API.DTOs.Payroll
+namespace CollegeManagement.API.DTOs.Payroll
 {
     public class GeneratePayslipRequest
     {
         public int StaffId { get; set; }
         public int PayrollMonth { get; set; }
         public int PayrollYear { get; set; }
+        public bool AutoDeductLop { get; set; } = true;
     }
 
     public class PayslipDto
@@ -41,6 +42,9 @@
         public decimal TDS { get; set; }
         public decimal ESI { get; set; }
         public decimal InsuranceOtherDeduction { get; set; }
+
+        public decimal LopDays { get; set; }
+        public decimal LopDeduction { get; set; }
 
         public decimal GrossSalary { get; set; }
         public decimal TotalDeductions { get; set; }

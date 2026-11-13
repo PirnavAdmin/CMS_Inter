@@ -1,33 +1,35 @@
-import { HubConnectionBuilder, LogLevel, HubConnectionState } from "@microsoft/signalr";
+import { HttpTransportType, HubConnectionBuilder, LogLevel, HubConnectionState } from "@microsoft/signalr";
 import { getAuthToken } from "@/features/authStorage.js";
 import { env } from "@/config/env.js";
 
-const BACKOFF_STEPS_MS = [3000, 6000, 12000, 25000, 45000, 60000];
-
-const withJitter = (ms) => {
-  const factor = 0.85 + Math.random() * 0.3;
-  return Math.round(ms * factor);
-};
+const RECONNECT_COOLDOWN_MS = 5000;
+const BLIP_RETRY_DELAY_MS = 2500;
 
 /**
  * Singleton service for managing the SignalR Notification Hub connection.
- * Maintains one persistent connection across all route transitions, avoids
- * negotiate/reconnect storms when the backend server stops and restarts, and
- * pushes server events directly to subscribers with zero idle polling.
+ * Maintains one persistent WebSocket connection while the server is up
+ * (zero idle HTTP polling), allows at most 1 fast recovery check on an
+ * unexpected network blip, and enters an idle paused state whenever the
+ * server stops so `/negotiate` is never hammered repeatedly.
+ * Automatically resumes once backend reachability is confirmed (via an API
+ * response, browser `online` event, or explicit user interaction).
  */
 class NotificationHubService {
   constructor() {
     this.connection = null;
     this.connectingPromise = null;
     this.subscribers = new Set();
+    this.domainSubscribers = new Set();
     this.readSubscribers = new Set();
     this.resyncSubscribers = new Set();
     this.currentCampusId = null;
     this.recentEventKeys = new Map();
 
-    this.retryAttempt = 0;
-    this.nextAllowedConnectAt = 0;
-    this.reconnectTimer = null;
+    this.lastConnectAttemptAt = 0;
+    this.pausedForServerDown = false;
+    this.wasConnectedBeforeDrop = false;
+    this.blipRetryUsed = false;
+    this.blipRetryTimer = null;
     this.resyncDebounceTimer = null;
     this.wasDisconnected = false;
     this.manualDisconnect = false;
@@ -35,16 +37,40 @@ class NotificationHubService {
     this.lifecycleBound = false;
   }
 
+  clearBlipRetryTimer() {
+    if (this.blipRetryTimer) {
+      clearTimeout(this.blipRetryTimer);
+      this.blipRetryTimer = null;
+    }
+  }
+
   getNormalizedToken() {
     return (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+  }
+
+  getStatus() {
+    if (this.connection?.state === HubConnectionState.Connected) return "Connected";
+    if (this.connection?.state === HubConnectionState.Connecting || this.connectingPromise) return "Connecting";
+    if (this.connection?.state === HubConnectionState.Reconnecting || this.blipRetryTimer) return "Reconnecting";
+    if (this.pausedForServerDown) return "Paused";
+    return "Disconnected";
   }
 
   bindWindowLifecycle() {
     if (this.lifecycleBound || typeof window === "undefined") return;
     this.lifecycleBound = true;
 
-    const resumeIfNeeded = () => {
+    const resumeIfOnline = () => {
+      this.notifyBackendReachable({ source: "online" });
+    };
+
+    const resumeOnReachableApi = () => {
+      this.notifyBackendReachable({ source: "api" });
+    };
+
+    const resumeOnVisibility = () => {
       if (document.visibilityState === "hidden") return;
+      if (this.pausedForServerDown) return;
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       if (!this.getNormalizedToken()) return;
       if (!this.connection || this.connection.state === HubConnectionState.Disconnected) {
@@ -52,32 +78,39 @@ class NotificationHubService {
       }
     };
 
-    window.addEventListener("online", resumeIfNeeded);
-    document.addEventListener("visibilitychange", resumeIfNeeded);
+    window.addEventListener("online", resumeIfOnline);
+    window.addEventListener("cms-backend-reachable", resumeOnReachableApi);
+    document.addEventListener("visibilitychange", resumeOnVisibility);
   }
 
-  scheduleRecoveryReconnect() {
-    if (this.manualDisconnect || this.reconnectTimer) return;
-    if (!this.getNormalizedToken()) return;
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  notifyBackendReachable({ source = "api" } = {}) {
+    if (this.manualDisconnect) return null;
+    if (!this.getNormalizedToken()) return null;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return null;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
 
-    const baseDelay = BACKOFF_STEPS_MS[Math.min(this.retryAttempt, BACKOFF_STEPS_MS.length - 1)];
-    const delayMs = withJitter(baseDelay);
-    this.retryAttempt = Math.min(this.retryAttempt + 1, BACKOFF_STEPS_MS.length);
-    this.nextAllowedConnectAt = Date.now() + delayMs;
-
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect().catch(() => {});
-    }, delayMs);
-  }
-
-  clearReconnectTimer() {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    if (
+      this.connection &&
+      (this.connection.state === HubConnectionState.Connected ||
+        this.connection.state === HubConnectionState.Connecting ||
+        this.connection.state === HubConnectionState.Reconnecting)
+    ) {
+      return this.connection;
     }
+
+    if (this.connectingPromise) {
+      return this.connectingPromise;
+    }
+
+    const forceBypassCooldown = source === "api";
+    if (!forceBypassCooldown && Date.now() - this.lastConnectAttemptAt < RECONNECT_COOLDOWN_MS) {
+      return null;
+    }
+
+    this.clearBlipRetryTimer();
+    this.pausedForServerDown = false;
+    this.blipRetryUsed = false;
+    return this.connect({ force: forceBypassCooldown }).catch(() => null);
   }
 
   emitResyncDebounced() {
@@ -99,7 +132,7 @@ class NotificationHubService {
     }, 600);
   }
 
-  async connect() {
+  async connect({ force = false } = {}) {
     const token = this.getNormalizedToken();
     if (!token) {
       return null;
@@ -115,6 +148,7 @@ class NotificationHubService {
     this.activeTokenKey = tokenTail;
 
     if (this.connection && this.connection.state === HubConnectionState.Connected) {
+      this.pausedForServerDown = false;
       return this.connection;
     }
 
@@ -130,10 +164,16 @@ class NotificationHubService {
       return this.connection;
     }
 
-    // Respect backoff cooldown so repeated StrictMode / route mounts never hammer /negotiate when backend is down
-    if (Date.now() < this.nextAllowedConnectAt) {
+    // While server is known to be stopped/unreachable, stay completely idle with zero /negotiate hits
+    if (!force && this.pausedForServerDown) {
       return null;
     }
+
+    if (!force && Date.now() - this.lastConnectAttemptAt < RECONNECT_COOLDOWN_MS) {
+      return null;
+    }
+
+    this.lastConnectAttemptAt = Date.now();
 
     this.connectingPromise = (async () => {
       try {
@@ -144,14 +184,9 @@ class NotificationHubService {
             .withUrl(`${base}/hubs/notifications`, {
               accessTokenFactory: () => this.getNormalizedToken(),
               headers: { "ngrok-skip-browser-warning": "true" },
-            })
-            .withAutomaticReconnect({
-              nextRetryDelayInMilliseconds: (retryContext) => {
-                if (!this.getNormalizedToken() || this.manualDisconnect) return null;
-                if (typeof navigator !== "undefined" && navigator.onLine === false) return 30000;
-                const idx = Math.min(retryContext.previousRetryCount, BACKOFF_STEPS_MS.length - 1);
-                return withJitter(BACKOFF_STEPS_MS[idx]);
-              },
+              ...(env.signalrSkipNegotiation
+                ? { transport: HttpTransportType.WebSockets, skipNegotiation: true }
+                : {}),
             })
             .configureLogging(LogLevel.None);
 
@@ -175,7 +210,15 @@ class NotificationHubService {
           };
 
           this.connection.on("ReceiveNotification", handleIncoming);
-          this.connection.on("NotificationReceived", handleIncoming);
+          this.connection.on("NotificationReceived", (payload) => {
+            if (!payload) return;
+            // Only real user notifications enter Bell subscribers; lightweight module refresh signals route to domainSubscribers
+            if (payload.notificationId || (payload.title && payload.message)) {
+              handleIncoming(payload);
+            } else {
+              this.notifyDomainSubscribers(payload);
+            }
+          });
           this.connection.on("NotificationRead", (payload) => {
             this.readSubscribers.forEach((cb) => {
               try {
@@ -195,42 +238,38 @@ class NotificationHubService {
             });
           });
 
-          this.connection.onreconnecting(() => {
-            this.wasDisconnected = true;
-          });
-
-          this.connection.onreconnected(async () => {
-            this.retryAttempt = 0;
-            this.nextAllowedConnectAt = 0;
-            this.clearReconnectTimer();
-
-            if (this.currentCampusId && this.connection?.state === HubConnectionState.Connected) {
-              try {
-                await this.connection.invoke("JoinCampus", Number(this.currentCampusId));
-              } catch {
-                // Ignore silent join error on reconnect
-              }
-            }
-
-            if (this.wasDisconnected) {
-              this.wasDisconnected = false;
-              this.emitResyncDebounced();
-            }
-          });
-
           this.connection.onclose(() => {
             if (!this.manualDisconnect && this.getNormalizedToken()) {
               this.wasDisconnected = true;
-              this.scheduleRecoveryReconnect();
+              const canRetrySingleBlip =
+                this.wasConnectedBeforeDrop &&
+                !this.blipRetryUsed &&
+                (typeof navigator === "undefined" || navigator.onLine !== false) &&
+                (typeof document === "undefined" || document.visibilityState !== "hidden");
+
+              if (canRetrySingleBlip) {
+                this.blipRetryUsed = true;
+                this.clearBlipRetryTimer();
+                this.blipRetryTimer = setTimeout(() => {
+                  this.blipRetryTimer = null;
+                  if (!this.manualDisconnect && this.getNormalizedToken()) {
+                    this.connect({ force: true }).catch(() => {});
+                  }
+                }, BLIP_RETRY_DELAY_MS);
+              } else {
+                this.pausedForServerDown = true;
+              }
             }
           });
         }
 
         if (this.connection.state === HubConnectionState.Disconnected) {
           await this.connection.start();
-          this.retryAttempt = 0;
-          this.nextAllowedConnectAt = 0;
-          this.clearReconnectTimer();
+          this.clearBlipRetryTimer();
+          this.pausedForServerDown = false;
+          this.wasConnectedBeforeDrop = true;
+          this.blipRetryUsed = false;
+          this.lastConnectAttemptAt = 0;
 
           if (this.currentCampusId && this.connection.state === HubConnectionState.Connected) {
             try {
@@ -250,7 +289,8 @@ class NotificationHubService {
         return this.connection;
       } catch {
         this.wasDisconnected = true;
-        this.scheduleRecoveryReconnect();
+        this.wasConnectedBeforeDrop = false;
+        this.pausedForServerDown = true;
         return null;
       } finally {
         this.connectingPromise = null;
@@ -270,10 +310,35 @@ class NotificationHubService {
     });
   }
 
+  notifyDomainSubscribers(payload) {
+    this.domainSubscribers.forEach((callback) => {
+      try {
+        callback(payload);
+      } catch (err) {
+        console.error("[NotificationHubService] Domain subscriber callback error:", err);
+      }
+    });
+  }
+
+  subscribeDomainEvents(callback) {
+    if (typeof callback === "function") {
+      this.domainSubscribers.add(callback);
+      if (!this.pausedForServerDown) {
+        this.connect().catch(() => {});
+      }
+    }
+
+    return () => {
+      this.domainSubscribers.delete(callback);
+    };
+  }
+
   subscribe(callback) {
     if (typeof callback === "function") {
       this.subscribers.add(callback);
-      this.connect().catch(() => {});
+      if (!this.pausedForServerDown) {
+        this.connect().catch(() => {});
+      }
     }
 
     return () => {
@@ -314,27 +379,30 @@ class NotificationHubService {
       } catch {
         // Ignore silent join error
       }
-    } else if (!this.connectingPromise && Date.now() >= this.nextAllowedConnectAt) {
+    } else if (!this.connectingPromise && !this.pausedForServerDown) {
       await this.connect();
     }
   }
 
   async disconnect({ keepSubscribers = false } = {}) {
     this.manualDisconnect = true;
-    this.clearReconnectTimer();
+    this.pausedForServerDown = false;
+    this.wasConnectedBeforeDrop = false;
+    this.blipRetryUsed = false;
+    this.clearBlipRetryTimer();
     if (this.resyncDebounceTimer) {
       clearTimeout(this.resyncDebounceTimer);
       this.resyncDebounceTimer = null;
     }
     if (!keepSubscribers) {
       this.subscribers.clear();
+      this.domainSubscribers.clear();
       this.readSubscribers.clear();
       this.resyncSubscribers.clear();
     }
     this.currentCampusId = null;
     this.wasDisconnected = false;
-    this.retryAttempt = 0;
-    this.nextAllowedConnectAt = 0;
+    this.lastConnectAttemptAt = 0;
 
     if (this.connection) {
       try {

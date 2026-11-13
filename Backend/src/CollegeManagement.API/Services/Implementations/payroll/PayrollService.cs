@@ -3,6 +3,7 @@ using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using CollegeManagement.API.Services.Exports;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Services.Interfaces.LopConfiguration;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
@@ -13,16 +14,19 @@ namespace CollegeManagement.API.Services.Implementations.Payroll
     {
         private readonly IPayrollRepository _payrollRepository;
         private readonly IEmailService _emailService;
+        private readonly ILopConfigurationService? _lopService;
         private readonly ILogger<PayrollService>? _logger;
 
         public PayrollService(
             IPayrollRepository payrollRepository,
             IEmailService emailService,
-            ILogger<PayrollService>? logger = null)
+            ILogger<PayrollService>? logger = null,
+            ILopConfigurationService? lopService = null)
         {
             _payrollRepository = payrollRepository;
             _emailService = emailService;
             _logger = logger;
+            _lopService = lopService;
         }
 
         // Salary Structures
@@ -125,15 +129,37 @@ namespace CollegeManagement.API.Services.Implementations.Payroll
         public async Task<int> GeneratePayslipAsync(
             GeneratePayslipRequest request)
         {
+            decimal lopDays = 0m;
+            decimal lopDeduction = 0m;
+
+            if (request.AutoDeductLop && _lopService != null)
+            {
+                (lopDays, lopDeduction) = await _lopService.CalculateStaffMonthlyLopForPayrollAsync(
+                    request.StaffId,
+                    request.PayrollYear,
+                    request.PayrollMonth);
+            }
+
             return await _payrollRepository
-                .GeneratePayslipAsync(request);
+                .GeneratePayslipAsync(request, lopDays, lopDeduction);
         }
 
         public async Task<IEnumerable<int>> GenerateBulkPayslipsAsync(
             GenerateBulkPayslipRequest request)
         {
-            return await _payrollRepository
-                .GenerateBulkPayslipsAsync(request);
+            var ids = new List<int>();
+            foreach (var staffId in request.StaffIds.Distinct())
+            {
+                var id = await GeneratePayslipAsync(new GeneratePayslipRequest
+                {
+                    StaffId = staffId,
+                    PayrollMonth = request.PayrollMonth,
+                    PayrollYear = request.PayrollYear,
+                    AutoDeductLop = request.AutoDeductLop
+                });
+                ids.Add(id);
+            }
+            return ids;
         }
 
         public async Task<bool> UpdatePayslipStatusAsync(
@@ -217,6 +243,10 @@ namespace CollegeManagement.API.Services.Implementations.Payroll
                                 <td style=""padding: 4px 0; color: #64748b;"">Gross Salary:</td>
                                 <td style=""padding: 4px 0; font-weight: bold; text-align: right;"">₹{payslip.GrossSalary:N2}</td>
                             </tr>
+                            {(payslip.LopDeduction > 0 ? $@"<tr>
+                                <td style=""padding: 4px 0; color: #64748b;"">LOP Deduction ({payslip.LopDays:0.#} days):</td>
+                                <td style=""padding: 4px 0; font-weight: bold; text-align: right; color: #b91c1c;"">₹{payslip.LopDeduction:N2}</td>
+                            </tr>" : "")}
                             <tr>
                                 <td style=""padding: 4px 0; color: #64748b;"">Total Deductions:</td>
                                 <td style=""padding: 4px 0; font-weight: bold; text-align: right; color: #dc2626;"">₹{payslip.TotalDeductions:N2}</td>
@@ -332,6 +362,8 @@ namespace CollegeManagement.API.Services.Implementations.Payroll
                 TDS = payslip.TDS,
                 ESI = payslip.ESI,
                 InsuranceOtherDeduction = payslip.InsuranceOtherDeduction,
+                LopDays = payslip.LopDays,
+                LopDeduction = payslip.LopDeduction,
 
                 GrossSalary = payslip.GrossSalary,
                 TotalDeductions = payslip.TotalDeductions,

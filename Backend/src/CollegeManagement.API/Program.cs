@@ -73,8 +73,28 @@ try
             fileSizeLimitBytes: 10 * 1024 * 1024,
             rollOnFileSizeLimit: true,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"));
-builder.Services.AddSignalR();
-builder.Services.AddDistributedMemoryCache();
+var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+var redisInstanceName = builder.Configuration["Redis:InstanceName"] ?? "CMS_";
+var useRedis = redisEnabled && !string.IsNullOrWhiteSpace(redisConnectionString);
+
+if (useRedis)
+{
+    builder.Services.AddSignalR().AddStackExchangeRedis(redisConnectionString!, options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal($"{redisInstanceName}SignalR:");
+    });
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = redisInstanceName;
+    });
+}
+else
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddDistributedMemoryCache();
+}
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(8);

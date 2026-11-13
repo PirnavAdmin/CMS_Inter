@@ -118,6 +118,8 @@ const mapApiPayslip = (payslip, employee = {}) => {
     tds: Number(getPayrollField(payslip, "tds") ?? 0),
     esi: Number(getPayrollField(payslip, "esi") ?? 0),
     insuranceOtherDeduction: Number(getPayrollField(payslip, "insuranceOtherDeduction") ?? 0),
+    lopDays: Number(getPayrollField(payslip, "lopDays") ?? 0),
+    lopDeduction: Number(getPayrollField(payslip, "lopDeduction") ?? 0),
     grossSalary: Number(getPayrollField(payslip, "grossSalary") ?? 0),
     totalDeductions: Number(getPayrollField(payslip, "totalDeductions") ?? 0),
     netSalary: Number(getPayrollField(payslip, "netSalary") ?? 0),
@@ -1430,7 +1432,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
       // The bulk API stops at the first failure. Individual calls preserve each result.
       for (const employee of employees) {
         try {
-          const response = await payrollApi.generatePayslip({ staffId: getNumericApiId(employee.rawStaffId), payrollMonth, payrollYear });
+          const response = await payrollApi.generatePayslip({ staffId: getNumericApiId(employee.rawStaffId), payrollMonth, payrollYear, autoDeductLop: autoLOP });
           const record = getPayrollRecord(response);
           const payslipId = getNumericApiId(getPayrollField(record, "payslipId", "id"));
           if (!payslipId) throw new Error("The server did not confirm a generated payslip ID. Check history before retrying.");
@@ -1968,6 +1970,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
           { key: "staffName", label: "Staff Name" },
           { key: "department", label: "Department" },
           { key: "grossSalary", label: "Gross", render: (r) => formatINR(r.grossSalary) },
+          { key: "lopDeduction", label: "LOP", render: (r) => (r.lopDeduction > 0 || r.lopDays > 0 ? `${r.lopDays || 0}d (${formatINR(r.lopDeduction)})` : "—") },
           { key: "totalDeductions", label: "Deductions", render: (r) => formatINR(r.totalDeductions) },
           { key: "netSalary", label: "Net Salary", render: (r) => <strong style={{ color: "#108E50" }}>{formatINR(r.netSalary)}</strong> },
           {
@@ -2109,6 +2112,9 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
                     <tr><td>TDS (Income Tax)</td><td>{formatINR(displayRecord.tds)}</td></tr>
                     <tr><td>ESI</td><td>{formatINR(displayRecord.esi)}</td></tr>
                     <tr><td>Insurance & Other</td><td>{formatINR(displayRecord.insuranceOtherDeduction)}</td></tr>
+                    {(Number(displayRecord.lopDeduction || 0) > 0 || Number(displayRecord.lopDays || 0) > 0) && (
+                      <tr><td>LOP Deduction ({displayRecord.lopDays || 0} d)</td><td style={{ color: "#dc2626" }}>{formatINR(displayRecord.lopDeduction)}</td></tr>
+                    )}
                     <tr className="subtotal"><td>Total Deductions</td><td>{formatINR(displayRecord.totalDeductions)}</td></tr>
                   </tbody>
                 </table>

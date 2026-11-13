@@ -30,6 +30,8 @@ namespace CollegeManagement.API.Services.Exports
         public decimal TDS { get; set; }
         public decimal ESI { get; set; }
         public decimal InsuranceOtherDeduction { get; set; }
+        public decimal LopDays { get; set; }
+        public decimal LopDeduction { get; set; }
 
         // Totals
         public decimal GrossSalary { get; set; }

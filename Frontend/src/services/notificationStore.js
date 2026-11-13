@@ -150,6 +150,7 @@ class NotificationStore {
 
     notificationHubService.subscribe((payload) => {
       if (!resolveSessionKey() || !payload) return;
+      if (!payload.notificationId && (!payload.title || !payload.message)) return;
       const newNotif = {
         notificationId: payload.notificationId || Date.now(),
         title: payload.title || "New Notification",
@@ -310,7 +311,7 @@ class NotificationStore {
         const merged = {
           ...existing,
           ...notif,
-          groupCount: Math.max(Number(notif.groupCount || 1), existing.groupKey === notif.groupKey ? 1 : 1),
+          groupCount: Math.max(Number(notif.groupCount || 1), existing.groupKey === notif.groupKey ? Number(existing.groupCount || 1) : 1),
         };
         nextAll = prev.allNotifications.map((item, idx) => (idx === existingIdx ? merged : item));
         nextAll = sortNewestFirst(nextAll);

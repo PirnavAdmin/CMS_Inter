@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useSyncExternalStore } from "react"
 import { CalendarCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import notificationStore from "@/services/notificationStore.js";
+import notificationHubService from "@/services/notificationHubService.js";
 import { resolveNotificationTarget } from "@/services/notificationRouting.js";
 import { getAuthUser } from "@/features/authStorage.js";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
@@ -94,6 +95,7 @@ export default function NotificationBell({ className = "", customIcon = null, cu
     const nextOpen = !isOpen;
     setIsOpen(nextOpen);
     if (nextOpen) {
+      notificationHubService.notifyBackendReachable({ source: "user" });
       if (activeTab === "history" && !historyLoaded) {
         notificationStore.loadHistoryNotifications();
       } else if (activeTab === "all" && !allLoaded) {
@@ -229,11 +231,14 @@ export default function NotificationBell({ className = "", customIcon = null, cu
                 <button
                   type="button"
                   className="cms-notif-mark-all-btn"
-                  onClick={() =>
-                    isHistoryTab
-                      ? notificationStore.loadHistoryNotifications({ force: true })
-                      : notificationStore.loadActiveNotifications({ force: true })
-                  }
+                  onClick={() => {
+                    notificationHubService.notifyBackendReachable({ source: "user" });
+                    if (isHistoryTab) {
+                      notificationStore.loadHistoryNotifications({ force: true });
+                    } else {
+                      notificationStore.loadActiveNotifications({ force: true });
+                    }
+                  }}
                 >
                   Retry
                 </button>

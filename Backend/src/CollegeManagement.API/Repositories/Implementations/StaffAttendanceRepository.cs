@@ -1241,12 +1241,21 @@ ORDER BY RegularizationId ASC;
 
             int totalWorkingDays = Math.Max(0, totalCalendarDays - weeklyOffs - holidayCount);
 
+            // Fetch Admin LOP Policy directly from database as single source of truth
+            var lopPolicy = await conn.QueryFirstOrDefaultAsync<CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto>(
+                "sp_LopPolicy_Get",
+                commandType: CommandType.StoredProcedure)
+                ?? throw new InvalidOperationException("LOP policy configuration is missing in database.");
+
             var logs = new List<MyAttendanceLogItemDto>();
             int presentCount = 0;
             int lateCount = 0;
             int missedCheckoutCount = 0;
             int absentCount = 0;
             int leaveCount = 0;
+            int currentWeekNum = -1;
+            int weeklyMissedCount = 0;
+            bool pendingWeeklyMissedPenalty = false;
 
             for (var d = start.Date; d <= end.Date; d = d.AddDays(1))
             {
@@ -1283,9 +1292,27 @@ ORDER BY RegularizationId ASC;
                 string? holidayName = holiday?.HolidayName;
                 object id = att != null && att.StaffAttendanceId > 0 ? att.StaffAttendanceId : (object)int.Parse(d.ToString("yyyyMMdd"));
 
+                int weekOfYear = CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(d, CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+                if (weekOfYear != currentWeekNum)
+                {
+                    currentWeekNum = weekOfYear;
+                    weeklyMissedCount = 0;
+                }
+
                 if (isSunday)
                 {
                     status = "Weekly Off";
+                }
+                else if (isHoliday)
+                {
+                    status = "Holiday";
+                }
+                else if (pendingWeeklyMissedPenalty)
+                {
+                    pendingWeeklyMissedPenalty = false;
+                    status = "Absent (LOP Penalty)";
+                    absentCount++;
+                    hours = "0h 0m (Penalty)";
                 }
                 else if (att != null)
                 {
@@ -1354,7 +1381,16 @@ ORDER BY RegularizationId ASC;
                     else if (status == "Absent") absentCount++;
 
                     if (isLate) lateCount++;
-                    if (isMissedCheckout) missedCheckoutCount++;
+                    if (isMissedCheckout)
+                    {
+                        missedCheckoutCount++;
+                        weeklyMissedCount++;
+                        if (lopPolicy.WeeklyMissedCheckoutRuleEnabled && weeklyMissedCount >= Math.Max(1, lopPolicy.WeeklyMissedCheckoutThreshold))
+                        {
+                            pendingWeeklyMissedPenalty = true;
+                            weeklyMissedCount = 0;
+                        }
+                    }
 
                 }
                 else
@@ -1433,12 +1469,6 @@ ORDER BY RegularizationId ASC;
                     MarkedBy = markedBy
                 });
             }
-
-            // Fetch Admin LOP Policy directly from database as single source of truth
-            var lopPolicy = await conn.QueryFirstOrDefaultAsync<CollegeManagement.API.DTOs.LopConfiguration.LopPolicyDto>(
-                "sp_LopPolicy_Get",
-                commandType: CommandType.StoredProcedure)
-                ?? throw new InvalidOperationException("LOP policy configuration is missing in database.");
 
             string lopTargetMonth = start.ToString("yyyy-MM");
             var (latePenalty, missedCheckoutPenalty, lopDays) = LopConfigurationService.CalculateAttendanceLop(

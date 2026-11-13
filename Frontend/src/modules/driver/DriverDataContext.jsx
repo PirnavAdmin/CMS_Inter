@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import apiClient from "../../api/apiClient.js";
 import { getDashboard, getProfile, getRoute } from "../../api/transportDriverApi.js";
-import { HubConnectionBuilder, LogLevel } from "@microsoft/signalr";
+import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from "@microsoft/signalr";
 import { getAuthToken } from "../auth/authStorage.js";
 import { env } from "../../config/env.js";
 import { getDriverIdentity } from "./data/driverIdentity.js";
@@ -84,76 +84,199 @@ export function DriverDataProvider({ children }) {
     return pending.current;
   }, []);
 
+  const broadcastDriverSync = useCallback((type, extra = {}) => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const tokenTail = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim().slice(-16);
+    if (!tokenTail) return;
+    try {
+      const ch = new BroadcastChannel("cms_driver_notifications_sync");
+      ch.postMessage({ type, tokenTail, ...extra });
+      ch.close();
+    } catch { /* ignore cross-tab broadcast errors */ }
+  }, []);
+
+  const refreshNotificationsOnly = useCallback(async () => {
+    try {
+      const value = unwrapDriverData(await apiClient.get("/api/v1/transport/driver/notifications"));
+      if (!mounted.current) return false;
+      const items = Array.isArray(value) ? value : value.items;
+      if (Array.isArray(items)) {
+        setNotifications(items.map((item) => ({ ...item, isRead: item.isRead ?? (item.readTime != null) })));
+        setNotificationError("");
+        return true;
+      }
+      setNotificationError("The notification API returned an unsupported response.");
+      return false;
+    } catch (err) {
+      if (mounted.current) {
+        setNotificationError(err?.response?.status === 404
+          ? "Driver notifications are not available on the server yet."
+          : "Unable to load driver notifications. Try refreshing.");
+      }
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     mounted.current = true;
     refresh();
-    const refreshIfDisconnected = () => {
-      if (document.visibilityState === "visible" && notificationHubService.getStatus() !== "Connected") {
-        refresh();
-      }
-    };
-    const timer = setInterval(refreshIfDisconnected, 60000);
-    window.addEventListener("cms-notifications-resync", refresh);
+    window.addEventListener("cms-notifications-resync", refreshNotificationsOnly);
+    let channel = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        channel = new BroadcastChannel("cms_driver_notifications_sync");
+        channel.onmessage = (event) => {
+          const msg = event?.data;
+          const tokenTail = (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim().slice(-16);
+          if (!msg || !tokenTail || msg.tokenTail !== tokenTail) return;
+          if (msg.type === "incoming" && msg.notification?.id != null) {
+            const n = msg.notification;
+            setNotifications((previous) => [{ ...n, isRead: n.isRead ?? false }, ...previous.filter((item) => item.id !== n.id)]);
+          } else if (msg.type === "mark-read" && msg.id != null) {
+            setNotifications((previous) => previous.map((item) => item.id === msg.id ? { ...item, isRead: true } : item));
+          } else if (msg.type === "mark-all-read") {
+            setNotifications((previous) => previous.map((item) => ({ ...item, isRead: true })));
+          }
+        };
+      } catch { channel = null; }
+    }
     return () => {
       mounted.current = false;
-      clearInterval(timer);
-      window.removeEventListener("cms-notifications-resync", refresh);
+      window.removeEventListener("cms-notifications-resync", refreshNotificationsOnly);
+      try { channel?.close(); } catch { /* ignore */ }
     };
-  }, [refresh]);
+  }, [refresh, refreshNotificationsOnly]);
 
   useEffect(() => {
     let stopped = false;
-    let retryTimer;
     let messageTimer;
+    let blipRetryTimer = null;
+    let pausedForServerDown = false;
+    let wasDisconnected = false;
+    let wasConnectedBeforeDrop = false;
+    let blipRetryUsed = false;
+    let isConnecting = false;
+    let lastAttemptAt = 0;
     const base = env.useDevProxy ? "" : env.apiBaseUrl.replace(/\/$/, "");
+    const getNormalizedToken = () => (getAuthToken() || "").replace(/^Bearer\s+/i, "").trim();
+    const clearBlipTimer = () => { if (blipRetryTimer) { clearTimeout(blipRetryTimer); blipRetryTimer = null; } };
     const connection = new HubConnectionBuilder()
       .withUrl(`${base}/hubs/driverNotifications`, {
-        accessTokenFactory: () => getAuthToken().replace(/^Bearer\s+/i, "").trim(),
+        accessTokenFactory: getNormalizedToken,
         headers: { "ngrok-skip-browser-warning": "true" },
+        ...(env.signalrSkipNegotiation ? { transport: HttpTransportType.WebSockets, skipNegotiation: true } : {}),
       })
-      .withAutomaticReconnect()
       .configureLogging(LogLevel.None)
       .build();
-    const start = async () => {
-      if (stopped) return;
+    const start = async (force = false) => {
+      if (stopped || isConnecting) return;
+      if (!getNormalizedToken()) {
+        setConnectionStatus("Disconnected");
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        wasDisconnected = true;
+        pausedForServerDown = true;
+        setConnectionStatus("Paused (offline)");
+        return;
+      }
+      if (connection.state !== HubConnectionState.Disconnected) return;
+      if (!force && pausedForServerDown) return;
+      if (!force && Date.now() - lastAttemptAt < 5000) return;
+      isConnecting = true;
+      lastAttemptAt = Date.now();
       try {
         await connection.start();
-        if (!stopped) { setConnectionStatus("Connected"); refresh(); }
+        if (!stopped) {
+          clearBlipTimer();
+          pausedForServerDown = false;
+          wasConnectedBeforeDrop = true;
+          blipRetryUsed = false;
+          setConnectionStatus("Connected");
+          if (wasDisconnected) {
+            wasDisconnected = false;
+            refreshNotificationsOnly();
+          }
+        }
       } catch {
         if (!stopped) {
-          setConnectionStatus("Reconnecting; periodic refresh active");
-          retryTimer = setTimeout(start, 10000);
+          wasDisconnected = true;
+          wasConnectedBeforeDrop = false;
+          pausedForServerDown = true;
+          setConnectionStatus("Paused (server unreachable)");
         }
+      } finally {
+        isConnecting = false;
       }
     };
     connection.on("ReceiveNotification", (notification) => {
       if (stopped) return;
       if (notification?.id != null) {
-        setNotifications((previous) => [{ ...notification, isRead: notification.isRead ?? false }, ...previous.filter((item) => item.id !== notification.id)]);
+        const normalized = { ...notification, isRead: notification.isRead ?? false };
+        setNotifications((previous) => [normalized, ...previous.filter((item) => item.id !== normalized.id)]);
+        broadcastDriverSync("incoming", { notification: normalized });
+      } else {
+        refreshNotificationsOnly();
       }
       setLiveMessage(notification?.message || notification?.title || "You have a new driver notification.");
       clearTimeout(messageTimer);
       messageTimer = setTimeout(() => setLiveMessage(""), 6000);
-      refresh();
     });
-    connection.onreconnecting(() => { if (!stopped) setConnectionStatus("Reconnecting; periodic refresh active"); });
-    connection.onreconnected(() => { if (!stopped) { setConnectionStatus("Connected"); refresh(); } });
-    connection.onclose(() => { if (!stopped) { setConnectionStatus("Reconnecting; periodic refresh active"); retryTimer = setTimeout(start, 10000); } });
+    connection.onclose(() => {
+      if (!stopped) {
+        wasDisconnected = true;
+        const canRetrySingleBlip =
+          wasConnectedBeforeDrop &&
+          !blipRetryUsed &&
+          (typeof navigator === "undefined" || navigator.onLine !== false) &&
+          (typeof document === "undefined" || document.visibilityState !== "hidden");
+        if (canRetrySingleBlip) {
+          blipRetryUsed = true;
+          setConnectionStatus("Reconnecting");
+          clearBlipTimer();
+          blipRetryTimer = setTimeout(() => { blipRetryTimer = null; if (!stopped) start(true); }, 2500);
+        } else {
+          pausedForServerDown = true;
+          setConnectionStatus("Paused (server unreachable)");
+        }
+      }
+    });
+    const handleBackendReachable = () => {
+      if (!stopped && pausedForServerDown && connection.state === HubConnectionState.Disconnected) {
+        clearBlipTimer();
+        pausedForServerDown = false;
+        blipRetryUsed = false;
+        start(true);
+      }
+    };
+    const handleOnline = () => {
+      if (!stopped && connection.state === HubConnectionState.Disconnected) {
+        clearBlipTimer();
+        pausedForServerDown = false;
+        blipRetryUsed = false;
+        start();
+      }
+    };
+    window.addEventListener("cms-backend-reachable", handleBackendReachable);
+    window.addEventListener("online", handleOnline);
     start();
     return () => {
       stopped = true;
-      clearTimeout(retryTimer);
       clearTimeout(messageTimer);
+      clearBlipTimer();
+      window.removeEventListener("cms-backend-reachable", handleBackendReachable);
+      window.removeEventListener("online", handleOnline);
       connection.off("ReceiveNotification");
       connection.stop().catch(() => {});
     };
-  }, [refresh]);
+  }, [refreshNotificationsOnly]);
 
   const markRead = async (id) => {
     try {
       unwrapDriverData(await apiClient.put(`/api/v1/transport/drivers/notifications/${encodeURIComponent(id)}/read`));
       if (!mounted.current) return false;
       setNotifications((previous) => previous.map((item) => item.id === id ? { ...item, isRead: true } : item));
+      broadcastDriverSync("mark-read", { id });
       setNotificationError("");
       return true;
     } catch { if (mounted.current) setNotificationError("Unable to mark notifications as read. Please try again."); return false; }
@@ -161,6 +284,7 @@ export function DriverDataProvider({ children }) {
 
   const markAllRead = async () => {
     await Promise.all(notifications.filter((item) => !item.isRead && item.id != null).map((item) => markRead(item.id)));
+    broadcastDriverSync("mark-all-read");
   };
 
   const driverProfile = useMemo(() => getDriverIdentity(assignmentProfile(dashboard, { ...profile, ...dashboard.driverProfile })), [dashboard, profile]);

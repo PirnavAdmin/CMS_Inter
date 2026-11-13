@@ -356,7 +356,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
 
         public async Task<int> GeneratePayslipAsync(
-            GeneratePayslipRequest request)
+            GeneratePayslipRequest request,
+            decimal lopDays = 0m,
+            decimal lopDeduction = 0m)
         {
             var parameters = new DynamicParameters();
 
@@ -367,6 +369,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add(
                 "p_PayrollYear",
                 request.PayrollYear);
+            parameters.Add("p_LopDays", lopDays);
+            parameters.Add("p_LopDeduction", lopDeduction);
 
             return await QuerySingleAsync<int>(
                 "sp_PayrollPayslip_Generate",
@@ -392,6 +396,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 parameters.Add(
                     "p_PayrollYear",
                     request.PayrollYear);
+                parameters.Add("p_LopDays", 0m);
+                parameters.Add("p_LopDeduction", 0m);
 
                 var payslipId =
                     await QuerySingleAsync<int>(

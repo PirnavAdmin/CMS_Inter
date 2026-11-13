@@ -619,6 +619,14 @@ export default function FacultyPayslips() {
                           {fmt(viewingPayslip.insuranceOtherDeduction)}
                         </td>
                       </tr>
+                      {(Number(viewingPayslip.lopDeduction || 0) > 0 || Number(viewingPayslip.lopDays || 0) > 0) && (
+                        <tr>
+                          <td>Loss of Pay (LOP · {viewingPayslip.lopDays || 0} d)</td>
+                          <td style={{ textAlign: "right", fontWeight: 700, color: "var(--cms-red, #d93636)" }}>
+                            {fmt(viewingPayslip.lopDeduction)}
+                          </td>
+                        </tr>
+                      )}
                       <tr style={{ background: "var(--cms-red-soft, #fdecec)" }}>
                         <td>
                           <strong>Total Deductions</strong>
