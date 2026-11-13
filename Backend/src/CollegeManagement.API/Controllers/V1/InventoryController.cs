@@ -1,13 +1,19 @@
 using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Asp.Versioning;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Inventory;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces.Inventory;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -22,13 +28,58 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IInventoryService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly AppDbContext? _db;
 
         public InventoryController(
             IInventoryService service,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            AppDbContext? db = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _db = db;
+        }
+
+        private int? GetTenantCollegeId()
+        {
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            return collegeId.HasValue && collegeId.Value > 1 ? collegeId.Value : null;
+        }
+
+        private async Task<HashSet<int>> GetOwnedIdsAsync(string table, string pkCol, int collegeId)
+        {
+            if (_db == null) return new HashSet<int>();
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+            var ids = await conn.QueryAsync<int>(
+                $"SELECT `{pkCol}` FROM `{table}` WHERE CollegeId = @CollegeId;",
+                new { CollegeId = collegeId });
+            return new HashSet<int>(ids);
+        }
+
+        private async Task<bool> OwnsRecordAsync(string table, string pkCol, int id, int collegeId)
+        {
+            if (_db == null) return false;
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+            int count = await conn.ExecuteScalarAsync<int>(
+                $"SELECT COUNT(*) FROM `{table}` WHERE `{pkCol}` = @Id AND CollegeId = @CollegeId;",
+                new { Id = id, CollegeId = collegeId });
+            return count > 0;
+        }
+
+        private async Task StampCollegeIdAsync(string table, string pkCol, int id, int collegeId)
+        {
+            if (_db == null || id <= 0) return;
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+            await conn.ExecuteAsync(
+                $"UPDATE `{table}` SET CollegeId = @CollegeId WHERE `{pkCol}` = @Id;",
+                new { CollegeId = collegeId, Id = id });
         }
 
         private int ResolveUserId()
@@ -57,6 +108,38 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var ownedItems = await GetOwnedIdsAsync("InventoryItems", "ItemId", tenantCollegeId.Value);
+                    var ownedTxns = await GetOwnedIdsAsync("InventoryTransactions", "TransactionId", tenantCollegeId.Value);
+                    var ownedCats = await GetOwnedIdsAsync("InventoryCategories", "CategoryId", tenantCollegeId.Value);
+                    var ownedOrders = await GetOwnedIdsAsync("InventoryPurchaseOrders", "OrderId", tenantCollegeId.Value);
+
+                    if (ownedItems.Count == 0 && ownedTxns.Count == 0 && ownedOrders.Count == 0)
+                    {
+                        return Ok(new { success = true, data = new InventoryDashboardDto() });
+                    }
+
+                    var allItems = (await _service.GetItemsAsync(new ItemFilterRequest())).Where(i => ownedItems.Contains(i.ItemId)).ToList();
+                    var full = await _service.GetDashboardSummaryAsync();
+                    var scoped = new InventoryDashboardDto
+                    {
+                        Kpis = new DashboardKpisDto
+                        {
+                            TotalItems = allItems.Count,
+                            TotalStockValue = allItems.Sum(i => i.StockValue),
+                            LowStockCount = allItems.Count(i => i.Quantity <= i.MinStock),
+                            PendingOrdersCount = (await _service.GetPurchaseOrdersAsync("Pending", null)).Count(o => ownedOrders.Contains(o.OrderId))
+                        },
+                        RecentMovements = full.RecentMovements.Where(m => ownedTxns.Contains(m.TransactionId)).ToList(),
+                        LowStockAlerts = full.LowStockAlerts.Where(a => ownedItems.Contains(a.ItemId)).ToList(),
+                        CategoryDistribution = full.CategoryDistribution.Where(c => ownedCats.Contains(c.CategoryId)).ToList(),
+                        RecentActivities = new List<ActivityLogDto>()
+                    };
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var data = await _service.GetDashboardSummaryAsync();
                 return Ok(new { success = true, data });
             }
@@ -73,6 +156,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var owned = await GetOwnedIdsAsync("InventoryItems", "ItemId", tenantCollegeId.Value);
+                    if (owned.Count == 0) return Ok(new { success = true, data = Array.Empty<ItemDto>() });
+                    var scoped = (await _service.GetItemsAsync(filter)).Where(i => owned.Contains(i.ItemId)).ToList();
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var items = await _service.GetItemsAsync(filter);
                 return Ok(new { success = true, data = items });
             }
@@ -87,6 +179,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 var item = await _service.GetItemByIdAsync(id);
                 if (item == null)
                     return NotFound(new { success = false, message = "Item not found." });
@@ -104,6 +200,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 var ledger = await _service.GetItemLedgerAsync(id, from, to);
                 return Ok(new { success = true, data = ledger });
             }
@@ -121,10 +221,16 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
 
+                var tenantCollegeId = GetTenantCollegeId();
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var item = await _service.CreateItemAsync(request, userId, userName);
+                if (tenantCollegeId.HasValue && item != null)
+                {
+                    await StampCollegeIdAsync("InventoryItems", "ItemId", item.ItemId, tenantCollegeId.Value);
+                    await StampCollegeIdAsync("InventoryTransactions", "ItemId", item.ItemId, tenantCollegeId.Value);
+                }
                 return CreatedAtAction(nameof(GetItemById), new { id = item.ItemId }, new { success = true, data = item, message = "Item created successfully." });
             }
             catch (ArgumentException ex)
@@ -148,6 +254,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
+
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
 
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
@@ -178,6 +288,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
@@ -203,6 +317,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
@@ -226,6 +344,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var owned = await GetOwnedIdsAsync("InventoryTransactions", "TransactionId", tenantCollegeId.Value);
+                    if (owned.Count == 0) return Ok(new { success = true, data = Array.Empty<TransactionDto>() });
+                    var scoped = (await _service.GetMovementsAsync(filter)).Where(m => owned.Contains(m.TransactionId)).ToList();
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var movements = await _service.GetMovementsAsync(filter);
                 return Ok(new { success = true, data = movements });
             }
@@ -240,6 +367,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryTransactions", "TransactionId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Transaction not found." });
+
                 var movement = await _service.GetMovementByIdAsync(id);
                 if (movement == null)
                     return NotFound(new { success = false, message = "Transaction not found." });
@@ -257,11 +388,18 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", request.ItemId, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 request.MovementType = "Stock In";
                 int userId = ResolveUserId();
                 string userName = string.IsNullOrWhiteSpace(request.PerformedBy) ? ResolveUserName() : request.PerformedBy;
 
                 var result = await _service.PostMovementAsync(request, userId, userName);
+                if (tenantCollegeId.HasValue && result != null)
+                    await StampCollegeIdAsync("InventoryTransactions", "TransactionId", result.TransactionId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = result, message = "Stock received and ledger updated." });
             }
             catch (ArgumentException ex)
@@ -279,11 +417,18 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", request.ItemId, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 request.MovementType = "Stock Out";
                 int userId = ResolveUserId();
                 string userName = string.IsNullOrWhiteSpace(request.PerformedBy) ? ResolveUserName() : request.PerformedBy;
 
                 var result = await _service.PostMovementAsync(request, userId, userName);
+                if (tenantCollegeId.HasValue && result != null)
+                    await StampCollegeIdAsync("InventoryTransactions", "TransactionId", result.TransactionId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = result, message = "Stock issued and ledger updated." });
             }
             catch (ArgumentException ex)
@@ -301,10 +446,17 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryTransactions", "TransactionId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Transaction not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var correction = await _service.ReverseMovementAsync(id, userId, userName);
+                if (tenantCollegeId.HasValue && correction != null)
+                    await StampCollegeIdAsync("InventoryTransactions", "TransactionId", correction.TransactionId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = correction, message = "Transaction reversed. Compensating entry recorded." });
             }
             catch (KeyNotFoundException ex)
@@ -326,10 +478,17 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryTransactions", "TransactionId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Transaction not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var returnReceipt = await _service.RecordReturnAsync(id, userId, userName);
+                if (tenantCollegeId.HasValue && returnReceipt != null)
+                    await StampCollegeIdAsync("InventoryTransactions", "TransactionId", returnReceipt.TransactionId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = returnReceipt, message = "Full return recorded. Stock balance updated." });
             }
             catch (KeyNotFoundException ex)
@@ -353,6 +512,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var owned = await GetOwnedIdsAsync("InventoryCategories", "CategoryId", tenantCollegeId.Value);
+                    if (owned.Count == 0) return Ok(new { success = true, data = Array.Empty<CategoryDto>() });
+                    var scoped = (await _service.GetCategoriesAsync(includeInactive)).Where(c => owned.Contains(c.CategoryId)).ToList();
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var categories = await _service.GetCategoriesAsync(includeInactive);
                 return Ok(new { success = true, data = categories });
             }
@@ -370,10 +538,14 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
 
+                var tenantCollegeId = GetTenantCollegeId();
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var category = await _service.SaveCategoryAsync(null, request, userId, userName);
+                if (tenantCollegeId.HasValue && category != null)
+                    await StampCollegeIdAsync("InventoryCategories", "CategoryId", category.CategoryId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = category, message = "Category created successfully." });
             }
             catch (InvalidOperationException ex)
@@ -393,6 +565,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
+
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryCategories", "CategoryId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Category not found." });
 
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
@@ -419,6 +595,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryCategories", "CategoryId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Category not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
@@ -442,6 +622,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var owned = await GetOwnedIdsAsync("InventorySuppliers", "SupplierId", tenantCollegeId.Value);
+                    if (owned.Count == 0) return Ok(new { success = true, data = Array.Empty<SupplierDto>() });
+                    var scoped = (await _service.GetSuppliersAsync(includeInactive)).Where(s => owned.Contains(s.SupplierId)).ToList();
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var suppliers = await _service.GetSuppliersAsync(includeInactive);
                 return Ok(new { success = true, data = suppliers });
             }
@@ -459,10 +648,14 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
 
+                var tenantCollegeId = GetTenantCollegeId();
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var supplier = await _service.SaveSupplierAsync(null, request, userId, userName);
+                if (tenantCollegeId.HasValue && supplier != null)
+                    await StampCollegeIdAsync("InventorySuppliers", "SupplierId", supplier.SupplierId, tenantCollegeId.Value);
+
                 return Ok(new { success = true, data = supplier, message = "Supplier created successfully." });
             }
             catch (InvalidOperationException ex)
@@ -482,6 +675,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid data submitted.", errors = ModelState });
+
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventorySuppliers", "SupplierId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Supplier not found." });
 
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
@@ -508,6 +705,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventorySuppliers", "SupplierId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Supplier not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
@@ -531,7 +732,25 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
                 var report = await _service.GetReportDataAsync(request);
+                if (tenantCollegeId.HasValue && report != null)
+                {
+                    var ownedItems = await GetOwnedIdsAsync("InventoryItems", "ItemId", tenantCollegeId.Value);
+                    var ownedCats = await GetOwnedIdsAsync("InventoryCategories", "CategoryId", tenantCollegeId.Value);
+                    var ownedTxns = await GetOwnedIdsAsync("InventoryTransactions", "TransactionId", tenantCollegeId.Value);
+                    report.Rows = report.Rows.Where(row =>
+                    {
+                        var t = row.GetType();
+                        var itemProp = t.GetProperty("ItemId");
+                        if (itemProp != null && itemProp.GetValue(row) is int iid) return ownedItems.Contains(iid);
+                        var catProp = t.GetProperty("CategoryId");
+                        if (catProp != null && catProp.GetValue(row) is int cid) return ownedCats.Contains(cid);
+                        var txnProp = t.GetProperty("TransactionId");
+                        if (txnProp != null && txnProp.GetValue(row) is int tid) return ownedTxns.Contains(tid);
+                        return ownedItems.Count > 0;
+                    }).ToList();
+                }
                 return Ok(new { success = true, data = report });
             }
             catch (Exception ex)
@@ -547,6 +766,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue)
+                {
+                    var owned = await GetOwnedIdsAsync("InventoryPurchaseOrders", "OrderId", tenantCollegeId.Value);
+                    if (owned.Count == 0) return Ok(new { success = true, data = Array.Empty<PurchaseOrderDto>() });
+                    var scoped = (await _service.GetPurchaseOrdersAsync(status, search)).Where(o => owned.Contains(o.OrderId)).ToList();
+                    return Ok(new { success = true, data = scoped });
+                }
+
                 var orders = await _service.GetPurchaseOrdersAsync(status, search);
                 return Ok(new { success = true, data = orders });
             }
@@ -561,6 +789,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryPurchaseOrders", "OrderId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Purchase order not found." });
+
                 var po = await _service.GetPurchaseOrderByIdAsync(id);
                 if (po == null)
                     return NotFound(new { success = false, message = "Purchase order not found." });
@@ -581,10 +813,17 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid purchase order request.", errors = ModelState });
 
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryItems", "ItemId", request.ItemId, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Item not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
                 var po = await _service.CreatePurchaseOrderAsync(request, userId, userName);
+                if (tenantCollegeId.HasValue && po != null)
+                    await StampCollegeIdAsync("InventoryPurchaseOrders", "OrderId", po.OrderId, tenantCollegeId.Value);
+
                 return CreatedAtAction(nameof(GetPurchaseOrderById), new { id = po.OrderId }, new { success = true, message = "Purchase order created successfully.", data = po });
             }
             catch (ArgumentException ex)
@@ -607,6 +846,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryPurchaseOrders", "OrderId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Purchase order not found." });
+
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
 
@@ -634,6 +877,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 if (!ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid status update payload.", errors = ModelState });
+
+                var tenantCollegeId = GetTenantCollegeId();
+                if (tenantCollegeId.HasValue && !await OwnsRecordAsync("InventoryPurchaseOrders", "OrderId", id, tenantCollegeId.Value))
+                    return NotFound(new { success = false, message = "Purchase order not found." });
 
                 int userId = ResolveUserId();
                 string userName = ResolveUserName();
