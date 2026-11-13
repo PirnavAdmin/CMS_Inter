@@ -521,9 +521,12 @@ namespace CollegeManagement.API.Data
             #endregion
 
             #region Role
-            modelBuilder.Entity<Role>()
-                .HasIndex(r => r.RoleName)
-                .IsUnique();
+            modelBuilder.Entity<Role>(entity =>
+            {
+                entity.HasIndex(r => r.RoleName).IsUnique();
+                entity.Property(r => r.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(r => r.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            });
             #endregion
             #region Subject
 

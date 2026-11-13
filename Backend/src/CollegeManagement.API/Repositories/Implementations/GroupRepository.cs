@@ -65,6 +65,8 @@ namespace CollegeManagement.API.Repositories
                     p_AcademicLevelId = academicLevelId,
                     p_IsActive = isActive,
                     p_MasterGroupId = masterGroupId
+                ,
+                    p_CollegeId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -124,6 +126,8 @@ namespace CollegeManagement.API.Repositories
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId
+                ,
+                    p_CollegeId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -405,6 +409,8 @@ namespace CollegeManagement.API.Repositories
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId
+                ,
+                    p_CollegeId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
