@@ -31,6 +31,7 @@ import {
   Sliders,
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import { isValidSuperAdminEmail } from "../superAdminValidation.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import settingsIllustration from "@/assets/settings-3d/campus-configuration.png";
@@ -147,12 +148,19 @@ export default function GlobalSettingsPage() {
   // Handle Save Platform Reminders
   const handleSave = async (e) => {
     e?.preventDefault();
+    const cleanName = platformName.trim();
+    const cleanEmail = supportEmail.trim();
+    const reminder = Number(renewalDays);
+    if (cleanName.length < 2 || cleanName.length > 100) { showToast("Platform name must be between 2 and 100 characters.", "error"); return; }
+    if (!isValidSuperAdminEmail(cleanEmail)) { showToast("Enter a valid support email address.", "error"); return; }
+    if (!Number.isSafeInteger(reminder) || reminder < 1 || reminder > 365) { showToast("Renewal reminder lead time must be a whole number from 1 to 365 days.", "error"); return; }
+    if (saving) return;
     setSaving(true);
     try {
       const payload = {
-        platformName: platformName.trim(),
-        supportEmail: supportEmail.trim(),
-        renewalDays: Number(renewalDays) || 30,
+        platformName: cleanName,
+        supportEmail: cleanEmail,
+        renewalDays: reminder,
       };
 
       await superAdminApi.updateSettings(payload);
@@ -175,6 +183,10 @@ export default function GlobalSettingsPage() {
   // Handle Save College Code Series
   const handleSaveCodeSeries = (e) => {
     e?.preventDefault();
+    const startNumber = Number(codeSeries.startNumber);
+    const currentSequence = Number(codeSeries.currentSequence);
+    if (!/^[A-Za-z0-9-]{1,12}$/.test(String(codeSeries.prefix || "").trim())) { showToast("Code prefix must use 1–12 letters, numbers, or hyphens.", "error"); return; }
+    if (!Number.isSafeInteger(startNumber) || startNumber < 1 || !Number.isSafeInteger(currentSequence) || currentSequence < 0) { showToast("Sequence numbers must be valid whole numbers (start at 1 or higher; current count may be 0).", "error"); return; }
     saveCollegeCodeSeriesSettings(codeSeries);
     showToast("College Code & Number Series configuration saved successfully!");
   };

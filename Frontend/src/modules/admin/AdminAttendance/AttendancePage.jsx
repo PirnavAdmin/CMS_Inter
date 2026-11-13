@@ -11,6 +11,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import FacultyMyAttendance from "@/modules/faculty/pages/FacultyMyAttendance.jsx";
 import StaffRegularizePanel from "./StaffRegularizePanel.jsx";
 import "./AttendancePage.css";
@@ -130,10 +131,14 @@ export default function AttendancePage({ area: areaProp } = {}) {
   const staff = resolvedArea === "staff";
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
+  const authUser = getAuthUser();
+  const isAdminWithoutStaff = Boolean(
+    (authUser?.isAdmin || String(authUser?.role || "").toLowerCase().includes("admin")) && !authUser?.staffId
+  );
   const normalizeStaffTab = (t) => {
     if (!t) {
       if (searchParams.get("view") === "regularize" || searchParams.get("regId")) return "staff-attendance";
-      return "my-attendance";
+      return isAdminWithoutStaff ? "staff-attendance" : "my-attendance";
     }
     const clean = String(t).trim().toLowerCase().replace(/\s+|_/g, "-");
     if (clean === "staff-attendance" || clean === "staff") return "staff-attendance";

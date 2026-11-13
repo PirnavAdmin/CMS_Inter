@@ -222,7 +222,7 @@ export default function AccountantDashboard() {
   const quickActions = [
     ["Collect Student Fee", "/accountant-dashboard/fees?tab=collection", adminIconAssets.feeManagement, canFees && canHistory && permissions.canCreate("fee-management", "fee-collection")],
     ["Student Fee Ledger", "/accountant-dashboard/fees?tab=ledger", adminIconAssets.feeManagement, canFees && permissions.canView("fee-management", "student-fees")],
-    ["Payment History", "/accountant-dashboard/payments?tab=fees", adminIconAssets.paymentHistory, canHistory],
+    ["Student Fee Payment History", "/accountant-dashboard/fees?tab=student-ledger&subtab=payment-history", adminIconAssets.paymentHistory, canHistory],
     ["Payroll", "/accountant-dashboard/payroll", adminIconAssets.payroll, canPayroll],
     ["Financial Reports", "/accountant-dashboard/reports", adminIconAssets.financialReports, permissions.canView("reports-analytics")],
   ].filter(([, , , allowed]) => allowed);
@@ -276,7 +276,7 @@ export default function AccountantDashboard() {
           <dl className="accountant-home-collection-totals">{[["Total Collected", collected, adminIconAssets.feeManagement, "green"], ["Total Pending", pending, adminIconAssets.feeManagement, "orange"]].map(([label, value, asset, tone]) => <div key={label} className={`tone-${tone}`}><span><HomeIcon asset={asset} /></span><div><dt>{label}</dt><dd>{finance.loading ? <Skeleton style={{ width: 90, height: 20 }} /> : amount(value)}</dd></div></div>)}</dl>
         </div>
       </AccountantCard>
-      <AccountantCard className="accountant-home-widget accountant-home-payments-card" title={<HomeCardTitle icon={adminIconAssets.paymentHistory}>Recent Payments</HomeCardTitle>} subtitle="Latest saved fee transactions" action={canHistory && <Link className="sp-text-link" to="/accountant-dashboard/payments?tab=fees">View History <ArrowRight size={15} /></Link>}>
+      <AccountantCard className="accountant-home-widget accountant-home-payments-card" title={<HomeCardTitle icon={adminIconAssets.paymentHistory}>Recent Payments</HomeCardTitle>} subtitle="Latest saved fee transactions" action={canHistory && <Link className="sp-text-link" to="/accountant-dashboard/fees?tab=student-ledger&subtab=payment-history">View History <ArrowRight size={15} /></Link>}>
         {finance.loading ? <SkeletonCard lines={3} /> : <AccountantDataTable columns={["Student", "Adm. No", "Type", "Amount", "Date"]} rows={(payments || []).slice(0, 3).map(row => ({ Student: row.studentName, "Adm. No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: row.date && Number.isFinite(Date.parse(row.date)) ? formatDate(row.date) : "Unavailable" }))} empty={payments == null ? "Recent payment data is unavailable." : "No payment transactions available."} />}
       </AccountantCard>
     </div>

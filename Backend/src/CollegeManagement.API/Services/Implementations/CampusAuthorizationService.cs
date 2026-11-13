@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -82,6 +83,17 @@ public class CampusAuthorizationService : ICampusAuthorizationService
 
                 if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
                 {
+                    if (requestedCampusId.Value == TenantIsolationActionFilter.NoCampusSentinel)
+                    {
+                        return new CampusResolutionResult
+                        {
+                            IsAuthorized = true,
+                            IsAdmin = true,
+                            EffectiveCampusId = TenantIsolationActionFilter.NoCampusSentinel,
+                            AuthorizedCampusIds = collegeCampuses
+                        };
+                    }
+
                     int ownsCampus = await Dapper.SqlMapper.ExecuteScalarAsync<int>(
                         adminConn,
                         "SELECT COUNT(*) FROM Campuses WHERE CampusId = @CampusId AND CollegeId = @CollegeId;",
@@ -112,7 +124,7 @@ public class CampusAuthorizationService : ICampusAuthorizationService
                 {
                     IsAuthorized = true,
                     IsAdmin = true,
-                    EffectiveCampusId = collegeCampuses.FirstOrDefault() > 0 ? collegeCampuses.First() : 999999999,
+                    EffectiveCampusId = collegeCampuses.FirstOrDefault() > 0 ? collegeCampuses.First() : TenantIsolationActionFilter.NoCampusSentinel,
                     AuthorizedCampusIds = collegeCampuses
                 };
             }

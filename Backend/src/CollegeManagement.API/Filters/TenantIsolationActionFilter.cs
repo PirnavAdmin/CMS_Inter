@@ -32,7 +32,8 @@ namespace CollegeManagement.API.Filters
             "Campus",
             "Location",
             "ThemePolicy",
-            "Health"
+            "Health",
+            "LandingPage"
         };
 
         private readonly AppDbContext _db;
@@ -102,7 +103,11 @@ namespace CollegeManagement.API.Filters
                     int? requested = TryToInt(arg);
                     if (requested.HasValue && requested.Value > 0 && requested.Value != NoCampusSentinel)
                     {
-                        if (!ownedSet.Contains(requested.Value))
+                        if (requested.Value == 1 && !ownedSet.Contains(1))
+                        {
+                            context.ActionArguments[key] = effectiveCampusId;
+                        }
+                        else if (!ownedSet.Contains(requested.Value))
                         {
                             _logger.LogWarning(
                                 "Cross-tenant block: CollegeId {CollegeId} requested CampusId {CampusId} on {Controller}",
@@ -134,7 +139,11 @@ namespace CollegeManagement.API.Filters
                         int? propVal = TryToInt(campusProp.GetValue(arg));
                         if (propVal.HasValue && propVal.Value > 0 && propVal.Value != NoCampusSentinel)
                         {
-                            if (!ownedSet.Contains(propVal.Value))
+                            if (propVal.Value == 1 && !ownedSet.Contains(1))
+                            {
+                                campusProp.SetValue(arg, effectiveCampusId);
+                            }
+                            else if (!ownedSet.Contains(propVal.Value))
                             {
                                 _logger.LogWarning(
                                     "Cross-tenant DTO block: CollegeId {CollegeId} sent CampusId {CampusId} on {Controller}",

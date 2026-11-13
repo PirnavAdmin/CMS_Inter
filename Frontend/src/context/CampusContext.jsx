@@ -374,12 +374,24 @@ export function CampusProvider({ children }) {
   return <CampusContext.Provider value={contextValue}>{children}</CampusContext.Provider>;
 }
 
+const EMPTY_CAMPUS_CONTEXT = {
+  campuses: [],
+  activeCampuses: [],
+  selectedCampus: null,
+  selectedCampusId: "",
+  setSelectedCampus: () => {},
+  fetchCampuses: () => Promise.resolve(),
+  addCampus: () => Promise.resolve(),
+  updateCampus: () => Promise.resolve(),
+  deleteCampus: () => Promise.resolve(),
+  toggleCampusStatus: () => Promise.resolve(),
+  loading: false,
+  error: null,
+};
+
 export function useCampusContext() {
   const context = useContext(CampusContext);
-  if (!context) {
-    throw new Error("useCampusContext must be used within a CampusProvider");
-  }
-  return context;
+  return context || EMPTY_CAMPUS_CONTEXT;
 }
 
 export const useCampus = useCampusContext;

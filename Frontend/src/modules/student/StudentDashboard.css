@@ -1794,6 +1794,116 @@
   padding-top: 5px
 }
 
+.sp-student-fee-paybar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 13px 16px;
+  border: 1px solid var(--sp-border);
+  border-radius: 12px;
+  background: var(--sp-surface);
+}
+.sp-student-fee-paybar > div { display: grid; gap: 3px; }
+.sp-student-fee-paybar strong { color: var(--sp-muted); font-size: 12px; }
+.sp-student-fee-paybar span { color: var(--sp-text); font-size: 18px; font-weight: 800; }
+.sp-fee-pay-now,
+.sp-fee-pay-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--sp-primary);
+  border-radius: 9px;
+  background: var(--sp-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sp-fee-pay-now:disabled,
+.sp-fee-pay-secondary:disabled { opacity: .55; cursor: not-allowed; }
+.sp-fee-pay-secondary { border-color: var(--sp-border); background: var(--sp-surface); color: var(--sp-text); }
+.sp-student-payment-modal { width: min(660px, 100%); }
+.sp-payment-account-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 14px;
+  padding: 12px;
+  border: 1px solid var(--sp-border);
+  border-radius: 10px;
+  background: var(--sp-surface-soft, var(--sp-surface));
+}
+.sp-payment-account-summary span,
+.sp-payment-account-summary small { color: var(--sp-muted); font-size: 12px; }
+.sp-payment-account-summary strong { color: var(--sp-text); }
+.sp-student-payment-modal .cms-fee-gateway { display: grid; gap: 12px; }
+.sp-student-payment-modal .cms-fee-gateway-start { display: grid; gap: 10px; justify-items: start; }
+.sp-student-payment-modal .cms-fee-gateway-start p,
+.sp-student-payment-modal .cms-fee-note { margin: 0; color: var(--sp-muted); font-size: 13px; }
+.sp-student-payment-modal .cms-fee-gateway-order { display: grid; justify-items: start; gap: 10px; }
+.sp-student-payment-modal .cms-fee-gateway-order > img { width: 200px; height: 200px; padding: 8px; border-radius: 8px; background: #fff; object-fit: contain; }
+.sp-student-payment-modal .cms-fee-gateway-order > strong { color: var(--sp-text); font-size: 22px; }
+.sp-student-payment-modal .cms-fee-gateway-order > code { overflow-wrap: anywhere; }
+.sp-student-payment-modal .cms-fee-gateway-order > input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--sp-border); border-radius: 7px; background: var(--sp-surface); color: var(--sp-text); }
+.sp-student-payment-modal .cms-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sp-student-payment-modal .cms-field { display: grid; gap: 5px; min-width: 0; }
+.sp-student-payment-modal .cms-field label { font-size: 12px; font-weight: 700; }
+.sp-student-payment-modal .cms-field input { width: 100%; min-width: 0; }
+.sp-student-payment-modal .cms-fee-qr-verification { display: grid; gap: 12px; }
+.sp-student-payment-modal .cms-fee-reversal-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.sp-student-payment-modal .cms-fee-reversal-details > div { min-width: 0; }
+.sp-student-payment-modal .cms-fee-reversal-details dt { color: var(--sp-muted); font-size: 11px; }
+.sp-student-payment-modal .cms-fee-reversal-details dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 700; }
+.sp-student-payment-modal footer { border-top: 1px solid var(--sp-border); }
+.sp-payment-account-summary { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.sp-shell .sp-modal.sp-student-payment-modal { width: min(660px, 100%); }
+.sp-shell .sp-modal.sp-student-payment-modal { display: flex; flex-direction: column; overflow: hidden; }
+.sp-student-payment-modal > header,
+.sp-student-payment-modal > footer { flex: 0 0 auto; }
+.sp-student-payment-body { display: grid; gap: 13px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1px 2px; scrollbar-width: thin; }
+.sp-payment-account-summary > div { display: grid; gap: 4px; }
+.sp-payment-account-summary strong { overflow-wrap: anywhere; }
+.sp-payment-methods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sp-payment-methods button { min-height: 42px; padding: 8px; border: 1px solid var(--sp-border); border-radius: 9px; background: var(--sp-surface); color: var(--sp-text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.sp-payment-methods button.is-selected { border-color: var(--sp-primary); background: var(--sp-primary); color: #fff; }
+.sp-payment-methods button:disabled { opacity: .6; cursor: not-allowed; }
+.sp-payment-target { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--sp-border); border-radius: 10px; }
+.sp-payment-target > strong,
+.sp-payment-schedules > strong { color: var(--sp-text); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.sp-payment-target-picker { position: relative; }
+.sp-payment-target-picker > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 42px; padding: 9px 12px; border: 1px solid var(--sp-border); border-radius: 9px; background: var(--sp-surface); color: var(--sp-text); font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+.sp-payment-target-picker > summary::-webkit-details-marker { display: none; }
+.sp-payment-target-picker:not([open]) > .sp-payment-target-options { display: none; }
+.sp-payment-target-picker > summary::after { content: ""; width: 8px; height: 8px; flex: 0 0 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .15s ease; }
+.sp-payment-target-picker[open] > summary::after { transform: rotate(225deg) translateY(-1px); }
+.sp-payment-target-picker[open] > summary { border-radius: 9px 9px 0 0; }
+.sp-payment-target-options { display: grid; gap: 0; padding: 4px 9px; border: 1px solid var(--sp-border); border-top: 0; border-radius: 0 0 9px 9px; background: var(--sp-surface); }
+.sp-payment-target-options > label { display: flex; align-items: flex-start; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--sp-border); color: var(--sp-text); font-size: 13px; }
+.sp-payment-target-options > label:last-of-type { border-bottom: 0; }
+.sp-payment-target-options > label span { font-size: inherit; font-weight: 600; }
+.sp-payment-target-options input[type="checkbox"] { width: auto; margin: 2px 0 0; accent-color: var(--sp-primary); }
+.sp-payment-target-empty { padding: 8px 0; color: var(--sp-muted); font-size: 12px; }
+.sp-payment-target > label,
+.sp-payment-schedules > label { display: flex; align-items: flex-start; gap: 9px; color: var(--sp-text); font-size: 13px; }
+.sp-payment-target input[type="radio"],
+.sp-payment-target input[type="checkbox"] { width: auto; margin: 2px 0 0; accent-color: var(--sp-primary); }
+.sp-payment-schedules { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--sp-border); border-radius: 8px; }
+.sp-payment-schedules > label { padding-top: 7px; border-top: 1px solid var(--sp-border); }
+.sp-payment-amount { display: grid !important; gap: 5px !important; color: var(--sp-text); font-size: 12px; font-weight: 700; }
+.sp-payment-amount input { width: min(176px, 100%); min-height: 38px; padding: 8px 10px; border: 1px solid var(--sp-border); border-radius: 8px; background: var(--sp-surface); color: var(--sp-text); font: inherit; }
+.sp-payment-amount small { color: var(--sp-muted); font-weight: 400; }
+.sp-payment-target input:disabled { opacity: .65; }
+@media (max-width: 580px) {
+  .sp-student-fee-paybar { align-items: stretch; flex-direction: column; }
+  .sp-student-payment-modal .cms-form-grid,
+  .sp-student-payment-modal .cms-fee-reversal-details,
+  .sp-payment-methods { grid-template-columns: 1fr; }
+}
+
 .sp-overlay {
   display: none
 }
@@ -3399,6 +3509,10 @@
 
 .sp-student-fee-tab .cms-fee-block {
   border-radius: 10px
+}
+
+.sp-student-fee-tab .cms-fee-block:has(> strong) {
+  display: none
 }
 
 .sp-student-fee-tab .cms-fee-scroll {

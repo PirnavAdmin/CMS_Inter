@@ -90,7 +90,15 @@ const sameBoard = (left, right) => {
   return normalize(left?.code ?? left?.name ?? left?.boardName) === normalize(right?.code ?? right?.name ?? right?.boardName);
 };
 
-const sameYear = (left, right) => String(yearIdOf(left) ?? "") === String(yearIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.label) === normalize(right?.code ?? right?.name ?? right?.label);
+const sameYear = (left, right) => {
+  if (!left || !right) return false;
+  const leftId = String(yearIdOf(left) ?? "");
+  const rightId = String(yearIdOf(right) ?? "");
+  // Identically named years can have different saved student/account relationships.
+  if (leftId && rightId) return leftId === rightId;
+  const name = normalize(left.code ?? left.name ?? left.label);
+  return Boolean(name) && name === normalize(right.code ?? right.name ?? right.label);
+};
 
 export function AcademicProvider({ children }) {
   useLocation();

@@ -1387,7 +1387,10 @@ export default function DashboardLayout({
                     <div className="cms-academic-panel-list">
                       {academicYearsLoading ? <div className="cms-academic-panel-empty">Loading academic years...</div> : !academicYears.length ? <div className="cms-academic-panel-empty">{academicYearsError || "No active academic years available"}</div> : academicYears.map((y) => {
                         const normalize = (s) => String(s || "").trim().replace(/[–—]/g, "-").replace(/\s+/g, "");
+                        const selectedYearId = selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.AcademicYearId ?? selectedAcademicYear?.id;
+                        const optionYearId = y.academicYearId ?? y.AcademicYearId ?? y.id;
                         const isSelected =
+                          selectedYearId != null && optionYearId != null ? String(selectedYearId) === String(optionYearId) :
                           normalize(selectedAcademicYear?.code) === normalize(y.code) ||
                           normalize(selectedAcademicYear?.name) === normalize(y.name) ||
                           normalize(selectedAcademicYear?.label) === normalize(y.label);

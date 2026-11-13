@@ -29,11 +29,12 @@ namespace CollegeManagement.API.Services
             int? academicLevelId = null,
             bool? isActive = null,
             int? masterGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(search) && !masterGroupId.HasValue)
             {
-                string key = $"lookup:groups:all:{boardId}:{academicYearId}:{academicLevelId}:{isActive}";
+                string key = $"lookup:groups:all:{collegeId}:{boardId}:{academicYearId}:{academicLevelId}:{isActive}";
                 return _cache.GetOrCreateAsync(key, () => _groupRepository.GetAllAsync(
                     search,
                     boardId,
@@ -41,6 +42,7 @@ namespace CollegeManagement.API.Services
                     academicLevelId,
                     isActive,
                     masterGroupId,
+                    collegeId,
                     cancellationToken));
             }
 
@@ -51,6 +53,7 @@ namespace CollegeManagement.API.Services
                 academicLevelId,
                 isActive,
                 masterGroupId,
+                collegeId,
                 cancellationToken);
         }
 
@@ -73,14 +76,15 @@ namespace CollegeManagement.API.Services
             int boardId,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             if (!academicYearId.HasValue && !academicLevelId.HasValue)
             {
-                return _cache.GetOrCreateAsync($"lookup:groups:board:{boardId}", () => _groupRepository.GetByBoardAsync(boardId, null, null, cancellationToken));
+                return _cache.GetOrCreateAsync($"lookup:groups:board:{collegeId}:{boardId}", () => _groupRepository.GetByBoardAsync(boardId, null, null, collegeId, cancellationToken));
             }
 
-            return _groupRepository.GetByBoardAsync(boardId, academicYearId, academicLevelId, cancellationToken);
+            return _groupRepository.GetByBoardAsync(boardId, academicYearId, academicLevelId, collegeId, cancellationToken);
         }
 
         // =========================================================
@@ -89,9 +93,10 @@ namespace CollegeManagement.API.Services
 
         public async Task<GroupResponse> CreateAsync(
             CreateGroupRequest request,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
-            var res = await _groupRepository.CreateAsync(request, cancellationToken);
+            var res = await _groupRepository.CreateAsync(request, collegeId, cancellationToken);
             _cache.RemoveByPrefix("lookup:groups");
             return res;
         }
@@ -148,12 +153,14 @@ namespace CollegeManagement.API.Services
             string groupCode,
             int? boardId = null,
             int? excludeGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             return _groupRepository.GroupCodeExistsAsync(
                 groupCode,
                 boardId,
                 excludeGroupId,
+                collegeId,
                 cancellationToken);
         }
 
@@ -208,9 +215,10 @@ namespace CollegeManagement.API.Services
                 int? boardId = null,
                 int? academicYearId = null,
                 int? academicLevelId = null,
+                int? collegeId = null,
                 CancellationToken cancellationToken = default)
         {
-            return _groupRepository.GetDropdownAsync(boardId, academicYearId, academicLevelId, cancellationToken);
+            return _groupRepository.GetDropdownAsync(boardId, academicYearId, academicLevelId, collegeId, cancellationToken);
         }
 
         // =========================================================

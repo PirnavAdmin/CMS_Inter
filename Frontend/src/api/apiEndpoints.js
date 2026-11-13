@@ -681,6 +681,12 @@ export const apiEndpoints = {
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
   },
+  landingPage: {
+    getConfig: "/api/v1/landing-page/config",
+    saveConfig: "/api/v1/landing-page/config",
+    uploadImage: "/api/v1/landing-page/upload-image",
+    getPublic: "/api/v1/landing-page/public",
+  },
   holidays: {
     list: "/api/v1/holidays",
     summary: "/api/v1/holidays/summary",

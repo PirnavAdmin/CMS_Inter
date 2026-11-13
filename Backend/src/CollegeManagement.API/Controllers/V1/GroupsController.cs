@@ -10,6 +10,7 @@ using CollegeManagement.API.Exceptions;
 
 using CollegeManagement.API.Filters;
 
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services;
 
 using Microsoft.AspNetCore.Authorization;
@@ -37,13 +38,26 @@ namespace CollegeManagement.API.Controllers
     {
 
         private readonly IGroupService _groupService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public GroupsController(IGroupService groupService)
+        public GroupsController(IGroupService groupService, IJwtTokenHelper jwtTokenHelper)
 
         {
 
             _groupService = groupService;
+            _jwtTokenHelper = jwtTokenHelper;
 
+        }
+
+        private int? ResolveCollegeId()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            return _jwtTokenHelper.GetCollegeId(User) ?? 1;
         }
 
         // =========================================================
@@ -88,6 +102,8 @@ namespace CollegeManagement.API.Controllers
 
                     masterGroupId,
 
+                    ResolveCollegeId(),
+
                     HttpContext.RequestAborted));
 
         }
@@ -121,6 +137,8 @@ namespace CollegeManagement.API.Controllers
                     academicYearId,
 
                     academicLevelId,
+
+                    ResolveCollegeId(),
 
                     HttpContext.RequestAborted));
 
@@ -356,6 +374,8 @@ namespace CollegeManagement.API.Controllers
 
                     academicLevelId,
 
+                    ResolveCollegeId(),
+
                     HttpContext.RequestAborted));
 
         }
@@ -387,6 +407,8 @@ namespace CollegeManagement.API.Controllers
                     await _groupService.CreateAsync(
 
                         request,
+
+                        ResolveCollegeId(),
 
                         HttpContext.RequestAborted);
 
@@ -638,6 +660,7 @@ namespace CollegeManagement.API.Controllers
                     groupCode,
                     boardId,
                     excludeGroupId,
+                    ResolveCollegeId(),
                     HttpContext.RequestAborted);
 
             return Ok(new
