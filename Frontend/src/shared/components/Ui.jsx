@@ -34,7 +34,7 @@ export function Toast({ message, onClose, type = "success" }) {
   );
 }
 
-export function Modal({ title, children, footer, onClose, size, className = "", closeOnOverlay = true }) {
+export function Modal({ title, children, footer, onClose, size, className = "", closeOnOverlay = true, closeDisabled = false }) {
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
     const previousOverflow = document.body.style.overflow;
@@ -52,7 +52,7 @@ export function Modal({ title, children, footer, onClose, size, className = "", 
       <div className={`cms-modal ${size === "sm" ? "sm" : ""} ${className}`.trim()} role="dialog" aria-modal="true">
         <div className="cms-modal-head">
           <h3>{title}</h3>
-          <button className="cms-action-btn" onClick={onClose} aria-label="Close">
+          <button className="cms-action-btn" onClick={onClose} aria-label="Close" disabled={closeDisabled}>
             <X size={16} />
           </button>
         </div>
