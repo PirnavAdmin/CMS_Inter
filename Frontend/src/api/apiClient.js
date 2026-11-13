@@ -235,7 +235,7 @@ apiClient.interceptors.response.use(
     if (!isHtmlResponse(response.data)) {
       if (!response.config?._isMockFallback && !response.data?._isMock && typeof window !== "undefined") {
         try { window.localStorage.removeItem("cms_backend_offline"); } catch { }
-        window.dispatchEvent(new CustomEvent("cms-backend-reachable", { detail: { url: response.config?.url || "" } }));
+        if (typeof window.dispatchEvent === "function" && typeof CustomEvent === "function") { window.dispatchEvent(new CustomEvent("cms-backend-reachable", { detail: { url: response.config?.url || "" } })); }
       }
       return response;
     }
