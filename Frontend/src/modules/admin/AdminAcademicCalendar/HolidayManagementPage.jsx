@@ -16,6 +16,31 @@ import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
 import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
 
 const PAGE_SIZE = 5;
+const PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
+function HolidayPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, disabled }) {
+  const [customMode, setCustomMode] = useState(!PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const pages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const current = Math.min(page, pages);
+  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav aria-label="Holiday pagination" style={navStyle}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      Per page:
+      <select aria-label="Rows per page" value={customMode || !PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} disabled={disabled} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>
+        {PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}
+        <option value="custom">Custom</option>
+      </select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} disabled={disabled} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={disabled || current <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: disabled || current <= 1 ? 0.48 : 1, cursor: disabled || current <= 1 ? "not-allowed" : "pointer" }} onClick={() => onPageChange(current - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{current} / {pages}</span>
+    <button type="button" disabled={disabled || current >= pages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: disabled || current >= pages ? 0.48 : 1, cursor: disabled || current >= pages ? "not-allowed" : "pointer" }} onClick={() => onPageChange(current + 1)}>Next</button>
+  </nav>;
+}
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
 const APPLIES_TO = ["All Students & Staff", "Students Only", "Staff Only"];
 const EMPTY_HOLIDAY = {
@@ -277,6 +302,7 @@ export default function HolidayManagementPage() {
   const [summary, setSummary] = useState({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const query = searchParams.get("q") || "";
   const setQuery = (value) => updateHolidayNavigation({ q: value }, true);
   const month = /^(?:[1-9]|1[0-2]|Custom Range)$/.test(searchParams.get("month") || "") ? searchParams.get("month") : "All";
@@ -437,9 +463,9 @@ export default function HolidayManagementPage() {
   }, [sortedHolidays, query, type, status, month, appliedRange]);
 
   const totalCount = filteredHolidays.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const rows = filteredHolidays.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const rows = filteredHolidays.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const updateFilter = (setter) => (value) => { setter(value); setPage(1); };
   const changeMonth = (value) => {
@@ -675,21 +701,7 @@ export default function HolidayManagementPage() {
             </table>
           </div>
 
-          <div className="holiday-pagination">
-            <span>
-              Showing {totalCount ? (currentPage - 1) * PAGE_SIZE + 1 : 0}-{Math.min(currentPage * PAGE_SIZE, totalCount)} of {totalCount} holiday{totalCount === 1 ? "" : "s"}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} aria-label="Previous Page">
-                Prev
-              </button>
-              <span>Page {currentPage} of {totalPages}</span>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} aria-label="Next Page">
-                Next
-              </button>
-              <span style={{ marginLeft: '4px' }}>Page {currentPage} of {totalPages}</span>
-            </div>
-          </div>
+          <HolidayPagination page={currentPage} totalRows={totalCount} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} disabled={loading} />
         </section>
       </div>
 
