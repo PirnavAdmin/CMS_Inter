@@ -7,6 +7,9 @@ const DOCUMENT_KEY = String(Math.round(window.performance?.timeOrigin || Date.no
 let landingIntroStartedInThisDocument = false;
 
 function shouldShowLandingIntro() {
+  if (typeof window !== "undefined" && window.location.hash && window.location.hash !== "#" && window.location.hash !== "#home") {
+    return false;
+  }
   if (landingIntroStartedInThisDocument) return false;
   try {
     return window.sessionStorage.getItem(LANDING_INTRO_KEY) !== DOCUMENT_KEY;

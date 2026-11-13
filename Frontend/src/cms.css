@@ -1010,10 +1010,16 @@ body {
 }
 html, body {
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   width: 100%;
   min-height: 100%;
   box-sizing: border-box;
+}
+
+html:has(.public-website),
+body:has(.public-website) {
+  overflow-x: clip !important;
+  overflow-y: visible !important;
 }
 
 .cms-shell {
@@ -1099,7 +1105,7 @@ html, body {
 /* ---------- Auth pages ---------- */
 .cms-auth { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); background: var(--cms-bg); }
 .cms-auth-aside {
-  position: relative; color: #fff; padding: 40px; display: flex; flex-direction: column; justify-content: space-between;
+  position: relative; color: #fff; padding: 40px; display: flex; flex-direction: column; justify-content: flex-end;
   background: linear-gradient(160deg, rgba(13, 27, 51, 0.92), rgba(29, 78, 216, 0.82));
   overflow: hidden;
 }

@@ -620,8 +620,9 @@ public class FeeRepository : IFeeRepository
         {
             try
             {
+                int? studentCampusId = await c.QueryFirstOrDefaultAsync<int?>("SELECT CampusId FROM Students WHERE StudentId = @StudentId LIMIT 1", new { StudentId = request.StudentId });
                 var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto();
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, 1);
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentCampusId ?? 1);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     finalReceiptNo = generatedDto.GeneratedNumber;

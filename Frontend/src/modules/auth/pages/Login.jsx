@@ -170,7 +170,10 @@ export default function Login() {
           userRole === "non-teaching" ||
           userRole === "non-teaching-staff" ||
           userRole === "nonteaching" ||
+          userRole === "receptionist" ||
+          userRole.includes("reception") ||
           result.roleType === "non_teaching" ||
+          result.roleType === "receptionist" ||
           (userRole === "staff" && String(result.user?.staffType || "").toLowerCase() === "non-teaching"));
       const isFacultyOrStaff =
         !isAdmin &&

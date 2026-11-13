@@ -1,7 +1,8 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ImagePlus, Save, Settings, AlignLeft, AlignCenter, AlignRight, Palette, Check, Pipette } from "lucide-react";
+import { ArrowLeft, ImagePlus, Save, Settings, AlignLeft, AlignCenter, AlignRight, Palette, Check, Pipette, Share2, Plus, Trash2, Globe, ExternalLink } from "lucide-react";
+import landingConfigApi from "@/api/landingConfigApi.js";
 import { Modal, Toast } from "../../../shared/components/Ui.jsx";
 import { createPortal } from "react-dom";
 import { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
@@ -38,6 +39,15 @@ const isHeaderLineDefault = (draft, key) => headerLineKeys(key).every((field) =>
 const isHeaderLogoDefault = (draft) => (!draft.dashboardLogo || draft.dashboardLogo === defaultHeaderLogo)
   && Number(draft.dashboardLogoSize) === Number(headerDefaults.dashboardLogoSize);
 
+
+const defaultSocialLinks = [
+  { id: "facebook", platform: "Facebook", url: "https://facebook.com/pirnavcollege", icon: "facebook", isCustom: false, isActive: true },
+  { id: "instagram", platform: "Instagram", url: "https://instagram.com/pirnavcollege", icon: "instagram", isCustom: false, isActive: true },
+  { id: "twitter", platform: "Twitter / X", url: "https://twitter.com/pirnavcollege", icon: "twitter", isCustom: false, isActive: true },
+  { id: "linkedin", platform: "LinkedIn", url: "https://linkedin.com/company/pirnavcollege", icon: "linkedin", isCustom: false, isActive: true },
+  { id: "youtube", platform: "YouTube", url: "https://youtube.com/@pirnavcollege", icon: "youtube", isCustom: false, isActive: true },
+];
+
 export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const title = page === "login" ? "Login Page Configuration" : "Landing Page Configuration";
   const imageFields = campusImageFields.filter(([slot]) =>
@@ -67,6 +77,9 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const [loginTheme, setLoginTheme] = useState(() => localStorage.getItem("pirnav-login-palette") || "olive");
   const [loginCustomColor, setLoginCustomColor] = useState(() => localStorage.getItem("pirnav-login-custom-color") || "#00b4d8");
   const [loginThemeModalOpen, setLoginThemeModalOpen] = useState(false);
+  const [socialLinks, setSocialLinks] = useState(defaultSocialLinks);
+  const [customSocialModalOpen, setCustomSocialModalOpen] = useState(false);
+  const [newSocial, setNewSocial] = useState({ platform: "", url: "", icon: "globe" });
   const pageScope = `${selectedCampusId}:${page}`;
   const scope = useRef(pageScope);
   scope.current = pageScope;
@@ -91,6 +104,15 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
         if (active) {
           setImages(value);
           setText({ ...campusContentDefaults, ...value, ...getHeaderBrand(value) });
+          if (page === "landing") {
+            landingConfigApi.getLandingConfig(selectedCampusId)
+              .then((cfg) => {
+                if (active && cfg?.socialLinks?.length) {
+                  setSocialLinks(cfg.socialLinks);
+                }
+              })
+              .catch(() => {});
+          }
           if (value?.loginThemePalette) {
             setLoginTheme(value.loginThemePalette);
             localStorage.setItem("pirnav-login-palette", value.loginThemePalette);
@@ -166,6 +188,30 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
         next.loginCustomColor = loginCustomColor;
         localStorage.setItem("pirnav-login-palette", loginTheme);
         if (loginCustomColor) localStorage.setItem("pirnav-login-custom-color", loginCustomColor);
+      }
+      if (page === "landing") {
+        try {
+          await landingConfigApi.saveLandingConfig({
+            campusId: campus ? Number(campus) : null,
+            collegeName: text.collegeName || "Pirnav College",
+            landingBadge: text.landingBadge || "A Smarter Campus Starts Here",
+            landingHeadline: text.landingHeadline || "Learn. Grow. Succeed Together. A Connected College Experience.",
+            landingDescription: text.landingDescription || "PIRNAV Intermediate College Management System brings students, faculty, academics and administration together in one integrated platform for better education and brighter futures.",
+            footerDescription: text.footerDescription || "One connected platform for academics, admissions, administration and student success.",
+            contactAddress: text.contactAddress || "Dwarakapuram, Pirnav, Nizamabad, Telangana - 503224",
+            contactEmail: text.contactEmail || "pirnavjuniorcollege@gmail.com",
+            contactPhone: text.contactPhone || "+91 9908364909",
+            officeHours: text.officeHours || "Monday – Saturday: 9:00 AM – 5:00 PM",
+            socialLinks: socialLinks,
+            headerLogo: images.headerLogo,
+            footerLogo: images.footerLogo,
+            heroImage: images.heroImage,
+            dashboardLogo: images.dashboardLogo,
+          });
+          next.socialLinks = socialLinks;
+        } catch (apiErr) {
+          console.warn("Backend save landing page config warning:", apiErr);
+        }
       }
       await saveCampusImages(campus, next);
       if (scope.current === activeScope) {
@@ -507,6 +553,74 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
               </section>}
             </div>
           )}
+          
+          {page === "landing" && !loading && (
+            <section className="campus-social-config-section">
+              <div className="campus-social-header">
+                <div>
+                  <h2><Share2 size={18} /> Social Media &amp; &quot;Follow Us&quot; Links</h2>
+                  <p>Configure links for official college social profiles. Configured links will display dynamically in the public website footer.</p>
+                </div>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    setNewSocial({ platform: "", url: "", icon: "globe" });
+                    setCustomSocialModalOpen(true);
+                  }}
+                >
+                  <Plus size={15} /> Add Custom Social Link
+                </button>
+              </div>
+              <div className="campus-social-list">
+                {socialLinks.map((item, index) => (
+                  <div key={item.id || index} className="campus-social-item">
+                    <div className="campus-social-badge">
+                      <span className="badge-icon"><Globe size={15} /></span>
+                      <span>{item.platform}</span>
+                    </div>
+                    <input
+                      type="url"
+                      placeholder={`https://${item.platform.toLowerCase().replace(/[^a-z]/g, "")}.com/...`}
+                      value={item.url}
+                      disabled={busy || !item.isActive}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSocialLinks((prev) => prev.map((s, idx) => idx === index ? { ...s, url: val } : s));
+                      }}
+                    />
+                    <label className="campus-social-toggle">
+                      <input
+                        type="checkbox"
+                        checked={item.isActive}
+                        disabled={busy}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSocialLinks((prev) => prev.map((s, idx) => idx === index ? { ...s, isActive: checked } : s));
+                        }}
+                      />
+                      {item.isActive ? "Active" : "Disabled"}
+                    </label>
+                    {item.isCustom ? (
+                      <button
+                        type="button"
+                        className="campus-social-delete-btn"
+                        title="Delete custom link"
+                        disabled={busy}
+                        onClick={() => {
+                          setSocialLinks((prev) => prev.filter((_, idx) => idx !== index));
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    ) : <span style={{ width: 32 }} />}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           <div className="campus-images-actions">
             <button
               type="submit"
@@ -518,6 +632,89 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
             </button>
           </div>
         </form>
+        
+      {customSocialModalOpen && page === "landing" && (
+        <Modal
+          title="Add Custom Social Media Link"
+          onClose={() => setCustomSocialModalOpen(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                onClick={() => setCustomSocialModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                disabled={!newSocial.platform.trim() || !newSocial.url.trim()}
+                onClick={() => {
+                  const trimmedPlatform = newSocial.platform.trim();
+                  const trimmedUrl = newSocial.url.trim();
+                  if (!trimmedPlatform || !trimmedUrl) return;
+                  const newId = "custom-" + Date.now();
+                  setSocialLinks((prev) => [
+                    ...prev,
+                    {
+                      id: newId,
+                      platform: trimmedPlatform,
+                      url: trimmedUrl,
+                      icon: newSocial.icon || "globe",
+                      isCustom: true,
+                      isActive: true,
+                    },
+                  ]);
+                  setCustomSocialModalOpen(false);
+                }}
+              >
+                Add Social Link
+              </button>
+            </>
+          }
+        >
+          <div className="campus-custom-social-modal-body">
+            <label>
+              Platform Name
+              <input
+                type="text"
+                placeholder="e.g. WhatsApp, Threads, Telegram, GitHub"
+                maxLength={60}
+                value={newSocial.platform}
+                onChange={(e) => setNewSocial((prev) => ({ ...prev, platform: e.target.value }))}
+              />
+            </label>
+            <label>
+              Platform Icon
+              <select
+                value={newSocial.icon}
+                onChange={(e) => setNewSocial((prev) => ({ ...prev, icon: e.target.value }))}
+              >
+                <option value="globe">Globe / Official Web</option>
+                <option value="github">GitHub</option>
+                <option value="send">Telegram / Channel</option>
+                <option value="share">Share / Community</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="twitter">Twitter / X</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="youtube">YouTube</option>
+              </select>
+            </label>
+            <label>
+              Social Profile URL
+              <input
+                type="url"
+                placeholder="https://..."
+                value={newSocial.url}
+                onChange={(e) => setNewSocial((prev) => ({ ...prev, url: e.target.value }))}
+              />
+            </label>
+          </div>
+        </Modal>
+      )}
+
         {headerDraft && page === "landing" && <Modal title="Header Configuration" className="campus-header-dialog" onClose={cancelHeader} closeOnOverlay={!busy} footer={<>
           <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={cancelHeader}>Cancel</button>
           <button type="button" className="cms-btn cms-btn-primary" disabled={busy || uploading > 0 || !selectedCampusId} onClick={saveHeader}>{busy ? "Saving..." : uploading ? "Reading image..." : "Save Changes"}</button>

@@ -11,6 +11,7 @@ const NonTeachingAnnouncements = lazy(() => import("./pages/NonTeachingAnnouncem
 const NonTeachingPayslip = lazy(() => import("./pages/NonTeachingPayslip.jsx"));
 const NonTeachingDepartment = lazy(() => import("./pages/NonTeachingDepartment.jsx"));
 const NonTeachingSupport = lazy(() => import("./pages/NonTeachingSupport.jsx"));
+const ReceptionistEnquiriesPage = lazy(() => import("./pages/ReceptionistEnquiriesPage.jsx"));
 
 function PortalLoadingFallback() {
   return (
@@ -105,6 +106,14 @@ export default function NonTeachingPortalRoutes() {
           element={
             <Suspense fallback={<PortalLoadingFallback />}>
               <NonTeachingSupport />
+            </Suspense>
+          }
+        />
+        <Route
+          path="enquiries"
+          element={
+            <Suspense fallback={<PortalLoadingFallback />}>
+              <ReceptionistEnquiriesPage />
             </Suspense>
           }
         />

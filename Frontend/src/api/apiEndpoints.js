@@ -915,6 +915,19 @@ export const apiEndpoints = {
     auditLogs: "/api/v1/super-admin/audit-logs",
     settings: "/api/v1/super-admin/settings",
     profile: "/api/v1/super-admin/profile",
+
+  },
+  enquiries: {
+    submit: "/api/v1/enquiries",
+    list: "/api/v1/enquiries",
+    stats: "/api/v1/enquiries/stats",
+    byId: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}`,
+    updateStatus: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/status`,
+    contactConfig: "/api/v1/enquiries/contact-config",
+  },
+  landingPageConfig: {
+    get: "/api/v1/landing-page-config",
+    save: "/api/v1/landing-page-config",
   },
 };
 

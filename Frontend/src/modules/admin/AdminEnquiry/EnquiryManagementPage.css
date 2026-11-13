@@ -1,0 +1,174 @@
+.admin-enq-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px;
+}
+
+.admin-enq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.admin-enq-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.admin-enq-icon-wrap {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 12px;
+  background: #eef5e9;
+  color: #557d48;
+}
+
+.admin-enq-title h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--cms-text, #0f172a);
+  margin: 0;
+}
+
+.admin-enq-title p {
+  font-size: 13.5px;
+  color: var(--cms-muted, #64748b);
+  margin: 3px 0 0;
+}
+
+.admin-enq-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid var(--cms-border, #e2e8f0);
+  padding-bottom: 2px;
+}
+
+.admin-enq-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -4px;
+  transition: all 0.16s ease;
+}
+
+.admin-enq-tab.is-active {
+  color: #557d48;
+  border-bottom-color: #557d48;
+}
+
+/* Config Card */
+.admin-enq-config-card {
+  border-radius: 16px;
+  background: var(--cms-card-bg, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  padding: 28px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.admin-enq-config-header {
+  margin-bottom: 24px;
+}
+
+.admin-enq-config-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cms-text, #0f172a);
+  margin: 0;
+}
+
+.admin-enq-config-header p {
+  font-size: 13.5px;
+  color: var(--cms-muted, #64748b);
+  margin: 4px 0 0;
+}
+
+.admin-enq-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.admin-enq-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.admin-enq-form-field.is-full {
+  grid-column: 1 / -1;
+}
+
+.admin-enq-form-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #334155);
+}
+
+.admin-enq-form-field input,
+.admin-enq-form-field textarea {
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  background: var(--cms-input-bg, #f8fafc);
+  font-size: 14px;
+  color: var(--cms-text, #1e293b);
+  outline: none;
+  transition: border-color 0.16s ease;
+}
+
+.admin-enq-form-field input:focus,
+.admin-enq-form-field textarea:focus {
+  border-color: #557d48;
+  background: #ffffff;
+}
+
+.admin-enq-save-bar {
+  margin-top: 24px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.admin-enq-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 24px;
+  border: none;
+  border-radius: 9px;
+  background: #557d48;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.admin-enq-save-btn:hover:not(:disabled) {
+  background: #44653a;
+}
+
+.admin-enq-save-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .admin-enq-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

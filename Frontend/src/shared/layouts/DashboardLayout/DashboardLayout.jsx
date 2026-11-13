@@ -250,6 +250,17 @@ export const menu = [
     ],
   },
   {
+    section: "Enquiry Management",
+    items: [
+      {
+        to: "/dashboard/enquiry-management",
+        label: "Enquiry Management",
+        icon: settingsTemplatesIcon,
+        moduleKey: "enquiry-management",
+      },
+    ],
+  },
+  {
     section: "Administration",
     items: [
       {
@@ -794,7 +805,7 @@ export default function DashboardLayout({
         .map((group) => ({
           ...group,
           items: (group.items || []).filter((item) => {
-            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            if (!item.moduleKey || item.moduleKey === "dashboard" || item.moduleKey === "enquiry-management") return true;
             return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
           }),
         }))

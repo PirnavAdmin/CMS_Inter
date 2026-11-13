@@ -193,7 +193,7 @@ namespace CollegeManagement.API.Controllers.V1
             var finalCampusId = campusId ?? 1;
 
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : (staffType ?? "Teaching");
-            var nextId = await _staffService.GetNextEmployeeIdAsync(type, finalCampusId);
+            var nextId = await _staffService.GetNextEmployeeIdPreviewAsync(type, finalCampusId);
             return Ok(new { nextEmployeeId = nextId, employeeId = nextId, staffType = type });
         }
 

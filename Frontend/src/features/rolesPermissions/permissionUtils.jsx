@@ -222,9 +222,18 @@ export const toPermissionMap = (permissions = []) => {
 
 export function normalizeRoleCode(value = "") {
   const code = normalizeCode(value);
+  if (
+    code === "ADMINISTRATOR" ||
+    code === "SYSTEM_ADMINISTRATOR" ||
+    code === "COLLEGE_ADMIN" ||
+    code === "COLLEGE_ADMINISTRATOR"
+  ) {
+    return "ADMIN";
+  }
   if (code === "ACCOUNTS" || code === "ACCOUNT" || code === "ACCOUNTING" || code === "FINANCE") return "ACCOUNTANT";
   if (code.includes("LIBRAR")) return "LIBRARIAN";
   if (code === "DRIVER") return "BUS_DRIVER";
+  if (code === "RECEPTION" || code === "RECEPTIONIST" || code === "FRONT_DESK" || code === "FRONT_OFFICE") return "RECEPTIONIST";
   return code;
 }
 export const ROLE_PRIORITY_ORDER = Object.freeze([
@@ -292,6 +301,20 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
   // Baseline dashboard and profile view access for any authenticated role
   if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
     return true;
+  }
+
+  // Administrators have full access
+  if (hasRole("ADMIN", user)) return true;
+
+  // Enquiry Management accessible to Admin, Principal, Receptionist, Non-Teaching
+  if (normMod === "enquiry-management" || normMod === "enquiries") {
+    if (hasRole("ADMIN", user) || hasRole("PRINCIPAL", user) || hasRole("RECEPTIONIST", user)) {
+      return true;
+    }
+    const roleStr = String(user?.role || user?.roleName || user?.roleCode || "").toLowerCase();
+    if (roleStr.includes("reception") || roleStr.includes("principal") || roleStr.includes("admin") || roleStr.includes("nonteaching") || roleStr.includes("non-teaching")) {
+      return true;
+    }
   }
 
 

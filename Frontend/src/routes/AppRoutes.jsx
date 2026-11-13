@@ -52,6 +52,7 @@ import ReimbursementPage from "@/modules/admin/AdminReimbursements/Reimbursement
 import AdminProfilePage from "@/modules/admin/AdminProfile/AdminProfilePage.jsx";
 const CampusConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusConfigurationPage.jsx"));
 const AuditLogsPage = lazy(() => import("@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx"));
+const EnquiryManagementPage = lazy(() => import("@/modules/admin/AdminEnquiry/EnquiryManagementPage.jsx"));
 
 const SettingsFallback = () => (
   <div className="p-8 text-sm text-slate-500 flex items-center justify-center min-h-[300px]">
@@ -207,6 +208,8 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+        <Route path="/principal-dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
+        <Route path="/principal-dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
       </Route>
 
       <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>
@@ -377,6 +380,10 @@ export default function AppRoutes() {
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
           <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
+        {/* Enquiry Management Module */}
+        <Route path="/dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
+        <Route path="/dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
+
         {/* Settings General & Admin Profile */}
         <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />

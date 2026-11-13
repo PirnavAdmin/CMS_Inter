@@ -16,6 +16,7 @@ import {
   Megaphone,
   Briefcase,
   Sparkles,
+  PhoneCall,
 } from "lucide-react";
 import { nonTeachingService } from "../services/nonTeachingService.js";
 import { attendanceService } from "@/api/attendanceService.js";
@@ -421,6 +422,23 @@ export default function NonTeachingDashboardHome() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Front Desk & Enquiries Portal Card */}
+          <div className="nts-card" style={{ borderLeft: "4px solid #557d48" }}>
+            <div className="nts-card-head">
+              <h3>
+                <PhoneCall size={16} style={{ color: "#557d48" }} /> Front Desk &amp; Enquiry Management
+              </h3>
+              <Link to="/non-teaching-dashboard/enquiries" className="nts-card-action">
+                Open Portal <ArrowRight size={13} />
+              </Link>
+            </div>
+            <div className="nts-card-body">
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--nts-muted, #555)", lineHeight: 1.5 }}>
+                Manage prospective student enquiries, track reception calls, and log follow-up contact notes.
+              </p>
             </div>
           </div>
 

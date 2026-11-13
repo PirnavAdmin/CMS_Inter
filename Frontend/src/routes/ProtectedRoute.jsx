@@ -133,12 +133,14 @@ export function isNonTeachingRole(role, user) {
     if (!val) return false;
     const s = String(val).trim().toLowerCase();
     const clean = s.replace(/[-_\s]/g, "");
-    return clean === "nonteaching" || clean === "nonteachingstaff";
+    return clean === "nonteaching" || clean === "nonteachingstaff" || clean === "receptionist" || s.includes("reception");
   };
   if (check(role)) return true;
   if (user && typeof user === "object") {
     if (check(user.role)) return true;
     if (check(user.roleType)) return true;
+    if (check(user.roleName)) return true;
+    if (check(user.designation)) return true;
     // Only check staffType if role is specifically generic "staff"
     const userRoleStr = String(user.role || "").trim().toLowerCase();
     if (userRoleStr === "staff" && check(user.staffType)) return true;

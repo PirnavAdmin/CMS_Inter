@@ -299,6 +299,8 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
+builder.Services.AddScoped<IEnquiryRepository, EnquiryRepository>();
+builder.Services.AddScoped<ILandingPageConfigRepository, LandingPageConfigRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
 builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
@@ -422,6 +424,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
+builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>

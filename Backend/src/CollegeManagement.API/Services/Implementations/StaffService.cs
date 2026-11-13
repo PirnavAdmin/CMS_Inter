@@ -295,6 +295,19 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
         }
 
+        public async Task<string> GetNextEmployeeIdPreviewAsync(string staffType, int campusId = 1)
+        {
+            var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, campusId: campusId);
+            
+            if (!string.IsNullOrWhiteSpace(preview) && preview != "0")
+            {
+                return preview;
+            }
+            return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
+        }
+
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
             return await _staffRepository.GetDashboardStatsAsync(boardId, campusId);
@@ -304,21 +317,35 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? "Teaching" : dto.StaffType.Trim();
 
-            // Auto generate Employee ID if not supplied or empty
+            // Auto generate Employee ID if not supplied, or advance series sequence if supplied ID matches series
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
+            var isTeachingStaff = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var activeSeriesCode = isTeachingStaff ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+            var targetCampusId = dto.CampusId ?? 1;
+
             if (string.IsNullOrWhiteSpace(employeeId))
             {
-                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
-                
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     employeeId = generatedDto.GeneratedNumber;
                 }
                 else
                 {
-                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
+                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, targetCampusId);
+                }
+            }
+            else
+            {
+                // Advance series sequence in database so subsequent staff creation increments properly
+                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(activeSeriesCode, targetCampusId);
+                if (seriesConfig != null && (!string.IsNullOrWhiteSpace(seriesConfig.Prefix) && employeeId.StartsWith(seriesConfig.Prefix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
+                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                    {
+                        employeeId = generatedDto.GeneratedNumber;
+                    }
                 }
             }
 
@@ -438,10 +465,13 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
                 var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var prefix = isTeaching ? "PCTCH" : "PCNT";
+                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, dto.CampusId ?? 1);
+                var prefix = seriesConfig?.Prefix ?? (isTeaching ? "MTCH" : "MNT");
 
                 // If this matches the auto-generated series format and was taken concurrently, safely fetch the next fresh ID
-                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                    employeeId.StartsWith("PCTCH", StringComparison.OrdinalIgnoreCase) ||
+                    employeeId.StartsWith("PCNT", StringComparison.OrdinalIgnoreCase))
                 {
                     var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
                     if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && await _staffRepository.IsEmployeeIdUniqueAsync(generatedDto.GeneratedNumber))
