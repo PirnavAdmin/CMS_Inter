@@ -20,6 +20,8 @@ import defaultHeaderLogo from "../../../assets/pirnav-college-crest.png";
 import { HeaderBrand } from "../../../shared/components/CampusBrandImage.jsx";
 import CampusBrandImage from "@/shared/components/CampusBrandImage.jsx";
 import { campusContentDefaults, campusTextFields } from "./campusContent.js";
+import { getAuthToken } from "../../auth/authStorage.js";
+import { landingPageApi } from "../../../api/landingPageApi.js";
 import "./CampusImagesConfigurationPage.css";
 
 const brandLines = [
@@ -123,9 +125,18 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     else { setError(""); setMessage(""); }
     try {
       const src = await readCampusImageFile(file, { allowSvg: slot === "dashboardLogo" });
+      let finalSrc = src;
+      try {
+        if (getAuthToken()) {
+          const uploadedUrl = await landingPageApi.uploadImage(file, slot);
+          if (uploadedUrl) finalSrc = uploadedUrl;
+        }
+      } catch (uploadErr) {
+        console.warn("Server image upload failed, using local preview:", uploadErr);
+      }
       if (scope.current === campus && uploadSequence.current[slot] === sequence) {
-        if (slot === "dashboardLogo") setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: src } : previous);
-        else setImages((previous) => ({ ...previous, [slot]: src }));
+        if (slot === "dashboardLogo") setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: finalSrc } : previous);
+        else setImages((previous) => ({ ...previous, [slot]: finalSrc }));
       }
     } catch (failure) {
       if (scope.current === campus && uploadSequence.current[slot] === sequence) {
