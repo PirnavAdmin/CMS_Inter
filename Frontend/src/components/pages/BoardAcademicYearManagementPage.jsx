@@ -15,6 +15,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { SkeletonPage, SkeletonRow, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./BoardAcademicYearManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -399,13 +400,15 @@ function normalizeAcademicYearList(responseData, requestedPage, requestedSize) {
   };
 }
 
-const academicYearPayload = (draft) => {
+const academicYearPayload = (draft, selectedCampusId) => {
   const payload = {
     boardId: Number(draft.boardId),
     academicYearName: draft.year.trim(),
     isActive: draft.status === "Active",
     description: draft.description?.trim() || "",
   };
+  const cId = Number(draft.campusId || selectedCampusId);
+  if (Number.isFinite(cId) && cId > 0) payload.campusId = cId;
   if (draft.start) payload.startDate = draft.start;
   if (draft.end) payload.endDate = draft.end;
   if (draft.admissionStart) payload.admissionStartDate = draft.admissionStart;
@@ -415,6 +418,9 @@ const academicYearPayload = (draft) => {
 
 function AcademicYearWorkspace() {
   const { confirm: confirmDelete, confirmationDialog } = useConfirmDialog();
+  const { selectedCampusId, selectedCampus } = useCampusContext();
+  const rawCampusId = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id;
+  const currentCampusId = Number.isFinite(Number(rawCampusId)) && Number(rawCampusId) > 0 ? Number(rawCampusId) : undefined;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -546,7 +552,7 @@ function AcademicYearWorkspace() {
     }
     setSaving(true);
     try {
-      const payload = academicYearPayload(draft);
+      const payload = academicYearPayload(draft, currentCampusId);
       if (editingId) {
         const statusChanged = Boolean(selected) && selected.status !== draft.status;
         const contentChanged =
