@@ -1412,6 +1412,25 @@ catch (Exception ex)
                 PRIMARY KEY (`Id`),
                 UNIQUE KEY `UX_PaymentCommSettings_Campus` (`CampusId`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `CampusBankAccounts` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NOT NULL,
+                `BankName` VARCHAR(200) NOT NULL,
+                `AccountHolderName` VARCHAR(200) NOT NULL,
+                `AccountNumber` VARCHAR(50) NOT NULL,
+                `IfscCode` VARCHAR(20) NOT NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 0,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `CreatedByUserId` INT NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
+                KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
         ");
     }
     catch (Exception pgEx)

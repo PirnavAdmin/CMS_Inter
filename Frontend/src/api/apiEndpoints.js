@@ -211,6 +211,9 @@ export const apiEndpoints = {
     communicationSettings: "/api/v1/fee-payments/gateway/communication-settings",
     restoreCommunicationSettings: "/api/v1/fee-payments/gateway/communication-settings/restore-default",
     sendTestCommunicationEmail: "/api/v1/fee-payments/gateway/communication-settings/send-test-email",
+    bankAccounts: "/api/v1/fee-payments/gateway/bank-accounts",
+    bankAccountById: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}`,
+    activateBankAccount: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}/activate`,
   },
   fee: {
     feeTypes: "/api/v1/fees/types",

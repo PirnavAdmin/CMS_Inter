@@ -254,6 +254,77 @@ public class PaymentGatewayConfigDto
     public string WebhookUrl { get; set; } = string.Empty;
 
     public DateTime? UpdatedAt { get; set; }
+
+    // Multi-Account Support
+    public List<CampusBankAccountDto> BankAccounts { get; set; } = new();
+    public int? ActiveBankAccountId { get; set; }
+}
+
+public class CampusBankAccountDto
+{
+    public int Id { get; set; }
+    public int CampusId { get; set; }
+    public string BankName { get; set; } = string.Empty;
+    public string AccountHolderName { get; set; } = string.Empty;
+    public string AccountNumber { get; set; } = string.Empty;
+    public string IfscCode { get; set; } = string.Empty;
+    public string? BranchName { get; set; }
+    public string AccountType { get; set; } = "Current";
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+}
+
+public class CreateCampusBankAccountRequest
+{
+    [Required]
+    public int CampusId { get; set; }
+
+    [Required, MaxLength(200)]
+    public string BankName { get; set; } = string.Empty;
+
+    [Required, MaxLength(200)]
+    public string AccountHolderName { get; set; } = string.Empty;
+
+    [Required, MaxLength(50)]
+    [RegularExpression(@"^[0-9a-zA-Z]{6,34}$", ErrorMessage = "Account number must be between 6 and 34 alphanumeric characters.")]
+    public string AccountNumber { get; set; } = string.Empty;
+
+    [Required, MaxLength(20)]
+    [RegularExpression(@"^[A-Za-z]{4}0[A-Za-z0-9]{6}$", ErrorMessage = "Invalid Indian IFSC code.")]
+    public string IfscCode { get; set; } = string.Empty;
+
+    [MaxLength(200)]
+    public string? BranchName { get; set; }
+
+    [MaxLength(50)]
+    public string AccountType { get; set; } = "Current";
+
+    public bool IsActive { get; set; }
+}
+
+public class UpdateCampusBankAccountRequest
+{
+    [Required, MaxLength(200)]
+    public string BankName { get; set; } = string.Empty;
+
+    [Required, MaxLength(200)]
+    public string AccountHolderName { get; set; } = string.Empty;
+
+    [MaxLength(50)]
+    public string? AccountNumber { get; set; }
+
+    [Required, MaxLength(20)]
+    [RegularExpression(@"^[A-Za-z]{4}0[A-Za-z0-9]{6}$", ErrorMessage = "Invalid Indian IFSC code.")]
+    public string IfscCode { get; set; } = string.Empty;
+
+    [MaxLength(200)]
+    public string? BranchName { get; set; }
+
+    [MaxLength(50)]
+    public string AccountType { get; set; } = "Current";
+
+    public bool IsActive { get; set; }
 }
 
 public class UpdateGatewayConfigResult

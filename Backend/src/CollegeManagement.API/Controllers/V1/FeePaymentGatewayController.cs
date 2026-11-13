@@ -1329,4 +1329,119 @@ public class FeePaymentGatewayController : ControllerBase
             data = result.Data
         });
     }
+
+    // ========================= CAMPUS BANK ACCOUNTS (MULTI-ACCOUNT) =========================
+
+    /// <summary>
+    /// Gets all receiving bank accounts configured for the specified campus.
+    /// </summary>
+    [HttpGet("bank-accounts")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> GetBankAccounts([FromQuery] int campusId)
+    {
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+            campusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var accounts = await _gatewayService.GetBankAccountsAsync(effectiveCampusId!.Value);
+        return Ok(accounts);
+    }
+
+    /// <summary>
+    /// Creates a new receiving bank account for the specified campus.
+    /// </summary>
+    [HttpPost("bank-accounts")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> CreateBankAccount([FromBody] CreateCampusBankAccountRequest request)
+    {
+        if (request == null)
+            return BadRequest(new { success = false, message = "Request body is required." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(new ValidationProblemDetails(ModelState));
+
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+            request.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        request.CampusId = effectiveCampusId!.Value;
+        var created = await _gatewayService.CreateBankAccountAsync(request, GetCurrentUserId());
+        return StatusCode(StatusCodes.Status201Created, created);
+    }
+
+    /// <summary>
+    /// Updates details of an existing campus bank account.
+    /// </summary>
+    [HttpPut("bank-accounts/{id:int}")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> UpdateBankAccount(int id, [FromBody] UpdateCampusBankAccountRequest request)
+    {
+        if (request == null)
+            return BadRequest(new { success = false, message = "Request body is required." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(new ValidationProblemDetails(ModelState));
+
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var updated = await _gatewayService.UpdateBankAccountAsync(id, request, GetCurrentUserId());
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Deletes a campus bank account.
+    /// </summary>
+    [HttpDelete("bank-accounts/{id:int}")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> DeleteBankAccount(int id)
+    {
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var deleted = await _gatewayService.DeleteBankAccountAsync(id, GetCurrentUserId());
+        if (!deleted)
+            return BadRequest(new { success = false, message = "Failed to delete bank account." });
+
+        return Ok(new { success = true, message = "Bank account deleted successfully." });
+    }
+
+    /// <summary>
+    /// Designates a specific bank account as the active receiving account for a campus.
+    /// </summary>
+    [HttpPost("bank-accounts/{id:int}/activate")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> ActivateBankAccount(int id)
+    {
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var activated = await _gatewayService.ActivateBankAccountAsync(id, GetCurrentUserId());
+        return Ok(new
+        {
+            success = true,
+            message = "Bank account set as active receiving account.",
+            data = activated
+        });
+    }
 }
