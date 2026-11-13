@@ -64,8 +64,8 @@ const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport 
 const LEDGER_TABS = [
   { id: "Fee Collection", label: "Fee Collection" },
   { id: "Student Fee Ledger", label: "Fee Accounts" },
-  { id: "Payment History", label: "Payment History" },
   { id: "Pending UTRs", label: "Pending UTR Queue" },
+  { id: "Payment History", label: "Payment History" },
 ];
 const feeSetupSlugs = { "Fee Types": "fee-types", "Fee Structure": "fee-structure", "Hostel Fees": "hostel-fees", "Transport Fees": "transport-fees", Scholarships: "scholarships", Fine: "fine" };
 const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history", "Pending UTRs": "pending-utrs" };
@@ -100,6 +100,13 @@ const getCollection = (payload) => {
   if (Array.isArray(data?.Results)) return data.Results;
   if (Array.isArray(data?.$values)) return data.$values;
   return [];
+};
+
+const feeAccountRows = (payload) => {
+  const data = payload?.data ?? payload?.Data ?? payload;
+  if (payload?.success === false || data?.success === false) throw new Error("The fee account request was not successful. Refresh to try again.");
+  if (Array.isArray(data) || ["data", "Data", "items", "Items", "results", "Results", "$values"].some(key => Array.isArray(data?.[key]))) return getCollection(payload);
+  throw new Error("The backend did not return a fee account list. Refresh or contact the backend team.");
 };
 
 const getObject = (payload) => {
@@ -2517,7 +2524,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Student Fee Ledger</h2>
-        <span className="cms-badge cms-badge-info">{rows.length} of {accounts.length} students</span>
+        <span className="cms-badge cms-badge-info">{error && !accounts.length ? "Unavailable" : `${rows.length} of ${accounts.length} students`}</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls">
         <div className="cms-fee-search">
@@ -2542,9 +2549,10 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
             </tr>
           </thead>
           <tbody>
+            {!loading && error && rows.length > 0 ? <tr><td colSpan={11} role="alert" className="cms-fee-empty-row">Unable to refresh fee accounts: {error} Showing previously loaded accounts; values may be outdated.</td></tr> : null}
             {loading ? (
               Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
-            ) : error ? (
+            ) : error && !rows.length ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">No students match the current search and filters.</td></tr>
@@ -2604,7 +2612,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Fee Collection</h2>
-        <span className="cms-badge cms-badge-info">{rows.length} accounts</span>
+        <span className="cms-badge cms-badge-info">{error && !accounts.length ? "Unavailable" : `${rows.length} accounts`}</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
@@ -2621,9 +2629,10 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
             </tr>
           </thead>
           <tbody>
+            {!loading && error && rows.length > 0 ? <tr><td colSpan={9} role="alert" className="cms-fee-empty-row">Unable to refresh fee accounts: {error} Showing previously loaded accounts; values may be outdated.</td></tr> : null}
             {loading ? (
               Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
-            ) : error ? (
+            ) : error && !rows.length ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">No fee accounts match the current search and filters.</td></tr>
@@ -4617,6 +4626,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const paymentHistoryRequestRef = useRef(0);
   const loadedTabsRef = useRef(new Set());
   const feeDetailCacheRef = useRef(new Map());
+  useEffect(() => {
+    // Retain rows during same-scope refreshes, but never retain another campus/year's rows.
+    accountRequestRef.current.ledger += 1;
+    accountRequestRef.current.collection += 1;
+    setLedgerAccounts([]); setCollectionAccounts([]);
+    setAccountErrors({ ledger: "", collection: "" });
+    feeDetailCacheRef.current.clear();
+    return () => {
+      accountRequestRef.current.ledger += 1;
+      accountRequestRef.current.collection += 1;
+    };
+  }, [selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
 
   const contextBoardOptions = useMemo(() => (
     toSelectOptions(
@@ -4701,13 +4722,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     accountRequestRef.current = { ...accountRequestRef.current, [source]: requestId };
     setAccountLoading((current) => ({ ...current, [source]: true }));
     setAccountErrors((current) => ({ ...current, [source]: "" }));
-    if (source === "collection") {
-      setCollectionAccounts([]);
-    } else {
-      setLedgerAccounts([]);
-    }
     try {
       const response = await apiClient.get(endpoint, {
+        requireRealBackend: true,
         params: cleanParams({
           campusId: selectedCampusValue,
           boardId: selectedBoardId,
@@ -4715,10 +4732,13 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         }),
       });
       if (accountRequestRef.current[source] !== requestId) return;
-      const rows = getCollection(response.data);
+      const rows = feeAccountRows(response.data);
       const context = await loadAccountContext(rows);
       if (accountRequestRef.current[source] !== requestId) return;
-      const initialAccounts = normalizeFeeAccountRows(rows, context);
+      const initialAccounts = normalizeFeeAccountDataset(normalizeFeeAccountRows(rows, context));
+      // The list is authoritative; optional detail enrichment must not discard it.
+      if (source === "collection") setCollectionAccounts(initialAccounts);
+      else setLedgerAccounts(initialAccounts);
       const unresolvedAccounts = initialAccounts.filter((account) => (
         (!account.paymentPlan || (account.paymentPlan === "Installment Payment" && !account.installments?.length))
         && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
@@ -4726,9 +4746,10 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       const detailRequests = new Map();
       // Cap initial pre-fetch to at most 6 accounts to prevent exhausting DB connections; full details load on demand when account is opened
       unresolvedAccounts.slice(0, 6).forEach((account) => {
-        const endpoint = account.studentId
-          ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
-          : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
+        const accountId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
+        const endpoint = accountId
+          ? apiEndpoints.fee.studentFeeDetails(accountId)
+          : apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId);
         if (!detailRequests.has(endpoint)) detailRequests.set(endpoint, account);
       });
       const detailEntries = await Promise.all(Array.from(detailRequests.entries()).map(async ([endpoint, account]) => {
@@ -4845,7 +4866,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       apiClient.get(apiEndpoints.hostel.fees),
       apiClient.get(apiEndpoints.hostel.blocks),
       apiClient.get(apiEndpoints.hostel.roomTypes),
-      apiClient.get(apiEndpoints.fee.fineRules, { silent: true, skipErrorLog: true }),
+      apiClient.get(apiEndpoints.fee.fineRules, { requireRealBackend: true, params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
     ]);
     if (structureRequestRef.current !== requestId) return;
     const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];
@@ -4975,7 +4996,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
     if (structureRequestRef.current === requestId) setStructureLoading(false);
-  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue]);
+  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
 
   const openCollectPayment = (id) => {
     navigateFeeAccount(id, "collection");

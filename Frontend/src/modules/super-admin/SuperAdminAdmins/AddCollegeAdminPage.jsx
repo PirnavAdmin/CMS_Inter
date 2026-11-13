@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword } from "../superAdminValidation.js";
 import "./AddCollegeAdminPage.css";
 
 /* ─── Field wrapper with leading icon & optional top badge ─── */
@@ -147,21 +148,34 @@ export default function AddCollegeAdminPage() {
       setErrorMsg("Please select an institution / college from the dropdown.");
       return false;
     }
-    if (!fullName.trim()) {
-      setErrorMsg("Please enter the administrator's full name.");
+    if (!selectedCollege) { setErrorMsg("Select a college from the available list."); return false; }
+    if (fullName.trim().length < 2) {
+      setErrorMsg("Administrator name must be at least 2 characters.");
       return false;
     }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (!isValidSuperAdminEmail(email)) {
       setErrorMsg("Please enter a valid official email address.");
       return false;
+    }
+    if ((data.users || []).some((user) => String(user.email || "").trim().toLowerCase() === email.trim().toLowerCase())) {
+      setErrorMsg("This email address is already assigned to an account."); return false;
     }
     if (!username.trim()) {
       setErrorMsg("Please specify a login username.");
       return false;
     }
-    if (initialPassword || confirmPassword) {
-      if (initialPassword.length < 6) {
-        setErrorMsg("Initial Password must be at least 6 characters.");
+    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(username.trim())) {
+      setErrorMsg("Username must be 3–50 characters and use only letters, numbers, dots, underscores, or hyphens.");
+      return false;
+    }
+    if (!isValidIndianMobile(phone)) {
+      setErrorMsg("Enter a valid 10-digit Indian mobile number.");
+      return false;
+    }
+    if (passwordSetupType === "custom" && !initialPassword.trim()) { setErrorMsg("Enter a custom password or choose automatic password generation."); return false; }
+    if (passwordSetupType === "custom" && (initialPassword || confirmPassword)) {
+      if (!isStrongSuperAdminPassword(initialPassword)) {
+        setErrorMsg("Password must be at least 8 characters and include uppercase, lowercase, number, and special character.");
         return false;
       }
       if (initialPassword !== confirmPassword) {
@@ -180,11 +194,13 @@ export default function AddCollegeAdminPage() {
   };
 
   const handleContinueToStep3 = () => {
+    if (!validateStep1()) return;
     setStep(3);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSubmitAdmin = async () => {
+    if (submitting || !validateStep1()) return;
     setSubmitting(true);
     setErrorMsg("");
 
@@ -196,7 +212,7 @@ export default function AddCollegeAdminPage() {
     const payload = {
       name: fullName.trim(),
       email: email.trim().toLowerCase(),
-      phone: phone.trim() ? (phone.startsWith("+91") ? phone.trim() : `+91 ${phone.trim()}`) : "+91 98765 43210",
+      phone: `+91 ${phone.trim()}`,
       username: username.trim().toLowerCase(),
       password: effectivePassword,
       collegeId: selectedCollege?.id || collegeId,
@@ -270,6 +286,10 @@ export default function AddCollegeAdminPage() {
           </p>
         </div>
       </header>
+
+      <Link to="/super-admin/college-admins" className="aca-back-link">
+        <ArrowLeft size={16} /> Back to College Admins
+      </Link>
 
       {/* ── 3-Step Stepper Header ── */}
       {!isSuccess && (
@@ -420,6 +440,9 @@ export default function AddCollegeAdminPage() {
                       name="aca_admin_full_name"
                       placeholder="e.g. Ramesh Kumar"
                       value={fullName}
+                      minLength={2}
+                      maxLength={100}
+                      required
                       onChange={(e) => handleNameChange(e.target.value)}
                       autoComplete="off"
                     />
@@ -455,6 +478,8 @@ export default function AddCollegeAdminPage() {
                       name="aca_admin_official_email"
                       placeholder="e.g. ramesh@abcdegree.ac.in"
                       value={email}
+                      maxLength={254}
+                      required
                       onChange={(e) => handleEmailChange(e.target.value)}
                       autoComplete="off"
                     />
@@ -468,9 +493,13 @@ export default function AddCollegeAdminPage() {
                     <input
                       type="tel"
                       name="aca_admin_mobile_phone"
-                      placeholder="98765 43210"
+                      placeholder="9876543210"
                       value={phone.replace(/^\+91\s*/, "")}
-                      onChange={(e) => setPhone(e.target.value)}
+                      maxLength={10}
+                      inputMode="numeric"
+                      pattern="[0-9]{10}"
+                      required
+                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       autoComplete="off"
                     />
                   </Field>
@@ -494,6 +523,10 @@ export default function AddCollegeAdminPage() {
                       name="aca_admin_portal_username"
                       placeholder="e.g. ramesh.abc"
                       value={username}
+                      minLength={3}
+                      maxLength={50}
+                      pattern="[a-zA-Z0-9._-]{3,50}"
+                      required
                       onChange={(e) => {
                         setUserManuallyEditedUsername(true);
                         setUsername(e.target.value.toLowerCase().replace(/\s+/g, "."));

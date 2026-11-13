@@ -39,6 +39,7 @@ import {
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
+import { isValidSuperAdminEmail, isValidContactPhone, isStrongSuperAdminPassword } from "../superAdminValidation.js";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./CollegeAdminsPage.css";
 
@@ -92,6 +93,7 @@ export default function CollegeAdminsPage() {
   const [resetPwAdmin, setResetPwAdmin] = useState(null);
   const [newPassword, setNewPassword] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -275,37 +277,48 @@ export default function CollegeAdminsPage() {
 
   const handleResetPasswordSubmit = async (e) => {
     e.preventDefault();
-    if (!newPassword || newPassword.trim().length < 6) {
-      alert("Password must be at least 6 characters.");
+    const password = newPassword.trim();
+    if (!isStrongSuperAdminPassword(password)) {
+      showToast("Password must be at least 8 characters and include uppercase, lowercase, number, and special character.", "error");
       return;
     }
+    if (resettingPassword) return;
+    setResettingPassword(true);
     const uid = resetPwAdmin.userId || resetPwAdmin.id;
     const ok = await update("Reset College Admin password", null, {
       module: "Global Users",
       actionType: "Reset password",
       userId: uid,
-      newPassword: newPassword.trim(),
+      newPassword: password,
     });
+    if (!ok) { showToast("Password reset failed. Please try again.", "error"); setResettingPassword(false); return; }
     setResetSuccess(true);
     showToast(`Password updated for ${resetPwAdmin.name}!`, "success");
     setTimeout(() => {
       setResetSuccess(false);
       setResetPwAdmin(null);
       setNewPassword("");
+      setResettingPassword(false);
     }, 1200);
   };
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
+    const name = String(editAdmin.name || "").trim();
+    const email = String(editAdmin.email || "").trim();
+    if (name.length < 2 || name.length > 100) { showToast("Admin name must be between 2 and 100 characters.", "error"); return; }
+    if (!isValidSuperAdminEmail(email)) { showToast("Enter a valid email address.", "error"); return; }
+    const phone = String(editAdmin.phone || editAdmin.phoneFormatted || "").trim();
+    if (phone && !isValidContactPhone(phone)) { showToast("Enter a valid phone number with 7–15 digits, or leave it blank.", "error"); return; }
     const uid = editAdmin.userId || editAdmin.id;
     const ok = await update(`Updated Admin: ${editAdmin.name}`, null, {
       module: "College Admins",
       actionType: "Update",
       userId: uid,
       payload: {
-        name: editAdmin.name,
-        email: editAdmin.email,
-        phone: editAdmin.phone,
+        name,
+        email: email.toLowerCase(),
+        phone,
         active: editAdmin.active,
         collegeId: editAdmin.collegeId,
       },
@@ -1489,6 +1502,8 @@ export default function CollegeAdminsPage() {
               <input
                 type="text"
                 required
+                minLength={2}
+                maxLength={100}
                 value={editAdmin.name || ""}
                 onChange={(e) => setEditAdmin({ ...editAdmin, name: e.target.value })}
                 className="cap-modal-input"
@@ -1499,6 +1514,7 @@ export default function CollegeAdminsPage() {
               <input
                 type="email"
                 required
+                maxLength={254}
                 value={editAdmin.email || ""}
                 onChange={(e) => setEditAdmin({ ...editAdmin, email: e.target.value })}
                 className="cap-modal-input"
@@ -1509,6 +1525,9 @@ export default function CollegeAdminsPage() {
               <input
                 type="tel"
                 value={editAdmin.phone || editAdmin.phoneFormatted || ""}
+                maxLength={25}
+                pattern="[+0-9().\\s-]{7,25}"
+                title="Enter a phone number with 7–15 digits, or leave it blank."
                 onChange={(e) => setEditAdmin({ ...editAdmin, phone: e.target.value })}
                 className="cap-modal-input"
               />
@@ -1574,6 +1593,9 @@ export default function CollegeAdminsPage() {
               <input
                 type="text"
                 required
+                minLength={8}
+                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,}"
+                title="Use at least 8 characters with uppercase, lowercase, a number, and a special character."
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="cap-modal-input"
