@@ -179,7 +179,8 @@ namespace CollegeManagement.API.Repositories
                 await SyncGroupProgramsAsync(created.GroupId, programIds, cancellationToken);
             }
 
-            return (await GetByIdAsync(created.GroupId, cancellationToken))!;
+            var fetched = await GetByIdAsync(created.GroupId, cancellationToken);
+            return fetched ?? created;
         }
 
         // =========================================================
