@@ -1546,6 +1546,14 @@ catch (Exception ex)
                 KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
                 KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            UPDATE `Notifications` 
+            SET `Message` = REPLACE(`Message`, 'â‚¹', '₹') 
+            WHERE `Message` LIKE '%â‚¹%';
+
+            UPDATE `Notifications` 
+            SET `Title` = REPLACE(`Title`, 'â‚¹', '₹') 
+            WHERE `Title` LIKE '%â‚¹%';
         ");
     }
     catch (Exception pgEx)

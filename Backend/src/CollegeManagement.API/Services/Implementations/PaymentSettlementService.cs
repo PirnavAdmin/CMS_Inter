@@ -832,7 +832,7 @@ public class PaymentSettlementService : IPaymentSettlementService
                         await _notificationService.SendToStudentAsync(
                             approvedTxnSnapshot.StudentId,
                             "Fee UTR Verification Rejected",
-                            $"Your UTR reference {approvedTxnSnapshot.UtrNumber} for â‚¹{approvedTxnSnapshot.Amount:N2} was rejected. Reason: {approvedTxnSnapshot.FailureReason}",
+                            $"Your UTR reference {approvedTxnSnapshot.UtrNumber} for ₹{approvedTxnSnapshot.Amount:N2} was rejected. Reason: {approvedTxnSnapshot.FailureReason}",
                             "Fee", approvedTxnSnapshot.Id, "/student/fees");
                     }
                     catch { /* Non-critical notification failure */ }
@@ -1195,7 +1195,7 @@ public class PaymentSettlementService : IPaymentSettlementService
             await _notificationService.SendToStudentAsync(
                 studentId,
                 "Fee Payment Received",
-                $"Payment of â‚¹{amount:N2} received. Receipt #{resolvedReceiptNumber}.",
+                $"Payment of ₹{amount:N2} received. Receipt #{resolvedReceiptNumber}.",
                 "Fee", resolvedFeePaymentId, $"/student/fees/receipt/{resolvedReceiptNumber}");
 
             if (parentUserIds.Any())
@@ -1203,7 +1203,7 @@ public class PaymentSettlementService : IPaymentSettlementService
                 await _notificationService.SendToUsersAsync(
                     parentUserIds,
                     "Fee Payment Received",
-                    $"Fee payment of â‚¹{amount:N2} settled for {studentDisplayName}. Receipt #{resolvedReceiptNumber}.",
+                    $"Fee payment of ₹{amount:N2} settled for {studentDisplayName}. Receipt #{resolvedReceiptNumber}.",
                     "Fee", resolvedFeePaymentId, "/parent/fees");
             }
 
@@ -1211,7 +1211,7 @@ public class PaymentSettlementService : IPaymentSettlementService
                 new[] { "Admin", "Super Admin", "SuperAdmin", "Accountant", "Finance" },
                 resolvedCampusId,
                 "Fee Payment Settled",
-                $"Payment of â‚¹{amount:N2} collected for {studentDisplayName} via {paymentMode}. Receipt #{resolvedReceiptNumber}.",
+                $"Payment of ₹{amount:N2} collected for {studentDisplayName} via {paymentMode}. Receipt #{resolvedReceiptNumber}.",
                 "Fee",
                 resolvedFeePaymentId,
                 "/dashboard/fee-structure");
