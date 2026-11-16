@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Settings,
   Building2,
@@ -66,7 +67,14 @@ export default function GlobalSettingsPage() {
   const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   // Active Navigation Tab
-  const [activeTab, setActiveTab] = useState("platform_reminders");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = ["platform_reminders", "college_code_series", "platform_identity", "regional_display", "security_access", "integrations"].includes(requestedTab) ? requestedTab : "platform_reminders";
+  const setActiveTab = (tab) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    next.set("tab", tab);
+    return next;
+  });
 
   // Form State — Platform & Reminders (Main real-time fields)
   const [platformName, setPlatformName] = useState("PIRNAV CMS");
@@ -276,15 +284,6 @@ export default function GlobalSettingsPage() {
           >
             <Hash size={16} className="gsp-tab-icon" />
             <span>College Code & Series</span>
-          </button>
-
-          <button
-            type="button"
-            className={`gsp-tab-btn ${activeTab === "platform_identity" ? "active" : ""}`}
-            onClick={() => setActiveTab("platform_identity")}
-          >
-            <Palette size={16} className="gsp-tab-icon" />
-            <span>Theme Appearance</span>
           </button>
 
           <button

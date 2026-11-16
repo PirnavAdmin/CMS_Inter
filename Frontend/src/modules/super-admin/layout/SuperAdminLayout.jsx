@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
+import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Palette, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
@@ -152,6 +152,17 @@ export default function SuperAdminLayout() {
                   <span>My Profile</span>
                 </button>
 
+                <button
+                  type="button"
+                  className="sa-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate("/super-admin/settings?tab=platform_identity");
+                  }}
+                >
+                  <Palette size={15} className="sa-dd-icon" />
+                  <span>Theme Appearance</span>
+                </button>
                 <button
                   type="button"
                   className="sa-dropdown-item"
