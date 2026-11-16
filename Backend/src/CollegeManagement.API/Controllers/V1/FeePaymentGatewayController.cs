@@ -178,9 +178,9 @@ public class FeePaymentGatewayController : ControllerBase
             PollingIntervalMs = config.PollingIntervalMs,
             MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
 
-            // Sensitive internal URLs & ports strictly redacted
-            BaseAppUrl = null,
-            FrontendPort = 0,
+            // Client application URL and frontend port for client-side polling / navigation
+            BaseAppUrl = !string.IsNullOrWhiteSpace(config.BaseAppUrl) ? config.BaseAppUrl : "http://localhost:5173",
+            FrontendPort = config.FrontendPort is >= 1 and <= 65535 ? config.FrontendPort : 5173,
             WebhookUrl = string.Empty,
 
             UpdatedAt = config.UpdatedAt,
@@ -1626,6 +1626,16 @@ public class FeePaymentGatewayController : ControllerBase
     {
         if (request == null)
             return BadRequest(new { success = false, message = "Request body is required." });
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(request);
+        var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request, validationContext, validationResults, validateAllProperties: true))
+        {
+            foreach (var vr in validationResults)
+            {
+                var member = vr.MemberNames.FirstOrDefault() ?? string.Empty;
+                ModelState.AddModelError(member, vr.ErrorMessage ?? "Validation error.");
+            }
+        }
 
         if (!ModelState.IsValid)
             return BadRequest(new ValidationProblemDetails(ModelState));

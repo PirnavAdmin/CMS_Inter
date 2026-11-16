@@ -752,6 +752,50 @@ public static class PaymentSettlementReceiptEmailTester
                 new Claim("CampusId", anchorCampusId.ToString())
             }, "TestAuth"));
 
+            // Ensure PaymentGatewayConfigs has BaseAppUrl and FrontendPort columns
+            var extraConfigColumns = new (string ColName, string AlterSql)[]
+            {
+                ("BaseAppUrl", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `BaseAppUrl` VARCHAR(255) NULL;"),
+                ("FrontendPort", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `FrontendPort` INT NOT NULL DEFAULT 5173;")
+            };
+            foreach (var (colName, alterSql) in extraConfigColumns)
+            {
+                var colExists = await db.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayConfigs' AND column_name = {colName}").FirstOrDefaultAsync();
+                if (colExists == 0)
+                {
+                    await db.Database.ExecuteSqlRawAsync(alterSql);
+                }
+            }
+
+            // Ensure anchor campus config in DB has valid BaseAppUrl and FrontendPort
+            var anchorCfg = await db.PaymentGatewayConfigs.FirstOrDefaultAsync(c => c.CampusId == anchorCampusId);
+            if (anchorCfg == null)
+            {
+                anchorCfg = new PaymentGatewayConfig
+                {
+                    CampusId = anchorCampusId,
+                    BaseAppUrl = "http://localhost:5173",
+                    FrontendPort = 5173,
+                    PollingIntervalMs = 1200,
+                    MonitoringTimeoutSeconds = 600,
+                    Currency = "INR",
+                    Mcc = "8220",
+                    Provider = "Razorpay",
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.PaymentGatewayConfigs.Add(anchorCfg);
+                await db.SaveChangesAsync();
+            }
+            else
+            {
+                anchorCfg.BaseAppUrl = "http://localhost:5173";
+                anchorCfg.FrontendPort = 5173;
+                anchorCfg.PollingIntervalMs = anchorCfg.PollingIntervalMs is >= 500 and <= 10000 ? anchorCfg.PollingIntervalMs : 1200;
+                anchorCfg.MonitoringTimeoutSeconds = anchorCfg.MonitoringTimeoutSeconds is >= 60 and <= 3600 ? anchorCfg.MonitoringTimeoutSeconds : 600;
+                await db.SaveChangesAsync();
+            }
+
             // 10a. Student can read campus payment configuration for their enrolled campus
             SetControllerContext(student1Principal);
             var studentConfigResult = await gatewayController.GetConfig(anchorCampusId);
@@ -766,11 +810,13 @@ public static class PaymentSettlementReceiptEmailTester
                 && safeConfig.HasRazorpayKeySecret == false
                 && safeConfig.HasRazorpayWebhookSecret == false
                 && string.IsNullOrEmpty(safeConfig.WebhookUrl)
-                && safeConfig.BaseAppUrl == null
-                && safeConfig.FrontendPort == 0
+                && !string.IsNullOrWhiteSpace(safeConfig.BaseAppUrl)
+                && safeConfig.PollingIntervalMs >= 500 && safeConfig.PollingIntervalMs <= 10000
+                && safeConfig.MonitoringTimeoutSeconds >= 60 && safeConfig.MonitoringTimeoutSeconds <= 3600
+                && safeConfig.FrontendPort >= 1 && safeConfig.FrontendPort <= 65535
                 && (safeConfig.BankAccounts == null || safeConfig.BankAccounts.All(a => a.IsActive));
             Assert(sensitiveRedacted,
-                "10b. Sensitive gateway fields (secrets presence, webhook URL, base app URL, port) are redacted for students",
+                "10b. Sensitive gateway secrets/webhook URLs are redacted while base app URL, port, and polling settings are preserved for students",
                 $"SecretsPresence=({safeConfig?.HasRazorpayKeySecret},{safeConfig?.HasRazorpayWebhookSecret}), WebhookUrl='{safeConfig?.WebhookUrl}', BaseAppUrl='{safeConfig?.BaseAppUrl}'");
 
             // 10c. Cross-campus configuration request by student is denied with 403 Forbidden
@@ -887,6 +933,75 @@ public static class PaymentSettlementReceiptEmailTester
             Assert(accountantConfigOk && accountantConfig != null && accountantQueueOk && adminConfigOk,
                 "10h. Preservation of Admin and Accountant administrative access to config and pending UTR queue",
                 $"AccountantConfig={accountantConfigOk}, QueueOk={accountantQueueOk}, AdminConfig={adminConfigOk}");
+
+            // 10i. Validation for Payment Gateway Configuration updates:
+            // Rejects invalid frontendPort (0), pollingIntervalMs (200), monitoringTimeoutSeconds (10) with HTTP 400
+            SetControllerContext(adminPrincipal);
+            var invalidPortReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 0,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 600,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidPortRes = await gatewayController.UpdateConfig(invalidPortReq);
+            bool portRejected = invalidPortRes is BadRequestObjectResult;
+
+            var invalidPollingReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 5173,
+                PollingIntervalMs = 200,
+                MonitoringTimeoutSeconds = 600,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidPollingRes = await gatewayController.UpdateConfig(invalidPollingReq);
+            bool pollingRejected = invalidPollingRes is BadRequestObjectResult;
+
+            var invalidTimeoutReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 5173,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 10,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidTimeoutRes = await gatewayController.UpdateConfig(invalidTimeoutReq);
+            bool timeoutRejected = invalidTimeoutRes is BadRequestObjectResult;
+
+            // Valid update persists baseAppUrl and frontendPort
+            var validUpdateReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                BaseAppUrl = "http://localhost:5173",
+                FrontendPort = 5173,
+                PollingIntervalMs = 1500,
+                MonitoringTimeoutSeconds = 900,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var validUpdateRes = await gatewayController.UpdateConfig(validUpdateReq);
+            bool updateOk = validUpdateRes is OkObjectResult;
+
+            var reloadedConfigRes = await gatewayController.GetConfig(anchorCampusId);
+            var reloadedConfig = (reloadedConfigRes as OkObjectResult)?.Value as PaymentGatewayConfigDto;
+            bool valuesPersisted = reloadedConfig != null
+                && reloadedConfig.BaseAppUrl == "http://localhost:5173"
+                && reloadedConfig.FrontendPort == 5173
+                && reloadedConfig.PollingIntervalMs == 1500
+                && reloadedConfig.MonitoringTimeoutSeconds == 900;
+
+            Assert(portRejected && pollingRejected && timeoutRejected && updateOk && valuesPersisted,
+                "10i. Payment gateway config validation enforces port, polling interval, timeout constraints and persists values",
+                $"PortRejected={portRejected}, PollingRejected={pollingRejected}, TimeoutRejected={timeoutRejected}, Persisted={valuesPersisted}");
         }
         catch (Exception ex)
         {
