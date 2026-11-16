@@ -120,6 +120,12 @@ namespace CollegeManagement.API.Helpers
                 claims.Add(new Claim("AdminId", user.AdminId.Value.ToString()));
             }
 
+            if (user.CollegeId.HasValue && user.CollegeId.Value > 0)
+            {
+                claims.Add(new Claim("CollegeId", user.CollegeId.Value.ToString()));
+                claims.Add(new Claim("collegeId", user.CollegeId.Value.ToString()));
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var tokenDescriptor = new SecurityTokenDescriptor
             {
@@ -177,6 +183,17 @@ namespace CollegeManagement.API.Helpers
             if (principal == null) return null;
 
             var val = principal.FindFirst("AdminId")?.Value;
+            if (int.TryParse(val, out var id) && id > 0)
+                return id;
+
+            return null;
+        }
+
+        public int? GetCollegeId(ClaimsPrincipal? principal)
+        {
+            if (principal == null) return null;
+
+            var val = principal.FindFirst("CollegeId")?.Value ?? principal.FindFirst("collegeId")?.Value;
             if (int.TryParse(val, out var id) && id > 0)
                 return id;
 

@@ -2,13 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Building2, Clock, Copy, CreditCard, Eye, EyeOff, QrCode, RefreshCw, Save } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
-import { ConfirmDialog } from "@/shared/components/Ui.jsx";
+import { ConfirmDialog, Modal } from "@/shared/components/Ui.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 import { hasRole, usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
-import { getPaymentGatewayConfigApi, updatePaymentGatewayConfigApi } from "@/api/feePaymentGatewayApi.js";
+import {
+  getPaymentGatewayConfigApi,
+  updatePaymentGatewayConfigApi,
+  getCampusBankAccountsApi,
+  createCampusBankAccountApi,
+  updateCampusBankAccountApi,
+  deleteCampusBankAccountApi,
+  activateCampusBankAccountApi,
+} from "@/api/feePaymentGatewayApi.js";
 import { hasPaymentReversalRole, PAYMENT_CONFIG_DEFAULTS, PAYMENT_CONFIG_SECTIONS, paymentConfigErrors, paymentConfigPayload } from "../AdminFees/services/paymentGatewaySession.js";
 import "./PaymentGatewayConfigPage.css";
 import PaymentTemplatesEditor from "./PaymentTemplatesEditor.jsx";
@@ -31,6 +39,13 @@ const toggles = {
   upi: [["enableCounterUpiQr", "Enable Dynamic UPI QR"]],
   razorpay: [["autoCapture", "Auto-Capture Payments"], ["enableRazorpay", "Enable Razorpay"]], advanced: [],
 };
+
+const SafeModal = typeof Modal !== "undefined" ? Modal : (props) => props.children;
+const unavailableBankAccountApi = () => Promise.reject(new Error("Bank account service is unavailable. No change was confirmed."));
+const safeCreateBankAccountApi = typeof createCampusBankAccountApi === "function" ? createCampusBankAccountApi : unavailableBankAccountApi;
+const safeUpdateBankAccountApi = typeof updateCampusBankAccountApi === "function" ? updateCampusBankAccountApi : unavailableBankAccountApi;
+const safeDeleteBankAccountApi = typeof deleteCampusBankAccountApi === "function" ? deleteCampusBankAccountApi : unavailableBankAccountApi;
+const safeActivateBankAccountApi = typeof activateCampusBankAccountApi === "function" ? activateCampusBankAccountApi : unavailableBankAccountApi;
 
 export function usePaymentSettingsAccess() {
   const permissions = usePermissions();
@@ -75,6 +90,14 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
   const [confirmation, setConfirmation] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [bankSelected, setBankSelected] = useState(false);
+  const [bankEditing, setBankEditing] = useState(false);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState(null);
+  const [accountModal, setAccountModal] = useState({ open: false, mode: "add", account: null });
+  const [accountForm, setAccountForm] = useState({ bankName: "", accountHolderName: "", accountNumber: "", confirmAccountNumber: "", ifscCode: "", branchName: "", accountType: "Current", isActive: false });
+  const [accountErrors, setAccountErrors] = useState({});
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [deleteAccountTarget, setDeleteAccountTarget] = useState(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const alive = useRef(false);
   const request = useRef(null);
   const guard = useRef(false);
@@ -88,7 +111,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     alive.current = true;
     const controller = new AbortController();
     request.current = controller;
-    setLoading(true); setReady(false); setBankSelected(false);
+    setLoading(true); setReady(false); setBankSelected(false); setBankEditing(false); setSelectedBankAccountId(null);
     getPaymentGatewayConfigApi(campusId, controller.signal).then((data) => {
       if (!controller.signal.aborted) {
         // A late response or explicit refresh must not overwrite an entered draft.
@@ -122,6 +145,24 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     });
   };
   const validateField = (key) => setErrors((current) => ({ ...current, [key]: paymentConfigErrors(form, tab)[key] || "" }));
+  const editBank = () => {
+    if (!ready || !editable || saving || confirmation || accessDenied) return;
+    // Resume a campus draft, but never put a masked number into an editable input.
+    setForm((current) => ({ ...current,
+      accountNumber: /^\d{6,34}$/.test(current.accountNumber) ? current.accountNumber : "",
+      confirmAccountNumber: current.confirmAccountNumber || "",
+    }));
+    setErrors({}); setRevealed({}); setBankEditing(true);
+  };
+  const cancelBank = () => {
+    if (saving || confirmation) return;
+    PAYMENT_CONFIG_SECTIONS.bank.forEach((key) => editedFields.current.delete(key));
+    dirty.current = editedFields.current.size > 0;
+    setForm((current) => ({ ...current, ...Object.fromEntries(
+      PAYMENT_CONFIG_SECTIONS.bank.map((key) => [key, saved?.[key] ?? PAYMENT_CONFIG_DEFAULTS[key]]),
+    ) }));
+    setErrors({}); setRevealed({}); setBankEditing(false);
+  };
   const save = async () => {
     if (guard.current || !ready || !editable || !saved || Number(saved.campusId) !== Number(campusId)) return;
     const section = tab;
@@ -151,6 +192,7 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
         [...editedFields.current].map((key) => [key, current[key]]),
       ) }));
       setSaved(persisted); setErrors({});
+      if (section === "bank") { setBankEditing(false); setBankSelected(true); }
       setMessage({ error: false, text: `${tabs.find(([id]) => id === section)[1]} settings saved successfully.` });
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -198,10 +240,173 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     razorpayWebhookSecret: form.enableRazorpay && !form.hasRazorpayWebhookSecret,
     pollingIntervalMs: true, monitoringTimeoutSeconds: true, frontendPort: true,
   };
-  // The config API returns one object, not a bank-account list or an active-account ID.
-  // Count only bank data in the successfully loaded campus configuration, never a draft.
+
+  // Saved bank accounts resolution
   const bankAvailable = ready && !loading && !accessDenied && Number(saved?.campusId) === Number(campusId);
   const hasConfiguredBank = bankAvailable && Boolean(saved.bankName || saved.accountNumber || saved.accountHolderName || saved.ifscCode);
+  const bankAccounts = bankAvailable
+    ? (Array.isArray(saved?.bankAccounts) && saved.bankAccounts.length > 0
+        ? saved.bankAccounts
+        : (hasConfiguredBank
+            ? [{
+                id: saved.activeBankAccountId || null,
+                campusId,
+                bankName: saved.bankName,
+                accountHolderName: saved.accountHolderName,
+                accountNumber: saved.accountNumber,
+                ifscCode: saved.ifscCode,
+                branchName: saved.branchName,
+                accountType: saved.accountType || "Current",
+                isActive: saved.activeBankAccountId != null ? true : undefined,
+              }]
+            : []))
+    : [];
+
+  const bankAccountCount = bankAvailable
+    ? (Array.isArray(saved?.bankAccounts) && saved.bankAccounts.length > 0
+        ? saved.bankAccounts.length
+        : (hasConfiguredBank ? "Unavailable" : 0))
+    : "Unavailable";
+
+  const activeAccount = bankAccounts.find((a) => a.isActive) || bankAccounts[0];
+  const selectedAccount = (selectedBankAccountId != null ? bankAccounts.find((a) => a.id === selectedBankAccountId) : null) || activeAccount || bankAccounts[0];
+
+  const handleActivateAccount = async (accountToActivate) => {
+    if (!accountToActivate || accountToActivate.isActive || !editable || saving) return;
+    setSaving(true);
+    try {
+      await safeActivateBankAccountApi(accountToActivate.id, campusId, request.current?.signal);
+      const persisted = await getPaymentGatewayConfigApi(campusId, request.current?.signal);
+      setSaved(persisted);
+      setSelectedBankAccountId(accountToActivate.id);
+      setBankSelected(true);
+      setForm((current) => ({
+        ...current,
+        bankName: editedFields.current.has("bankName") ? current.bankName : persisted.bankName,
+        accountHolderName: editedFields.current.has("accountHolderName") ? current.accountHolderName : persisted.accountHolderName,
+        accountNumber: editedFields.current.has("accountNumber") ? current.accountNumber : persisted.accountNumber,
+        confirmAccountNumber: editedFields.current.has("confirmAccountNumber") ? current.confirmAccountNumber : persisted.confirmAccountNumber,
+        ifscCode: editedFields.current.has("ifscCode") ? current.ifscCode : persisted.ifscCode,
+        branchName: editedFields.current.has("branchName") ? current.branchName : persisted.branchName,
+        accountType: editedFields.current.has("accountType") ? current.accountType : persisted.accountType,
+      }));
+      setMessage({
+        error: false,
+        text: `"${accountToActivate.bankName}" (${maskedBankAccount(accountToActivate.accountNumber)}) is now the active receiving account for this campus.`,
+      });
+    } catch (error) {
+      setMessage({ error: true, text: configFailure(error) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openAddAccountModal = () => {
+    setAccountModal({ open: true, mode: "add", account: null });
+    setAccountForm({
+      bankName: "",
+      accountHolderName: "",
+      accountNumber: "",
+      confirmAccountNumber: "",
+      ifscCode: "",
+      branchName: "",
+      accountType: "Current",
+      isActive: bankAccounts.length === 0,
+    });
+    setAccountErrors({});
+  };
+
+  const openEditAccountModal = (acc) => {
+    setAccountModal({ open: true, mode: "edit", account: acc });
+    setAccountForm({
+      bankName: acc.bankName || "",
+      accountHolderName: acc.accountHolderName || "",
+      accountNumber: /^\d{6,34}$/.test(acc.accountNumber || "") ? acc.accountNumber : "",
+      confirmAccountNumber: "",
+      ifscCode: acc.ifscCode || "",
+      branchName: acc.branchName || "",
+      accountType: acc.accountType || "Current",
+      isActive: Boolean(acc.isActive),
+    });
+    setAccountErrors({});
+  };
+
+  const closeAccountModal = () => {
+    setAccountModal({ open: false, mode: "add", account: null });
+    setAccountErrors({});
+  };
+
+  const saveAccountModal = async () => {
+    const errs = {};
+    if (!String(accountForm.bankName || "").trim()) errs.bankName = "Bank name is required.";
+    if (!String(accountForm.accountHolderName || "").trim()) errs.accountHolderName = "Account holder / beneficiary name is required.";
+    if (!String(accountForm.accountNumber || "").trim()) errs.accountNumber = "Account number is required.";
+    else if (!/^\d{6,34}$/.test(String(accountForm.accountNumber || "").trim())) errs.accountNumber = "Enter 6–34 digits, preserving leading zeroes.";
+    if (accountForm.accountNumber !== accountForm.confirmAccountNumber) errs.confirmAccountNumber = "Account numbers must match.";
+    if (!String(accountForm.ifscCode || "").trim()) errs.ifscCode = "IFSC code is required.";
+    else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(String(accountForm.ifscCode || "").trim().toUpperCase())) errs.ifscCode = "Enter a valid 11-character IFSC code.";
+
+    if (Object.keys(errs).length > 0) {
+      setAccountErrors(errs);
+      return;
+    }
+
+    setAccountSaving(true);
+    try {
+      const payload = {
+        campusId,
+        bankName: accountForm.bankName.trim(),
+        accountHolderName: accountForm.accountHolderName.trim(),
+        accountNumber: accountForm.accountNumber.trim(),
+        ifscCode: accountForm.ifscCode.trim().toUpperCase(),
+        branchName: (accountForm.branchName || "").trim(),
+        accountType: accountForm.accountType,
+        isActive: Boolean(accountForm.isActive),
+      };
+
+      if (accountModal.mode === "add") {
+        await safeCreateBankAccountApi(payload, request.current?.signal);
+      } else {
+        await safeUpdateBankAccountApi(accountModal.account.id, payload, request.current?.signal);
+      }
+
+      const persisted = await getPaymentGatewayConfigApi(campusId, request.current?.signal);
+      setSaved(persisted);
+      closeAccountModal();
+      setMessage({
+        error: false,
+        text: `Bank account "${payload.bankName}" ${accountModal.mode === "add" ? "added" : "updated"} successfully.`,
+      });
+    } catch (error) {
+      setAccountErrors({ general: configFailure(error) });
+    } finally {
+      setAccountSaving(false);
+    }
+  };
+
+  const confirmDeleteAccount = async () => {
+    if (!deleteAccountTarget || deleteSaving) return;
+    setDeleteSaving(true);
+    try {
+      await safeDeleteBankAccountApi(deleteAccountTarget.id, campusId, request.current?.signal);
+      const persisted = await getPaymentGatewayConfigApi(campusId, request.current?.signal);
+      setSaved(persisted);
+      if (selectedBankAccountId === deleteAccountTarget.id) {
+        setSelectedBankAccountId(null);
+      }
+      const deletedName = deleteAccountTarget.bankName;
+      setDeleteAccountTarget(null);
+      setMessage({
+        error: false,
+        text: `Bank account "${deletedName}" deleted successfully.`,
+      });
+    } catch (error) {
+      setMessage({ error: true, text: configFailure(error) });
+    } finally {
+      setDeleteSaving(false);
+    }
+  };
+
   return <section className="cms-payment-config">
     <div className="cms-payment-config-head"><div><h2>{campusName}</h2><p>Receiving accounts and payment processing · Campus {campusId}</p></div>
       <button type="button" className="cms-btn cms-btn-ghost" disabled={loading || saving || Boolean(confirmation)} onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={15} /> Refresh</button></div>
@@ -214,29 +419,134 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
     </div>
     {tab === "bank" && <section className="cms-payment-bank-accounts" aria-labelledby="payment-bank-accounts-title">
       <div className="cms-payment-bank-summary">
-        <div><h3 id="payment-bank-accounts-title">College Bank Accounts</h3><p>Configured account: <strong data-bank-account-count>{bankAvailable ? hasConfiguredBank ? 1 : 0 : "Unavailable"}</strong></p></div>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">+ Add Bank Account</button>
+        <div><h3 id="payment-bank-accounts-title">College Bank Accounts</h3><p>Configured account: <strong data-bank-account-count>{bankAccountCount}</strong></p></div>
+        <button
+          type="button"
+          className="cms-btn cms-btn-ghost"
+          disabled={!bankAvailable || !editable || saving || Boolean(confirmation)}
+          onClick={openAddAccountModal}
+          aria-describedby="payment-bank-support"
+        >
+          + Add Bank Account
+        </button>
       </div>
-      <p id="payment-bank-support" className="cms-payment-config-note">Only one bank account is exposed by the current campus configuration API. A full account list, total saved-account count, and active-account status are not available. Adding another account or activating one requires backend support.</p>
+      <p id="payment-bank-support" className="cms-payment-config-note">
+        Configure receiving bank accounts for this campus. Designate one active account to receive fee collections via Direct UPI QR and Bank Transfer / UTR.
+      </p>
       {!bankAvailable ? <p>Load this campus's configuration to view its saved bank details.</p>
-        : !hasConfiguredBank ? <p>No bank details are configured for this campus. Use the existing form below to configure its receiving account.</p>
+        : bankAccounts.length === 0 ? <p>No bank details are configured for this campus. Use the existing form below to configure its receiving account.</p>
           : <>
-            <h4>Saved Bank Account</h4>
-            <label className={`cms-payment-bank-card${bankSelected ? " is-selected" : ""}`}>
-              <input type="radio" name="payment-bank-view" checked={bankSelected} onChange={() => setBankSelected(true)} aria-controls="payment-bank-details" />
-              <span><strong>{saved.bankName || "Bank name not supplied"}</strong><span>{saved.accountType || "Account type not supplied"} · {maskedBankAccount(saved.accountNumber)}</span><span>{saved.accountHolderName || "Beneficiary not supplied"}</span><small>Configured · Active status not supplied</small></span>
-            </label>
-            {bankSelected && <div id="payment-bank-details" className="cms-payment-bank-details">
+            <h4>Saved Bank Account{bankAccounts.length > 1 ? "s" : ""}</h4>
+            <div className="cms-payment-bank-cards">
+              {bankAccounts.map((acc, index) => {
+                const isSelected = selectedBankAccountId != null ? acc.id === selectedBankAccountId : (bankSelected ? index === 0 : Boolean(acc.isActive));
+                return (
+                  <label
+                    key={acc.id || index}
+                    className={`cms-payment-bank-card${isSelected ? " is-selected" : ""}${acc.isActive ? " is-active" : ""}`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment-bank-view"
+                      checked={isSelected}
+                      onChange={() => {
+                        setBankSelected(true);
+                        setSelectedBankAccountId(acc.id);
+                      }}
+                      aria-controls="payment-bank-details"
+                    />
+                    <span className="cms-payment-bank-card-content">
+                      <div className="cms-payment-bank-card-title-row">
+                        <strong>{acc.bankName || "Bank name not supplied"}</strong>
+                        {acc.isActive === true ? (
+                          <span className="cms-badge cms-badge-active">Active Receiving Account</span>
+                        ) : acc.isActive === false ? (
+                          <span className="cms-badge cms-badge-inactive">Inactive</span>
+                        ) : (
+                          <small>Configured · Active status not supplied</small>
+                        )}
+                      </div>
+                      <span>{acc.accountType || "Account type not supplied"} · {maskedBankAccount(acc.accountNumber)}</span>
+                      <span>{acc.accountHolderName || "Beneficiary not supplied"}</span>
+                      {acc.branchName && <small className="cms-muted">{acc.branchName} · IFSC: {acc.ifscCode}</small>}
+                      <div className="cms-payment-bank-card-actions">
+                        {acc.isActive === false && editable && (
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost cms-btn-xs"
+                            disabled={saving || !editable}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleActivateAccount(acc);
+                            }}
+                          >
+                            Set as Active
+                          </button>
+                        )}
+                        {editable && acc.id && (
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost cms-btn-xs"
+                            disabled={saving}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              openEditAccountModal(acc);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {editable && bankAccounts.length > 1 && acc.id && (
+                          <button
+                            type="button"
+                            className="cms-btn cms-btn-ghost cms-btn-xs cms-btn-danger"
+                            disabled={saving}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDeleteAccountTarget(acc);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {selectedAccount && bankSelected && <div id="payment-bank-details" className="cms-payment-bank-details">
               <h4>Selected Account Details</h4>
-              <dl>{[["Bank", saved.bankName], ["Beneficiary", saved.accountHolderName], ["Account", maskedBankAccount(saved.accountNumber)], ["IFSC", saved.ifscCode], ["Branch", saved.branchName], ["Account Type", saved.accountType], ["Offline UTR", saved.enableOfflineUtr ? "Enabled" : "Disabled"], ["Active Receiving Account", "Not reported by the backend"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not supplied"}</dd></div>)}</dl>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled aria-describedby="payment-bank-support">Set as Active Receiving Account</button>
-              <p className="cms-payment-config-note">Selecting this card only shows saved details. It does not change the receiving account or discard your draft.</p>
+              <dl>{[
+                ["Bank", selectedAccount.bankName],
+                ["Beneficiary", selectedAccount.accountHolderName],
+                ["Account", maskedBankAccount(selectedAccount.accountNumber)],
+                ["IFSC", selectedAccount.ifscCode],
+                ["Branch", selectedAccount.branchName],
+                ["Account Type", selectedAccount.accountType],
+                ["Offline UTR", saved.enableOfflineUtr ? "Enabled" : "Disabled"],
+                ["Active Receiving Account", selectedAccount.isActive === true ? "Yes (Active Receiving Account)" : selectedAccount.isActive === false ? "No (Inactive)" : "Not reported by the backend"],
+              ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Not supplied"}</dd></div>)}</dl>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={selectedAccount.isActive !== false || !editable || saving}
+                onClick={() => handleActivateAccount(selectedAccount)}
+                aria-describedby="payment-bank-support"
+              >
+                Set as Active Receiving Account
+              </button>
+              {!saved.bankAccounts?.length && !bankEditing && <button type="button" className="cms-btn cms-btn-primary" disabled={!editable || saving || Boolean(confirmation)} onClick={editBank}>Edit Bank Account</button>}
+              <p className="cms-payment-config-note">Selecting this card shows saved details. Changing the active account designates which bank account receives fee payments for this campus.</p>
             </div>}
           </>}
       <p className="cms-payment-config-note">Changing bank details does not change the bank linked to a UPI ID or Razorpay's merchant settlement account. Those must be verified with the bank or payment provider.</p>
-      <h4>{hasConfiguredBank ? "Update Configured Bank Account" : "Bank Account Form"}</h4>
+      {bankEditing && <h4>Edit Bank Account</h4>}
     </section>}
-    {tab === "templates" ? <PaymentTemplatesEditor campusId={campusId} campusName={campusName} editable={templatesEditable && !accessDenied} drafts={templateDrafts} /> : <form noValidate onSubmit={submit}>
+    {tab === "templates" ? <PaymentTemplatesEditor campusId={campusId} campusName={campusName} editable={templatesEditable && !accessDenied} drafts={templateDrafts} /> : <form hidden={tab === "bank" && !bankEditing} noValidate onSubmit={submit}>
       <fieldset disabled={saving || !editable || accessDenied || Boolean(confirmation)}>
         <div id="payment-settings-panel" role="tabpanel" aria-labelledby={`payment-tab-${tab}`}>
           {tab === "razorpay" && <div className="cms-payment-config-mode"><span>Environment</span>{[[false, "Test / Sandbox"], [true, "Live / Production"]].map(([live, label]) => <label key={label}><input type="radio" name="payment-mode" checked={form.isLiveMode === live} onChange={() => update("isLiveMode", live)} /> {label}</label>)}</div>}
@@ -260,9 +570,139 @@ function CampusPaymentConfig({ campusId, campusName, editable, drafts, templateD
         : tab === "upi" ? "Displaying or scanning a QR never confirms payment. The backend must verify settlement before updating fees. Note: If Razorpay Gateway is also enabled with valid keys for this campus, UPI QR orders route through Razorpay's Merchant Account (auto-settlement) instead of the Payee VPA above."
           : tab === "razorpay" ? "Leave stored secrets blank to preserve them. Enter a replacement only when changing credentials; saved secrets are never displayed."
             : "These settings do not change the Vite proxy, API base URL or workstation network. Mobile checkout and backend LAN resolution must be supported separately."}</p>
-      <div className="cms-payment-config-actions"><button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : "Save Settings"}</button></div>
+      <div className="cms-payment-config-actions">{tab === "bank" && <button type="button" className="cms-btn cms-btn-ghost" disabled={saving || Boolean(confirmation)} onClick={cancelBank}>Cancel</button>}<button type="submit" className="cms-btn cms-btn-primary" disabled={!ready || !editable || loading || saving || Boolean(confirmation)}><Save size={15} /> {saving ? "Saving and verifying…" : tab === "bank" ? "Save Changes" : "Save Settings"}</button></div>
     </form>}
     {confirmation && <ConfirmDialog title="Confirm payment settings" message={confirmation} confirmLabel="Confirm & Save" onCancel={() => setConfirmation("")} onConfirm={save} loading={saving} />}
+    {accountModal.open && (
+      <SafeModal
+        title={accountModal.mode === "add" ? "Add Receiving Bank Account" : "Edit Receiving Bank Account"}
+        onClose={accountSaving ? () => {} : closeAccountModal}
+        footer={
+          <>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              onClick={closeAccountModal}
+              disabled={accountSaving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={saveAccountModal}
+              disabled={accountSaving}
+            >
+              {accountSaving ? "Saving…" : (accountModal.mode === "add" ? "Add Account" : "Save Changes")}
+            </button>
+          </>
+        }
+      >
+        <div className="cms-payment-modal-form">
+          {accountErrors.general && <p className="cms-error" role="alert">{accountErrors.general}</p>}
+          <div className="cms-field">
+            <label htmlFor="modal-bankName">Bank Name <span className="req">*</span></label>
+            <input
+              id="modal-bankName"
+              type="text"
+              value={accountForm.bankName}
+              onChange={(e) => setAccountForm({ ...accountForm, bankName: e.target.value })}
+              placeholder="e.g. State Bank of India, HDFC Bank"
+            />
+            {accountErrors.bankName && <span className="cms-error">{accountErrors.bankName}</span>}
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-accountHolderName">Beneficiary / Account Holder Name <span className="req">*</span></label>
+            <input
+              id="modal-accountHolderName"
+              type="text"
+              value={accountForm.accountHolderName}
+              onChange={(e) => setAccountForm({ ...accountForm, accountHolderName: e.target.value })}
+              placeholder="Official College or Trust Name"
+            />
+            {accountErrors.accountHolderName && <span className="cms-error">{accountErrors.accountHolderName}</span>}
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-accountNumber">Account Number <span className="req">*</span></label>
+            <input
+              id="modal-accountNumber"
+              type="password"
+              value={accountForm.accountNumber}
+              onChange={(e) => setAccountForm({ ...accountForm, accountNumber: e.target.value })}
+              placeholder="6–34 digit bank account number"
+              autoComplete="new-password"
+              inputMode="numeric"
+            />
+            {accountErrors.accountNumber && <span className="cms-error">{accountErrors.accountNumber}</span>}
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-confirmAccountNumber">Confirm Account Number <span className="req">*</span></label>
+            <input
+              id="modal-confirmAccountNumber"
+              type="password"
+              value={accountForm.confirmAccountNumber}
+              onChange={(e) => setAccountForm({ ...accountForm, confirmAccountNumber: e.target.value })}
+              placeholder="Re-enter bank account number"
+              autoComplete="new-password"
+              inputMode="numeric"
+            />
+            {accountErrors.confirmAccountNumber && <span className="cms-error">{accountErrors.confirmAccountNumber}</span>}
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-ifscCode">IFSC Code <span className="req">*</span></label>
+            <input
+              id="modal-ifscCode"
+              type="text"
+              value={accountForm.ifscCode}
+              onChange={(e) => setAccountForm({ ...accountForm, ifscCode: e.target.value.toUpperCase() })}
+              placeholder="11-character code (e.g. SBIN0001234)"
+              maxLength={11}
+            />
+            {accountErrors.ifscCode && <span className="cms-error">{accountErrors.ifscCode}</span>}
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-branchName">Branch Name</label>
+            <input
+              id="modal-branchName"
+              type="text"
+              value={accountForm.branchName}
+              onChange={(e) => setAccountForm({ ...accountForm, branchName: e.target.value })}
+              placeholder="Branch location or city"
+            />
+          </div>
+          <div className="cms-field">
+            <label htmlFor="modal-accountType">Account Type</label>
+            <select
+              id="modal-accountType"
+              value={accountForm.accountType}
+              onChange={(e) => setAccountForm({ ...accountForm, accountType: e.target.value })}
+            >
+              <option value="Current">Current</option>
+              <option value="Savings">Savings</option>
+            </select>
+          </div>
+          <label className="cms-payment-config-toggle">
+            <input
+              type="checkbox"
+              checked={accountForm.isActive}
+              onChange={(e) => setAccountForm({ ...accountForm, isActive: e.target.checked })}
+            />
+            Set as Active Receiving Account immediately
+          </label>
+        </div>
+      </SafeModal>
+    )}
+    {deleteAccountTarget && (
+      <ConfirmDialog
+        title="Delete Bank Account"
+        message={`Are you sure you want to remove "${deleteAccountTarget.bankName}" (${maskedBankAccount(deleteAccountTarget.accountNumber)})? If this is the active receiving account, another saved account will become active.`}
+        confirmLabel="Delete Account"
+        danger={true}
+        loading={deleteSaving}
+        onCancel={() => setDeleteAccountTarget(null)}
+        onConfirm={confirmDeleteAccount}
+      />
+    )}
   </section>;
 }
 

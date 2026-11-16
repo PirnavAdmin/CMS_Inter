@@ -1214,6 +1214,22 @@ input:-webkit-autofill:active {
 }
 
 /* ── Footer ── */
+.rcf-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 28px 16px;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--cms-primary, #1e4529);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.rcf-back-link:hover { text-decoration: underline; }
+
 .rcf-footer {
   display: flex;
   justify-content: space-between;

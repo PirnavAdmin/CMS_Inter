@@ -31,6 +31,23 @@
   animation: get-in-touch-dialog-in .24s cubic-bezier(.2, .75, .3, 1) both;
   outline: none;
 }
+.get-in-touch-page-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 10px 16px 50px;
+  box-sizing: border-box;
+}
+.get-in-touch-dialog.is-inline-page {
+  width: min(1020px, 100%);
+  height: auto;
+  min-height: 610px;
+  max-height: none;
+  box-shadow: 0 20px 60px rgba(12, 29, 18, 0.12);
+  border: 1px solid rgba(82, 126, 66, 0.22);
+  animation: none;
+}
 .get-in-touch-backdrop.is-closing { animation: get-in-touch-backdrop-out .19s ease both; }
 .get-in-touch-dialog.is-closing { animation: get-in-touch-dialog-out .19s ease both; }
 .get-in-touch-close {
@@ -102,8 +119,11 @@
 .get-in-touch-demo-note strong { font-size: 12px; }
 .get-in-touch-demo-note small { color: #62715f; font-size: 11px; line-height: 1.4; }
 .get-in-touch-success { margin: 0; padding: 11px 13px; border: 1px solid #c8ddbd; border-radius: 10px; color: #365a2d; background: #f2f8ee; font-size: 13px; line-height: 1.5; }
+.get-in-touch-error-banner { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 0 0 6px; padding: 10px 14px; border: 1px solid #f0b9b5; border-radius: 10px; color: #8e231e; background: #fdf3f2; font-size: 13px; line-height: 1.45; }
+.get-in-touch-success-banner { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 0 0 6px; padding: 11px 14px; border: 1px solid #b7deb0; border-radius: 10px; color: #2b5c21; background: #f1f8ee; font-size: 13px; font-weight: 600; line-height: 1.45; }
 .get-in-touch-submit { display: flex; min-height: 46px; align-items: center; justify-content: center; gap: 10px; margin-top: 1px; border: 0; border-radius: 10px; color: #fff; background: linear-gradient(100deg, #648e54, #527e46); box-shadow: 0 8px 17px rgba(67, 108, 53, .18); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
-.get-in-touch-submit:hover { background: linear-gradient(100deg, #557d48, #416c38); box-shadow: 0 11px 22px rgba(67, 108, 53, .24); transform: translateY(-1px); }
+.get-in-touch-submit:hover:not(:disabled) { background: linear-gradient(100deg, #557d48, #416c38); box-shadow: 0 11px 22px rgba(67, 108, 53, .24); transform: translateY(-1px); }
+.get-in-touch-submit:disabled { opacity: 0.68; cursor: not-allowed; }
 .get-in-touch-direct { margin: 8px 0 0; color: #747d75; font-size: 12px; text-align: center; }
 .get-in-touch-direct a { color: #527e46; font-weight: 800; text-decoration: none; }
 .get-in-touch-direct a:hover { text-decoration: underline; }
@@ -122,6 +142,7 @@
 @media (max-width: 640px) {
   .get-in-touch-backdrop { display: block; overflow-y: auto; padding: 10px; }
   .get-in-touch-dialog { display: block; width: 100%; height: auto; max-height: calc(100dvh - 20px); overflow-y: auto; border-radius: 18px; scrollbar-width: none; }
+  .get-in-touch-dialog.is-inline-page { min-height: 0; height: auto; }
   .get-in-touch-close { position: sticky; top: 9px; float: right; margin: 9px 9px -49px 0; }
   .get-in-touch-aside { min-height: 0; padding: 20px 20px 19px; }
   .get-in-touch-logo { width: 145px; height: 42px; }
@@ -155,7 +176,7 @@
 html:has(.get-in-touch-backdrop), body:has(.get-in-touch-backdrop) { overflow: hidden !important; }
 @media (max-height: 700px) and (min-width: 641px) {
   .get-in-touch-backdrop { padding: 12px; }
-  .get-in-touch-dialog { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+  .get-in-touch-dialog:not(.is-inline-page) { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
   .get-in-touch-aside { padding: 17px 24px; }
   .get-in-touch-logo { height: 36px; flex-basis: 36px; }
   .get-in-touch-script { margin-top: 8px; font-size: 24px; }

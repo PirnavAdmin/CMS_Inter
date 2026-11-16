@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, RefreshCw, X } from "lucide-react";
+import { Check, Eye, RefreshCw, X } from "lucide-react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Modal, SkeletonRow } from "@/shared/components/Ui.jsx";
 import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
@@ -70,6 +71,26 @@ export default function OfflineUtrQueueTab({
       if (proofRequest.current === controller) proofRequest.current = null;
     }
   };
+  const renderProof = (row, withActions = true) => {
+    if (!Number.isSafeInteger(Number(row.attachmentId)) || Number(row.attachmentId) <= 0)
+      return <p className="cms-fee-note">No payment proof attached.</p>;
+    const current = proof?.scopeKey === scopeKey && String(proof.row.id) === String(row.id) ? proof : null;
+    return <>
+      <p className="cms-fee-note">{row.attachmentFileName || "Payment proof"} · Uploaded: {row.attachmentUploadedAt ? formatDate(row.attachmentUploadedAt) : "Unavailable"}</p>
+      {!current ? <button type="button" className="cms-btn cms-btn-ghost" disabled={!canView} onClick={() => viewProof(row)}>View Payment Proof</button> : null}
+      {current?.loading ? <p role="status">Loading private payment proof...</p> : null}
+      {current?.error ? <p role="alert" className="cms-error">{current.error}</p> : null}
+      {current?.url && current.type === "application/pdf" ? <iframe title="Payment proof PDF" sandbox="" src={current.url} style={{ width: "100%", height: "55vh", border: 0 }} />
+        : current?.url ? <img className="cms-fee-proof-preview" src={current.url} alt="Submitted payment proof" /> : null}
+      {withActions && current?.url ? <div className="cms-actions"><a className="cms-btn cms-btn-ghost" href={current.url} target="_blank" rel="noopener noreferrer">Open Payment Proof</a>
+        <a className="cms-btn cms-btn-ghost" href={current.url} download={String(row.attachmentFileName || "Payment_Proof").replace(/[\\/:*?"<>|]/g, "_")}>Download Payment Proof</a></div> : null}
+    </>;
+  };
+  const closeReview = () => {
+    if (processing) return;
+    setReview(null);
+    closeProof();
+  };
   useEffect(() => {
     const refresh = () => {
       if (reviewActive.current) { refreshPending.current = true; return; }
@@ -135,6 +156,7 @@ export default function OfflineUtrQueueTab({
       refreshPending.current = false;
       setItems((current) => current.filter((item) => String(item.id) !== String(review.id)));
       setReview(null);
+      closeProof();
       setVersion((value) => value + 1);
       onToast(approved ? "UTR approved by the backend; refreshing fee records." : "UTR rejected.");
       setNotice(approved ? "Payment Successful. Approval and settlement confirmed by the backend." : "Payment Rejected. The verification request was rejected; no payment credit was applied.");
@@ -150,6 +172,7 @@ export default function OfflineUtrQueueTab({
         if (!failure.response || failure.response.status >= 500) {
           setUncertain((current) => new Set([...current, review.id]));
           setReview(null);
+          closeProof();
           setError(
             `${getApiErrorMessage(failure)} Outcome uncertain; refresh and review payment history before repeating this action.`,
           );
@@ -243,13 +266,19 @@ export default function OfflineUtrQueueTab({
                         </span>
                       </td>
                       <td>
+                        <Tooltip.Provider delayDuration={200}>
                         <div className="cms-actions">
-                          {Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0 ? <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={!canView} onClick={() => viewProof(row)}>View Payment Proof</button> : null}
+                          {Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0 ? <Tooltip.Root>
+                            <Tooltip.Trigger asChild><button type="button" className="cms-action-btn view" aria-label="View Payment Proof" disabled={!canView} onClick={() => viewProof(row)}><Eye size={15} aria-hidden="true" /></button></Tooltip.Trigger>
+                            <Tooltip.Portal><Tooltip.Content className="cms-fee-utr-tooltip" side="top" sideOffset={6} collisionPadding={8} hideWhenDetached>View Payment Proof</Tooltip.Content></Tooltip.Portal>
+                          </Tooltip.Root> : null}
                           {["Approve", "Reject"].map((action) => (
+                            <Tooltip.Root key={action}>
+                            <Tooltip.Trigger asChild>
                             <button
-                              key={action}
                               type="button"
-                              className="cms-btn cms-btn-ghost cms-fee-mini-btn"
+                              className={`cms-action-btn ${action === "Approve" ? "edit" : "danger"}`}
+                              aria-label={action === "Approve" ? "Approve & Credit" : "Reject"}
                               disabled={
                                 !canReview ||
                                 processing ||
@@ -258,16 +287,21 @@ export default function OfflineUtrQueueTab({
                                 Number(row.id) <= 0
                               }
                               onClick={() => {
+                                closeProof();
                                 setReview({ ...row, action });
                                 setReason("");
                                 setError("");
+                                if (Number.isSafeInteger(Number(row.attachmentId)) && Number(row.attachmentId) > 0) viewProof(row);
                               }}
                             >
-                              {action === "Approve" ? <Check size={14} /> : <X size={14} />}
-                              {action === "Approve" ? "Approve & Credit" : "Reject"}
+                              {action === "Approve" ? <Check size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}
                             </button>
+                            </Tooltip.Trigger>
+                            <Tooltip.Portal><Tooltip.Content className="cms-fee-utr-tooltip" side="top" sideOffset={6} collisionPadding={8} hideWhenDetached>{action === "Approve" ? "Approve & Credit" : "Reject"}</Tooltip.Content></Tooltip.Portal>
+                            </Tooltip.Root>
                           ))}
                         </div>
+                        </Tooltip.Provider>
                       </td>
                     </tr>
                   )) : null}
@@ -284,29 +318,27 @@ export default function OfflineUtrQueueTab({
         </div>
         {canView && !loading && !loadError ? <Pagination page={page} totalItems={rows.length} onPageChange={setPage} /> : null}
       </div>
-      {proof && canView && proof.scopeKey === scopeKey ? <Modal title="Payment Proof" onClose={closeProof} footer={<>
+      {proof && !review && canView && proof.scopeKey === scopeKey ? <Modal title="Payment Proof" onClose={closeProof} footer={<>
         <button type="button" className="cms-btn cms-btn-ghost" onClick={closeProof}>Close</button>
         {proof.url ? <><a className="cms-btn cms-btn-ghost" href={proof.url} target="_blank" rel="noopener noreferrer">Open Payment Proof</a>
           <a className="cms-btn cms-btn-primary" href={proof.url} download={String(proof.row.attachmentFileName || "Payment_Proof").replace(/[\\/:*?"<>|]/g, "_")}>Download Payment Proof</a></> : null}
       </>}>
         <dl className="cms-fee-reversal-details">{[["UTR", proof.row.utrNumber], ["Amount", formatCurrency(proof.row.amount)], ["Payment Date", proof.row.paymentDate ? formatDate(proof.row.paymentDate) : "Unavailable"], ["File", proof.row.attachmentFileName || "Payment proof"]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-        {proof.loading ? <p role="status">Loading private payment proof...</p> : null}
-        {proof.error ? <p role="alert" className="cms-error">{proof.error}</p> : null}
-        {proof.url && proof.type === "application/pdf" ? <iframe title="Payment proof PDF" sandbox="" src={proof.url} style={{ width: "100%", height: "55vh", border: 0 }} /> : proof.url ? <img className="cms-fee-proof-preview" src={proof.url} alt="Submitted payment proof" /> : null}
+        {renderProof(proof.row, false)}
       </Modal> : null}
       {confirmed ? <PaymentConfirmation payment={confirmed} onClose={() => setConfirmed(null)} /> : null}
-      {review && (
+      {review && canView && (
         <Modal
           title={review.action === "Approve" ? "Approve Bank Transfer" : "Reject Bank Transfer"}
           size="sm"
-          onClose={processing ? () => {} : () => setReview(null)}
+          onClose={closeReview}
           footer={
             <>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
                 disabled={processing}
-                onClick={() => setReview(null)}
+                onClick={closeReview}
               >
                 Cancel
               </button>
@@ -324,6 +356,9 @@ export default function OfflineUtrQueueTab({
           <p>
             {review.studentName} · {formatCurrency(review.amount)} · UTR {review.utrNumber}
           </p>
+          <dl className="cms-fee-reversal-details">{[["Student", review.studentName], ["Admission Number", review.admissionNo || review.admissionNumber], ["UTR / Reference", review.utrNumber], ["Amount", formatCurrency(review.amount)], ["Bank / Payment App", review.bankName], ["Payment Date", review.paymentDate ? formatDate(review.paymentDate) : "Unavailable"], ["Submitted", formatDate(review.submittedAt || review.submittedAtUtc || review.createdAt || review.date)], ["Payment Order", review.orderId || "Unavailable"], ["Status", review.status]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "Unavailable"}</dd></div>)}</dl>
+          {renderProof(review)}
+          <p className="cms-fee-note">Compare the UTR and amount with independently verified bank/payment records before approving. A screenshot alone does not confirm receipt of payment.</p>
           <div className="cms-field">
             <label htmlFor="utr-review-reason">
               {review.action === "Reject" ? "Rejection Reason (required)" : "Review Note"}

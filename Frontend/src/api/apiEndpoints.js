@@ -211,6 +211,9 @@ export const apiEndpoints = {
     communicationSettings: "/api/v1/fee-payments/gateway/communication-settings",
     restoreCommunicationSettings: "/api/v1/fee-payments/gateway/communication-settings/restore-default",
     sendTestCommunicationEmail: "/api/v1/fee-payments/gateway/communication-settings/send-test-email",
+    bankAccounts: "/api/v1/fee-payments/gateway/bank-accounts",
+    bankAccountById: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}`,
+    activateBankAccount: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}/activate`,
   },
   fee: {
     feeTypes: "/api/v1/fees/types",
@@ -678,6 +681,12 @@ export const apiEndpoints = {
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
   },
+  landingPage: {
+    getConfig: "/api/v1/landing-page/config",
+    saveConfig: "/api/v1/landing-page/config",
+    uploadImage: "/api/v1/landing-page/upload-image",
+    getPublic: "/api/v1/landing-page/public",
+  },
   holidays: {
     list: "/api/v1/holidays",
     summary: "/api/v1/holidays/summary",
@@ -912,6 +921,19 @@ export const apiEndpoints = {
     auditLogs: "/api/v1/super-admin/audit-logs",
     settings: "/api/v1/super-admin/settings",
     profile: "/api/v1/super-admin/profile",
+
+  },
+  enquiries: {
+    submit: "/api/v1/enquiries",
+    list: "/api/v1/enquiries",
+    stats: "/api/v1/enquiries/stats",
+    byId: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}`,
+    updateStatus: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/status`,
+    contactConfig: "/api/v1/enquiries/contact-config",
+  },
+  landingPageConfig: {
+    get: "/api/v1/landing-page-config",
+    save: "/api/v1/landing-page-config",
   },
 };
 

@@ -362,15 +362,15 @@
   font-size: 13px;
 }
 
-.cms-content:has(> .cms-fee-tabs) .cms-table .num, .cms-fee-table .num { text-align: right; }
-.cms-content:has(> .cms-fee-tabs) .cms-table-wrap { max-width: 100%; overflow-x: auto; }
-.cms-content:has(> .cms-fee-tabs) .cms-table { min-width: max-content; }
-.cms-content:has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col {
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .num, .cms-fee-table .num { text-align: right; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table-wrap { max-width: 100%; overflow-x: auto; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table { min-width: max-content; }
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col {
   width: 132px;
   min-width: 132px;
   text-align: left;
 }
-.cms-content:has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col .cms-actions {
+:is(.cms-content, .cms-fee-shared-page):has(> .cms-fee-tabs) .cms-table .cms-fee-actions-col .cms-actions {
   justify-content: flex-start;
   gap: 8px;
   flex-wrap: nowrap;
@@ -1040,6 +1040,11 @@
   width: 16px;
   height: 16px;
   pointer-events: none;
+  transform: rotate(0deg);
+  transition: transform 180ms ease;
+}
+.cms-fee-pay-towards[open] > .cms-fee-pay-towards-trigger .cms-fee-pay-towards-arrow {
+  transform: rotate(180deg);
 }
 .cms-fee-pay-towards-arrow svg {
   display: block;
@@ -1134,6 +1139,20 @@
 }
 
 /* Receipt */
+.cms-fee-utr-tooltip { z-index: 1000; max-width: calc(100vw - 16px); padding: 6px 8px; border-radius: 6px; background: var(--cms-text); color: var(--cms-surface); box-shadow: var(--cms-shadow); font-size: 12px; line-height: 1.4; pointer-events: none; }
+
+.cms-payment-confirmation-attachment { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px; border: 1px solid var(--cms-border); border-radius: 10px; color: var(--cms-text); }
+.cms-payment-confirmation-attachment > svg { flex-shrink: 0; color: var(--cms-primary); }
+.cms-payment-confirmation-attachment > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cms-payment-confirmation-attachment strong, .cms-payment-confirmation-attachment span { display: block; }
+.cms-payment-confirmation-attachment span { margin-top: 4px; font-size: 12px; color: var(--cms-muted); }
+.cms-payment-confirmation-attachment > .cms-btn { flex-shrink: 0; }
+.cms-payment-confirmation-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; width: 100%; }
+.cms-payment-confirmation-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.cms-modal-foot .cms-payment-confirmation-footer .cms-btn { min-height: 40px; width: auto; }
+.cms-payment-confirmation-print { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; border: 0; }
+@media (max-width: 480px) { .cms-payment-confirmation-actions { width: 100%; } .cms-payment-confirmation-actions .cms-btn { flex: 1; } }
+
 .cms-fee-receipt {
   border: 1px solid var(--cms-border);
   border-radius: 8px;

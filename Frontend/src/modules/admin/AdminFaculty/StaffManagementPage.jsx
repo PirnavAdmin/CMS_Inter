@@ -522,86 +522,33 @@ export const normalizeStaffRecord = (raw) => {
 
 export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = [], selectedCampus = null) => {
   const isTeaching = String(staffType || "").toLowerCase().includes("teach") && !String(staffType || "").toLowerCase().includes("non");
-  const prefix = isTeaching ? "PCTCH" : "PCNT";
   const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-  const requestedStaffType = isTeaching ? "Teaching" : "Non-Teaching";
   const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
 
-  const readSeriesSettings = async (campusId) => {
-    try {
-      const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
-        params: campusId != null ? { campusId } : undefined,
-      });
-      return response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
-    } catch {
-      return {};
-    }
-  };
-
-  const nextIdFromStaffRecords = (staffRecords, settings = {}) => {
-    const configuredPrefix = String(settings.prefix || prefix).trim();
-    const numberLength = Math.max(1, Number(settings.numberLength) || 4);
-    const startNumber = Math.max(1, Number(settings.startNumber) || 1);
-    let maxSequence = startNumber - 1;
-
-    // Respect the database-tracked current sequence if available
-    const dbSequence = settings.currentSequence ?? settings.CurrentSequence;
-    if (dbSequence != null && !isNaN(dbSequence)) {
-      maxSequence = Math.max(maxSequence, Number(dbSequence));
-    }
-
-    for (const record of staffRecords) {
-      const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").trim();
-      if (!employeeId.toUpperCase().startsWith(configuredPrefix.toUpperCase())) continue;
-      const suffix = employeeId.slice(configuredPrefix.length);
-      if (!/^\d+$/.test(suffix)) continue;
-      maxSequence = Math.max(maxSequence, Number(suffix));
-    }
-
-    return `${configuredPrefix}${String(maxSequence + 1).padStart(numberLength, "0")}`;
-  };
-
-  let staffRecords = null;
   try {
-    const params = {
-      PageNumber: 1,
-      PageSize: 1000,
-      StaffType: requestedStaffType,
-      ...(campusId != null && campusId !== "" ? { CampusId: Number(campusId) || campusId } : {}),
-    };
-    const response = await staffApi.getStaffPaged(params);
+    // 1. Fetch live preview directly from official Settings -> ID & Number Series API
+    const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
+      params: campusId != null ? { campusId } : undefined,
+    });
     const data = response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
-    const candidates = [
-      data?.items,
-      data?.Items,
-      data?.staff,
-      data?.Staff,
-      data?.results,
-      data?.Results,
-      data?.data?.items,
-      data?.data?.Items,
-      Array.isArray(data) ? data : null,
-    ];
-    staffRecords = candidates.find(Array.isArray) ?? null;
-  } catch {
-    // Use records already loaded by the staff page if the API is unavailable.
+    if (data?.livePreview && typeof data.livePreview === "string") {
+      return data.livePreview;
+    }
+  } catch (err) {
+    console.warn("Number series getByCode livePreview error:", err);
   }
 
-  if (!Array.isArray(staffRecords)) {
-    staffRecords = Array.isArray(existingRecords) ? existingRecords : [];
+  // 2. Fallback to staff next-employee-id endpoint
+  try {
+    const res = await staffApi.getNextEmployeeId(isTeaching ? "Teaching" : "Non-Teaching", campusId);
+    const nextId = res?.data?.nextEmployeeId || res?.data?.employeeId;
+    if (nextId) return nextId;
+  } catch (err) {
+    console.warn("Staff getNextEmployeeId endpoint error:", err);
   }
 
-  staffRecords = staffRecords.filter((record) => {
-    if (selectedCampus && !isStaffMatchingCampus(record, selectedCampus)) return false;
-    const type = String(record?.staffType ?? record?.StaffType ?? "").toLowerCase();
-    const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").toUpperCase();
-    return isTeaching
-      ? (!type.includes("non") && type.includes("teach")) || employeeId.startsWith(prefix)
-      : type.includes("non") || employeeId.startsWith(prefix);
-  });
-
-  const settings = await readSeriesSettings(campusId);
-  return nextIdFromStaffRecords(staffRecords, settings);
+  // 3. Fallback default
+  return isTeaching ? "MTCH0001" : "MNT0001";
 };
 
 export const resolveBoardCode = (staffRecord, boardsList = []) => {
@@ -5660,6 +5607,36 @@ function TeachingForm({ records, setRecords, existing }) {
         }
       }
 
+      // Upload Document Files (Driving License, Aadhaar, PAN, Certificates, Bank Proof)
+      if (targetId) {
+        const docFieldsToUpload = [
+          { key: "drivingLicence_file", type: "drivingLicence" },
+          { key: "aadhaarDocument_file", type: "aadhaar" },
+          { key: "panDocument_file", type: "pan" },
+          { key: "qualificationCertificate_file", type: "qualification" },
+          { key: "experienceCertificate_file", type: "experience" },
+          { key: "resume_file", type: "resume" },
+          { key: "bankProof_file", type: "bankProof" },
+          { key: "otherDocuments_file", type: "otherDocuments" },
+        ];
+
+        for (const doc of docFieldsToUpload) {
+          const fileToUpload = values[doc.key];
+          if (fileToUpload instanceof File) {
+            try {
+              const docFormData = new FormData();
+              docFormData.append("DocumentType", doc.type);
+              docFormData.append("File", fileToUpload);
+              await apiClient.post(apiEndpoints.faculty.uploadDocument(targetId), docFormData, {
+                headers: { "Content-Type": "multipart/form-data" },
+              });
+            } catch (docErr) {
+              console.warn(`Failed to upload ${doc.type} document:`, docErr);
+            }
+          }
+        }
+      }
+
       const record = {
         ...payload,
         id: targetId,
@@ -5673,7 +5650,6 @@ function TeachingForm({ records, setRecords, existing }) {
         profileCompletion: existing?.profileCompletion || 30,
         addedOn: existing?.addedOn || new Date().toISOString().split("T")[0]
       };
-      if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       window.dispatchEvent(new Event("staff-records-updated"));
       if (existing) {
@@ -5703,18 +5679,9 @@ function TeachingForm({ records, setRecords, existing }) {
         setErrors(nextErrors);
         return;
       }
-      console.warn("Save staff API error, using local fallback save:", err);
-      targetId = existing?.id || Date.now();
-      const record = { ...payload, id: targetId, profileCompletion: existing?.profileCompletion || 25, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
-      if (!existing) incrementSeriesSequence("employee-id");
-      setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
-      if (existing) {
-        setToast("Teaching staff profile updated successfully.");
-        n(`/dashboard/staff/teaching`);
-      } else {
-        setToast("Teaching staff created and invitation email sent successfully.");
-        n(`/dashboard/staff/teaching`);
-      }
+      console.error("Save staff API error:", err);
+      setToast(errMsg);
+      setErrors({ api: errMsg });
     } finally {
       setSubmitting(false);
     }
@@ -6160,17 +6127,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
         setStep(errorStep);
         return;
       }
-      console.warn("Save non-teaching staff API error:", err);
-      targetId = existing?.id || Date.now();
-      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
-      if (!existing) incrementSeriesSequence("employee-id");
-      setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
-      if (existing) {
-        setToast("Non-teaching staff profile updated successfully.");
-        n(`/dashboard/staff/non-teaching`);
-      } else {
-        n(`/dashboard/staff/${record.id}`);
-      }
+      console.error("Save non-teaching staff API error:", err);
+      setToast(errMsg);
+      setErrors({ api: errMsg });
     } finally {
       setSubmitting(false);
     }

@@ -1,3 +1,4 @@
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Admin;
 using CollegeManagement.API.DTOs.Authentication;
 using CollegeManagement.API.Helpers;
@@ -6,6 +7,7 @@ using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
@@ -22,15 +24,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IAdminService _adminService;
         private readonly IEmailService _emailService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly AppDbContext? _db;
 
         public AdminController(
             IAdminService adminService,
             IEmailService emailService,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            AppDbContext? db = null)
         {
             _adminService = adminService;
             _emailService = emailService;
             _jwtTokenHelper = jwtTokenHelper;
+            _db = db;
         }
 
         /// <summary>
@@ -104,9 +109,14 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves a list of all platform administrators.
         /// </summary>
         [HttpGet]
-        [AllowAnonymous]
         public async Task<IActionResult> GetAll()
         {
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 1)
+            {
+                return Forbid();
+            }
+
             var result = await _adminService.GetAllAdminsAsync();
             return Ok(new
             {
@@ -120,9 +130,24 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves details of an admin by ID.
         /// </summary>
         [HttpGet("{adminId}")]
-        [AllowAnonymous]
         public async Task<IActionResult> GetById(int adminId)
         {
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 1)
+            {
+                var currentUserId = _jwtTokenHelper.GetUserId(User);
+                var currentAdminId = _jwtTokenHelper.GetAdminId(User);
+                if (adminId != currentUserId && adminId != currentAdminId)
+                {
+                    return Forbid();
+                }
+
+                if (currentUserId.HasValue && adminId == currentUserId.Value)
+                {
+                    return await GetTenantUserProfileAsync(currentUserId.Value);
+                }
+            }
+
             var result = await _adminService.GetAdminByIdAsync(adminId);
             if (result == null)
             {
@@ -141,13 +166,66 @@ namespace CollegeManagement.API.Controllers.V1
             });
         }
 
+        private async Task<IActionResult> GetTenantUserProfileAsync(int userId)
+        {
+            if (_db == null)
+            {
+                return NotFound(new { Status = false, Message = $"Admin profile with ID {userId} not found." });
+            }
+
+            var userEntity = await _db.Users
+                .Include(u => u.Role)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == userId);
+
+            if (userEntity == null)
+            {
+                return NotFound(new
+                {
+                    Status = false,
+                    Message = $"Admin profile with ID {userId} not found."
+                });
+            }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = "Admin profile retrieved successfully.",
+                Data = new
+                {
+                    id = userEntity.UserId,
+                    email = userEntity.Email,
+                    fullName = userEntity.FullName,
+                    phoneNumber = userEntity.PhoneNumber,
+                    photoPath = (string?)null,
+                    roleId = userEntity.RoleId,
+                    roleName = userEntity.Role?.RoleName ?? "Admin",
+                    collegeId = userEntity.CollegeId,
+                    isActive = userEntity.IsActive,
+                    createdAt = userEntity.CreatedAt,
+                    updatedAt = userEntity.UpdatedAt
+                }
+            });
+        }
+
         /// <summary>
         /// Retrieves the profile details of the currently authenticated administrator.
         /// </summary>
         [HttpGet("profile")]
         public async Task<IActionResult> GetProfile()
         {
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            var userId = _jwtTokenHelper.GetUserId(User);
             var targetAdminId = _jwtTokenHelper.GetAdminId(User);
+
+            if ((collegeId.HasValue && collegeId.Value > 1) || ((!targetAdminId.HasValue || targetAdminId.Value <= 0) && userId.HasValue && userId.Value > 0))
+            {
+                if (userId.HasValue && userId.Value > 0)
+                {
+                    return await GetTenantUserProfileAsync(userId.Value);
+                }
+            }
+
             if (!targetAdminId.HasValue || targetAdminId.Value <= 0)
             {
                 targetAdminId = 1;

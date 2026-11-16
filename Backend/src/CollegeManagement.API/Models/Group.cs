@@ -22,6 +22,9 @@ namespace CollegeManagement.API.Models
         [Required]
         public int BoardId { get; set; }
 
+        [NotMapped]
+        public int CollegeId { get; set; } = 1;
+
         public int? AcademicYearId { get; set; }
 
         public int? AcademicLevelId { get; set; }

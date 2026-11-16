@@ -51,6 +51,8 @@ namespace CollegeManagement.API.Models
         [ForeignKey(nameof(AdminId))]
         public Admin? Admin { get; set; }
 
+        public int? CollegeId { get; set; }
+
         // Lifecycle & Status
         public bool IsFirstLogin { get; set; } = true;
 

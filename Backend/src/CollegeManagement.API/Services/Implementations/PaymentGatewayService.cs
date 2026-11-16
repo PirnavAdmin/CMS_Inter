@@ -818,12 +818,60 @@ public class PaymentGatewayService : IPaymentGatewayService
             : _urlResolver.GetFrontendBaseUrl();
         var webhookUrl = $"{resolvedApiUrl}/api/v1/fee-payments/gateway/webhook";
 
+        List<CampusBankAccountDto> bankAccounts = new();
+        int? activeBankAccountId = null;
+        if (campusId.HasValue && campusId.Value > 0)
+        {
+            var dbAccounts = await _context.CampusBankAccounts.AsNoTracking()
+                .Where(a => a.CampusId == campusId.Value)
+                .OrderByDescending(a => a.IsActive)
+                .ThenBy(a => a.BankName)
+                .ToListAsync();
+
+            if (dbAccounts.Count == 0 && config != null && !string.IsNullOrWhiteSpace(config.BankName) && !string.IsNullOrWhiteSpace(config.AccountNumber))
+            {
+                var seeded = new CampusBankAccount
+                {
+                    CampusId = campusId.Value,
+                    BankName = config.BankName.Trim(),
+                    AccountHolderName = (config.AccountHolderName ?? string.Empty).Trim(),
+                    AccountNumber = config.AccountNumber.Trim(),
+                    IfscCode = (config.IfscCode ?? string.Empty).Trim().ToUpperInvariant(),
+                    BranchName = config.BranchName?.Trim(),
+                    AccountType = string.Equals(config.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.CampusBankAccounts.Add(seeded);
+                await _context.SaveChangesAsync();
+                dbAccounts.Add(seeded);
+            }
+
+            var active = dbAccounts.FirstOrDefault(a => a.IsActive) ?? dbAccounts.FirstOrDefault();
+            activeBankAccountId = active?.Id;
+            bankAccounts = dbAccounts.Select(MapToBankAccountDto).ToList();
+
+            if (active != null && config != null)
+            {
+                config.BankName = active.BankName;
+                config.AccountHolderName = active.AccountHolderName;
+                config.AccountNumber = active.AccountNumber;
+                config.IfscCode = active.IfscCode;
+                config.BranchName = active.BranchName;
+                config.AccountType = active.AccountType;
+            }
+        }
+
+        var isDev = _hostEnvironment?.IsDevelopment() ?? true;
+        var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
+        var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
+        var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : (isDev ? 5173 : 443);
+        var defaultBaseUrl = !string.IsNullOrWhiteSpace(_settings.BaseAppUrl)
+            ? _settings.BaseAppUrl.TrimEnd('/')
+            : (isDev ? "http://localhost:5173" : resolvedApiUrl);
+
         if (config == null)
         {
-            var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
-            var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
-            var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : 5173;
-
             return new PaymentGatewayConfigDto
             {
                 Id = 0,
@@ -849,12 +897,19 @@ public class PaymentGatewayService : IPaymentGatewayService
                 EnableOfflineUtr = false,
                 PollingIntervalMs = defaultInterval,
                 MonitoringTimeoutSeconds = defaultTimeout,
-                BaseAppUrl = _settings.BaseAppUrl ?? string.Empty,
+                BaseAppUrl = defaultBaseUrl,
                 FrontendPort = defaultPort,
                 WebhookUrl = webhookUrl,
-                UpdatedAt = null
+                UpdatedAt = null,
+                BankAccounts = bankAccounts,
+                ActiveBankAccountId = activeBankAccountId
             };
         }
+
+        var effectivePort = (config.FrontendPort is >= 1 and <= 65535) ? config.FrontendPort : defaultPort;
+        var effectiveBaseUrl = !string.IsNullOrWhiteSpace(config.BaseAppUrl) ? config.BaseAppUrl.TrimEnd('/') : defaultBaseUrl;
+        var effectivePolling = (config.PollingIntervalMs is >= 500 and <= 10000) ? config.PollingIntervalMs : defaultInterval;
+        var effectiveTimeout = (config.MonitoringTimeoutSeconds is >= 60 and <= 3600) ? config.MonitoringTimeoutSeconds : defaultTimeout;
 
         return new PaymentGatewayConfigDto
         {
@@ -879,12 +934,14 @@ public class PaymentGatewayService : IPaymentGatewayService
             AutoCapture = config.AutoCapture,
             EnableRazorpay = config.EnableRazorpay,
             EnableOfflineUtr = config.EnableOfflineUtr,
-            PollingIntervalMs = config.PollingIntervalMs,
-            MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
-            BaseAppUrl = config.BaseAppUrl ?? string.Empty,
-            FrontendPort = config.FrontendPort,
+            PollingIntervalMs = effectivePolling,
+            MonitoringTimeoutSeconds = effectiveTimeout,
+            BaseAppUrl = effectiveBaseUrl,
+            FrontendPort = effectivePort,
             WebhookUrl = webhookUrl,
-            UpdatedAt = config.UpdatedAt
+            UpdatedAt = config.UpdatedAt,
+            BankAccounts = bankAccounts,
+            ActiveBankAccountId = activeBankAccountId
         };
     }
 
@@ -898,6 +955,21 @@ public class PaymentGatewayService : IPaymentGatewayService
 
         // DB-aware validation BEFORE mutating or adding any entity so validation errors cause zero partial DB updates.
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (request.FrontendPort < 1 || request.FrontendPort > 65535)
+        {
+            errors[nameof(request.FrontendPort)] = new[] { "Frontend port must be an integer between 1 and 65535." };
+        }
+
+        if (request.PollingIntervalMs < 500 || request.PollingIntervalMs > 10000)
+        {
+            errors[nameof(request.PollingIntervalMs)] = new[] { "Polling interval must be an integer between 500 and 10000 ms." };
+        }
+
+        if (request.MonitoringTimeoutSeconds < 60 || request.MonitoringTimeoutSeconds > 3600)
+        {
+            errors[nameof(request.MonitoringTimeoutSeconds)] = new[] { "Monitoring timeout must be an integer between 60 and 3600 seconds." };
+        }
 
         if (request.EnableRazorpay)
         {
@@ -941,6 +1013,7 @@ public class PaymentGatewayService : IPaymentGatewayService
             config = new PaymentGatewayConfig
             {
                 CampusId = request.CampusId,
+                FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173,
                 CreatedAt = DateTime.UtcNow
             };
             _context.PaymentGatewayConfigs.Add(config);
@@ -976,10 +1049,50 @@ public class PaymentGatewayService : IPaymentGatewayService
         config.PollingIntervalMs = request.PollingIntervalMs;
         config.MonitoringTimeoutSeconds = request.MonitoringTimeoutSeconds;
         config.BaseAppUrl = (request.BaseAppUrl ?? string.Empty).Trim();
-        config.FrontendPort = request.FrontendPort;
+        config.FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173;
 
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedByUserId = userId;
+
+        // Keep active CampusBankAccount in sync if bank fields were supplied
+        if (request.CampusId.HasValue && !string.IsNullOrWhiteSpace(request.BankName) && !string.IsNullOrWhiteSpace(request.AccountNumber))
+        {
+            var activeAcc = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == request.CampusId.Value && a.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (activeAcc != null)
+            {
+                activeAcc.BankName = config.BankName;
+                activeAcc.AccountHolderName = config.AccountHolderName;
+                if (!request.AccountNumber.Contains('*') && !request.AccountNumber.StartsWith("XXXX", StringComparison.OrdinalIgnoreCase))
+                {
+                    activeAcc.AccountNumber = config.AccountNumber;
+                }
+                activeAcc.IfscCode = config.IfscCode;
+                activeAcc.BranchName = config.BranchName;
+                activeAcc.AccountType = config.AccountType;
+                activeAcc.UpdatedAt = DateTime.UtcNow;
+                activeAcc.UpdatedByUserId = userId;
+            }
+            else
+            {
+                var newAcc = new CampusBankAccount
+                {
+                    CampusId = request.CampusId.Value,
+                    BankName = config.BankName,
+                    AccountHolderName = config.AccountHolderName,
+                    AccountNumber = config.AccountNumber,
+                    IfscCode = config.IfscCode,
+                    BranchName = config.BranchName,
+                    AccountType = config.AccountType,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUserId = userId
+                };
+                _context.CampusBankAccounts.Add(newAcc);
+            }
+        }
 
         await _context.SaveChangesAsync();
 
@@ -990,6 +1103,242 @@ public class PaymentGatewayService : IPaymentGatewayService
             Data = reloaded
         };
     }
+
+    // ========================= CAMPUS BANK ACCOUNTS (MULTI-ACCOUNT) =========================
+
+    public async Task<List<CampusBankAccountDto>> GetBankAccountsAsync(int campusId)
+    {
+        var accounts = await _context.CampusBankAccounts.AsNoTracking()
+            .Where(a => a.CampusId == campusId)
+            .OrderByDescending(a => a.IsActive)
+            .ThenBy(a => a.BankName)
+            .ToListAsync();
+
+        if (accounts.Count == 0)
+        {
+            var config = await _context.PaymentGatewayConfigs.AsNoTracking()
+                .Where(c => c.CampusId == campusId)
+                .FirstOrDefaultAsync();
+
+            if (config != null && !string.IsNullOrWhiteSpace(config.BankName) && !string.IsNullOrWhiteSpace(config.AccountNumber))
+            {
+                var seeded = new CampusBankAccount
+                {
+                    CampusId = campusId,
+                    BankName = config.BankName.Trim(),
+                    AccountHolderName = (config.AccountHolderName ?? string.Empty).Trim(),
+                    AccountNumber = config.AccountNumber.Trim(),
+                    IfscCode = (config.IfscCode ?? string.Empty).Trim().ToUpperInvariant(),
+                    BranchName = config.BranchName?.Trim(),
+                    AccountType = string.Equals(config.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.CampusBankAccounts.Add(seeded);
+                await _context.SaveChangesAsync();
+                accounts.Add(seeded);
+            }
+        }
+
+        return accounts.Select(MapToBankAccountDto).ToList();
+    }
+
+    public async Task<CampusBankAccountDto?> GetBankAccountByIdAsync(int id)
+    {
+        var account = await _context.CampusBankAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == id);
+        return account == null ? null : MapToBankAccountDto(account);
+    }
+
+    public async Task<CampusBankAccountDto> CreateBankAccountAsync(CreateCampusBankAccountRequest request, int? userId)
+    {
+        var existingCount = await _context.CampusBankAccounts
+            .Where(a => a.CampusId == request.CampusId)
+            .CountAsync();
+
+        var shouldBeActive = request.IsActive || existingCount == 0;
+
+        if (shouldBeActive)
+        {
+            var otherAccounts = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == request.CampusId && a.IsActive)
+                .ToListAsync();
+            foreach (var acc in otherAccounts)
+            {
+                acc.IsActive = false;
+                acc.UpdatedAt = DateTime.UtcNow;
+                acc.UpdatedByUserId = userId;
+            }
+        }
+
+        var entity = new CampusBankAccount
+        {
+            CampusId = request.CampusId,
+            BankName = request.BankName.Trim(),
+            AccountHolderName = request.AccountHolderName.Trim(),
+            AccountNumber = request.AccountNumber.Trim(),
+            IfscCode = request.IfscCode.Trim().ToUpperInvariant(),
+            BranchName = request.BranchName?.Trim(),
+            AccountType = string.Equals(request.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+            IsActive = shouldBeActive,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = userId
+        };
+
+        _context.CampusBankAccounts.Add(entity);
+        await _context.SaveChangesAsync();
+
+        if (shouldBeActive)
+        {
+            await SyncActiveBankAccountToConfigAsync(entity, userId);
+        }
+
+        return MapToBankAccountDto(entity);
+    }
+
+    public async Task<CampusBankAccountDto> UpdateBankAccountAsync(int id, UpdateCampusBankAccountRequest request, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null)
+            throw new KeyNotFoundException($"Campus bank account {id} not found.");
+
+        entity.BankName = request.BankName.Trim();
+        entity.AccountHolderName = request.AccountHolderName.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AccountNumber) && !request.AccountNumber.Contains('*') && !request.AccountNumber.StartsWith("XXXX", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.AccountNumber = request.AccountNumber.Trim();
+        }
+        entity.IfscCode = request.IfscCode.Trim().ToUpperInvariant();
+        entity.BranchName = request.BranchName?.Trim();
+        entity.AccountType = string.Equals(request.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current";
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedByUserId = userId;
+
+        if (request.IsActive && !entity.IsActive)
+        {
+            var otherAccounts = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == entity.CampusId && a.Id != id && a.IsActive)
+                .ToListAsync();
+            foreach (var acc in otherAccounts)
+            {
+                acc.IsActive = false;
+                acc.UpdatedAt = DateTime.UtcNow;
+                acc.UpdatedByUserId = userId;
+            }
+            entity.IsActive = true;
+        }
+
+        await _context.SaveChangesAsync();
+
+        if (entity.IsActive)
+        {
+            await SyncActiveBankAccountToConfigAsync(entity, userId);
+        }
+
+        return MapToBankAccountDto(entity);
+    }
+
+    public async Task<bool> DeleteBankAccountAsync(int id, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null) return false;
+
+        var campusId = entity.CampusId;
+        var wasActive = entity.IsActive;
+
+        _context.CampusBankAccounts.Remove(entity);
+        await _context.SaveChangesAsync();
+
+        if (wasActive)
+        {
+            var nextAccount = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == campusId)
+                .OrderBy(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            if (nextAccount != null)
+            {
+                nextAccount.IsActive = true;
+                nextAccount.UpdatedAt = DateTime.UtcNow;
+                nextAccount.UpdatedByUserId = userId;
+                await _context.SaveChangesAsync();
+                await SyncActiveBankAccountToConfigAsync(nextAccount, userId);
+            }
+        }
+
+        return true;
+    }
+
+    public async Task<CampusBankAccountDto> ActivateBankAccountAsync(int id, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null)
+            throw new KeyNotFoundException($"Campus bank account {id} not found.");
+
+        var otherAccounts = await _context.CampusBankAccounts
+            .Where(a => a.CampusId == entity.CampusId && a.Id != id && a.IsActive)
+            .ToListAsync();
+
+        foreach (var acc in otherAccounts)
+        {
+            acc.IsActive = false;
+            acc.UpdatedAt = DateTime.UtcNow;
+            acc.UpdatedByUserId = userId;
+        }
+
+        entity.IsActive = true;
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedByUserId = userId;
+
+        await _context.SaveChangesAsync();
+
+        await SyncActiveBankAccountToConfigAsync(entity, userId);
+
+        return MapToBankAccountDto(entity);
+    }
+
+    private async Task SyncActiveBankAccountToConfigAsync(CampusBankAccount bankAccount, int? userId)
+    {
+        var config = await _context.PaymentGatewayConfigs
+            .Where(c => c.CampusId == bankAccount.CampusId)
+            .FirstOrDefaultAsync();
+
+        if (config == null)
+        {
+            config = new PaymentGatewayConfig
+            {
+                CampusId = bankAccount.CampusId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.PaymentGatewayConfigs.Add(config);
+        }
+
+        config.BankName = bankAccount.BankName;
+        config.AccountHolderName = bankAccount.AccountHolderName;
+        config.AccountNumber = bankAccount.AccountNumber;
+        config.IfscCode = bankAccount.IfscCode;
+        config.BranchName = bankAccount.BranchName;
+        config.AccountType = bankAccount.AccountType;
+        config.UpdatedAt = DateTime.UtcNow;
+        config.UpdatedByUserId = userId;
+
+        await _context.SaveChangesAsync();
+    }
+
+    private static CampusBankAccountDto MapToBankAccountDto(CampusBankAccount a) => new()
+    {
+        Id = a.Id,
+        CampusId = a.CampusId,
+        BankName = a.BankName,
+        AccountHolderName = a.AccountHolderName,
+        AccountNumber = a.AccountNumber,
+        IfscCode = a.IfscCode,
+        BranchName = a.BranchName,
+        AccountType = a.AccountType,
+        IsActive = a.IsActive,
+        CreatedAt = a.CreatedAt,
+        UpdatedAt = a.UpdatedAt
+    };
 
     // ========================= PRIVATE HELPERS =========================
 

@@ -73,8 +73,28 @@ try
             fileSizeLimitBytes: 10 * 1024 * 1024,
             rollOnFileSizeLimit: true,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"));
-builder.Services.AddSignalR();
-builder.Services.AddDistributedMemoryCache();
+var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+var redisInstanceName = builder.Configuration["Redis:InstanceName"] ?? "CMS_";
+var useRedis = redisEnabled && !string.IsNullOrWhiteSpace(redisConnectionString);
+
+if (useRedis)
+{
+    builder.Services.AddSignalR().AddStackExchangeRedis(redisConnectionString!, options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal($"{redisInstanceName}SignalR:");
+    });
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = redisInstanceName;
+    });
+}
+else
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddDistributedMemoryCache();
+}
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(8);
@@ -96,6 +116,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+        options.Filters.Add<CollegeManagement.API.Filters.TenantIsolationActionFilter>();
     })
     .AddJsonOptions(options =>
     {
@@ -235,6 +256,7 @@ builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocati
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
+builder.Services.AddScoped<ILandingPageRepository, LandingPageRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
@@ -278,6 +300,8 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
+builder.Services.AddScoped<IEnquiryRepository, EnquiryRepository>();
+builder.Services.AddScoped<ILandingPageConfigRepository, LandingPageConfigRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
 builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
@@ -401,6 +425,8 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
+builder.Services.AddScoped<IEnquiryService, EnquiryService>();
+builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -414,6 +440,7 @@ builder.Services.AddHttpClient("RazorpayAssets", client =>
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.NotificationHistoryCleanupWorker>();
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeePaymentEmailDispatcherWorker>();
 #endregion
 
@@ -1296,6 +1323,96 @@ catch (Exception ex)
             }
         }
 
+        var extraPgConfigColumns = new (string ColName, string AlterSql)[]
+        {
+            ("BaseAppUrl", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `BaseAppUrl` VARCHAR(255) NULL;"),
+            ("FrontendPort", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `FrontendPort` INT NOT NULL DEFAULT 5173;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgConfigColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayConfigs' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        // Align and persist local development configuration for CampusId = 1
+        var isDevEnv = app.Environment.IsDevelopment();
+        var defaultDevUrl = "http://localhost:5173";
+        const int defaultDevPort = 5173;
+
+        var campus1Config = await pgDb.PaymentGatewayConfigs
+            .Where(c => c.CampusId == 1)
+            .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        if (campus1Config != null)
+        {
+            bool modified = false;
+            if (isDevEnv)
+            {
+                if (campus1Config.BaseAppUrl != defaultDevUrl)
+                {
+                    campus1Config.BaseAppUrl = defaultDevUrl;
+                    modified = true;
+                }
+                if (campus1Config.FrontendPort != defaultDevPort)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            else
+            {
+                if (campus1Config.FrontendPort <= 0)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            if (campus1Config.PollingIntervalMs < 500 || campus1Config.PollingIntervalMs > 10000)
+            {
+                campus1Config.PollingIntervalMs = 1200;
+                modified = true;
+            }
+            if (campus1Config.MonitoringTimeoutSeconds < 60 || campus1Config.MonitoringTimeoutSeconds > 3600)
+            {
+                campus1Config.MonitoringTimeoutSeconds = 600;
+                modified = true;
+            }
+            if (modified)
+            {
+                campus1Config.UpdatedAt = DateTime.UtcNow;
+                await pgDb.SaveChangesAsync();
+            }
+        }
+        else if (isDevEnv)
+        {
+            pgDb.PaymentGatewayConfigs.Add(new CollegeManagement.API.Models.Fee.PaymentGatewayConfig
+            {
+                CampusId = 1,
+                BaseAppUrl = defaultDevUrl,
+                FrontendPort = defaultDevPort,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 600,
+                Currency = "INR",
+                Mcc = "8220",
+                Provider = "Razorpay",
+                AutoCapture = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await pgDb.SaveChangesAsync();
+        }
+
+        // Ensure no other campus configuration defaults FrontendPort to <= 0
+        await pgDb.Database.ExecuteSqlRawAsync(
+            "UPDATE `PaymentGatewayConfigs` SET `FrontendPort` = 5173 WHERE `FrontendPort` <= 0;");
+
+
         await pgDb.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
                 `Id` INT NOT NULL AUTO_INCREMENT,
@@ -1410,6 +1527,33 @@ catch (Exception ex)
                 PRIMARY KEY (`Id`),
                 UNIQUE KEY `UX_PaymentCommSettings_Campus` (`CampusId`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `CampusBankAccounts` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NOT NULL,
+                `BankName` VARCHAR(200) NOT NULL,
+                `AccountHolderName` VARCHAR(200) NOT NULL,
+                `AccountNumber` VARCHAR(50) NOT NULL,
+                `IfscCode` VARCHAR(20) NOT NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 0,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `CreatedByUserId` INT NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
+                KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            UPDATE `Notifications` 
+            SET `Message` = REPLACE(`Message`, 'â‚¹', '₹') 
+            WHERE `Message` LIKE '%â‚¹%';
+
+            UPDATE `Notifications` 
+            SET `Title` = REPLACE(`Title`, 'â‚¹', '₹') 
+            WHERE `Title` LIKE '%â‚¹%';
         ");
     }
     catch (Exception pgEx)

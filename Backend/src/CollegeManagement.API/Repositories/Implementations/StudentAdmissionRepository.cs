@@ -112,11 +112,13 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         public async Task<StudentAdmissionResponseDto> CreateAsync(
             CreateStudentAdmissionRequest request,
-            string? studentPhoto)
+            string? studentPhoto,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
-            var connection = await GetOpenConnectionAsync();
+            var conn = connection ?? await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
 
             parameters.Add("p_AdmissionDate", request.AdmissionDate, DbType.DateTime);
@@ -184,9 +186,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_HostelBed", request.HostelBed, DbType.String);
             parameters.Add("p_HallTicketNumber", request.HallTicketNumber, DbType.String);
 
-            using var multi = await connection.QueryMultipleAsync(
+            using var multi = await conn.QueryMultipleAsync(
                 "sp_CreateStudentAdmission",
                 parameters,
+                transaction: transaction,
                 commandType: CommandType.StoredProcedure);
 
             var created = await multi.ReadFirstOrDefaultAsync<StudentAdmissionResponseDto>();
@@ -304,16 +307,21 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // UPDATE ADMISSION NUMBER
         // =========================================================
-        public async Task<bool> UpdateAdmissionNumberAsync(int admissionId, string admissionNo)
+        public async Task<bool> UpdateAdmissionNumberAsync(
+            int admissionId,
+            string admissionNo,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
         {
-            var connection = await GetOpenConnectionAsync();
+            var conn = connection ?? await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_AdmissionId", admissionId, DbType.Int32);
             parameters.Add("p_AdmissionNo", admissionNo, DbType.String);
 
-            var rows = await connection.ExecuteAsync(
+            var rows = await conn.ExecuteAsync(
                 "sp_UpdateAdmissionNumber",
                 parameters,
+                transaction: transaction,
                 commandType: CommandType.StoredProcedure);
 
             return rows > 0;
@@ -369,17 +377,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             return result.ToList();
         }
 
-        public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string generatedAdmissionNo, string? remarks)
+        public async Task<bool> ApproveAdmissionRequestAsync(
+            int admissionId,
+            string generatedAdmissionNo,
+            string? remarks,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
         {
-            var connection = await GetOpenConnectionAsync();
+            var conn = connection ?? await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_AdmissionId", admissionId, DbType.Int32);
             parameters.Add("p_AdmissionNo", generatedAdmissionNo, DbType.String);
             parameters.Add("p_Remarks", remarks, DbType.String);
 
-            var rows = await connection.ExecuteAsync(
+            var rows = await conn.ExecuteAsync(
                 "sp_ApproveAdmissionRequest",
                 parameters,
+                transaction: transaction,
                 commandType: CommandType.StoredProcedure);
 
             return rows > 0;
@@ -465,78 +479,162 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         // =========================================================
-        // GENERATE ADMISSION NUMBER
+        // PRE-ALLOCATION MASTER REFERENCE & FEE VALIDATION
         // =========================================================
-        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
+        public async Task ValidateMasterReferencesAsync(CreateStudentAdmissionRequest request)
         {
-            try
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
             {
-                var connection = await GetOpenConnectionAsync();
-                var config = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
-                    SELECT Prefix, FormatPattern, NumberLength, CurrentSequence, StartNumber 
-                    FROM NumberSeriesConfigurations 
-                    WHERE SeriesCode = 'ADMISSION_NO' AND (CampusId = @CampusId OR CampusId IS NULL)
-                    ORDER BY (CampusId = @CampusId) DESC 
-                    LIMIT 1;",
-                    new { CampusId = campusId });
-
-                if (config != null)
-                {
-                    string prefix = (string)(config.Prefix ?? "ADM");
-                    string formatPattern = (string)(config.FormatPattern ?? "{PREFIX}-{SEQ}");
-                    int numberLength = (int)(config.NumberLength ?? 4);
-                    int curSeq = (int)(config.CurrentSequence ?? 0);
-                    int startNum = (int)(config.StartNumber ?? 1);
-                    int nextSeq = curSeq < startNum ? startNum : curSeq + 1;
-
-                    string paddedSeq = nextSeq.ToString().PadLeft(Math.Max(1, numberLength), '0');
-                    return formatPattern
-                        .Replace("{PREFIX}", prefix, StringComparison.OrdinalIgnoreCase)
-                        .Replace("{SEQ}", paddedSeq, StringComparison.OrdinalIgnoreCase);
-                }
+                var campusExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.CampusId.Value && c.IsActive);
+                if (!campusExists)
+                    throw new ArgumentException($"CampusId {request.CampusId.Value} does not exist or is inactive.");
             }
-            catch
+            else
             {
+                throw new ArgumentException("Valid CampusId is required.");
             }
 
-            try
+            if (request.SourceCampusId.HasValue && request.SourceCampusId.Value > 0)
             {
-                var connection = await GetOpenConnectionAsync();
-                return await connection.QuerySingleAsync<string>(
-                    "sp_GenerateAdmissionNumber",
-                    commandType: CommandType.StoredProcedure);
+                var sourceExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.SourceCampusId.Value && c.IsActive);
+                if (!sourceExists)
+                    throw new ArgumentException($"SourceCampusId {request.SourceCampusId.Value} does not exist or is inactive.");
             }
-            catch
+
+            if (!await _context.Boards.AnyAsync(b => b.BoardId == request.BoardId && b.IsActive))
+                throw new ArgumentException($"BoardId {request.BoardId} does not exist or is inactive.");
+
+            if (!await _context.AcademicYears.AnyAsync(a => a.AcademicYearId == request.AcademicYearId && a.IsActive))
+                throw new ArgumentException($"AcademicYearId {request.AcademicYearId} does not exist or is inactive.");
+
+            if (!await _context.AcademicLevels.AnyAsync(l => l.AcademicLevelId == request.AcademicLevelId && l.IsActive))
+                throw new ArgumentException($"AcademicLevelId {request.AcademicLevelId} does not exist or is inactive.");
+
+            if (!await _context.Groups.AnyAsync(g => g.GroupId == request.GroupId && g.IsActive))
+                throw new ArgumentException($"GroupId {request.GroupId} does not exist or is inactive.");
+
+            if (!await _context.Programs.AnyAsync(p => p.ProgramId == request.ProgramId && p.IsActive))
+                throw new ArgumentException($"ProgramId {request.ProgramId} does not exist or is inactive.");
+
+            if (!request.IsReferral)
             {
-                return $"ADM-{DateTime.Now.Year}-0001";
+                if (!request.FeeStructureId.HasValue || request.FeeStructureId.Value <= 0)
+                    throw new ArgumentException("Fee structure is required for non-referral admissions.");
+
+                var feeStructureExists = await _context.FeeStructures
+                    .AnyAsync(f => f.FeeStructureId == request.FeeStructureId.Value && f.IsActive);
+                if (!feeStructureExists)
+                    throw new ArgumentException($"FeeStructureId {request.FeeStructureId.Value} does not exist or is inactive.");
             }
         }
 
-        public async Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId)
+        public async Task ValidateFeeSelectionInputsAsync(int admissionId, IReadOnlyCollection<int> componentIds)
+        {
+            var admission = await _context.StudentAdmissions
+                .AsNoTracking()
+                .Where(a => a.AdmissionId == admissionId && a.IsActive)
+                .Select(a => new { a.AdmissionId, a.FeeStructureId })
+                .FirstOrDefaultAsync();
+
+            if (admission == null)
+                throw new KeyNotFoundException($"Student admission with ID {admissionId} was not found.");
+
+            if (!admission.FeeStructureId.HasValue || admission.FeeStructureId.Value <= 0)
+                throw new ArgumentException($"Admission {admissionId} does not have an assigned FeeStructureId.");
+
+            if (componentIds.Count == 0)
+                return;
+
+            var distinctIds = componentIds.Distinct().ToList();
+            if (distinctIds.Any(id => id <= 0))
+                throw new ArgumentException("All fee structure component IDs must be positive integers.");
+
+            var validIds = await _context.FeeStructureComponents
+                .AsNoTracking()
+                .Where(c => c.FeeStructureId == admission.FeeStructureId.Value && c.IsActive && distinctIds.Contains(c.FeeStructureComponentId))
+                .Select(c => c.FeeStructureComponentId)
+                .ToListAsync();
+
+            var invalidIds = distinctIds.Except(validIds).ToList();
+            if (invalidIds.Count > 0)
+            {
+                throw new ArgumentException($"Invalid or inactive fee structure component ID(s) for admission fee structure {admission.FeeStructureId.Value}: {string.Join(", ", invalidIds)}");
+            }
+        }
+
+        // =========================================================
+        // PERSISTENT IDEMPOTENCY & RECOVERY STORE
+        // =========================================================
+        public async Task<AdmissionIdempotencyRecordDto?> TryBeginIdempotencyAsync(
+            string idempotencyKey,
+            int? campusId,
+            int? createdByUserId,
+            string requestHash,
+            DateTime expiresAtUtc)
         {
             var connection = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
+            parameters.Add("p_IdempotencyKey", idempotencyKey, DbType.String);
             parameters.Add("p_CampusId", campusId, DbType.Int32);
-            parameters.Add("p_BoardId", boardId, DbType.Int32);
-            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_CreatedByUserId", createdByUserId, DbType.Int32);
+            parameters.Add("p_RequestHash", requestHash, DbType.String);
+            parameters.Add("p_ExpiresAt", expiresAtUtc, DbType.DateTime);
 
-            return await connection.ExecuteScalarAsync<int>(
-                "sp_GetMaxAdmissionSequence",
+            return await connection.QueryFirstOrDefaultAsync<AdmissionIdempotencyRecordDto>(
+                "sp_TryBeginAdmissionIdempotency",
                 parameters,
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence)
+        public async Task CompleteIdempotencyAsync(
+            string idempotencyKey,
+            int admissionId,
+            string? admissionNo,
+            int httpStatusCode,
+            string responseJson,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_IdempotencyKey", idempotencyKey, DbType.String);
+            parameters.Add("p_AdmissionId", admissionId, DbType.Int32);
+            parameters.Add("p_AdmissionNo", admissionNo, DbType.String);
+            parameters.Add("p_HttpStatusCode", httpStatusCode, DbType.Int32);
+            parameters.Add("p_ResponseJson", responseJson, DbType.String);
+
+            await conn.ExecuteAsync(
+                "sp_CompleteAdmissionIdempotency",
+                parameters,
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task FailIdempotencyAsync(
+            string idempotencyKey,
+            int httpStatusCode,
+            string errorMessage)
         {
             var connection = await GetOpenConnectionAsync();
-            string seriesCode = $"ADMISSION_NO|B:{boardId}_AY:{academicYearId}";
             var parameters = new DynamicParameters();
-            parameters.Add("p_CampusId", campusId, DbType.Int32);
-            parameters.Add("p_SeriesCode", seriesCode, DbType.String);
-            parameters.Add("p_CorrectSequence", correctSequence, DbType.Int32);
+            parameters.Add("p_IdempotencyKey", idempotencyKey, DbType.String);
+            parameters.Add("p_HttpStatusCode", httpStatusCode, DbType.Int32);
+            parameters.Add("p_ErrorMessage", errorMessage, DbType.String);
 
             await connection.ExecuteAsync(
-                "sp_SyncAdmissionSequence",
+                "sp_FailAdmissionIdempotency",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<AdmissionIdempotencyRecordDto?> GetIdempotencyRecordAsync(string idempotencyKey)
+        {
+            var connection = await GetOpenConnectionAsync();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_IdempotencyKey", idempotencyKey, DbType.String);
+
+            return await connection.QueryFirstOrDefaultAsync<AdmissionIdempotencyRecordDto>(
+                "sp_GetAdmissionIdempotencyRecord",
                 parameters,
                 commandType: CommandType.StoredProcedure);
         }

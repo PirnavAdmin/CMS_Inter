@@ -26,6 +26,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string? RegularizationType { get; set; }
         public string? RegularizationReason { get; set; }
         public string? RegularizationAdminRemarks { get; set; }
+        public DateTime? ReviewedAt { get; set; }
         public bool MarkedByAdmin { get; set; } = false;
         public string? MarkedBy { get; set; }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Reimbursement;
@@ -24,6 +25,19 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             _hubContext = hubContext;
         }
 
+        private async Task BroadcastClaimEventAsync(string eventType, int? campusId, int? staffId = null)
+        {
+            if (_hubContext == null) return;
+            try
+            {
+                var groups = new List<string> { "Role_admin", "Role_superadmin", "Role_super admin", "Role_accountant", "Role_principal" };
+                if (campusId.HasValue && campusId.Value > 0) groups.Add($"Campus_{campusId.Value}");
+                if (staffId.HasValue && staffId.Value > 0) groups.Add($"Staff_{staffId.Value}");
+                await _hubContext.Clients.Groups(groups.Distinct().ToList()).SendAsync("NotificationReceived", new { type = eventType, campusId });
+            }
+            catch { }
+        }
+
         public async Task<CreateClaimResponseDto> CreateClaimAsync(CreateReimbursementClaimRequest request)
         {
             if (request.Amount <= 0)
@@ -42,11 +56,7 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             }
 
             var created = await _repository.CreateClaimAsync(request);
-            try
-            {
-                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_REIMBURSEMENT", campusId = request.CampusId });
-            }
-            catch { }
+            await BroadcastClaimEventAsync("NEW_REIMBURSEMENT", request.CampusId, request.StaffId);
 
             return created;
         }
@@ -187,11 +197,7 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             var verifyResult = await _repository.VerifyClaimAsync(id, approvedAmount, reviewNotes, reviewedBy);
             if (verifyResult.Success)
             {
-                try
-                {
-                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
-                }
-                catch { }
+                await BroadcastClaimEventAsync("REIMBURSEMENT_STATUS_UPDATED", existing.CampusId, existing.StaffId);
             }
             return verifyResult;
         }
@@ -220,11 +226,7 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             var rejectResult = await _repository.RejectClaimAsync(id, noteText, reviewedBy);
             if (rejectResult)
             {
-                try
-                {
-                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
-                }
-                catch { }
+                await BroadcastClaimEventAsync("REIMBURSEMENT_STATUS_UPDATED", existing.CampusId, existing.StaffId);
             }
             return rejectResult;
         }
@@ -241,11 +243,7 @@ namespace CollegeManagement.API.Services.Implementations.Reimbursement
             var paidResult = await _repository.MarkPaidAsync(id, paymentRef, paidBy);
             if (paidResult)
             {
-                try
-                {
-                    await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "REIMBURSEMENT_STATUS_UPDATED", campusId = existing.CampusId });
-                }
-                catch { }
+                await BroadcastClaimEventAsync("REIMBURSEMENT_STATUS_UPDATED", existing.CampusId, existing.StaffId);
             }
             return paidResult;
         }

@@ -166,10 +166,27 @@
   transition: all 0.15s ease;
 }
 
+.cms-notif-tab:focus-visible,
+.cms-notif-mark-all-btn:focus-visible,
+.cms-notif-bell-trigger:focus-visible,
+.cms-notif-item:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: -2px;
+}
+
 .cms-notif-tab.active {
   background: #ffffff;
   color: #1e293b;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.cms-notif-section-caption {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 /* Body / List */
@@ -180,11 +197,16 @@
 }
 
 .cms-notif-item {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #f8fafc;
   cursor: pointer;
   transition: background 0.15s ease;
   position: relative;
@@ -195,11 +217,41 @@
 }
 
 .cms-notif-item.is-unread {
-  background: rgba(245, 243, 255, 0.5);
+  background: rgba(245, 243, 255, 0.72);
 }
 
 .cms-notif-item.is-unread:hover {
-  background: rgba(245, 243, 255, 0.85);
+  background: rgba(237, 233, 254, 0.9);
+}
+
+.cms-notif-item.is-read {
+  background: #ffffff;
+}
+
+.cms-notif-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cms-notif-state-pill {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+
+.cms-notif-state-pill.unread {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.cms-notif-state-pill.read {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .cms-notif-icon-box {
@@ -316,8 +368,94 @@
   color: #f1f5f9;
 }
 
+[data-theme="dark"] .cms-notif-item.is-read {
+  background: #1e293b;
+}
+
+[data-theme="dark"] .cms-notif-section-caption {
+  background: #0f172a;
+  color: #94a3b8;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .cms-notif-state-pill.unread {
+  background: rgba(124, 58, 237, 0.25);
+  color: #ddd6fe;
+}
+
+[data-theme="dark"] .cms-notif-state-pill.read {
+  background: rgba(148, 163, 184, 0.16);
+  color: #94a3b8;
+}
+
 [data-theme="dark"] .cms-notif-tab.active {
   background: #1e293b;
   color: #f1f5f9;
 }
 
+/* Grouped Notification Badge & Card Polish */
+.cms-notif-item {
+  container-type: inline-size;
+  gap: 12px;
+}
+.cms-notif-icon-box.attendance {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+.cms-notif-group-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 9px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cms-notif-group-badge.multiple {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+.cms-notif-group-badge.single {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid rgba(109, 40, 217, 0.16);
+}
+.cms-notif-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cms-notif-group-hint {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #2563eb;
+}
+[data-theme="dark"] .cms-notif-icon-box.attendance {
+  background: rgba(14, 165, 233, 0.2);
+  color: #7dd3fc;
+}
+[data-theme="dark"] .cms-notif-group-badge.multiple {
+  background: rgba(37, 99, 235, 0.25);
+  color: #93c5fd;
+  border-color: rgba(147, 197, 253, 0.25);
+}
+[data-theme="dark"] .cms-notif-group-badge.single {
+  background: rgba(124, 58, 237, 0.25);
+  color: #ddd6fe;
+  border-color: rgba(221, 214, 254, 0.2);
+}
+[data-theme="dark"] .cms-notif-group-hint {
+  color: #93c5fd;
+}
+@container (width < 320px) {
+  .cms-notif-item-top {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}

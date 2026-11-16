@@ -415,6 +415,11 @@ BEGIN
     SET v_InitialStatus = 'Pending';
     SET v_AdmissionNo = NULLIF(TRIM(p_AdmissionNo), '');
 
+    IF (p_IsReferral = 0 OR p_IsReferral IS NULL) AND v_AdmissionNo IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Admission number could not be allocated.';
+    END IF;
+
     INSERT INTO `StudentAdmissions`
     (
         AdmissionDate, AdmissionNo, AdmissionType, AdmissionQuota, CampusId, SourceCampusId, IsReferral, AdmittedById,
@@ -449,12 +454,6 @@ BEGIN
     );
 
     SET v_AdmissionId = LAST_INSERT_ID();
-
-    -- Fallback default admission number if non-referral and empty
-    IF v_AdmissionNo IS NULL AND (p_IsReferral = 0 OR p_IsReferral IS NULL) THEN
-        SET v_AdmissionNo = CONCAT('ADM-', LPAD(v_AdmissionId, 4, '0'));
-        UPDATE `StudentAdmissions` SET `AdmissionNo` = v_AdmissionNo WHERE `AdmissionId` = v_AdmissionId;
-    END IF;
 
     -- Return full created projection
     CALL sp_GetStudentAdmissionById(v_AdmissionId);
@@ -1334,25 +1333,156 @@ BEGIN
     INNER JOIN `FeeStructureComponents` fsc
         ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
     WHERE afs.AdmissionId = p_AdmissionId
-      AND fsc.FeeStructureId = v_FeeStructureId
-      AND fsc.IsMandatory = 0;
+      AND (fsc.FeeStructureId != v_FeeStructureId OR fsc.IsMandatory = 0);
 
     IF p_SelectedComponentIds IS NOT NULL AND JSON_LENGTH(p_SelectedComponentIds) > 0 THEN
         INSERT INTO `AdmissionFeeSelections` (AdmissionId, FeeStructureComponentId, IsSelected, CreatedAt)
-        SELECT 
-            p_AdmissionId, 
-            jt.ComponentId, 
-            1, 
+        SELECT DISTINCT
+            p_AdmissionId,
+            jt.ComponentId,
+            1,
             CURRENT_TIMESTAMP(6)
         FROM JSON_TABLE(
             p_SelectedComponentIds,
-            '$[*]' COLUMNS (ComponentId INT PATH '$')
+            '$[*]' COLUMNS (ComponentId INT PATH '
+
+    SELECT COUNT(*)
+    INTO v_SelectedCount
+    FROM `AdmissionFeeSelections` afs
+    INNER JOIN `FeeStructureComponents` fsc
+        ON fsc.FeeStructureComponentId = afs.FeeStructureComponentId
+    WHERE afs.AdmissionId = p_AdmissionId
+      AND fsc.FeeStructureId = v_FeeStructureId
+      AND afs.IsSelected = 1;
+
+    SELECT v_SelectedCount AS SelectedOptionalFees;
+END //
+
+-- =============================================================================
+-- 12. SYNC APPROVED STUDENT FROM ADMISSION UPDATE
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_SyncApprovedStudentFromAdmission`//
+CREATE PROCEDURE `sp_SyncApprovedStudentFromAdmission`
+(
+    IN p_AdmissionId INT
+)
+BEGIN
+    DECLARE v_StudentId INT;
+
+    SELECT `StudentId` INTO v_StudentId
+    FROM `Students`
+    WHERE `AdmissionId` = p_AdmissionId
+    ORDER BY `StudentId` DESC
+    LIMIT 1;
+
+    IF v_StudentId IS NOT NULL THEN
+        UPDATE `Students` s
+        JOIN `StudentAdmissions` sa ON s.AdmissionId = sa.AdmissionId
+        SET
+            s.StudentName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
+            s.Photo = COALESCE(sa.StudentPhoto, s.Photo),
+            s.Gender = COALESCE(sa.Gender, s.Gender),
+            s.DateOfBirth = COALESCE(sa.DateOfBirth, s.DateOfBirth),
+            s.BloodGroup = COALESCE(sa.BloodGroup, s.BloodGroup),
+            s.Email = COALESCE(sa.StudentEmail, s.Email),
+            s.MobileNumber = COALESCE(sa.StudentMobileNumber, s.MobileNumber),
+            s.AadhaarNumber = COALESCE(sa.AadhaarNumber, s.AadhaarNumber),
+            s.Nationality = COALESCE(sa.Nationality, s.Nationality),
+            s.Religion = COALESCE(sa.Religion, s.Religion),
+            s.Category = COALESCE(sa.Category, s.Category),
+            s.Address = CONCAT_WS(', ', NULLIF(TRIM(sa.HouseDoorNumber), ''), NULLIF(TRIM(sa.StreetVillage), ''), NULLIF(TRIM(sa.City), ''), NULLIF(TRIM(sa.District), ''), NULLIF(TRIM(sa.State), ''), NULLIF(TRIM(sa.Pincode), '')),
+            s.City = COALESCE(sa.City, s.City),
+            s.District = COALESCE(sa.District, s.District),
+            s.State = COALESCE(sa.State, s.State),
+            s.Pincode = COALESCE(sa.Pincode, s.Pincode),
+            s.BoardId = COALESCE(sa.BoardId, s.BoardId),
+            s.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId),
+            s.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId),
+            s.GroupId = COALESCE(sa.GroupId, s.GroupId),
+            s.ProgramId = COALESCE(sa.ProgramId, s.ProgramId),
+            s.Medium = COALESCE(sa.Medium, s.Medium),
+            s.SecondLanguage = COALESCE(sa.SecondLanguage, s.SecondLanguage),
+            s.PreviousSchool = COALESCE(sa.PreviousSchool, s.PreviousSchool),
+            s.PreviousBoard = COALESCE(sa.PreviousBoard, s.PreviousBoard),
+            s.PreviousYearOfPassing = COALESCE(sa.PreviousYearOfPassing, s.PreviousYearOfPassing),
+            s.PreviousPercentage = COALESCE(sa.PreviousPercentage, s.PreviousPercentage),
+            s.HallTicketNumber = COALESCE(sa.HallTicketNumber, s.HallTicketNumber),
+            s.PreviousHallTicketNumber = COALESCE(sa.HallTicketNumber, s.PreviousHallTicketNumber),
+            s.FatherName = COALESCE(sa.FatherName, s.FatherName),
+            s.FatherOccupation = COALESCE(sa.FatherOccupation, s.FatherOccupation),
+            s.FatherMobile = COALESCE(sa.FatherMobile, s.FatherMobile),
+            s.FatherEmail = COALESCE(sa.FatherEmail, s.FatherEmail),
+            s.MotherName = COALESCE(sa.MotherName, s.MotherName),
+            s.MotherOccupation = COALESCE(sa.MotherOccupation, s.MotherOccupation),
+            s.MotherMobile = COALESCE(sa.MotherMobile, s.MotherMobile),
+            s.MotherEmail = COALESCE(sa.MotherEmail, s.MotherEmail),
+            s.GuardianName = COALESCE(sa.GuardianName, s.GuardianName),
+            s.GuardianMobile = COALESCE(sa.GuardianMobile, s.GuardianMobile),
+            s.ParentGuardianEmail = COALESCE(sa.ParentGuardianEmail, s.ParentGuardianEmail),
+            s.AnnualIncome = COALESCE(sa.AnnualIncome, s.AnnualIncome),
+            s.StudentType = COALESCE(sa.StudentType, s.StudentType),
+            s.TransportRequired = COALESCE(sa.TransportRequired, s.TransportRequired),
+            s.BusType = COALESCE(sa.BusType, s.BusType),
+            s.RouteId = COALESCE(sa.RouteId, s.RouteId),
+            s.BusRoute = COALESCE(sa.BusRoute, s.BusRoute),
+            s.PickupPointId = COALESCE(sa.PickupPointId, s.PickupPointId),
+            s.PickupPoint = COALESCE(sa.PickupPoint, s.PickupPoint),
+            s.HostelId = COALESCE(sa.HostelId, s.HostelId),
+            s.HostelBlock = COALESCE(sa.HostelBlock, s.HostelBlock),
+            s.RoomId = COALESCE(sa.RoomId, s.RoomId),
+            s.HostelRoom = COALESCE(sa.HostelRoom, s.HostelRoom),
+            s.BedId = COALESCE(sa.BedId, s.BedId),
+            s.HostelBed = COALESCE(sa.HostelBed, s.HostelBed),
+            s.CampusId = COALESCE(sa.CampusId, s.CampusId),
+            s.FeeStructureId = COALESCE(sa.FeeStructureId, s.FeeStructureId),
+            s.PaymentPlan = COALESCE(sa.PaymentPlan, s.PaymentPlan),
+            s.ScholarshipStatus = COALESCE(sa.ScholarshipStatus, s.ScholarshipStatus),
+            s.UpdatedAt = CURRENT_TIMESTAMP(6)
+        WHERE s.StudentId = v_StudentId;
+
+        -- Update Users table for Student Login / Profile
+        UPDATE `Users` u
+        JOIN `StudentAdmissions` sa ON sa.AdmissionId = p_AdmissionId
+        SET 
+            u.FullName = CONCAT_WS(' ', NULLIF(TRIM(sa.FirstName), ''), NULLIF(TRIM(sa.LastName), '')),
+            u.Email = COALESCE(NULLIF(sa.StudentEmail, ''), u.Email),
+            u.PhoneNumber = COALESCE(NULLIF(sa.StudentMobileNumber, ''), u.PhoneNumber),
+            u.UpdatedAt = CURRENT_TIMESTAMP(6)
+        WHERE u.StudentId = v_StudentId;
+    END IF;
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+
+-- =============================================================================
+-- 13. UPDATE ADMISSION NUMBER
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_UpdateAdmissionNumber`//
+CREATE PROCEDURE `sp_UpdateAdmissionNumber`
+(
+    IN p_AdmissionId INT,
+    IN p_AdmissionNo VARCHAR(50)
+)
+BEGIN
+    UPDATE `StudentAdmissions`
+    SET `AdmissionNo` = p_AdmissionNo,
+        `UpdatedAt` = CURRENT_TIMESTAMP(6)
+    WHERE `AdmissionId` = p_AdmissionId;
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+
+DELIMITER ;
+)
         ) jt
         INNER JOIN `FeeStructureComponents` fsc
             ON fsc.FeeStructureComponentId = jt.ComponentId
         WHERE fsc.FeeStructureId = v_FeeStructureId
           AND fsc.IsActive = 1
-          AND fsc.IsMandatory = 0;
+          AND fsc.IsMandatory = 0
+        ON DUPLICATE KEY UPDATE
+            IsSelected = 1,
+            UpdatedAt = CURRENT_TIMESTAMP(6);
     END IF;
 
     SELECT COUNT(*)
@@ -1479,6 +1609,197 @@ BEGIN
     WHERE `AdmissionId` = p_AdmissionId;
 
     SELECT ROW_COUNT() AS AffectedRows;
+END //
+
+
+-- =============================================================================
+-- Migration 017: Student Admission Persistent Idempotency & Sequence Sync
+-- Creates StudentAdmissionIdempotencyRecords table and hardened stored procedures
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS `StudentAdmissionIdempotencyRecords` (
+    `Id` BIGINT NOT NULL AUTO_INCREMENT,
+    `IdempotencyKey` VARCHAR(128) NOT NULL,
+    `CampusId` INT NULL,
+    `CreatedByUserId` INT NULL,
+    `RequestHash` CHAR(64) NOT NULL,
+    `Status` VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
+    `AdmissionId` INT NULL,
+    `AdmissionNo` VARCHAR(50) NULL,
+    `HttpStatusCode` INT NULL,
+    `ResponseJson` LONGTEXT NULL,
+    `ErrorMessage` VARCHAR(1000) NULL,
+    `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `UpdatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    `ExpiresAt` DATETIME(6) NOT NULL,
+    PRIMARY KEY (`Id`),
+    UNIQUE KEY `UX_AdmissionIdempotency_Key` (`IdempotencyKey`),
+    KEY `IX_AdmissionIdempotency_AdmissionId` (`AdmissionId`),
+    KEY `IX_AdmissionIdempotency_CreatedAt` (`CreatedAt`),
+    KEY `IX_AdmissionIdempotency_Hash_Created` (`RequestHash`, `CreatedAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DELIMITER //
+
+-- =============================================================================
+-- 1. TRY BEGIN / RECLAIM ADMISSION IDEMPOTENCY LOCK
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_TryBeginAdmissionIdempotency`//
+CREATE PROCEDURE `sp_TryBeginAdmissionIdempotency`
+(
+    IN p_IdempotencyKey VARCHAR(128),
+    IN p_CampusId INT,
+    IN p_CreatedByUserId INT,
+    IN p_RequestHash CHAR(64),
+    IN p_ExpiresAt DATETIME(6)
+)
+BEGIN
+    DECLARE v_Inserted INT DEFAULT 0;
+    DECLARE v_Reclaimed INT DEFAULT 0;
+
+    INSERT IGNORE INTO `StudentAdmissionIdempotencyRecords`
+    (
+        `IdempotencyKey`,
+        `CampusId`,
+        `CreatedByUserId`,
+        `RequestHash`,
+        `Status`,
+        `CreatedAt`,
+        `UpdatedAt`,
+        `ExpiresAt`
+    )
+    VALUES
+    (
+        TRIM(p_IdempotencyKey),
+        p_CampusId,
+        p_CreatedByUserId,
+        p_RequestHash,
+        'IN_PROGRESS',
+        UTC_TIMESTAMP(6),
+        UTC_TIMESTAMP(6),
+        p_ExpiresAt
+    );
+
+    SET v_Inserted = ROW_COUNT();
+
+    IF v_Inserted = 0 THEN
+        -- Reclaim only if same payload hash previously failed with transient 5xx or abandoned in-progress (> 5 min)
+        UPDATE `StudentAdmissionIdempotencyRecords`
+        SET `Status` = 'IN_PROGRESS',
+            `ErrorMessage` = NULL,
+            `HttpStatusCode` = NULL,
+            `UpdatedAt` = UTC_TIMESTAMP(6),
+            `ExpiresAt` = p_ExpiresAt
+        WHERE `IdempotencyKey` = TRIM(p_IdempotencyKey)
+          AND `RequestHash` = p_RequestHash
+          AND `AdmissionId` IS NULL
+          AND (
+              (`Status` = 'FAILED' AND COALESCE(`HttpStatusCode`, 500) >= 500)
+              OR (`Status` = 'IN_PROGRESS' AND `UpdatedAt` < DATE_SUB(UTC_TIMESTAMP(6), INTERVAL 5 MINUTE))
+          );
+
+        SET v_Reclaimed = ROW_COUNT();
+    END IF;
+
+    SELECT
+        IF(v_Inserted = 1 OR v_Reclaimed = 1, 1, 0) AS LockAcquired,
+        `Id`,
+        `IdempotencyKey`,
+        `CampusId`,
+        `CreatedByUserId`,
+        `RequestHash`,
+        `Status`,
+        `AdmissionId`,
+        `AdmissionNo`,
+        `HttpStatusCode`,
+        `ResponseJson`,
+        `ErrorMessage`,
+        `CreatedAt`,
+        `UpdatedAt`,
+        `ExpiresAt`
+    FROM `StudentAdmissionIdempotencyRecords`
+    WHERE `IdempotencyKey` = TRIM(p_IdempotencyKey)
+    LIMIT 1;
+END //
+
+-- =============================================================================
+-- 2. COMPLETE ADMISSION IDEMPOTENCY RECORD (RUNS INSIDE ADMISSION TX)
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_CompleteAdmissionIdempotency`//
+CREATE PROCEDURE `sp_CompleteAdmissionIdempotency`
+(
+    IN p_IdempotencyKey VARCHAR(128),
+    IN p_AdmissionId INT,
+    IN p_AdmissionNo VARCHAR(50),
+    IN p_HttpStatusCode INT,
+    IN p_ResponseJson LONGTEXT
+)
+BEGIN
+    UPDATE `StudentAdmissionIdempotencyRecords`
+    SET `Status` = 'COMPLETED',
+        `AdmissionId` = p_AdmissionId,
+        `AdmissionNo` = NULLIF(TRIM(p_AdmissionNo), ''),
+        `HttpStatusCode` = COALESCE(p_HttpStatusCode, 201),
+        `ResponseJson` = p_ResponseJson,
+        `ErrorMessage` = NULL,
+        `UpdatedAt` = UTC_TIMESTAMP(6)
+    WHERE `IdempotencyKey` = TRIM(p_IdempotencyKey);
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+
+-- =============================================================================
+-- 3. FAIL ADMISSION IDEMPOTENCY RECORD (RUNS AFTER TX ROLLBACK)
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_FailAdmissionIdempotency`//
+CREATE PROCEDURE `sp_FailAdmissionIdempotency`
+(
+    IN p_IdempotencyKey VARCHAR(128),
+    IN p_HttpStatusCode INT,
+    IN p_ErrorMessage VARCHAR(1000)
+)
+BEGIN
+    UPDATE `StudentAdmissionIdempotencyRecords`
+    SET `Status` = 'FAILED',
+        `AdmissionId` = NULL,
+        `AdmissionNo` = NULL,
+        `HttpStatusCode` = COALESCE(p_HttpStatusCode, 500),
+        `ResponseJson` = NULL,
+        `ErrorMessage` = LEFT(p_ErrorMessage, 1000),
+        `UpdatedAt` = UTC_TIMESTAMP(6)
+    WHERE `IdempotencyKey` = TRIM(p_IdempotencyKey)
+      AND `Status` != 'COMPLETED';
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+
+-- =============================================================================
+-- 4. GET ADMISSION IDEMPOTENCY / RECOVERY RECORD
+-- =============================================================================
+DROP PROCEDURE IF EXISTS `sp_GetAdmissionIdempotencyRecord`//
+CREATE PROCEDURE `sp_GetAdmissionIdempotencyRecord`
+(
+    IN p_IdempotencyKey VARCHAR(128)
+)
+BEGIN
+    SELECT
+        `Id`,
+        `IdempotencyKey`,
+        `CampusId`,
+        `CreatedByUserId`,
+        `RequestHash`,
+        `Status`,
+        `AdmissionId`,
+        `AdmissionNo`,
+        `HttpStatusCode`,
+        `ResponseJson`,
+        `ErrorMessage`,
+        `CreatedAt`,
+        `UpdatedAt`,
+        `ExpiresAt`
+    FROM `StudentAdmissionIdempotencyRecords`
+    WHERE `IdempotencyKey` = TRIM(p_IdempotencyKey)
+    LIMIT 1;
 END //
 
 DELIMITER ;

@@ -337,6 +337,11 @@ namespace CollegeManagement.API.Services.Implementations
             return await _repository.GetRegularizationsAsync(status, departmentId, campusId, requestType, search);
         }
 
+        public async Task<RegularizationItemDto?> GetRegularizationByIdAsync(int regularizationId)
+        {
+            return await _repository.GetRegularizationByIdAsync(regularizationId);
+        }
+
         public async Task<bool> ReviewRegularizationAsync(int regularizationId, ReviewRegularizationRequest request, int? reviewerUserId)
         {
             return await _repository.ReviewRegularizationAsync(regularizationId, request, reviewerUserId);

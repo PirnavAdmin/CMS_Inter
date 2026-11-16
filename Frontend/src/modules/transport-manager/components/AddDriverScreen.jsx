@@ -19,7 +19,6 @@ import apiEndpoints from "@/api/apiEndpoints.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
-import { incrementSeriesSequence } from "@/data/numberSeriesData.js";
 import { resolveNextStaffEmployeeId } from "@/modules/admin/AdminFaculty/StaffManagementPage.jsx";
 import "@/modules/admin/AdminFaculty/StaffManagementPage.css";
 
@@ -1344,13 +1343,7 @@ export default function AddDriverScreen({ onCancel, onSuccess, existingDrivers =
         }
       }
 
-      try {
-        incrementSeriesSequence("NON_TEACHING_STAFF");
-        incrementSeriesSequence("NON_TEACHING_STAFF_ID");
-        incrementSeriesSequence("non-teaching-staff");
-        incrementSeriesSequence("employee-id");
-      } catch {}
-
+      
       // Clear all previously entered details except the newly resolved employee ID sequence
       let nextId = "";
       try {

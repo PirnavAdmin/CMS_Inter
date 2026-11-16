@@ -178,6 +178,23 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { success = false, message = ex.Message });
             }
         }
+
+        [HttpPost("college-admins/{id:int}/resend-credentials")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> ResendCollegeAdminCredentials(int id)
+        {
+            try
+            {
+                bool ok = await _service.ResendAdminCredentialsAsync(id, GetCurrentUserName());
+                if (!ok) return NotFound(new { success = false, message = "Administrator not found." });
+                return Ok(new { success = true, message = "New temporary login credentials generated and emailed to the administrator." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
         #endregion
 
         #region 4. Global Users

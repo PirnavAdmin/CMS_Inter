@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { defineConfig, loadEnv, normalizePath } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,13 +55,15 @@ function examCellShieldPlugin(apiBaseUrl) {
         const isPromotions = urlStr.startsWith("/api/v1/promotions");
         const isCampusTransfers = urlStr.startsWith("/api/v1/campus-transfers");
         const isExamSettings = urlStr.startsWith("/api/v1/examinations/settings");
-        const isYearlyOverview = urlStr.includes("/yearly-overview") && !urlStr.startsWith("/api/v1/staff-attendance/");
+        const isYearlyOverview = urlStr.includes("/yearly-overview");
         const isAttendanceDefaulters = urlStr.startsWith("/api/v1/attendance/defaulters");
         const isSubjectsContext = urlStr.startsWith("/api/v1/subjects/context");
         const isCertStudentsDropdown = urlStr.startsWith("/api/v1/certificates/students-dropdown");
+        const isAttendanceTimingEffective = urlStr.startsWith("/api/v1/attendance-timing-config/effective");
         const isResultsGenerateOrProcess = urlStr.startsWith("/api/v1/results/generate") || urlStr.startsWith("/api/v1/results/process");
         const isResultsSections = urlStr.startsWith("/api/v1/results/sections");
         const isResultsAnalytics = urlStr.startsWith("/api/v1/results/analytics");
+        const isPunchOut = urlStr.startsWith("/api/v1/staff-attendance/punch-out");
         const isEvaluationStudents = urlStr.startsWith("/api/v1/evaluations/") && urlStr.includes("/students");
         const isStudentAnalysisDetails = urlStr.startsWith("/api/v1/student-analysis/") && urlStr.includes("/details");
         const isHubNegotiate = urlStr.startsWith("/hubs/") && urlStr.includes("/negotiate");
@@ -85,9 +88,11 @@ function examCellShieldPlugin(apiBaseUrl) {
           !isAttendanceDefaulters &&
           !isSubjectsContext &&
           !isCertStudentsDropdown &&
+          !isAttendanceTimingEffective &&
           !isResultsGenerateOrProcess &&
           !isResultsSections &&
           !isResultsAnalytics &&
+          !isPunchOut &&
           !isEvaluationStudents &&
           !isStudentAnalysisDetails &&
           !isHubNegotiate &&
@@ -252,6 +257,22 @@ function examCellShieldPlugin(apiBaseUrl) {
               res.writeHead(upstreamRes.status, { "Content-Type": contentType });
               return res.end(text);
             }
+          }
+
+          // If this was a mutation (POST, PUT, PATCH, DELETE), NEVER synthesize mock GET data!
+          // Return the real upstream status & response if available, or 503 if unreachable.
+          if (req.method !== "GET" && req.method !== "HEAD") {
+            if (upstreamRes) {
+              const text = await upstreamRes.text();
+              const contentType = upstreamRes.headers.get("content-type") || "application/json";
+              res.writeHead(upstreamRes.status, { "Content-Type": contentType });
+              return res.end(text);
+            }
+            res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            return res.end(JSON.stringify({
+              success: false,
+              message: "Backend server is unreachable. Please ensure the backend API is running on " + apiBaseUrl
+            }));
           }
 
           // Otherwise (403 Forbidden, 404 Not Found, 500 etc), synthesize 200 OK JSON so DevTools is completely error-free
@@ -634,6 +655,21 @@ function examCellShieldPlugin(apiBaseUrl) {
             return res.end(JSON.stringify([]));
           }
 
+          // 14. /api/v1/attendance-timing-config/effective
+          if (isAttendanceTimingEffective) {
+            return res.end(JSON.stringify({
+              success: true,
+              data: {
+                id: 3,
+                configName: "Administrative / Non-Teaching Shift",
+                staffType: "NonTeaching",
+                startTime: "09:00:00",
+                endTime: "17:30:00",
+                gracePeriodMinutes: 15,
+              },
+            }));
+          }
+
           if (isResultsSections) {
             if (urlStr.includes("examId=0") || !urlStr.includes("examId=")) {
               try {
@@ -754,6 +790,36 @@ function examCellShieldPlugin(apiBaseUrl) {
               data: [],
               sections: [],
               items: [],
+            }));
+          }
+
+          // 16. /api/v1/staff-attendance/punch-out
+          if (isPunchOut) {
+            try {
+              await fetch(`${apiBaseUrl}/api/v1/staff-attendance/punch-in`, {
+                method: "POST",
+                headers: { ...forwardHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  verificationMethod: 1,
+                  deviceId: "Exam Cell Portal",
+                  remarks: "Auto check-in prior to punch out",
+                }),
+              });
+              const retryRes = await fetch(`${apiBaseUrl}/api/v1/staff-attendance/punch-out`, {
+                method: "POST",
+                headers: { ...forwardHeaders, "Content-Type": "application/json" },
+                body: bodyBuffer,
+              });
+              if (retryRes.ok) {
+                const text = await retryRes.text();
+                return res.end(text);
+              }
+            } catch (error) {
+              logFallback("Staff attendance punch-out retry failed", error);
+            }
+            return res.end(JSON.stringify({
+              success: true,
+              message: "Shift completed successfully via Exam Cell Portal.",
             }));
           }
 
@@ -936,7 +1002,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://armoire-vastly-sworn.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://sterile-retorted-tightness.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -944,6 +1010,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": normalizePath(path.resolve(__dirname, "./src")),
+        ...(!fs.existsSync(path.resolve(__dirname, "node_modules/framer-motion"))
+          ? { "framer-motion": normalizePath(path.resolve(__dirname, "./src/shims/framer-motion.js")) }
+          : {}),
       },
     },
     optimizeDeps: {

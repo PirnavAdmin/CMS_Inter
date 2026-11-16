@@ -21,10 +21,12 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
-        public int? CampusId { get; set; } = 1; 
+        public int? CampusId { get; set; }
         public int? SourceCampusId { get; set; }
         public int? AdmittedById { get; set; }
         public bool IsReferral { get; set; }
+        public string? IdempotencyKey { get; set; }
+        public List<int>? SelectedFeeStructureComponentIds { get; set; }
 
         [Required]
         public int BoardId { get; set; }

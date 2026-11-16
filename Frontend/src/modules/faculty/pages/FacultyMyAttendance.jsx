@@ -22,6 +22,42 @@ import { useFacultySafe } from "../FacultyContext.jsx";
 import { attendanceService } from "../../../api/attendanceService.js";
 import { attendanceTimingApi } from "../../../api/attendanceTimingApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
+import notificationHubService from "@/services/notificationHubService.js";
+
+const getIstTodayIsoStr = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
+const resolveRangeForDate = (dateParam) => {
+  const target = String(dateParam || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return null;
+  const todayIso = getIstTodayIsoStr();
+  const todayUtc = new Date(`${todayIso}T00:00:00Z`);
+  const diffToMon = (todayUtc.getUTCDay() + 6) % 7;
+  const weekStart = new Date(todayUtc);
+  weekStart.setUTCDate(todayUtc.getUTCDate() - diffToMon);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const weekStartIso = weekStart.toISOString().slice(0, 10);
+  const weekEndIso = weekEnd.toISOString().slice(0, 10);
+  if (target >= weekStartIso && target <= weekEndIso) return "week";
+  if (target.slice(0, 7) === todayIso.slice(0, 7)) return "month";
+  return "last_month";
+};
+
+const formatDecisionDate = (raw) => {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  const normalized = s.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -160,8 +196,12 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   const urlRouting = adminRouting || pathname.startsWith("/faculty-dashboard/my-attendance");
   const regularizeDate = urlRouting ? routeParams.get("regularize") || "" : "";
   const highlightedRegId = routeParams.get("regId") || "";
+  const notifDateParam = routeParams.get("date") || "";
   const rangeParam = routeParams.get("range");
-  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam) ? rangeParam : (highlightedRegId ? "month" : "week");
+  const inferredNotifRange = resolveRangeForDate(notifDateParam);
+  const routedRange = ["week", "last_week", "month", "last_month"].includes(rangeParam)
+    ? rangeParam
+    : (inferredNotifRange || (highlightedRegId ? "month" : "week"));
   const highlightedRowRef = useRef(null);
   const restoredRegularization = useRef("");
   const historyRequest = useRef(0);
@@ -169,14 +209,6 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
   const context = useFacultySafe();
   const [shiftUpdateTick, setShiftUpdateTick] = useState(0);
-
-  // Periodic ticker to recalculate active shift timer every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setShiftUpdateTick((prev) => prev + 1);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Attendance Timing Configuration State (populated strictly from backend settings)
   const [timingConfig, setTimingConfig] = useState({
@@ -261,6 +293,15 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
     regularizationAdminRemarks: null,
     reviewedAt: null,
   });
+
+  // Periodic ticker runs only during active checked-in shift
+  useEffect(() => {
+    if (todayData.status !== "punched_in") return undefined;
+    const timer = setInterval(() => {
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [todayData.status]);
 
   // Monthly KPI Summary state
   const [monthlyMetrics, setMonthlyMetrics] = useState(null);
@@ -392,7 +433,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         const hours = l.hours || l.Hours || ((inTime !== "--" && outTime !== "--") ? calculateDurationStr(inTime, outTime, false) : "--");
         const canRegularize = l.canRegularize !== undefined || l.CanRegularize !== undefined
           ? Boolean(l.canRegularize ?? l.CanRegularize)
-          : ((status === "Late" || isMissedCheckout || status === "Absent") && !regState);
+          : (isToday && (status === "Late" || isMissedCheckout || status === "Absent") && !regState);
 
         return {
           id: l.id || l.Id || `log-${l.rawDate || l.RawDate}`,
@@ -419,6 +460,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           holidayName: l.holidayName || l.HolidayName || null,
         };
       });
+
+      if (period === "month") {
+        setMonthlyMetrics(rawMetrics);
+      }
 
       setHistoryData({
         logs: processedLogs,
@@ -471,8 +516,34 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
   }, []);
 
   useEffect(() => {
-    fetchMonthlyMetrics();
-  }, [fetchMonthlyMetrics]);
+    if (activeFilter !== "month") {
+      fetchMonthlyMetrics();
+    }
+  }, [activeFilter, fetchMonthlyMetrics]);
+
+  // Synchronize live Admin regularization approvals/rejections immediately
+  useEffect(() => {
+    const refreshAll = () => {
+      fetchTodayStatus();
+      fetchHistory(activeFilter);
+      if (activeFilter !== "month") {
+        fetchMonthlyMetrics();
+      }
+    };
+    window.addEventListener("cms-attendance-resync", refreshAll);
+    window.addEventListener("cms-notifications-resync", refreshAll);
+    const unsubHub = notificationHubService.subscribe((payload) => {
+      const t = String(payload?.type || "").toLowerCase();
+      if (t.includes("attend") || t.includes("regulariz")) {
+        refreshAll();
+      }
+    });
+    return () => {
+      window.removeEventListener("cms-attendance-resync", refreshAll);
+      window.removeEventListener("cms-notifications-resync", refreshAll);
+      if (typeof unsubHub === "function") unsubHub();
+    };
+  }, [activeFilter, fetchTodayStatus, fetchHistory, fetchMonthlyMetrics]);
 
   const isMissedCheckout = useMemo(() => {
     if (todayData.isMissedCheckout && !todayData.isMissedCheckoutResolved) return true;
@@ -707,7 +778,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         closeRegularizeModal();
         fetchTodayStatus();
         fetchHistory(activeFilter);
-        fetchMonthlyMetrics();
+        if (activeFilter !== "month") fetchMonthlyMetrics();
       } else {
         notify(res?.message || res?.Message || "Failed to submit regularization.", "error");
       }
@@ -777,7 +848,7 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
         <div className="sp-att-error-banner" role="alert">
           <AlertCircle size={16} />
           <span>{todayError || historyError}</span>
-          <button type="button" onClick={() => { fetchTodayStatus(); fetchHistory(activeFilter); fetchMonthlyMetrics(); }}>Retry</button>
+          <button type="button" onClick={() => { fetchTodayStatus(); fetchHistory(activeFilter); if (activeFilter !== "month") fetchMonthlyMetrics(); }}>Retry</button>
         </div>
       )}
       {/* Top Punch & Shift Grid */}
@@ -810,9 +881,9 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                 {todayData.status === "punched_out"
                   ? `${todayData.todayStatus || "Present"} · Checked Out (${todayData.outTime || "--"})`
                   : isMissedCheckout
-                  ? `${todayData.isLate ? "Late" : "Present"} · Missed Checkout (In: ${todayData.inTime || "--"})`
+                  ? `${todayData.isLate ? "Late" : "Present"}`
                   : todayData.isMissedCheckoutResolved
-                  ? "Present · Missed Checkout Regularized"
+                  ? (todayData.todayStatus && todayData.todayStatus !== "--" ? todayData.todayStatus : "Present")
                   : todayData.inTime
                   ? `Checked In (${todayData.inTime})${todayData.isLate ? " (Late)" : ""}`
                   : (todayData.todayStatus && todayData.todayStatus !== "--" ? todayData.todayStatus : "Not Checked In")}
@@ -830,7 +901,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               <div className="sp-summary-col">
                 <span className="sp-metric-col-label">CHECK OUT</span>
                 <span className="sp-metric-col-val">
-                  {todayData.outTime || "--:-- --"}
+                  {isMissedCheckout ? (
+                    <span className="sp-checkout-missed-pill">Missed Checkout</span>
+                  ) : todayData.isMissedCheckoutResolved ? (
+                    <span className="sp-checkout-resolved-pill">{todayData.outTime || "Checkout Regularized"}</span>
+                  ) : (
+                    todayData.outTime || "--:-- --"
+                  )}
                 </span>
               </div>
               <div className="sp-summary-col">
@@ -965,7 +1042,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                       <div className="sp-punch-foot-hint" style={{ color: "#b91c1c", fontWeight: 600 }}>
                         Missed Checkout · Window closed after {formattedCutoffTime}.
                       </div>
-                      {!todayData.regularizationState && (
+                      {String(todayData.regularizationState || "").toLowerCase() === "pending" ? (
+                        <span className="sp-reg-badge pending">Regularization Pending</span>
+                      ) : String(todayData.regularizationState || "").toLowerCase() === "approved" ? (
+                        <span className="sp-reg-badge approved">Approved</span>
+                      ) : String(todayData.regularizationState || "").toLowerCase() === "rejected" ? (
+                        <span className="sp-reg-badge rejected">Rejected – Rejected by Admin</span>
+                      ) : todayData.canRegularize ? (
                         <button
                           type="button"
                           className="sp-missed-regularize-btn"
@@ -977,12 +1060,13 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                               inTime: todayData.inTime || "--",
                               outTime: "--",
                               isMissedCheckout: true,
+                              isToday: true,
                             })
                           }
                         >
                           Regularize Missed Checkout &gt;
                         </button>
-                      )}
+                      ) : null}
                     </>
                   ) : (
                     <div
@@ -1155,17 +1239,17 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
           </div>
         </div>
 
-        <div className="cms-table-wrap">
+        <div className="cms-table-wrap" role="region" aria-label="Attendance logs" tabIndex={0}>
           <table className="sp-attendance-table">
             <thead>
               <tr>
-                <th style={{ width: "16%" }}>DAY</th>
-                <th style={{ width: "22%" }}>SHIFT</th>
-                <th style={{ width: "15%" }}>CHECK IN</th>
-                <th style={{ width: "15%" }}>CHECK OUT</th>
-                <th style={{ width: "12%" }}>HOURS</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+                <th scope="col" style={{ width: "16%" }}>DAY</th>
+                <th scope="col" style={{ width: "22%" }}>SHIFT</th>
+                <th scope="col" style={{ width: "15%" }}>CHECK IN</th>
+                <th scope="col" style={{ width: "15%" }}>CHECK OUT</th>
+                <th scope="col" style={{ width: "12%" }}>HOURS</th>
+                <th scope="col" style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                <th scope="col" style={{ width: "10%", textAlign: "center" }}>ACTION</th>
               </tr>
             </thead>
             <tbody>
@@ -1205,8 +1289,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                   const regState = log.regularizationState || log.RegularizationState;
                   const regLower = String(regState || "").toLowerCase();
                   const holidayName = log.holidayName || log.HolidayName;
-                  const isUpcoming = status === "-" || status === "--";
+                  const displayStatus = status === "Missed Checkout" ? "Present" : status;
+                  const isUpcoming = displayStatus === "-" || displayStatus === "--";
                   const isHighlighted = Boolean(highlightedRegId && log.regularizationId && String(log.regularizationId) === String(highlightedRegId));
+                  const decisionDateStr = formatDecisionDate(log.reviewedAt);
 
                   return (
                     <tr key={id} ref={isHighlighted ? highlightedRowRef : undefined} className={isHighlighted ? "sp-reg-row-highlight" : undefined}>
@@ -1223,7 +1309,15 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                         </span>
                       </td>
                       <td>
-                        <span className="sp-time-text">{outTime}</span>
+                        {log.isMissedCheckout && !log.isMissedCheckoutResolved ? (
+                          <span className="sp-checkout-missed-pill">Missed Checkout</span>
+                        ) : log.isMissedCheckoutResolved ? (
+                          <span className="sp-checkout-resolved-pill" title="Missed checkout regularized by Admin">
+                            {outTime !== "--" ? outTime : "Checkout Regularized"}
+                          </span>
+                        ) : (
+                          <span className="sp-time-text">{outTime}</span>
+                        )}
                       </td>
                       <td>
                         <span className="sp-hours-text">{hours}</span>
@@ -1233,15 +1327,9 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                           <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
                         ) : (
                           <div className="sp-status-cell">
-                            <span className={`sp-status-badge ${getStatusBadgeClass(status)}`}>
-                              {status}
+                            <span className={`sp-status-badge ${getStatusBadgeClass(displayStatus)}`}>
+                              {displayStatus}
                             </span>
-                            {log.isMissedCheckout && !log.isMissedCheckoutResolved && (
-                              <span className="sp-missed-subbadge">Missed Checkout</span>
-                            )}
-                            {log.isMissedCheckoutResolved && (
-                              <span className="sp-resolved-subbadge">Checkout Regularized</span>
-                            )}
                             {holidayName && (
                               <span className="sp-holiday-name-subtext" title={holidayName}>
                                 {holidayName}
@@ -1251,26 +1339,24 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                         )}
                       </td>
                       <td style={{ textAlign: "center" }}>
-                        {regLower === "pending" || regLower === "approved" || regLower === "rejected" ? (
+                        {regLower === "pending" ? (
+                          <span className="sp-reg-badge pending">Regularization Pending</span>
+                        ) : regLower === "approved" ? (
+                          <span className="sp-reg-badge approved">Approved</span>
+                        ) : regLower === "rejected" ? (
                           <div className="sp-reg-action-info">
-                            <span className={`sp-reg-badge ${regLower}`}>
-                              {regLower === "pending" ? "Pending" : regLower === "approved" ? "Approved" : "Rejected"}
-                            </span>
-                            {log.regularizationType && (
-                              <span className="sp-reg-submeta">{log.regularizationType}</span>
-                            )}
-                            {log.regularizationReason && (
-                              <span className="sp-reg-submeta" title={log.regularizationReason}>
-                                Reason: {log.regularizationReason}
-                              </span>
+                            <span className="sp-reg-badge rejected">Rejected</span>
+                            <span className="sp-reg-decision-by rejected">Rejected by Admin</span>
+                            {decisionDateStr && (
+                              <span className="sp-reg-submeta">{decisionDateStr}</span>
                             )}
                             {log.regularizationAdminRemarks && (
                               <span className="sp-reg-submeta remarks" title={log.regularizationAdminRemarks}>
-                                Admin: {log.regularizationAdminRemarks}
+                                Remarks: {log.regularizationAdminRemarks}
                               </span>
                             )}
                           </div>
-                        ) : canReg ? (
+                        ) : canReg && log.isToday ? (
                           <button
                             type="button"
                             className="sp-btn-regularize"
@@ -1300,13 +1386,29 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
 
       {/* Attendance Regularization Modal */}
       {regModalOpen && (
-        <div className="sp-reg-modal-backdrop" onClick={() => !regSubmitting && closeRegularizeModal()}>
-          <div className="sp-reg-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="sp-reg-modal-backdrop"
+          onClick={() => !regSubmitting && closeRegularizeModal()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && !regSubmitting) closeRegularizeModal();
+          }}
+        >
+          <div
+            className="sp-reg-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sp-reg-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="sp-reg-modal-header">
-              <h3 className="sp-reg-modal-title">Attendance Regularization Request</h3>
+              <div className="sp-reg-modal-heading">
+                <h3 id="sp-reg-modal-title" className="sp-reg-modal-title">Attendance Regularization Request</h3>
+                <p className="sp-reg-modal-subtitle">Review recorded attendance and submit your reason for adjustment.</p>
+              </div>
               <button
                 type="button"
                 className="sp-reg-modal-close"
+                aria-label="Close regularization dialog"
                 disabled={regSubmitting}
                 onClick={closeRegularizeModal}
               >
@@ -1314,16 +1416,25 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
               </button>
             </div>
 
-            <form onSubmit={handleSubmitRegularization}>
+            <form onSubmit={handleSubmitRegularization} aria-labelledby="sp-reg-modal-title">
               <div className="sp-reg-modal-body">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div className="sp-reg-form-row">
                   <div className="sp-reg-form-group">
-                    <label className="sp-reg-label">Attendance Date</label>
-                    <input type="text" className="sp-reg-input" value={regForm.displayDate} disabled />
+                    <label htmlFor="sp-reg-date" className="sp-reg-label">Attendance Date</label>
+                    <input
+                      id="sp-reg-date"
+                      name="attendanceDateDisplay"
+                      type="text"
+                      className="sp-reg-input"
+                      value={regForm.displayDate}
+                      disabled
+                    />
                   </div>
                   <div className="sp-reg-form-group">
-                    <label className="sp-reg-label">Request Type</label>
+                    <label htmlFor="sp-reg-type" className="sp-reg-label">Request Type</label>
                     <select
+                      id="sp-reg-type"
+                      name="requestType"
                       className="sp-reg-input"
                       value={regForm.requestType}
                       onChange={(e) => setRegForm({ ...regForm, requestType: e.target.value })}
@@ -1335,17 +1446,28 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                   </div>
                 </div>
 
-                <div className="sp-reg-orig-summary">
-                  <span>Original Status: <strong>{regForm.originalStatus}</strong></span>
-                  <span>In: <strong>{regForm.originalInTime}</strong></span>
-                  <span>Out: <strong>{regForm.originalOutTime}</strong></span>
+                <div className="sp-reg-orig-summary" aria-label="Recorded attendance details">
+                  <div className="sp-reg-orig-item">
+                    <span className="sp-reg-orig-label">Status</span>
+                    <strong className="sp-reg-orig-value">{regForm.originalStatus}</strong>
+                  </div>
+                  <div className="sp-reg-orig-item">
+                    <span className="sp-reg-orig-label">Check-In</span>
+                    <strong className="sp-reg-orig-value">{regForm.originalInTime}</strong>
+                  </div>
+                  <div className="sp-reg-orig-item">
+                    <span className="sp-reg-orig-label">Check-Out</span>
+                    <strong className="sp-reg-orig-value">{regForm.originalOutTime}</strong>
+                  </div>
                 </div>
 
                 {regForm.requestType !== "Missed Checkout" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="sp-reg-form-row">
                     <div className="sp-reg-form-group">
-                      <label className="sp-reg-label">Requested In-Time</label>
+                      <label htmlFor="sp-reg-in-time" className="sp-reg-label">Requested In-Time</label>
                       <input
+                        id="sp-reg-in-time"
+                        name="requestedInTime"
                         type="time"
                         className="sp-reg-input"
                         value={regForm.requestedInTime}
@@ -1353,8 +1475,10 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                       />
                     </div>
                     <div className="sp-reg-form-group">
-                      <label className="sp-reg-label">Requested Out-Time</label>
+                      <label htmlFor="sp-reg-out-time" className="sp-reg-label">Requested Out-Time</label>
                       <input
+                        id="sp-reg-out-time"
+                        name="requestedOutTime"
                         type="time"
                         className="sp-reg-input"
                         value={regForm.requestedOutTime}
@@ -1365,34 +1489,24 @@ export default function FacultyMyAttendance({ adminRouting = false } = {}) {
                 )}
 
                 <div className="sp-reg-form-group">
-                  <label className="sp-reg-label">Reason / Justification * (min 5 characters)</label>
+                  <label htmlFor="sp-reg-reason" className="sp-reg-label">
+                    Reason / Justification <span aria-hidden="true">*</span>
+                  </label>
                   <textarea
-                    rows={3}
+                    id="sp-reg-reason"
+                    name="reason"
+                    rows={4}
+                    minLength={5}
                     className="sp-reg-textarea"
-                    placeholder="Explain why punch was missed or late (e.g., On official duty, scanner glitch)..."
+                    aria-describedby="sp-reg-reason-hint"
+                    placeholder="Enter your reason for attendance regularization..."
                     value={regForm.reason}
                     onChange={(e) => setRegForm({ ...regForm, reason: e.target.value })}
                     required
                   />
-
-                  {/* Quick Reason Pills */}
-                  <div className="sp-reg-quick-pills">
-                    {[
-                      "Biometric Machine Failure",
-                      "Official Exam Duty (OD)",
-                      "Campus Network / Power Issue",
-                      "Permitted Late Arrival",
-                    ].map((pill) => (
-                      <button
-                        key={pill}
-                        type="button"
-                        className="sp-reg-quick-pill"
-                        onClick={() => setRegForm((prev) => ({ ...prev, reason: pill }))}
-                      >
-                        + {pill}
-                      </button>
-                    ))}
-                  </div>
+                  <span id="sp-reg-reason-hint" className="sp-reg-hint">
+                    Minimum 5 characters required ({regForm.reason.trim().length} entered)
+                  </span>
                 </div>
               </div>
 

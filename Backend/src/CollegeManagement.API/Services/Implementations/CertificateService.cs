@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Certificate;
@@ -30,6 +31,19 @@ public class CertificateService : ICertificateService
         _templateService = templateService;
         _hubContext = hubContext;
         _logger = logger;
+    }
+
+    private async Task BroadcastCertificateEventAsync(string eventType, int? campusId = null, bool includeStudents = false, CancellationToken ct = default)
+    {
+        if (_hubContext == null) return;
+        try
+        {
+            var groups = new List<string> { "Role_admin", "Role_superadmin", "Role_super admin", "Role_principal", "Role_examcell", "Role_exam cell", "Role_exam_cell" };
+            if (includeStudents) groups.Add("Role_student");
+            if (campusId.HasValue && campusId.Value > 0) groups.Add($"Campus_{campusId.Value}");
+            await _hubContext.Clients.Groups(groups.Distinct().ToList()).SendAsync("NotificationReceived", new { type = eventType, campusId }, ct);
+        }
+        catch { }
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
@@ -155,13 +169,9 @@ public class CertificateService : ICertificateService
         }
 
         var generatedCert = await _repository.GenerateAsync(request, ct);
-        if (generatedCert != null && _hubContext != null)
+        if (generatedCert != null)
         {
-            try
-            {
-                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct);
-            }
-            catch { }
+            await BroadcastCertificateEventAsync("NEW_CERTIFICATE_REQUEST", request.CampusId, false, ct);
         }
         return generatedCert;
     }
@@ -273,13 +283,9 @@ public class CertificateService : ICertificateService
             return false;
 
         var moveResult = await _repository.MoveStatusAsync(id, status, issuedBy, ct);
-        if (moveResult && _hubContext != null)
+        if (moveResult)
         {
-            try
-            {
-                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct);
-            }
-            catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", null, true, ct);
         }
         return moveResult;
     }
@@ -290,9 +296,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkReviewAsync(reviewedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -303,9 +309,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkApproveAsync(approvedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -316,9 +322,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkIssueAsync(issuedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -347,9 +353,9 @@ public class CertificateService : ICertificateService
     {
         ArgumentNullException.ThrowIfNull(request);
         var list = await _repository.BulkGenerateAsync(request, ct);
-        if (list.Count > 0 && _hubContext != null)
+        if (list.Count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("NEW_CERTIFICATE_REQUEST", null, false, ct);
         }
         return list;
     }

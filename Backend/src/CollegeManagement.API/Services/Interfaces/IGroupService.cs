@@ -14,6 +14,7 @@ namespace CollegeManagement.API.Services
             int? academicLevelId = null,
             bool? isActive = null,
             int? masterGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default);
 
         Task<GroupResponse?> GetByIdAsync(
@@ -24,10 +25,12 @@ namespace CollegeManagement.API.Services
             int boardId,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default);
 
         Task<GroupResponse> CreateAsync(
             CreateGroupRequest request,
+            int? collegeId = null,
             CancellationToken cancellationToken = default);
 
         Task<GroupResponse?> UpdateAsync(
@@ -48,6 +51,7 @@ namespace CollegeManagement.API.Services
             string groupCode,
             int? boardId = null,
             int? excludeGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default);
 
         Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
@@ -69,6 +73,7 @@ namespace CollegeManagement.API.Services
                 int? boardId = null,
                 int? academicYearId = null,
                 int? academicLevelId = null,
+                int? collegeId = null,
                 CancellationToken cancellationToken = default);
 
         Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>

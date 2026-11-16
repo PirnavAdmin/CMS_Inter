@@ -233,6 +233,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             var list = new List<ExaminationResponse>();
             foreach (var r in rows)
             {
+                var rDict = (IDictionary<string, object>)r;
+                string rowScheduleMode = rDict.ContainsKey("ScheduleMode") && rDict["ScheduleMode"] != null ? rDict["ScheduleMode"].ToString() ?? string.Empty : string.Empty;
+                string rowScheduleExamMode = rDict.ContainsKey("ScheduleExamMode") && rDict["ScheduleExamMode"] != null ? rDict["ScheduleExamMode"].ToString() ?? string.Empty : string.Empty;
+                bool isRowObj = Helpers.ExaminationFormatHelper.IsObjectiveConfiguration(
+                    (string?)r.ExamPattern,
+                    (string?)r.ExamType,
+                    null,
+                    rowScheduleMode,
+                    rowScheduleExamMode);
                 var subjIdsRaw = (string?)r.AggregatedSubjectIds;
                 var subjIds = !string.IsNullOrWhiteSpace(subjIdsRaw)
                     ? subjIdsRaw.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -260,6 +269,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     AssessmentTypeId = (int)r.AssessmentTypeId,
                     ExamType = (string)(r.ExamType ?? string.Empty),
                     ExamPattern = (string)(r.ExamPattern ?? "REGULAR_ACADEMIC"),
+                    ExamCategory = isRowObj ? "Objective" : "Regular",
+                    ScheduleMode = !string.IsNullOrWhiteSpace(rowScheduleMode) ? rowScheduleMode : (isRowObj ? "PATTERN_WISE" : "SUBJECT_WISE"),
                     StartDate = r.StartDate is DateTime dtStart ? DateOnly.FromDateTime(dtStart) : (r.StartDate is DateOnly dStart ? dStart : DateOnly.FromDateTime(Convert.ToDateTime(r.StartDate))),
                     EndDate = r.EndDate is DateTime dtEnd ? DateOnly.FromDateTime(dtEnd) : (r.EndDate is DateOnly dEnd ? dEnd : DateOnly.FromDateTime(Convert.ToDateTime(r.EndDate))),
                     TotalMarks = (int?)r.TotalMarks,

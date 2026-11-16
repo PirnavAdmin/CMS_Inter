@@ -78,3 +78,6 @@
   .accountant-fee-page .cms-fee-pagination-actions { flex-wrap: wrap; }
   .accountant-fee-page .cms-fee-search { max-width: 100%; }
 }
+
+/* Shared fee screens use the Admin styles inside the existing Accountant shell. */
+.accountant-shell .cms-fee-shared-page { min-width: 0; width: 100%; }

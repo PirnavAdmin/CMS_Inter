@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
+import { getAuthUser, getAuthToken } from "../../auth/authStorage.js";
+import { landingPageApi } from "../../../api/landingPageApi.js";
 
 export const campusImageFields = [
   ["dashboardLogo", "Dashboard Logo", "Logo in dashboard sidebars", "logo"],
@@ -28,6 +30,13 @@ export const headerBrandDefaults = {
   dashboardLogoSize: "48",
 };
 export function getHeaderBrand(configuration = {}) {
+  const u = getAuthUser();
+  const isTenantCollege = Boolean(u?.collegeId && Number(u.collegeId) > 1);
+  const tenantName = (u?.collegeName || "").trim();
+  const defaultTitle = isTenantCollege && tenantName ? tenantName.toUpperCase() : headerBrandDefaults.dashboardTitle;
+  const defaultSubtitle = isTenantCollege && tenantName ? "" : headerBrandDefaults.dashboardSubtitle;
+  const defaultTagline = isTenantCollege ? "COLLEGE MANAGEMENT SYSTEM" : headerBrandDefaults.dashboardTagline;
+
   const boundedSize = (key, min, max) => {
     const value = Number(configuration[key] ?? headerBrandDefaults[key]);
     return String(Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : Number(headerBrandDefaults[key]));
@@ -37,9 +46,9 @@ export function getHeaderBrand(configuration = {}) {
   // Preserve custom single-line names saved before the two-line title existed.
   const legacyTitle = configuration.dashboardTitle === "PIRNAV COLLEGE" && configuration.dashboardSubtitle == null;
   return {
-    dashboardTitle: String(legacyTitle ? "PIRNAV" : configuration.dashboardTitle ?? headerBrandDefaults.dashboardTitle),
-    dashboardSubtitle: String(configuration.dashboardSubtitle ?? (configuration.dashboardTitle && !legacyTitle ? "" : headerBrandDefaults.dashboardSubtitle)),
-    dashboardTagline: String(configuration.dashboardTagline ?? headerBrandDefaults.dashboardTagline),
+    dashboardTitle: String(legacyTitle ? "PIRNAV" : configuration.dashboardTitle ?? defaultTitle),
+    dashboardSubtitle: String(configuration.dashboardSubtitle ?? (configuration.dashboardTitle && !legacyTitle ? "" : defaultSubtitle)),
+    dashboardTagline: String(configuration.dashboardTagline ?? defaultTagline),
     dashboardTitleColor: color("dashboardTitleColor"),
     dashboardSubtitleColor: color("dashboardSubtitleColor"),
     dashboardTaglineColor: color("dashboardTaglineColor"),
@@ -62,6 +71,31 @@ const openDatabase = () => new Promise((resolve, reject) => {
   request.onerror = () => reject(new Error("Browser image storage is unavailable."));
 });
 export async function readCampusImages(campusId) {
+  try {
+    const token = getAuthToken();
+    const serverData = token
+      ? await landingPageApi.getConfig()
+      : await landingPageApi.getPublicConfig();
+
+    if (serverData && typeof serverData === "object" && Object.keys(serverData).length > 0) {
+      try {
+        const db = await openDatabase();
+        await new Promise((resolve, reject) => {
+          const transaction = db.transaction("images", "readwrite");
+          transaction.objectStore("images").put(serverData, String(campusId));
+          transaction.oncomplete = resolve;
+          transaction.onerror = transaction.onabort = reject;
+        });
+        db.close();
+      } catch {
+        // Cache error ignored
+      }
+      return serverData;
+    }
+  } catch (err) {
+    // Fall back to local storage if server is unavailable
+  }
+
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
@@ -73,6 +107,21 @@ export async function readCampusImages(campusId) {
 }
 export async function saveCampusImages(campusId, images) {
   if (campusId == null || campusId === "") throw new Error("Select a campus before saving images.");
+
+  // Save to backend database API
+  if (getAuthToken()) {
+    try {
+      await landingPageApi.saveConfig({
+        ...images,
+        campusId: Number(campusId) || null,
+      });
+    } catch (apiErr) {
+      console.error("Failed to save landing page configuration to backend API:", apiErr);
+      const apiMessage = apiErr?.response?.data?.message || apiErr?.message || "Failed to save configuration to database.";
+      throw new Error(apiMessage);
+    }
+  }
+
   const db = await openDatabase();
   try {
     await new Promise((resolve, reject) => {
