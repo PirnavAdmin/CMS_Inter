@@ -707,6 +707,21 @@
   border-bottom: 1px solid var(--cms-border);
 }
 
+.rbac-module-matrix .rbac-matrix-row {
+  grid-template-columns: minmax(240px, 1fr) repeat(5, 96px);
+}
+
+.rbac-matrix-section-row {
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--cms-border);
+  background: #f6f8ef;
+  color: var(--cms-muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .rbac-matrix-row:last-child {
   border-bottom: 0;
 }
