@@ -76,6 +76,7 @@ const normalizeRole = (role = {}) => {
   const matchedSeed = ROLE_SEEDS.find(
     (s) => s.code === code || s.roleId === (role.roleId ?? role.id) || s.id === role.id
   );
+  const staffType = role.staffType || role.StaffType || matchedSeed?.staffType || "Both";
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
@@ -83,6 +84,11 @@ const normalizeRole = (role = {}) => {
     code,
     name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
     description: role.description || matchedSeed?.description || "",
+    staffType,
+    departmentId: role.departmentId ?? role.DepartmentId ?? null,
+    departmentName: role.departmentName ?? role.DepartmentName ?? "",
+    designationId: role.designationId ?? role.DesignationId ?? null,
+    designationName: role.designationName ?? role.DesignationName ?? "",
     isSystemRole: role.isSystemRole ?? matchedSeed?.isSystemRole ?? false,
     isProtected: role.isProtected ?? matchedSeed?.isProtected ?? (code === "SUPER_ADMIN"),
     icon: role.icon || matchedSeed?.icon,
@@ -219,6 +225,11 @@ export async function createRole(payload = {}) {
     const response = await apiClient.post(apiEndpoints.roles.create, {
       roleName: payload.name || payload.roleName || payload.code,
       description: payload.description || "",
+      staffType: payload.staffType || "Both",
+      departmentId: payload.departmentId || null,
+      designationId: payload.designationId || null,
+      newDepartmentName: payload.newDepartmentName || null,
+      newDesignationName: payload.newDesignationName || null,
     });
     notifyRolesUpdated();
     return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
@@ -233,6 +244,11 @@ export async function updateRole(roleId, payload = {}) {
     const response = await apiClient.put(apiEndpoints.roles.update(roleId), {
       roleName: payload.name || payload.roleName || payload.code,
       description: payload.description || "",
+      staffType: payload.staffType || undefined,
+      departmentId: payload.departmentId !== undefined ? payload.departmentId : undefined,
+      designationId: payload.designationId !== undefined ? payload.designationId : undefined,
+      newDepartmentName: payload.newDepartmentName || null,
+      newDesignationName: payload.newDesignationName || null,
       isActive: payload.isActive ?? true,
     });
     notifyRolesUpdated();
@@ -630,3 +646,65 @@ export const rolesPermissionsApiConfig = Object.freeze({
   apiIntegrationEnabled: true,
 });
 
+
+export async function getDepartmentLookup() {
+  try {
+    const res = await apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments", {
+      params: { includeInactive: false },
+    });
+    const raw = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    return raw.filter(
+      (d) => d && d.isActive !== false && d.status !== "Inactive" && d.Status !== "Inactive"
+    );
+  } catch (err) {
+    console.warn("Failed to load departments lookup:", err);
+    return [];
+  }
+}
+
+export async function getDesignationLookup(departmentId = null) {
+  try {
+    const params = {
+      includeInactive: false,
+      ...(departmentId ? { departmentId } : {}),
+    };
+    const res = await apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations", { params });
+    const raw = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    return raw.filter(
+      (d) => d && d.isActive !== false && d.status !== "Inactive" && d.Status !== "Inactive"
+    );
+  } catch (err) {
+    console.warn("Failed to load designations lookup:", err);
+    return [];
+  }
+}
+
+export async function createQuickDepartment(payload = {}) {
+  const res = await apiClient.post(apiEndpoints.departments?.create || "/api/v1/departments", {
+    departmentName: payload.departmentName,
+    staffType: payload.staffType || "Both",
+    description: payload.description || "",
+  });
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try { window.sessionStorage.removeItem("cms_cached_departments"); } catch {}
+  }
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new Event("departments-updated")); } catch {}
+  }
+  return res?.data?.data || res?.data;
+}
+
+export async function createQuickDesignation(payload = {}) {
+  const res = await apiClient.post(apiEndpoints.designations?.create || "/api/v1/designations", {
+    name: payload.name,
+    departmentId: payload.departmentId || null,
+    staffType: payload.staffType || "Both",
+  });
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try { window.sessionStorage.removeItem("cms_cached_designations"); } catch {}
+  }
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new Event("designations-updated")); } catch {}
+  }
+  return res?.data?.data || res?.data;
+}

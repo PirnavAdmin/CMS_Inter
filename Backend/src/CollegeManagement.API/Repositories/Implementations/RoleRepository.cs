@@ -16,12 +16,18 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<Role?> GetByIdAsync(int id)
         {
-            return await _context.Roles.FindAsync(id);
+            return await _context.Roles
+                .Include(r => r.Department)
+                .Include(r => r.Designation)
+                .FirstOrDefaultAsync(r => r.RoleId == id);
         }
 
         public async Task<List<Role>> GetAllAsync(string? staffType = null, bool includeInactive = false)
         {
-            var query = _context.Roles.AsQueryable();
+            var query = _context.Roles
+                .Include(r => r.Department)
+                .Include(r => r.Designation)
+                .AsQueryable();
 
             if (!includeInactive)
             {

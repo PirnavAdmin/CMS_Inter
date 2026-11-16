@@ -44,11 +44,12 @@ import "./PublicSite.css";
 
 // ── MOTION VARIANTS ─────────────────────────────────────────────────────────────
 const fadeUpVariant = {
-  hidden: { opacity: 0, y: 32 },
+  hidden: { opacity: 0, y: 32, scale: 0.98 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+    scale: 1,
+    transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] },
   },
 };
 
@@ -57,8 +58,8 @@ const staggerContainer = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.08,
+      staggerChildren: 0.09,
+      delayChildren: 0.06,
     },
   },
 };
@@ -68,10 +69,10 @@ function AnimatedSectionHeader({ kicker, title, description, icon: Icon }) {
   return (
     <motion.header
       className="public-section-heading"
-      initial={{ opacity: 0, y: 36 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: false, amount: 0.2 }}
-      transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+      initial={{ opacity: 0, y: 32, scale: 0.98 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: false, amount: 0.15 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
     >
       {kicker && (
         <div className="public-kicker-wrap">
@@ -160,9 +161,8 @@ function HomeSection({ content, onNavigate }) {
 
   return (
     <section id="home" className="public-home-hero-wrap">
-      {/* Expansive Hero Banner */}
+      {/* Expansive 2-Column Hero Banner with Restoran-Style Orb Showcase */}
       <div className="landing-hero-banner public-home-hero">
-        <HeroSlider variant="hero-bg" imageOverride={classImage} autoRotate={false} showControls={false} />
         <motion.div
           className="landing-hero-content public-home-hero-copy"
           initial={{ opacity: 0, y: 35 }}
@@ -170,7 +170,7 @@ function HomeSection({ content, onNavigate }) {
           transition={{ duration: 0.75, ease: "easeOut" }}
         >
           <span className="cms-eyebrow">
-            <Building2 size={16} /> {content.landingBadge || "A Smarter Campus Starts Here"}
+            <Building2 size={16} /> {content.landingBadge || "The Best Campus in Intermediate Education"}
           </span>
           <h1>
             Your Gateway to<br />
@@ -202,6 +202,27 @@ function HomeSection({ content, onNavigate }) {
             </motion.button>
           </div>
         </motion.div>
+
+        {/* Right Column: Restoran-style Signature Circular Orb Showcase */}
+        <motion.div
+          className="public-hero-orb-wrap"
+          initial={{ opacity: 0, scale: 0.88 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.85, ease: "easeOut", delay: 0.15 }}
+        >
+          <div className="public-hero-orb-ring-outer" aria-hidden="true" />
+          <div className="public-hero-orb-ring-inner" aria-hidden="true" />
+          <div className="public-hero-orb-aura" aria-hidden="true" />
+
+          <div className="public-hero-orb-core">
+            <img
+              src={content.heroImage || collegeHeroImage || classImage}
+              alt={`${content.collegeName || "Pirnav College"} Campus Showcase`}
+              className="public-hero-orb-img"
+              loading="eager"
+            />
+          </div>
+        </motion.div>
       </div>
 
       {/* 5 Showcase Feature Tiles with Stagger Motion */}
@@ -209,7 +230,7 @@ function HomeSection({ content, onNavigate }) {
         className="public-home-feature-cards"
         aria-label="College management features"
         variants={staggerContainer}
-        initial={"hidden"}
+        initial="hidden"
         whileInView="visible"
         viewport={{ once: false, amount: 0.15 }}
       >
@@ -233,7 +254,14 @@ function HomeSection({ content, onNavigate }) {
       </motion.div>
 
       {/* Highlights Strip */}
-      <div className="public-home-stat-strip" aria-label="College highlights">
+      <motion.div
+        className="public-home-stat-strip"
+        aria-label="College highlights"
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: false, amount: 0.2 }}
+        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div>
           <BookOpen size={26} />
           <strong>MPC &amp; BiPC</strong>
@@ -259,7 +287,7 @@ function HomeSection({ content, onNavigate }) {
           <strong>Admissions Help</strong>
           <small>Active Front Desk Support</small>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }
@@ -283,7 +311,7 @@ function AboutSection({ content, onNavigate }) {
           className="public-about-collage"
           initial={{ opacity: 0, x: -35 }}
           whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: false, amount: 0.2 }}
+          viewport={{ once: false, amount: 0.15 }}
           transition={{ duration: 0.65, ease: "easeOut" }}
         >
           <div className="public-photo-container main-photo aspect-4-3">
@@ -324,7 +352,7 @@ function AboutSection({ content, onNavigate }) {
           className="public-home-about-copy"
           initial={{ opacity: 0, x: 35 }}
           whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: false, amount: 0.2 }}
+          viewport={{ once: false, amount: 0.15 }}
           transition={{ duration: 0.65, ease: "easeOut" }}
         >
           <span className="public-kicker">
@@ -413,9 +441,9 @@ function AcademicsSection({ onNavigate }) {
       <motion.div
         className="public-programmes-grid"
         variants={staggerContainer}
-        initial={"hidden"}
+        initial="hidden"
         whileInView="visible"
-        viewport={{ once: false, amount: 0.15 }}
+        viewport={{ once: false, amount: 0.12 }}
         style={{ marginTop: "28px" }}
       >
         {programmes.map((prog) => {
@@ -461,17 +489,21 @@ function AcademicsSection({ onNavigate }) {
         })}
       </motion.div>
 
-      {/* Course Showcase Cards with Aspect Ratios */}
-      <div className="public-home-course-grid" style={{ marginTop: "42px" }}>
+      {/* Course Showcase Cards with Stagger Motion */}
+      <motion.div
+        className="public-home-course-grid"
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: false, amount: 0.15 }}
+        style={{ marginTop: "42px" }}
+      >
         {courseShowcase.map(([label, title, description, image]) => (
           <motion.article
             key={title}
             className="course-showcase-item"
-            initial={{ opacity: 0, y: 22 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: false, amount: 0.15 }}
+            variants={fadeUpVariant}
             whileHover={shouldReduce ? {} : { y: -6 }}
-            transition={{ duration: 0.4 }}
           >
             <div className="aspect-16-9 course-img-box">
               <img src={image} alt={title} loading="lazy" />
@@ -483,7 +515,7 @@ function AcademicsSection({ onNavigate }) {
             </div>
           </motion.article>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -514,9 +546,9 @@ function AdmissionsSection({ content, onNavigate }) {
       <motion.div
         className="public-steps-grid"
         variants={staggerContainer}
-        initial={"hidden"}
+        initial="hidden"
         whileInView="visible"
-        viewport={{ once: false, amount: 0.15 }}
+        viewport={{ once: false, amount: 0.12 }}
         style={{ marginTop: "28px" }}
       >
         {steps.map((st) => (
@@ -541,6 +573,7 @@ function AdmissionsSection({ content, onNavigate }) {
         initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: false, amount: 0.15 }}
+        transition={{ duration: 0.55 }}
         style={{ marginTop: "32px" }}
       >
         <div className="admissions-banner-copy">
@@ -593,26 +626,39 @@ function StudentServicesSection({ content, onNavigate }) {
       />
 
       {/* 3 Support Columns */}
-      <div className="public-support-cards" style={{ marginTop: "28px" }}>
-        <article className="public-support-card">
+      <motion.div
+        className="public-support-cards"
+        style={{ marginTop: "28px" }}
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: false, amount: 0.15 }}
+      >
+        <motion.article className="public-support-card" variants={fadeUpVariant}>
           <div className="support-card-icon"><HeartHandshake size={30} /></div>
           <h3>Academic Mentoring</h3>
           <p>One-on-one mentorship by dedicated subject lecturers, regular doubt-clearing sessions, and specialized entrance study materials.</p>
-        </article>
-        <article className="public-support-card">
+        </motion.article>
+        <motion.article className="public-support-card" variants={fadeUpVariant}>
           <div className="support-card-icon"><Bus size={30} /></div>
           <h3>Safe Transport &amp; Hostel</h3>
           <p>Well-maintained college buses with GPS tracking, alongside monitored residential hostel blocks for outstation learners.</p>
-        </article>
-        <article className="public-support-card">
+        </motion.article>
+        <motion.article className="public-support-card" variants={fadeUpVariant}>
           <div className="support-card-icon"><Compass size={30} /></div>
           <h3>Career &amp; Entrance Prep</h3>
           <p>Guidance for EAMCET, JEE, NEET, CA Foundation, CLAT, and top university admissions with regular practice test series.</p>
-        </article>
-      </div>
+        </motion.article>
+      </motion.div>
 
       {/* FAQ Accordion */}
-      <div className="public-faq-wrap">
+      <motion.div
+        className="public-faq-wrap"
+        initial={{ opacity: 0, y: 28 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: false, amount: 0.15 }}
+        transition={{ duration: 0.55 }}
+      >
         <h3 className="public-faq-title">Frequently Asked Questions</h3>
         <div className="public-faq-list">
           {faqItems.map(([question, answer], index) => {
@@ -634,7 +680,7 @@ function StudentServicesSection({ content, onNavigate }) {
             );
           })}
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -655,9 +701,9 @@ function CmsSection({ onNavigate }) {
       <motion.div
         className="public-cms-grid"
         variants={staggerContainer}
-        initial={"hidden"}
+        initial="hidden"
         whileInView="visible"
-        viewport={{ once: false, amount: 0.15 }}
+        viewport={{ once: false, amount: 0.1 }}
         style={{ marginTop: "28px" }}
       >
         {cmsFeatures.map(([title, description, Icon]) => (
@@ -676,7 +722,14 @@ function CmsSection({ onNavigate }) {
         ))}
       </motion.div>
 
-      <div className="public-cms-login-cta" style={{ marginTop: "32px" }}>
+      <motion.div
+        className="public-cms-login-cta"
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: false, amount: 0.18 }}
+        transition={{ duration: 0.5 }}
+        style={{ marginTop: "32px" }}
+      >
         <div>
           <h3>Authorized Staff &amp; Student Portal Access</h3>
           <p>Faculty, staff, and enrolled students can sign into the management system to access their personal dashboards.</p>
@@ -684,7 +737,7 @@ function CmsSection({ onNavigate }) {
         <Link to="/login" className="public-btn is-white">
           Sign In to Portal <ArrowRight size={16} />
         </Link>
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -701,13 +754,20 @@ function ContactSection({ content }) {
       />
 
       {/* 4 Contact Cards */}
-      <div className="public-contact-cards-row" style={{ marginTop: "28px" }}>
-        <div className="contact-info-card">
+      <motion.div
+        className="public-contact-cards-row"
+        style={{ marginTop: "28px" }}
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: false, amount: 0.15 }}
+      >
+        <motion.div className="contact-info-card" variants={fadeUpVariant}>
           <div className="card-icon"><MapPin size={24} /></div>
           <h4>Campus Address</h4>
           <p>{content.contactAddress || "Dwarakapuram, Pirnav, Nizamabad, Telangana - 503224"}</p>
-        </div>
-        <div className="contact-info-card">
+        </motion.div>
+        <motion.div className="contact-info-card" variants={fadeUpVariant}>
           <div className="card-icon"><Phone size={24} /></div>
           <h4>Call Admissions</h4>
           <p>
@@ -715,8 +775,8 @@ function ContactSection({ content }) {
               {content.contactPhone || "+91 9908364909"}
             </a>
           </p>
-        </div>
-        <div className="contact-info-card">
+        </motion.div>
+        <motion.div className="contact-info-card" variants={fadeUpVariant}>
           <div className="card-icon"><Mail size={24} /></div>
           <h4>Email Inquiries</h4>
           <p>
@@ -724,18 +784,25 @@ function ContactSection({ content }) {
               {content.contactEmail || "pirnavjuniorcollege@gmail.com"}
             </a>
           </p>
-        </div>
-        <div className="contact-info-card">
+        </motion.div>
+        <motion.div className="contact-info-card" variants={fadeUpVariant}>
           <div className="card-icon"><Clock size={24} /></div>
           <h4>Office Working Hours</h4>
           <p>{content.officeHours || "Monday – Saturday: 9:00 AM – 5:00 PM"}</p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Embedded Interactive GetInTouch Form */}
-      <div className="public-contact-form-wrap" style={{ marginTop: "36px" }}>
+      <motion.div
+        className="public-contact-form-wrap"
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: false, amount: 0.12 }}
+        transition={{ duration: 0.6 }}
+        style={{ marginTop: "36px" }}
+      >
         <GetInTouchView contact={content} isPageView={true} />
-      </div>
+      </motion.div>
     </div>
   );
 }

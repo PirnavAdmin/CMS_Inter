@@ -19,6 +19,7 @@ const getCategoryIcon = (type = "") => {
   if (t.includes("transport") || t.includes("trip") || t.includes("bus")) return { icon: "🚌", className: "transport" };
   if (t.includes("leave") || t.includes("holiday")) return { icon: "🏖️", className: "leave" };
   if (t.includes("attend") || t.includes("regulariz")) return { icon: <CalendarCheck size={17} strokeWidth={2.1} />, className: "attendance" };
+  if (t.includes("enquir")) return { icon: "📥", className: "enquiry" };
   return { icon: "🔔", className: "general" };
 };
 

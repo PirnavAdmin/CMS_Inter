@@ -1,9 +1,13 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using CollegeManagement.API.Models.Faculty;
 
 namespace CollegeManagement.API.Models
 {
     /// <summary>
-    /// Represents a user role in the college management system (e.g., "Super Admin", "Admin", "Teacher", "Student").
+    /// Represents a user role in the college management system (e.g., "Super Admin", "Admin", "Teacher", "Student", "Receptionist").
     /// </summary>
     public class Role
     {
@@ -19,6 +23,16 @@ namespace CollegeManagement.API.Models
 
         [StringLength(255)]
         public string? Description { get; set; }
+
+        public int? DepartmentId { get; set; }
+
+        [ForeignKey(nameof(DepartmentId))]
+        public virtual Department? Department { get; set; }
+
+        public int? DesignationId { get; set; }
+
+        [ForeignKey(nameof(DesignationId))]
+        public virtual Designation? Designation { get; set; }
 
         [StringLength(20)]
         public string StaffType { get; set; } = "Both";

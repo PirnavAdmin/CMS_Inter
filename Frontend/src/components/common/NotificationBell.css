@@ -273,6 +273,7 @@
 .cms-notif-icon-box.exam { background: #ffedd5; color: #ea580c; }
 .cms-notif-icon-box.transport { background: #f3e8ff; color: #9333ea; }
 .cms-notif-icon-box.leave { background: #fee2e2; color: #dc2626; }
+.cms-notif-icon-box.enquiry { background: #dcfce7; color: #15803d; }
 
 .cms-notif-content {
   flex: 1;

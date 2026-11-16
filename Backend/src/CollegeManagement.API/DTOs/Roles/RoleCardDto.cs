@@ -7,6 +7,10 @@ namespace CollegeManagement.API.DTOs.Roles
         public int RoleId { get; set; }
         public string RoleName { get; set; } = string.Empty;
         public string? Description { get; set; }
+        public int? DepartmentId { get; set; }
+        public string? DepartmentName { get; set; }
+        public int? DesignationId { get; set; }
+        public string? DesignationName { get; set; }
         public bool IsSystemRole { get; set; }
         public bool IsActive { get; set; }
         public int UserCount { get; set; }

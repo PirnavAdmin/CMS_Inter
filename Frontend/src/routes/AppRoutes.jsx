@@ -209,7 +209,7 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
         <Route path="/principal-dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
-        <Route path="/principal-dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
+        <Route path="/principal-dashboard/enquiries" element={<Navigate to="/principal-dashboard/enquiry-management" replace />} />
       </Route>
 
       <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>

@@ -1463,6 +1463,71 @@ catch (Exception ex)
         app.Logger.LogWarning(pgEx, "Failed to align PaymentGateway database tables on startup.");
     }
 
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var deptColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId';
+        ").FirstOrDefaultAsync();
+        if (deptColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `DepartmentId` INT NULL AFTER `Description`;");
+        }
+
+        var desigColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId';
+        ").FirstOrDefaultAsync();
+        if (desigColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `DesignationId` INT NULL AFTER `DepartmentId`;");
+        }
+
+        var stColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType';
+        ").FirstOrDefaultAsync();
+        if (stColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `StaffType` VARCHAR(20) NOT NULL DEFAULT 'Both' AFTER `DesignationId`;");
+        }
+
+        await db.Database.ExecuteSqlRawAsync(@"
+            INSERT IGNORE INTO `Departments` (`DepartmentCode`, `DepartmentName`, `StaffType`, `Description`, `IsActive`)
+            VALUES ('DEP_SA', 'Student Affairs', 'Non-Teaching', 'Student Affairs, Front Office & Services', 1);
+
+            INSERT IGNORE INTO `Designations` (`Name`, `StaffType`, `IsActive`, `CreatedAt`)
+            VALUES ('Receptionist', 'Non-Teaching', 1, UTC_TIMESTAMP());
+
+            UPDATE `Designations`
+            SET `DepartmentId` = (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                `StaffType` = 'Non-Teaching'
+            WHERE `Name` = 'Receptionist';
+
+            INSERT INTO `Roles` (`RoleName`, `Description`, `StaffType`, `IsSystemRole`, `IsActive`, `DepartmentId`, `DesignationId`)
+            SELECT 'Receptionist', 'Front desk visitor management, receptionist services, and prospective student enquiry handling', 'Non-Teaching', 0, 1,
+                   (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                   (SELECT `Id` FROM `Designations` WHERE `Name` = 'Receptionist' LIMIT 1)
+            WHERE NOT EXISTS (SELECT 1 FROM `Roles` WHERE `RoleName` = 'Receptionist');
+
+            UPDATE `Roles`
+            SET `StaffType` = 'Non-Teaching',
+                `DepartmentId` = (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                `DesignationId` = (SELECT `Id` FROM `Designations` WHERE `Name` = 'Receptionist' LIMIT 1)
+            WHERE `RoleName` = 'Receptionist';
+
+            UPDATE `Roles` SET `StaffType` = 'Teaching' WHERE `RoleName` IN ('Faculty', 'Teacher', 'Lecturer', 'HOD');
+            UPDATE `Roles` SET `StaffType` = 'Non-Teaching' WHERE `RoleName` IN ('Accounts', 'Accountant', 'Examination Cell', 'Library / Librarian', 'Librarian', 'Hostel Warden', 'Placement Officer', 'Bus Driver', 'Driver', 'Cleaner', 'Attendant');
+        ");
+    }
+    catch (Exception roleEx)
+    {
+        app.Logger.LogWarning(roleEx, "Failed to align Roles department and designation schema on startup.");
+    }
+
     app.Run();
 }
 catch (Exception ex)
