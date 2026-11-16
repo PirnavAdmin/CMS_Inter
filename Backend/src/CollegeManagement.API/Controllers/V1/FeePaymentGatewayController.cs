@@ -64,8 +64,31 @@ public class FeePaymentGatewayController : ControllerBase
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("UserId")?.Value
-            ?? User.FindFirst("userId")?.Value;
+            ?? User.FindFirst("userId")?.Value
+            ?? User.FindFirst("sub")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private async Task<int?> GetAuthenticatedStudentIdAsync()
+    {
+        var studentIdClaim = User.FindFirst("StudentId")?.Value ?? User.FindFirst("studentId")?.Value;
+        if (int.TryParse(studentIdClaim, out var sId) && sId > 0)
+            return sId;
+
+        var userId = GetCurrentUserId();
+        if (userId.HasValue && userId.Value > 0)
+        {
+            var studentId = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.UserId == userId.Value)
+                .Select(u => u.StudentId)
+                .FirstOrDefaultAsync();
+
+            if (studentId.HasValue && studentId.Value > 0)
+                return studentId.Value;
+        }
+
+        return null;
     }
 
     private bool IsPrivilegedStaff()
@@ -77,7 +100,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Prevents Insecure Direct Object Reference (IDOR) when Student or Parent roles access gateway APIs.
-    /// Privileged staff roles are permitted; Students must match their own StudentId claim;
+    /// Privileged staff roles are permitted; Students must match their own StudentId;
     /// Parents must pass sp_CheckParentStudentMapping for the target student.
     /// </summary>
     private async Task<bool> IsAuthorizedForStudentAsync(int targetStudentId)
@@ -88,8 +111,8 @@ public class FeePaymentGatewayController : ControllerBase
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
         {
-            var studentIdClaim = User.FindFirst("StudentId")?.Value ?? User.FindFirst("studentId")?.Value;
-            return int.TryParse(studentIdClaim, out int ownStudentId) && ownStudentId == targetStudentId;
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            return ownStudentId.HasValue && ownStudentId.Value == targetStudentId;
         }
 
         if (string.Equals(userRole, "Parent", StringComparison.OrdinalIgnoreCase))
@@ -112,6 +135,94 @@ public class FeePaymentGatewayController : ControllerBase
         return false;
     }
 
+    /// <summary>
+    /// Returns a sanitized public payment configuration safe for students and parents.
+    /// Redacts Razorpay secret status, webhook secrets, webhook URLs, and internal server endpoints.
+    /// Retains active receiving accounts and public payee details required for UPI QR generation and Razorpay checkout.
+    /// </summary>
+    private static PaymentGatewayConfigDto SanitizeConfigForStudent(PaymentGatewayConfigDto config)
+    {
+        if (config == null) return new PaymentGatewayConfigDto();
+
+        return new PaymentGatewayConfigDto
+        {
+            Id = config.Id,
+            CampusId = config.CampusId,
+
+            // Safe bank details for manual transfer / display
+            BankName = config.BankName,
+            AccountHolderName = config.AccountHolderName,
+            AccountNumber = config.AccountNumber,
+            IfscCode = config.IfscCode,
+            BranchName = config.BranchName,
+            AccountType = config.AccountType,
+
+            // Safe UPI details for display & QR generation
+            PayeeVpa = config.PayeeVpa,
+            PayeeName = config.PayeeName,
+            Currency = config.Currency,
+            Mcc = config.Mcc,
+            EnableCounterUpiQr = config.EnableCounterUpiQr,
+
+            // Public gateway flags & client key ID
+            Provider = config.Provider,
+            IsLiveMode = config.IsLiveMode,
+            RazorpayKeyId = config.RazorpayKeyId,
+            HasRazorpayKeySecret = false, // REDACTED: Never expose secret existence or status to students
+            HasRazorpayWebhookSecret = false, // REDACTED: Never expose secret existence or status to students
+            AutoCapture = config.AutoCapture,
+            EnableRazorpay = config.EnableRazorpay,
+            EnableOfflineUtr = config.EnableOfflineUtr,
+
+            // Safe polling config
+            PollingIntervalMs = config.PollingIntervalMs,
+            MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
+
+            // Sensitive internal URLs & ports strictly redacted
+            BaseAppUrl = null,
+            FrontendPort = 0,
+            WebhookUrl = string.Empty,
+
+            UpdatedAt = config.UpdatedAt,
+
+            // Multi-account: only return active accounts, with public fields
+            BankAccounts = config.BankAccounts?
+                .Where(a => a.IsActive)
+                .Select(a => new CampusBankAccountDto
+                {
+                    Id = a.Id,
+                    CampusId = a.CampusId,
+                    BankName = a.BankName,
+                    AccountHolderName = a.AccountHolderName,
+                    AccountNumber = a.AccountNumber,
+                    IfscCode = a.IfscCode,
+                    BranchName = a.BranchName,
+                    AccountType = a.AccountType,
+                    IsActive = a.IsActive,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt
+                })
+                .ToList() ?? new List<CampusBankAccountDto>(),
+            ActiveBankAccountId = config.ActiveBankAccountId
+        };
+    }
+
+    private string GetApiBaseUrl()
+    {
+        try
+        {
+            if (Request != null && Request.Host.HasValue && !string.IsNullOrWhiteSpace(Request.Host.Value))
+            {
+                return $"{Request.Scheme}://{Request.Host}";
+            }
+        }
+        catch
+        {
+            // fallback
+        }
+        return "http://localhost";
+    }
+
     // ========================= ORDER CREATION =========================
 
     /// <summary>
@@ -124,26 +235,59 @@ public class FeePaymentGatewayController : ControllerBase
     [BypassPermission]
     public async Task<IActionResult> CreateOrder([FromBody] CreateGatewayOrderRequest request)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (request == null) return BadRequest(new { success = false, message = "Request body is required." });
 
-        if (!await IsAuthorizedForStudentAsync(request.StudentId))
-            return Forbid();
-
-        var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
-        if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
-            return Forbid();
-
-        if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
-            (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
         {
-            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
-            var targetCampusId = request.CampusId ?? studentCampusId;
-            if (targetCampusId.HasValue)
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
+                return Forbid();
+
+            // Override student ID on the server - do not trust client-supplied ID
+            request.StudentId = ownStudentId.Value;
+            ModelState.Remove(nameof(request.StudentId));
+
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            // Validate that the student fee account belongs to the authenticated student
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (!feeOwnerStudentId.HasValue || feeOwnerStudentId.Value != ownStudentId.Value)
             {
-                var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
-                    targetCampusId,
-                    requireExplicitCampusId: false);
-                if (!ok) return errorResult!;
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "You can only create payment orders for your own fee account."
+                });
+            }
+
+            // Enforce student's enrolled campus
+            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(ownStudentId.Value);
+            request.CampusId = studentCampusId;
+        }
+        else
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            if (!await IsAuthorizedForStudentAsync(request.StudentId))
+                return Forbid();
+
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
+                return Forbid();
+
+            if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
+                (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+            {
+                var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
+                var targetCampusId = request.CampusId ?? studentCampusId;
+                if (targetCampusId.HasValue)
+                {
+                    var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+                        targetCampusId,
+                        requireExplicitCampusId: false);
+                    if (!ok) return errorResult!;
+                }
             }
         }
 
@@ -347,6 +491,8 @@ public class FeePaymentGatewayController : ControllerBase
     /// and legacy application/json requests.
     /// </summary>
     [HttpPost("submit-utr")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [BypassPermission]
     [RequestSizeLimit(6 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
     public async Task<IActionResult> SubmitUtr(CancellationToken cancellationToken = default)
@@ -364,24 +510,85 @@ public class FeePaymentGatewayController : ControllerBase
         }
 
         var request = parseResult.Request;
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
 
-        if (!await IsAuthorizedForStudentAsync(request.StudentId))
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
             {
-                success = false,
-                errorCode = "STUDENT_ACCESS_DENIED",
-                message = "You are not authorized to submit a payment verification for this student."
-            });
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit a payment verification for this student."
+                });
+            }
+
+            // Server enforces own student ID - never trust client-supplied ID
+            request.StudentId = ownStudentId.Value;
+
+            // Validate that the fee account belongs to this student
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (!feeOwnerStudentId.HasValue || feeOwnerStudentId.Value != ownStudentId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit payment verification for another student's fee account."
+                });
+            }
+
+            // If order ID was specified, ensure transaction belongs to student
+            if (!string.IsNullOrWhiteSpace(request.OrderId))
+            {
+                var orderStudentId = await _gatewayService.GetStudentIdForTransactionAsync(request.OrderId);
+                if (orderStudentId.HasValue && orderStudentId.Value != ownStudentId.Value)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        errorCode = "STUDENT_ACCESS_DENIED",
+                        message = "You are not authorized to submit payment verification for another student's transaction."
+                    });
+                }
+            }
+
+            // Students do not require staff campus clearance - their identity and fee account ownership authorize them
         }
-
-        var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
-        if (studentCampusId.HasValue && studentCampusId.Value > 0)
+        else
         {
-            var campusAccess = await EnsureAuthorizedForCampusAsync(studentCampusId.Value);
-            if (!campusAccess.Authorized)
+            if (!await IsAuthorizedForStudentAsync(request.StudentId))
             {
-                return campusAccess.ErrorResult!;
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit a payment verification for this student."
+                });
+            }
+
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "Fee account does not belong to the specified student."
+                });
+            }
+
+            // Staff campus isolation check
+            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
+            if (studentCampusId.HasValue && studentCampusId.Value > 0 && IsPrivilegedStaff())
+            {
+                var campusAccess = await EnsureAuthorizedForCampusAsync(studentCampusId.Value);
+                if (!campusAccess.Authorized)
+                {
+                    return campusAccess.ErrorResult!;
+                }
             }
         }
 
@@ -593,7 +800,18 @@ public class FeePaymentGatewayController : ControllerBase
             }
 
             if (!int.TryParse(form["studentId"].FirstOrDefault(), out int studentId) || studentId <= 0)
-                AddError("studentId", "studentId must be a valid positive integer.");
+            {
+                var callerStudentClaim = httpRequest.HttpContext?.User?.FindFirst("StudentId")?.Value
+                    ?? httpRequest.HttpContext?.User?.FindFirst("studentId")?.Value;
+                if (int.TryParse(callerStudentClaim, out int sId) && sId > 0)
+                {
+                    studentId = sId;
+                }
+                else
+                {
+                    AddError("studentId", "studentId must be a valid positive integer.");
+                }
+            }
 
             if (!int.TryParse(form["studentFeeId"].FirstOrDefault(), out int studentFeeId) || studentFeeId <= 0)
                 AddError("studentFeeId", "studentFeeId must be a valid positive integer.");
@@ -729,6 +947,16 @@ public class FeePaymentGatewayController : ControllerBase
                 ErrorCode = "EMPTY_REQUEST_BODY",
                 ErrorMessage = "Request payload is required."
             };
+        }
+
+        if (payload.StudentId <= 0)
+        {
+            var callerStudentClaim = httpRequest.HttpContext?.User?.FindFirst("StudentId")?.Value
+                ?? httpRequest.HttpContext?.User?.FindFirst("studentId")?.Value;
+            if (int.TryParse(callerStudentClaim, out int sId) && sId > 0)
+            {
+                payload.StudentId = sId;
+            }
         }
 
         var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
@@ -1267,19 +1495,124 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Gets active payment receiving bank details, UPI VPA, and gateway configuration for the authorized campus.
-    /// Secrets are never returned; only boolean presence flags are exposed.
+    /// Secrets are never returned to students/parents; only safe public details required for checkout are returned.
+    /// Privileged staff roles receive full administrative configuration.
     /// </summary>
     [HttpGet("config")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [BypassPermission]
     public async Task<IActionResult> GetConfig([FromQuery] int? campusId)
     {
-        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var apiBaseUrl = GetApiBaseUrl();
+
+        // 1. Authenticated Student Flow
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
+        {
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Student identity could not be verified."
+                });
+            }
+
+            var enrolledCampusId = await _gatewayService.GetStudentCampusIdAsync(ownStudentId.Value);
+            if (!enrolledCampusId.HasValue || enrolledCampusId.Value <= 0)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Student is not enrolled in a valid campus."
+                });
+            }
+
+            // Deny cross-campus configuration access
+            if (campusId.HasValue && campusId.Value > 0 && campusId.Value != enrolledCampusId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "You are not authorized to view payment settings for other campuses."
+                });
+            }
+
+            var rawConfig = await _gatewayService.GetConfigAsync(enrolledCampusId.Value, apiBaseUrl);
+            var safeConfig = SanitizeConfigForStudent(rawConfig);
+            return Ok(safeConfig);
+        }
+
+        // 2. Authenticated Parent Flow
+        if (string.Equals(userRole, "Parent", StringComparison.OrdinalIgnoreCase))
+        {
+            var parentUserId = GetCurrentUserId();
+            if (!parentUserId.HasValue)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Parent identity could not be verified."
+                });
+            }
+
+            int effectiveCampusId;
+            var conn = _dbContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync();
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var hasChildInCampus = await conn.ExecuteScalarAsync<bool>(@"
+                    SELECT EXISTS (
+                        SELECT 1 FROM ParentStudentMappings psm
+                        INNER JOIN Students s ON psm.StudentId = s.StudentId
+                        WHERE psm.ParentUserId = @ParentUserId AND s.CampusId = @CampusId AND s.IsActive = 1
+                    );", new { ParentUserId = parentUserId.Value, CampusId = campusId.Value });
+
+                if (!hasChildInCampus)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "You are not authorized to view payment settings for this campus."
+                    });
+                }
+
+                effectiveCampusId = campusId.Value;
+            }
+            else
+            {
+                var firstCampusId = await conn.ExecuteScalarAsync<int?>(@"
+                    SELECT s.CampusId FROM ParentStudentMappings psm
+                    INNER JOIN Students s ON psm.StudentId = s.StudentId
+                    WHERE psm.ParentUserId = @ParentUserId AND s.IsActive = 1
+                    LIMIT 1;", new { ParentUserId = parentUserId.Value });
+
+                if (!firstCampusId.HasValue)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "No enrolled student found for parent account."
+                    });
+                }
+                effectiveCampusId = firstCampusId.Value;
+            }
+
+            var rawConfig = await _gatewayService.GetConfigAsync(effectiveCampusId, apiBaseUrl);
+            var safeConfig = SanitizeConfigForStudent(rawConfig);
+            return Ok(safeConfig);
+        }
+
+        // 3. Privileged Staff & Admin Flow (Preserve existing administrative behavior)
+        var (ok, effectiveStaffCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
             campusId,
             requireExplicitCampusId: true);
         if (!ok) return errorResult!;
 
-        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
-        var config = await _gatewayService.GetConfigAsync(effectiveCampusId, apiBaseUrl);
+        var config = await _gatewayService.GetConfigAsync(effectiveStaffCampusId, apiBaseUrl);
         return Ok(config);
     }
 
@@ -1302,7 +1635,7 @@ public class FeePaymentGatewayController : ControllerBase
             requireExplicitCampusId: true);
         if (!ok) return errorResult!;
 
-        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var apiBaseUrl = GetApiBaseUrl();
         var result = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId(), apiBaseUrl);
 
         if (!result.Success)
