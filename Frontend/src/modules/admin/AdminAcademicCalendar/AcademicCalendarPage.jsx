@@ -1,7 +1,7 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Plus, Printer, Download, Eye, Pencil, Trash2, RotateCcw, CalendarDays, Clock3, FileText, Sun } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Printer, Download, Eye, Pencil, Trash2, RotateCcw, CalendarDays, Clock3, FileText, Sun, Layers } from 'lucide-react';
 import DashboardLayout from '@/shared/layouts/DashboardLayout/DashboardLayout.jsx';
 import { Modal, ConfirmDialog, Toast, Skeleton, SkeletonCard, SkeletonTable } from '@/shared/components/Ui.jsx';
 import apiClient, { getApiErrorMessage } from '@/api/axios.js';
@@ -399,8 +399,8 @@ export function PlannerHeader({ filtered, upcoming, loading, busy, exporting, vi
   </>;
 }
 
-export function PlannerNavigation({ view, periodLabel, move, today, changeView }) {
-  return <div className="academic-calendar-toolbar"><div className="academic-planner-period">{view !== 'list' && <><button className="academic-planner-nav" aria-label="Previous period" onClick={() => move(-1)}><ChevronLeft size={18} /></button><button className="academic-planner-nav" aria-label="Next period" onClick={() => move(1)}><ChevronRight size={18} /></button></>}<h2>{periodLabel}</h2>{view !== 'list' && <button className="cms-btn cms-btn-ghost" onClick={today}>Today</button>}</div><div className="academic-planner-view-switch" aria-label="Planner view">{['month', 'week', 'list'].map((mode) => <button aria-pressed={view === mode} className={view === mode ? 'is-active' : ''} key={mode} onClick={() => changeView(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</div></div>;
+export function PlannerNavigation({ view, periodLabel, move, changeView }) {
+  return <div className="academic-calendar-toolbar"><div className="academic-planner-period">{view !== 'list' && <button className="academic-planner-nav" aria-label="Previous period" onClick={() => move(-1)}><ChevronLeft size={18} /></button>}<h2>{periodLabel}</h2>{view !== 'list' && <button className="academic-planner-nav" aria-label="Next period" onClick={() => move(1)}><ChevronRight size={18} /></button>}</div><div className="academic-planner-view-switch" aria-label="Planner view">{['month', 'week', 'list'].map((mode) => <button aria-pressed={view === mode} className={view === mode ? 'is-active' : ''} key={mode} onClick={() => changeView(mode)}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}</div></div>;
 }
 
 export function monthCells(anchor, events) {
@@ -439,10 +439,10 @@ export function PlannerTimeline({ timeline, view, eventButton, openEditor, ancho
 
 export function PlannerAside({ filtered, upcoming, loading, busy, setDetail, viewAll, reset, eventTypes = EVENT_TYPES, metrics }) {
   return <aside className="academic-planner-side" aria-label="Upcoming events and categories">
-    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2>Upcoming Events</h2><button onClick={viewAll}>View All</button></div>
+    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2><CalendarDays size={23} aria-hidden="true" />Upcoming Events</h2><button onClick={viewAll}>View All</button></div>
       {loading ? <div aria-label="Loading upcoming events">{Array.from({ length: 5 }, (_, index) => <SkeletonCard key={index} lines={2} />)}</div> : upcoming.length ? <div className="academic-planner-upcoming">{upcoming.slice(0, 5).map((event) => <button key={event.id} onClick={() => setDetail(event)} style={{ '--event-color': eventTypes[event.type].color }}><DateBadge date={event.start} /><span className="academic-planner-upcoming-copy"><strong><i />{event.title}</strong><span>{event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' – ')}</span><small>{eventTypes[event.type].label}</small></span></button>)}</div> : <p className="academic-planner-empty-day">No upcoming events</p>}
     </section>
-    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2>Event Types</h2><span>{loading ? <Skeleton style={{ width: 40 }} /> : <>{metrics?.totalEvents ?? metrics?.total ?? filtered.length} total</>}</span></div><div className="academic-planner-categories" tabIndex={0} role="region" aria-label="Event types">{Object.entries(eventTypes).map(([key, type]) => <div key={key}><i style={{ background: type.color }} /><span>{type.label}</span><strong>{loading ? <Skeleton style={{ width: 20 }} /> : (Array.isArray(metrics?.categories) ? metrics.categories : []).find((category) => typeKey(category.eventType ?? category.type ?? category.name) === key)?.count ?? filtered.filter((event) => event.type === key).length}</strong></div>)}</div></section>
+    <section className="academic-planner-panel"><div className="academic-planner-panel-heading"><h2><Layers size={23} aria-hidden="true" />Event Types</h2><span>{loading ? <Skeleton style={{ width: 40 }} /> : <>{metrics?.totalEvents ?? metrics?.total ?? filtered.length} total</>}</span></div><div className="academic-planner-categories" tabIndex={0} role="region" aria-label="Event types">{Object.entries(eventTypes).map(([key, type]) => <div key={key}><i style={{ background: type.color }} /><span>{type.label}</span><strong>{loading ? <Skeleton style={{ width: 20 }} /> : (Array.isArray(metrics?.categories) ? metrics.categories : []).find((category) => typeKey(category.eventType ?? category.type ?? category.name) === key)?.count ?? filtered.filter((event) => event.type === key).length}</strong></div>)}</div></section>
 
   </aside>;
 }
@@ -532,6 +532,13 @@ export default function AcademicCalendarPage() {
   const detailRequest = useRef(0);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeError, setRangeError] = useState('');
+  const calendarError = error || widgetsError || rangeError;
+  const calendarErrorMessage = /offline|ERR_NGROK_3200|network error/i.test(calendarError)
+    ? 'Academic Calendar service is offline. Please try again later.'
+    : calendarError;
+  useEffect(() => {
+    if (calendarErrorMessage) setToast({ message: calendarErrorMessage, type: 'error' });
+  }, [calendarErrorMessage]);
   const eventTypes = useMemo(() => {
     const types = { ...EVENT_TYPES };
     [...events, ...rangeEvents, ...sidebarEvents, ...(detail ? [detail] : []), ...(editor?.event ? [editor.event] : [])].forEach((event) => { if (!types[event.type]) types[event.type] = { label: event.apiEventType || event.type, color: CUSTOM_TYPE_COLOR }; });
@@ -697,14 +704,14 @@ export default function AcademicCalendarPage() {
   const eventButton = (event) => <button key={event.id} className={`academic-planner-event is-${event.status.toLowerCase()}`} style={{ '--event-color': eventTypes[event.type].color }} onClick={() => showDetail(event)}><span className="academic-planner-event-title">{event.title}</span><span className="academic-planner-event-meta"><span className="academic-planner-category"><i />{eventTypes[event.type].label}</span><span><Clock3 size={13} />{event.allDay ? 'All day' : [event.startTime, event.endTime].filter(Boolean).join(' – ')}</span></span><StatusBadge status={event.status} /></button>;
   const actions = (event) => <div className="academic-calendar-row-actions"><button aria-label={`View ${event.title}`} title="View" onClick={() => showDetail(event)}><Eye size={15} /></button>{event.source === 'calendar' && <><button aria-label={`Edit ${event.title}`} title="Edit" onClick={() => openEditor(event)}><Pencil size={15} /></button><button aria-label={`Delete ${event.title}`} title="Delete" onClick={() => confirmDelete(event)}><Trash2 size={15} /></button></>}</div>;
 
-  return <DashboardLayout title="Academic Calendar" subtitle="Manage academic schedules, examinations, holidays, and college events.">
+  return <DashboardLayout title="Academic Calendar" subtitle="Manage academic schedules, examinations, holidays, and college events." hidePageHeader>
     <div className="academic-calendar">
+      <header className="academic-calendar-page-heading"><span className="academic-calendar-heading-icon"><CalendarDays size={34} aria-hidden="true" /></span><div><h1>Academic Calendar</h1><p>Manage academic schedules, examinations, holidays, and college events.</p></div></header>
       <PlannerHeader filtered={filtered} upcoming={upcoming} loading={loading} busy={busy} exporting={exporting} visible={visible} yearName={yearName} selectedDate={selectedDate} metrics={null} onPrint={printCalendar} openEditor={openEditor} exportFile={exportFile} />
       <div className="academic-planner-layout">
       <section className="academic-planner-main" aria-label="Academic event planner">
       <PlannerNavigation view={view} periodLabel={periodLabel} move={move} today={() => selectDate(todayKey())} changeView={(mode) => { updateNavigation({ view: mode, upcoming: null }); setPage(1); }} />
       <div className="academic-calendar-print-heading"><h1>Pirnav College — Academic Calendar </h1><p>{yearName} | {periodLabel}</p></div>
-      {(error || widgetsError || rangeError) && <p role="alert">{error || widgetsError || rangeError}</p>}
       {loading || (view !== 'list' && rangeLoading) ? <CalendarLoadingSkeleton view={view} /> : <>
         {!visible.length && <p role="status">No events scheduled for this period.</p>}
         {view === 'list' ? <>

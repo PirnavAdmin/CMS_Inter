@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, WalletCards, X } from "lucide-react";
+import { Download, LoaderCircle, WalletCards, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { SkeletonPage } from "@/shared/components/Ui.jsx";
@@ -256,18 +256,18 @@ export default function StudentFees() {
     try {
       const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(receiptNo));
       const receiptData = response.data?.data ?? response.data?.Data ?? response.data;
-      if (receiptData) {
-        downloadFeeReceiptPdf({
+      if (!receiptData || typeof receiptData !== "object") throw new Error("Receipt details are unavailable. Please try again.");
+      await downloadFeeReceiptPdf({
           ...receiptData,
           studentName: receiptData.studentName || student?.studentName || student?.name,
           admissionNumber: receiptData.admissionNumber || student?.admissionNo,
           groupName: receiptData.groupName || student?.groupName,
           sectionName: receiptData.sectionName || student?.sectionName,
-        });
-      }
+      });
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
     } finally {
+      receiptRequest.current = false;
       setReceiptLoading("");
     }
   };
@@ -291,20 +291,16 @@ export default function StudentFees() {
     ? Number(paymentAccount?.balance || 0)
     : selectedSchedules.reduce((sum, schedule) => sum + schedule.balance, 0);
   const openPayment = () => {
-    const firstSchedule = availableSchedules[0];
     setPaymentMode("UPI_QR");
-    if (firstSchedule) {
-      setPaymentTarget("schedules");
-      setSelectedScheduleIds([firstSchedule.id]);
-      setPaymentAmount(String(firstSchedule.balance));
-    } else {
-      setPaymentTarget("full");
-      setSelectedScheduleIds([]);
-      setPaymentAmount(String(paymentAccount.balance));
-    }
+    clearPaymentSelection();
     setPaymentNotice("");
     setPaymentFooter(null);
     setPaymentOpen(true);
+  };
+  const clearPaymentSelection = () => {
+    setPaymentTarget("schedules");
+    setSelectedScheduleIds([]);
+    setPaymentAmount("");
   };
   const selectFullBalance = () => {
     setPaymentTarget("full");
@@ -315,7 +311,7 @@ export default function StudentFees() {
     const next = selectedScheduleIds.includes(schedule.id)
       ? selectedScheduleIds.filter((id) => id !== schedule.id)
       : [...selectedScheduleIds, schedule.id];
-    if (!next.length) return selectFullBalance();
+    if (!next.length) return clearPaymentSelection();
     setPaymentTarget("schedules");
     setSelectedScheduleIds(next);
     setPaymentAmount(String(availableSchedules.filter((item) => next.includes(item.id)).reduce((sum, item) => sum + item.balance, 0)));
@@ -342,7 +338,7 @@ export default function StudentFees() {
           if (index === 2) return money(row.amount);
           if (index === 3) return row.mode;
           if (index === 4) return <span className="sp-badge">{row.status}</span>;
-          if (index === 5) return <button className="sp-icon-action" title="Download receipt PDF" aria-label="Download receipt PDF" disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row.receiptNo)}><Download size={16}/></button>;
+          if (index === 5) return <button type="button" className="sp-icon-action" title={receiptLoading === row.receiptNo ? "Downloading receipt..." : "Download receipt PDF"} aria-label={receiptLoading === row.receiptNo ? "Downloading receipt..." : "Download receipt PDF"} aria-busy={receiptLoading === row.receiptNo} disabled={row.receiptNo === "—" || Boolean(receiptLoading)} onClick={() => downloadReceipt(row)}>{receiptLoading === row.receiptNo ? <LoaderCircle size={16} className="sp-receipt-download-spinner"/> : <Download size={16}/>}</button>;
           return row.paymentFor;
         }}/ >}
     </StudentCard>
@@ -356,10 +352,10 @@ export default function StudentFees() {
         <section className="sp-payment-target" aria-label="Fee amount selection">
           <strong>Pay Towards</strong>
           <details className="sp-payment-target-picker">
-            <summary>{paymentTarget === "full" ? `Pay full remaining balance - ${formatMoney(paymentAccount.balance)}` : `${selectedSchedules.length} schedule${selectedSchedules.length === 1 ? "" : "s"} selected - ${formatMoney(maximumPaymentAmount)}`}</summary>
+            <summary>{paymentTarget === "full" ? `Pay full remaining balance - ${formatMoney(paymentAccount.balance)}` : selectedSchedules.length ? `${selectedSchedules.length} schedule${selectedSchedules.length === 1 ? "" : "s"} selected - ${formatMoney(maximumPaymentAmount)}` : "Select pending fee schedules"}</summary>
             <div className="sp-payment-target-options">
-              <label><input type="checkbox" checked={paymentTarget === "full"} disabled={paymentFooter?.locked} onChange={(event) => event.target.checked ? selectFullBalance() : (availableSchedules[0] && toggleSchedule(availableSchedules[0]))}/> <span>Pay full remaining balance - {formatMoney(paymentAccount.balance)}</span></label>
-              {availableSchedules.map((schedule) => <label key={schedule.id}><input type="checkbox" checked={paymentTarget !== "full" && selectedScheduleIds.includes(schedule.id)} disabled={paymentFooter?.locked} onChange={() => toggleSchedule(schedule)}/> <span>{schedule.label || `Fee Schedule ${schedule.no}`} - {formatMoney(schedule.balance)}{schedule.dueDate ? ` due ${formatDate(schedule.dueDate)}` : ""}</span></label>)}
+              <label><input type="checkbox" checked={paymentTarget === "full"} disabled={paymentFooter?.locked} onChange={(event) => event.target.checked ? selectFullBalance() : clearPaymentSelection()}/> <span>Pay full remaining balance - {formatMoney(paymentAccount.balance)}</span></label>
+              {availableSchedules.map((schedule) => <label key={schedule.id}><input type="checkbox" checked={paymentTarget !== "full" && selectedScheduleIds.includes(schedule.id)} disabled={paymentFooter?.locked} onChange={() => toggleSchedule(schedule)}/> <span>Fee Schedule {schedule.no} - {formatMoney(schedule.balance)}{schedule.dueDate ? ` due ${formatDate(schedule.dueDate)}` : ""}</span></label>)}
               {!availableSchedules.length ? <span className="sp-payment-target-empty">No unpaid fee schedules.</span> : null}
             </div>
           </details>
