@@ -424,7 +424,9 @@ namespace CollegeManagement.API.Controllers
 
                         message = "Group created successfully",
 
-                        data = group
+                        data = group,
+
+                        groupId = group.GroupId
 
                     });
 
@@ -490,7 +492,9 @@ namespace CollegeManagement.API.Controllers
 
                     message = "Group updated successfully",
 
-                    data = group
+                    data = group,
+
+                    groupId = group.GroupId
 
                 });
 

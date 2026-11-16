@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { defineConfig, loadEnv, normalizePath } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -256,6 +257,22 @@ function examCellShieldPlugin(apiBaseUrl) {
               res.writeHead(upstreamRes.status, { "Content-Type": contentType });
               return res.end(text);
             }
+          }
+
+          // If this was a mutation (POST, PUT, PATCH, DELETE), NEVER synthesize mock GET data!
+          // Return the real upstream status & response if available, or 503 if unreachable.
+          if (req.method !== "GET" && req.method !== "HEAD") {
+            if (upstreamRes) {
+              const text = await upstreamRes.text();
+              const contentType = upstreamRes.headers.get("content-type") || "application/json";
+              res.writeHead(upstreamRes.status, { "Content-Type": contentType });
+              return res.end(text);
+            }
+            res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            return res.end(JSON.stringify({
+              success: false,
+              message: "Backend server is unreachable. Please ensure the backend API is running on " + apiBaseUrl
+            }));
           }
 
           // Otherwise (403 Forbidden, 404 Not Found, 500 etc), synthesize 200 OK JSON so DevTools is completely error-free
@@ -993,6 +1010,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": normalizePath(path.resolve(__dirname, "./src")),
+        ...(!fs.existsSync(path.resolve(__dirname, "node_modules/framer-motion"))
+          ? { "framer-motion": normalizePath(path.resolve(__dirname, "./src/shims/framer-motion.js")) }
+          : {}),
       },
     },
     optimizeDeps: {
