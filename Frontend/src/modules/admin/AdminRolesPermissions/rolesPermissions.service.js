@@ -9,6 +9,7 @@ import {
 } from "./rolesPermissions.constants.js";
 import { normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -304,12 +305,78 @@ export async function getModulesAndPermissions() {
   return apiResult(ALL_PERMISSION_MODULES, "catalog");
 }
 
+export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULES) {
+  if (normalizeRoleCode(roleCode) === "ACCOUNTANT") {
+    return ACCOUNTANT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "EXAMINATION_CELL") {
+    return EXAMINATION_CELL_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "BUS_DRIVER") {
+    return DRIVER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "INVENTORY_MANAGER") {
+    return INVENTORY_MANAGER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "HOSTEL_WARDEN") {
+    return HOSTEL_WARDEN_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "STUDENT") {
+    return STUDENT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "FACULTY") {
+    return FACULTY_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "PARENT") {
+    return PARENT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "TRANSPORT_MANAGER") {
+    return TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  const keys = ROLE_SIDEBAR_MODULE_KEYS[normalizeRoleCode(roleCode)];
+  if (keys === null) return catalog;
+  if (!keys) return [];
+  const order = new Map(keys.map((key, index) => [key, index]));
+  return catalog
+    .filter((module) => order.has(module.id))
+    .sort((left, right) => order.get(left.id) - order.get(right.id));
+}
+
 export async function getRolePermissions(roleId, roleCode) {
   const targetId = resolveRoleIdParam(roleId, roleCode);
   try {
     const response = await apiClient.get(apiEndpoints.roles.permissions(targetId));
     const matrixData = response?.data?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(matrixData) && matrixData.length > 0) {
+    // An empty array is a valid saved state: it means every permission is off.
+    // Do not replace it with frontend defaults after a successful API response.
+    if (Array.isArray(matrixData)) {
       return apiResult(transformBackendPermissionsToMatrix(matrixData), "api");
     }
   } catch (err) {
@@ -379,9 +446,9 @@ export async function updateRolePermissions(roleId, payload) {
     notifyRolesUpdated();
 
     try {
-      const refreshed = await getRolePermissions(targetId);
-      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
-        return apiResult(refreshed.data, "api");
+      const refreshed = await getRolePermissions(targetId, payload?.roleCode);
+      if (refreshed?.meta?.source === "api") {
+        return refreshed;
       }
     } catch {
       // Fallback to normalized
@@ -413,7 +480,9 @@ export async function getUserPermissions(userId, roleCode) {
   try {
     const response = await apiClient.get(apiEndpoints.roles.userPermissions(userId));
     const matrixData = response?.data?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(matrixData) && matrixData.length > 0) {
+    // An empty response is an intentional "no permissions" state, not a
+    // failed request that should fall back to another role's permissions.
+    if (Array.isArray(matrixData)) {
       return apiResult(transformBackendPermissionsToMatrix(matrixData), "api");
     }
   } catch (err) {
@@ -475,9 +544,9 @@ export async function updateUserPermissions(userId, payload) {
     notifyRolesUpdated();
 
     try {
-      const refreshed = await getUserPermissions(userId);
-      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
-        return apiResult(refreshed.data, "api");
+      const refreshed = await getUserPermissions(userId, payload?.roleCode);
+      if (refreshed?.meta?.source === "api") {
+        return refreshed;
       }
     } catch {
       // Fallback to normalized
@@ -603,31 +672,32 @@ export async function cloneRole(sourceRoleId, { newName, description = "" }) {
   return apiResult(newRole, "api");
 }
 
-export function exportPermissionsToCsv(role, matrix = []) {
+export function exportPermissionsToCsv(role, matrix = [], modules = []) {
   if (!role || !Array.isArray(matrix)) return;
 
   const rows = [
-    ["Module ID", "Module Name", "Screen ID", "Screen Name", "View", "Add/Create", "Edit/Update", "Delete"],
+    ["Module ID", "Module Name", "Section", "Module Access", "View", "Add/Create", "Edit/Update", "Delete"],
   ];
+  const moduleById = new Map((modules || []).map((module) => [module.id, module]));
+  const actionsByModule = new Map(matrix.map((permission) => [permission.module || permission.id, permission.actions || []]));
+  const exportRows = modules.length
+    ? modules.map((module) => ({ module: module.id, actions: actionsByModule.get(module.id) || [] }))
+    : matrix;
 
-  matrix.forEach((mod) => {
-    const screens = mod.screens && mod.screens.length > 0
-      ? mod.screens
-      : [{ screenId: "", screenName: "(Whole Module)", actions: mod.actions }];
-
-    screens.forEach((scr) => {
-      const actions = scr.actions || [];
-      rows.push([
-        `"${mod.module || mod.id || ""}"`,
-        `"${mod.name || mod.module || ""}"`,
-        `"${scr.screenId || ""}"`,
-        `"${scr.screenName || scr.name || ""}"`,
-        actions.includes("view") ? "YES" : "NO",
-        actions.includes("create") ? "YES" : "NO",
-        actions.includes("edit") ? "YES" : "NO",
-        actions.includes("delete") ? "YES" : "NO",
-      ]);
-    });
+  exportRows.forEach((mod) => {
+    const moduleId = mod.module || mod.id || "";
+    const definition = moduleById.get(moduleId);
+    const actions = mod.actions || [];
+    rows.push([
+      `"${moduleId}"`,
+      `"${definition?.name || mod.name || moduleId}"`,
+      `"${definition?.section || ""}"`,
+      actions.length > 0 ? "YES" : "NO",
+      actions.includes("view") ? "YES" : "NO",
+      actions.includes("create") ? "YES" : "NO",
+      actions.includes("edit") ? "YES" : "NO",
+      actions.includes("delete") ? "YES" : "NO",
+    ]);
   });
 
   const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");

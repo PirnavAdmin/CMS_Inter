@@ -341,18 +341,8 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
-  // Check specific screen permission first if requested
-  if (normScr) {
-    const screenLookupKey = `${normMod}:${normScr}`;
-    if (Array.isArray(permissionMap[screenLookupKey])) {
-      return permissionMap[screenLookupKey].includes(normAct);
-    }
-    if (Array.isArray(permissionMap[normScr])) {
-      return permissionMap[normScr].includes(normAct);
-    }
-  }
-
-  // Fallback to module-level permission
+  // Screen routes inherit their parent module grant. Legacy screen records are
+  // retained for compatibility, but do not override the module-level policy.
   const moduleActions = permissionMap[normMod];
   if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
     return true;

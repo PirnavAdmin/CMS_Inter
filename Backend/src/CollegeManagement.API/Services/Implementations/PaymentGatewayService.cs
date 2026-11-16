@@ -862,12 +862,16 @@ public class PaymentGatewayService : IPaymentGatewayService
             }
         }
 
+        var isDev = _hostEnvironment?.IsDevelopment() ?? true;
+        var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
+        var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
+        var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : (isDev ? 5173 : 443);
+        var defaultBaseUrl = !string.IsNullOrWhiteSpace(_settings.BaseAppUrl)
+            ? _settings.BaseAppUrl.TrimEnd('/')
+            : (isDev ? "http://localhost:5173" : resolvedApiUrl);
+
         if (config == null)
         {
-            var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
-            var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
-            var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : 5173;
-
             return new PaymentGatewayConfigDto
             {
                 Id = 0,
@@ -893,7 +897,7 @@ public class PaymentGatewayService : IPaymentGatewayService
                 EnableOfflineUtr = false,
                 PollingIntervalMs = defaultInterval,
                 MonitoringTimeoutSeconds = defaultTimeout,
-                BaseAppUrl = _settings.BaseAppUrl ?? string.Empty,
+                BaseAppUrl = defaultBaseUrl,
                 FrontendPort = defaultPort,
                 WebhookUrl = webhookUrl,
                 UpdatedAt = null,
@@ -901,6 +905,11 @@ public class PaymentGatewayService : IPaymentGatewayService
                 ActiveBankAccountId = activeBankAccountId
             };
         }
+
+        var effectivePort = (config.FrontendPort is >= 1 and <= 65535) ? config.FrontendPort : defaultPort;
+        var effectiveBaseUrl = !string.IsNullOrWhiteSpace(config.BaseAppUrl) ? config.BaseAppUrl.TrimEnd('/') : defaultBaseUrl;
+        var effectivePolling = (config.PollingIntervalMs is >= 500 and <= 10000) ? config.PollingIntervalMs : defaultInterval;
+        var effectiveTimeout = (config.MonitoringTimeoutSeconds is >= 60 and <= 3600) ? config.MonitoringTimeoutSeconds : defaultTimeout;
 
         return new PaymentGatewayConfigDto
         {
@@ -925,10 +934,10 @@ public class PaymentGatewayService : IPaymentGatewayService
             AutoCapture = config.AutoCapture,
             EnableRazorpay = config.EnableRazorpay,
             EnableOfflineUtr = config.EnableOfflineUtr,
-            PollingIntervalMs = config.PollingIntervalMs,
-            MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
-            BaseAppUrl = config.BaseAppUrl ?? string.Empty,
-            FrontendPort = config.FrontendPort,
+            PollingIntervalMs = effectivePolling,
+            MonitoringTimeoutSeconds = effectiveTimeout,
+            BaseAppUrl = effectiveBaseUrl,
+            FrontendPort = effectivePort,
             WebhookUrl = webhookUrl,
             UpdatedAt = config.UpdatedAt,
             BankAccounts = bankAccounts,
@@ -946,6 +955,21 @@ public class PaymentGatewayService : IPaymentGatewayService
 
         // DB-aware validation BEFORE mutating or adding any entity so validation errors cause zero partial DB updates.
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (request.FrontendPort < 1 || request.FrontendPort > 65535)
+        {
+            errors[nameof(request.FrontendPort)] = new[] { "Frontend port must be an integer between 1 and 65535." };
+        }
+
+        if (request.PollingIntervalMs < 500 || request.PollingIntervalMs > 10000)
+        {
+            errors[nameof(request.PollingIntervalMs)] = new[] { "Polling interval must be an integer between 500 and 10000 ms." };
+        }
+
+        if (request.MonitoringTimeoutSeconds < 60 || request.MonitoringTimeoutSeconds > 3600)
+        {
+            errors[nameof(request.MonitoringTimeoutSeconds)] = new[] { "Monitoring timeout must be an integer between 60 and 3600 seconds." };
+        }
 
         if (request.EnableRazorpay)
         {
@@ -989,6 +1013,7 @@ public class PaymentGatewayService : IPaymentGatewayService
             config = new PaymentGatewayConfig
             {
                 CampusId = request.CampusId,
+                FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173,
                 CreatedAt = DateTime.UtcNow
             };
             _context.PaymentGatewayConfigs.Add(config);
@@ -1024,7 +1049,7 @@ public class PaymentGatewayService : IPaymentGatewayService
         config.PollingIntervalMs = request.PollingIntervalMs;
         config.MonitoringTimeoutSeconds = request.MonitoringTimeoutSeconds;
         config.BaseAppUrl = (request.BaseAppUrl ?? string.Empty).Trim();
-        config.FrontendPort = request.FrontendPort;
+        config.FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173;
 
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedByUserId = userId;

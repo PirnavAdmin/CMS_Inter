@@ -1323,6 +1323,96 @@ catch (Exception ex)
             }
         }
 
+        var extraPgConfigColumns = new (string ColName, string AlterSql)[]
+        {
+            ("BaseAppUrl", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `BaseAppUrl` VARCHAR(255) NULL;"),
+            ("FrontendPort", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `FrontendPort` INT NOT NULL DEFAULT 5173;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgConfigColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayConfigs' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        // Align and persist local development configuration for CampusId = 1
+        var isDevEnv = app.Environment.IsDevelopment();
+        var defaultDevUrl = "http://localhost:5173";
+        const int defaultDevPort = 5173;
+
+        var campus1Config = await pgDb.PaymentGatewayConfigs
+            .Where(c => c.CampusId == 1)
+            .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        if (campus1Config != null)
+        {
+            bool modified = false;
+            if (isDevEnv)
+            {
+                if (campus1Config.BaseAppUrl != defaultDevUrl)
+                {
+                    campus1Config.BaseAppUrl = defaultDevUrl;
+                    modified = true;
+                }
+                if (campus1Config.FrontendPort != defaultDevPort)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            else
+            {
+                if (campus1Config.FrontendPort <= 0)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            if (campus1Config.PollingIntervalMs < 500 || campus1Config.PollingIntervalMs > 10000)
+            {
+                campus1Config.PollingIntervalMs = 1200;
+                modified = true;
+            }
+            if (campus1Config.MonitoringTimeoutSeconds < 60 || campus1Config.MonitoringTimeoutSeconds > 3600)
+            {
+                campus1Config.MonitoringTimeoutSeconds = 600;
+                modified = true;
+            }
+            if (modified)
+            {
+                campus1Config.UpdatedAt = DateTime.UtcNow;
+                await pgDb.SaveChangesAsync();
+            }
+        }
+        else if (isDevEnv)
+        {
+            pgDb.PaymentGatewayConfigs.Add(new CollegeManagement.API.Models.Fee.PaymentGatewayConfig
+            {
+                CampusId = 1,
+                BaseAppUrl = defaultDevUrl,
+                FrontendPort = defaultDevPort,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 600,
+                Currency = "INR",
+                Mcc = "8220",
+                Provider = "Razorpay",
+                AutoCapture = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await pgDb.SaveChangesAsync();
+        }
+
+        // Ensure no other campus configuration defaults FrontendPort to <= 0
+        await pgDb.Database.ExecuteSqlRawAsync(
+            "UPDATE `PaymentGatewayConfigs` SET `FrontendPort` = 5173 WHERE `FrontendPort` <= 0;");
+
+
         await pgDb.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
                 `Id` INT NOT NULL AUTO_INCREMENT,
@@ -1456,6 +1546,14 @@ catch (Exception ex)
                 KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
                 KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            UPDATE `Notifications` 
+            SET `Message` = REPLACE(`Message`, 'â‚¹', '₹') 
+            WHERE `Message` LIKE '%â‚¹%';
+
+            UPDATE `Notifications` 
+            SET `Title` = REPLACE(`Title`, 'â‚¹', '₹') 
+            WHERE `Title` LIKE '%â‚¹%';
         ");
     }
     catch (Exception pgEx)

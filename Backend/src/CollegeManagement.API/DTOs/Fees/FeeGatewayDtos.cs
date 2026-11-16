@@ -481,6 +481,27 @@ public class UpdatePaymentGatewayConfigRequest : IValidatableObject
         }
 
         // 4. Polling & Network validation
+        if (FrontendPort < 1 || FrontendPort > 65535)
+        {
+            yield return new ValidationResult(
+                "Frontend port must be an integer between 1 and 65535.",
+                new[] { nameof(FrontendPort) });
+        }
+
+        if (PollingIntervalMs < 500 || PollingIntervalMs > 10000)
+        {
+            yield return new ValidationResult(
+                "Polling interval must be an integer between 500 and 10000 ms.",
+                new[] { nameof(PollingIntervalMs) });
+        }
+
+        if (MonitoringTimeoutSeconds < 60 || MonitoringTimeoutSeconds > 3600)
+        {
+            yield return new ValidationResult(
+                "Monitoring timeout must be an integer between 60 and 3600 seconds.",
+                new[] { nameof(MonitoringTimeoutSeconds) });
+        }
+
         var baseUrl = BaseAppUrl?.Trim() ?? string.Empty;
         if (!string.IsNullOrEmpty(baseUrl))
         {

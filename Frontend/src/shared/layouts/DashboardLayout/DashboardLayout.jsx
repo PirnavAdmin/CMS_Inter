@@ -23,6 +23,7 @@ import { env } from "@/config/env.js";
 import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
+import { getHostelWardenNavigationItem, getParentNavigationItem } from "@/navigation/roleSidebarRegistry.js";
 import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
 import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
@@ -277,27 +278,27 @@ export const parentMenu = [
   {
     section: "Main",
     items: [
-      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon },
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.id },
     ],
   },
   {
     section: "Student & Academics",
     items: [
-      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon },
-      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
-      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon },
-      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon },
-      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon },
-      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon },
-      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon },
-      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon },
-      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon },
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.id },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.id },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.id },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.id },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.id },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.id },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.id },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.id },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.id },
     ],
   },
   {
     section: "Settings",
     items: [
-      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon },
+      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.id },
     ],
   },
 ];
@@ -306,27 +307,27 @@ export const wardenMenu = [
   {
     section: "Overview",
     items: [
-      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon },
+      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.id },
     ],
   },
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
-      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
-      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
-      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
+      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
+      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
+      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
     ],
   },
   {
     section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon },
-      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
-      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon },
-      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
+      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
     ],
   },
 ];

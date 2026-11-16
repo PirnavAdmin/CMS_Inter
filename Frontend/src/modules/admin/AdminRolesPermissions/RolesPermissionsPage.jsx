@@ -1,5 +1,5 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
@@ -52,6 +52,7 @@ import {
   deleteRole,
   updateRole,
   exportPermissionsToCsv,
+  getRoleEligibleModules,
   getModulesAndPermissions,
   getRolePermissions,
   getRoles,
@@ -115,23 +116,19 @@ const getUniqueMembers = (members = []) => {
 
 function getEditablePermissionTargets(modules = [], selectedRole, busy = false) {
   if (!selectedRole || selectedRole.isProtected || busy) return [];
-  return modules.flatMap((module) => {
-    const screens = module.screens || [];
-    if (screens.length > 0) {
-      return screens.flatMap((screen) =>
-        (screen.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
-          moduleId: module.id,
-          screenId: screen.id,
-          action,
-        })),
-      );
-    }
-    return (module.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
-      moduleId: module.id,
-      screenId: null,
+  return modules.flatMap((module) =>
+    (module.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
+      moduleId: module.permissionKey || module.id,
       action,
-    }));
-  });
+    })),
+  );
+}
+
+function getUniquePermissionModules(modules = []) {
+  return [...new Map(modules.map((module) => [module.permissionKey || module.id, {
+    ...module,
+    id: module.permissionKey || module.id,
+  }])).values()];
 }
 
 function getPermissionRestriction({ selectedRole, saving }) {
@@ -1517,7 +1514,6 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
                       </em>
                     ) : null}
                     {role.isProtected ? <em>Protected</em> : null}
-                    {role.discoveredFrom ? <em>Configured</em> : null}
                   </span>
                   {(role.departmentName || role.designationName) ? (
                     <span className="rbac-role-dept-desig">
@@ -2208,6 +2204,57 @@ function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, erro
   );
 }
 
+function ModulePermissionMatrix({ modules, permissionRows, selectedRole, saving, query, onQuery, onToggle, markAllState, onMarkAll, onApplyPreset, onExportCsv, statusFilter, onStatusFilterChange }) {
+  const [sectionFilter, setSectionFilter] = useState("all");
+  useEffect(() => {
+    setSectionFilter("all");
+  }, [selectedRole?.id]);
+  const actionsByModule = useMemo(() => new Map((permissionRows || []).map((row) => [String(row.module || "").trim().toLowerCase(), new Set(row.actions || [])])), [permissionRows]);
+  const actionsForModule = useCallback((module) => {
+    const moduleId = String(module.permissionKey || module.id).trim().toLowerCase();
+    // A direct row is an explicit role/member decision, including an empty
+    // action list created by switching a legacy-granted item off. Only fall
+    // back to legacy grants before that direct decision exists.
+    if (actionsByModule.has(moduleId)) return new Set(actionsByModule.get(moduleId));
+    return new Set((module.legacyPermissionKeys || []).flatMap((key) => [...(actionsByModule.get(String(key).trim().toLowerCase()) || [])]));
+  }, [actionsByModule]);
+  const sections = useMemo(() => [...new Set(modules.map((module) => module.section).filter(Boolean))].sort(), [modules]);
+  const filteredModules = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return modules.filter((module) => {
+      const actions = actionsForModule(module);
+      const granted = actions.size > 0;
+      const matchesText = !needle || [module.name, module.id, module.section].some((value) => String(value || "").toLowerCase().includes(needle));
+      const matchesSection = sectionFilter === "all" || module.section === sectionFilter;
+      const matchesStatus = statusFilter === "all" || (statusFilter === "granted" && granted) || (statusFilter === "denied" && !granted) || (statusFilter === "partial" && granted && actions.size < (module.availableActions || MATRIX_ACTION_KEYS).length);
+      return matchesText && matchesSection && matchesStatus;
+    });
+  }, [actionsForModule, modules, query, sectionFilter, statusFilter]);
+  const restriction = getPermissionRestriction({ selectedRole, saving });
+
+  return <div className="rbac-permission-wrap">
+    <div className="rbac-presets-bar">
+      <span className="rbac-presets-label">Quick Presets:</span>
+      <button type="button" className="rbac-preset-pill is-full" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.FULL_ACCESS)}><CheckCircle2 size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.FULL_ACCESS]}</button>
+      <button type="button" className="rbac-preset-pill is-view" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.VIEW_ONLY)}><Eye size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.VIEW_ONLY]}</button>
+      <button type="button" className="rbac-preset-pill is-operational" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.OPERATIONAL)}><Sliders size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.OPERATIONAL]}</button>
+      <button type="button" className="rbac-preset-pill is-revoke" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.REVOKE_ALL)}><XCircle size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.REVOKE_ALL]}</button>
+    </div>
+    <div className="rbac-permission-toolbar">
+      <div className="rbac-permission-toolbar-top"><div className="rbac-permission-title-group"><h3>Permissions</h3><span className="rbac-module-count-badge">{filteredModules.length} {filteredModules.length === 1 ? "module" : "modules"}</span></div><button type="button" className="rbac-export-btn" onClick={onExportCsv}><Download size={14} /> Export CSV</button></div>
+      <div className="rbac-permission-toolbar-bottom"><div className="rbac-search-wrapper"><SearchBox value={query} onChange={onQuery} placeholder="Search modules..." label="Search modules" /></div><div className="rbac-toolbar-filters"><select className="rbac-status-filter rbac-section-filter" value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} aria-label="Filter modules by section"><option value="all">All Sections ({modules.length})</option>{sections.map((section) => <option key={section} value={section}>{section}</option>)}</select><select className="rbac-status-filter" value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} aria-label="Filter modules by permission status"><option value="all">All Modules</option><option value="granted">Granted Only</option><option value="denied">Denied Only</option><option value="partial">Partial Only</option></select><MarkAllControl {...markAllState} roleName={selectedRole?.name} onChange={onMarkAll} /></div></div>
+    </div>
+    {filteredModules.length ? <div className="rbac-matrix rbac-module-matrix" role="table" aria-label={`${selectedRole?.name || "Role"} module permissions`}><div className="rbac-matrix-row rbac-matrix-head" role="row"><span role="columnheader">Module</span><span role="columnheader">Module Access</span>{MATRIX_ACTION_COLUMNS.map((action) => <span role="columnheader" key={action.key}>{action.label}</span>)}</div>{filteredModules.map((module, index) => {
+      const Icon = module.icon || ShieldCheck;
+      const actions = actionsForModule(module);
+      const availableActions = (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey);
+      const showSection = index === 0 || filteredModules[index - 1].section !== module.section;
+      const permissionKey = module.permissionKey || module.id;
+      return <Fragment key={module.id}>{showSection ? <div className="rbac-matrix-section-row" role="rowheader">{module.section}</div> : null}<div className="rbac-matrix-row rbac-matrix-module-row" role="row"><div className="rbac-module-cell" role="cell"><span className="rbac-module-icon"><Icon size={19} /></span><div><strong>{module.name}</strong><small>{module.section}</small></div></div><div className="rbac-matrix-action-cell" role="cell"><PermissionToggle checked={actions.size > 0} disabled={restriction.disabled} disabledReason={restriction.reason} label={`Module access for ${module.name}`} onChange={(checked) => onToggle({ roleId: selectedRole?.id, moduleId: permissionKey, action: ACTIONS.VIEW, checked })} /></div>{MATRIX_ACTION_COLUMNS.map((action) => <div className="rbac-matrix-action-cell" role="cell" key={action.key}><PermissionToggle checked={actions.has(action.key)} disabled={restriction.disabled || !availableActions.includes(action.key)} disabledReason={!availableActions.includes(action.key) ? "Action not applicable for this module" : restriction.reason} label={`${action.label} ${module.name}`} onChange={(checked) => onToggle({ roleId: selectedRole?.id, moduleId: permissionKey, action: action.key, checked })} /></div>)}</div></Fragment>;
+    })}</div> : <EmptyState title="No modules found" message="Try a different module name, section, or permission filter." />}
+  </div>;
+}
+
 function RoleDetails({
   selectedRole,
   selectedMember,
@@ -2227,7 +2274,7 @@ function RoleDetails({
 }) {
   const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
-    const modConfig = modules.find((m) => m.id === moduleId);
+    const modConfig = modules.find((m) => (m.permissionKey || m.id) === moduleId);
     if (!modConfig || !MATRIX_ACTION_KEYS.includes(action)) return;
 
     const previousPermissions = [...permissions];
@@ -2312,7 +2359,10 @@ function RoleDetails({
 
     let selectedCount = 0;
     editablePermissionTargets.forEach(({ moduleId, screenId, action }) => {
-      const mod = permissionMap.get(moduleId);
+      const configuredModule = modules.find((module) => module.id === moduleId);
+      const mod = permissionMap.get(moduleId) || (configuredModule?.legacyPermissionKeys || [])
+        .map((legacyKey) => permissionMap.get(legacyKey))
+        .find(Boolean);
       if (!mod) return;
       if (screenId) {
         const scr = mod.screens.get(screenId);
@@ -2335,7 +2385,7 @@ function RoleDetails({
     if (markAllState.disabled) return;
     const shouldEnable = !markAllState.checked;
 
-    const nextPermissions = modules.map((module) => {
+    const nextPermissions = getUniquePermissionModules(modules).map((module) => {
       const modScreens = module.screens || [];
       const screens = modScreens.map((screen) => {
         const available = screen.availableActions || MATRIX_ACTION_KEYS;
@@ -2344,7 +2394,7 @@ function RoleDetails({
           actions: shouldEnable ? MATRIX_ACTION_KEYS.filter((a) => available.includes(a)) : [],
         };
       });
-      const actions = shouldEnable ? MATRIX_ACTION_KEYS : [];
+      const actions = shouldEnable ? (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey) : [];
       return {
         module: module.id,
         actions,
@@ -2359,7 +2409,7 @@ function RoleDetails({
 
   const applyPreset = useCallback((presetKey) => {
     if (!selectedRole || selectedRole.isProtected || loading || saving) return;
-    const nextPermissions = modules.map((module) => {
+    const nextPermissions = getUniquePermissionModules(modules).map((module) => {
       const modScreens = module.screens || [];
       const screens = modScreens.map((screen) => {
         const available = screen.availableActions || MATRIX_ACTION_KEYS;
@@ -2464,7 +2514,7 @@ function RoleDetails({
         <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div>
       ) : (
         <>
-          <PermissionMatrix
+          <ModulePermissionMatrix
             modules={modules}
             permissionRows={permissions}
             selectedRole={selectedRole}
@@ -2965,6 +3015,7 @@ export default function RolesPermissionsPage() {
   const [allRoles, setAllRoles] = useState([]);
   const [manageableRoles, setManageableRoles] = useState([]);
   const [modules, setModules] = useState([]);
+  const [moduleCatalog, setModuleCatalog] = useState([]);
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [roleMembers, setRoleMembers] = useState([]);
@@ -2986,6 +3037,7 @@ export default function RolesPermissionsPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
+  const permissionRequestRef = useRef(0);
   const selectedRoleIdRef = useRef(null);
   const pageRequestRef = useRef(0);
   const roleCountsRequestRef = useRef(0);
@@ -3007,7 +3059,7 @@ export default function RolesPermissionsPage() {
       setManageableRoles(getManageableRoles(nextAllRoles));
       setSelectedRole((role) => (
         role
-          ? nextAllRoles.find((nextRole) => String(nextRole.id) === String(role.id)) || role
+          ? getManageableRoles(nextAllRoles).find((nextRole) => String(nextRole.id) === String(role.id)) || getManageableRoles(nextAllRoles)[0] || null
           : role
       ));
     } catch (err) {
@@ -3022,15 +3074,18 @@ export default function RolesPermissionsPage() {
 
   const loadPermissions = useCallback(async (role) => {
     if (!role) return;
+    const requestId = permissionRequestRef.current + 1;
+    permissionRequestRef.current = requestId;
     setPermissionLoading(true);
     try {
       const response = await getRolePermissions(role.id, role.code);
+      if (permissionRequestRef.current !== requestId) return;
       setPermissions(response.data);
       setLastSavedPermissions(response.data);
     } catch (err) {
-      setToast({ type: "error", message: err?.message || "Unable to load role permissions." });
+      if (permissionRequestRef.current === requestId) setToast({ type: "error", message: err?.message || "Unable to load role permissions." });
     } finally {
-      setPermissionLoading(false);
+      if (permissionRequestRef.current === requestId) setPermissionLoading(false);
     }
   }, []);
 
@@ -3095,14 +3150,16 @@ export default function RolesPermissionsPage() {
       const nextManageableRoles = getManageableRoles(nextAllRoles);
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
-      setModules(modulesResponse.data);
+      setModuleCatalog(modulesResponse.data);
       const searchParams = routeParamsRef.current;
       const persistedRoleId = searchParams?.get("roleId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_role_id") : null) || selectedRoleIdRef.current;
       const persistedUserId = searchParams?.get("userId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_user_id") : null);
 
       const role = (persistedRoleId
-        ? nextAllRoles.find((r) => String(r.id) === String(persistedRoleId) || String(r.roleId) === String(persistedRoleId) || String(r.code).toLowerCase() === String(persistedRoleId).toLowerCase())
-        : null) || nextAllRoles[0] || null;
+        ? nextManageableRoles.find((r) => String(r.id) === String(persistedRoleId) || String(r.roleId) === String(persistedRoleId) || String(r.code).toLowerCase() === String(persistedRoleId).toLowerCase())
+        : null) || nextManageableRoles[0] || null;
+
+      setModules(role ? getRoleEligibleModules(role.code, modulesResponse.data) : []);
 
       if (role) {
         try {
@@ -3173,6 +3230,11 @@ export default function RolesPermissionsPage() {
     updateRoleRoute({ roleId: String(role.id || role.roleId || role.code), userId: null });
     setSelectedRole(role);
     setSelectedMember(null);
+    setPermissions([]);
+    setLastSavedPermissions([]);
+    setPermissionQuery("");
+    setModules([]);
+    setModules(getRoleEligibleModules(role.code, moduleCatalog));
     await loadPermissions(role);
     await loadRoleMembers(role);
   };
@@ -3230,7 +3292,7 @@ export default function RolesPermissionsPage() {
   useEffect(() => {
     if (loading || permissionLoading || !allRoles.length || !requestedRoleId) return undefined;
     const key = requestedRoleId + ":" + requestedUserId;
-    const role = allRoles.find((item) => [item.id, item.roleId, item.code].some((id) => id != null && String(id).toLowerCase() === requestedRoleId.toLowerCase()));
+    const role = manageableRoles.find((item) => [item.id, item.roleId, item.code].some((id) => id != null && String(id).toLowerCase() === requestedRoleId.toLowerCase()));
     if (!role || selectionRestoreRef.current === key) return undefined;
     const sameRole = String(role.id) === String(selectedRole?.id);
     const sameMember = requestedUserId ? [selectedMember?.id, selectedMember?.userId].some((id) => id != null && String(id) === requestedUserId) : !selectedMember;
@@ -3239,6 +3301,9 @@ export default function RolesPermissionsPage() {
     let active = true;
     const restore = async () => {
       setSelectedRole(role);
+      setPermissions([]);
+      setLastSavedPermissions([]);
+      setModules(getRoleEligibleModules(role.code, moduleCatalog));
       const members = await selectionLoadersRef.current.members(role);
       if (!active) return;
       const member = requestedUserId ? (members || []).find((item) => [item.id, item.userId].some((id) => id != null && String(id) === requestedUserId)) : null;
@@ -3249,7 +3314,7 @@ export default function RolesPermissionsPage() {
     return () => { active = false; };
   // Role/member changes made by this restoration must not cancel its pending read.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedRoleId, requestedUserId, loading, permissionLoading, allRoles]);
+  }, [requestedRoleId, requestedUserId, loading, permissionLoading, manageableRoles, moduleCatalog]);
 
   const persistPermissions = useCallback(async (target, nextPermissions, previousPermissions = lastSavedPermissions) => {
     const role = target?.role;
@@ -3269,6 +3334,7 @@ export default function RolesPermissionsPage() {
           })
         : await updateRolePermissions(role.id, {
             roleId: role.id,
+            roleCode: role.code,
             permissions: normalized,
           });
       const sameRole = String(selectedRole?.id) === String(role.id);
@@ -3296,9 +3362,15 @@ export default function RolesPermissionsPage() {
     await persistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, permissions, lastSavedPermissions);
   };
 
-  // Always show ALL modules so admins can grant permissions for any module to any role.
-  // Permission data is used only to set toggle states, not to filter module visibility.
-  const visiblePermissionModules = modules;
+  // Derive the displayed rows from the selected role at render time. This also
+  // keeps a member-override URL (for example `userId=866`) scoped to the
+  // Accountant portal rather than falling back to the full admin catalog.
+  const visiblePermissionModules = useMemo(() => {
+    if (!selectedRole) return modules;
+    const code = String(selectedRole.code || "").trim();
+    const roleIdentifier = /^\d+$/.test(code) ? selectedRole.name : (code || selectedRole.name);
+    return getRoleEligibleModules(roleIdentifier, moduleCatalog);
+  }, [moduleCatalog, modules, selectedRole]);
 
   const routeNote = "";
 
@@ -3365,7 +3437,7 @@ export default function RolesPermissionsPage() {
         {!loading && !error && activeTab === "permissions" ? (
           <div className="rbac-grid">
             <RoleList
-              roles={allRoles}
+              roles={manageableRoles}
               selectedRoleId={selectedRole?.id}
               onSelect={selectRole}
               onOpenMembers={openRoleMembers}
@@ -3394,7 +3466,7 @@ export default function RolesPermissionsPage() {
           </div>
         ) : null}
 
-        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
+        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={manageableRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
         {membersDialogOpen ? (
           <RoleMembersDialog
             role={membersRole}

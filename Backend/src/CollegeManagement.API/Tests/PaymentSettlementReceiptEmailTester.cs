@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CollegeManagement.API.Controllers.V1;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Helpers;
@@ -19,6 +20,7 @@ using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Settings;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -165,6 +167,7 @@ public static class PaymentSettlementReceiptEmailTester
 
         int? testStudentId = null;
         int? testStudentNoEmailId = null;
+        int? testStudentTrackCId = null;
         int? testFeeId = null;
         int? testFeeNoEmailId = null;
         int? testPlanId = null;
@@ -353,7 +356,10 @@ public static class PaymentSettlementReceiptEmailTester
             var cashOutbox = await db.FeePaymentEmailOutboxes
                 .FirstAsync(o => o.FeePaymentId == cashFeePaymentId && o.NotificationType == PaymentEmailOutboxService.TypePaymentSuccessReceipt);
             cashOutbox.MaxAttempts = 1;
+            cashOutbox.LockedUntilUtc = null;
+            cashOutbox.NextAttemptAtUtc = DateTime.UtcNow.AddMinutes(-5);
             await db.SaveChangesAsync();
+            db.Entry(cashOutbox).State = EntityState.Detached;
 
             mockEmail.ShouldFail = true;
             await outboxSvc.DispatchDueAsync(20);
@@ -656,6 +662,346 @@ public static class PaymentSettlementReceiptEmailTester
                 && principalCrossCampusDenied
                 && principalOwnCampus == 2,
                 "9. Track B settings inheritance, [TEST] email subject prefix, & Principal campus isolation");
+
+            // 10. Track C: Student Fee Payment Gateway Authorization & Security Suite
+            Console.WriteLine("\n--- 10. STUDENT FEE PAYMENT GATEWAY AUTHORIZATION & SECURITY SUITE ---");
+
+            var studentTrackC = new Student
+            {
+                AdmissionNo = $"QA-TRKC-{marker}",
+                AdmissionDate = DateTime.UtcNow.Date,
+                StudentName = $"QA Track C Student {marker}",
+                Gender = "Other",
+                DateOfBirth = new DateTime(2007, 3, 15),
+                Email = $"qa.trackc.{marker}@example.invalid",
+                CampusId = anchorCampusId,
+                BoardId = baseStructure.BoardId,
+                AcademicYearId = baseStructure.AcademicYearId,
+                AcademicLevelId = baseStructure.AcademicLevelId,
+                GroupId = baseStructure.GroupId,
+                Status = "Active"
+            };
+            db.Students.Add(studentTrackC);
+            await db.SaveChangesAsync();
+            testStudentTrackCId = studentTrackC.StudentId;
+
+            var feeTrackC = new StudentFee
+            {
+                StudentId = studentTrackC.StudentId,
+                FeeStructureId = baseStructure.FeeStructureId,
+                TotalAmount = 5000m,
+                ConcessionAmount = 0m,
+                PayableAmount = 5000m,
+                PaidAmount = 0m,
+                BalanceAmount = 5000m,
+                PaymentPlan = "Full",
+                Status = "Pending",
+                AssignedAt = DateTime.UtcNow
+            };
+            db.StudentFees.Add(feeTrackC);
+            await db.SaveChangesAsync();
+
+            var gatewaySvc = sp.GetRequiredService<IPaymentGatewayService>();
+            var campusAuth = sp.GetService<ICampusAuthorizationService>();
+            var gatewayController = new FeePaymentGatewayController(
+                gatewaySvc,
+                settleSvc,
+                ledgerService,
+                pdfService,
+                db,
+                loggerFactory.CreateLogger<FeePaymentGatewayController>(),
+                campusAuth,
+                outboxSvc);
+
+            void SetControllerContext(ClaimsPrincipal principal)
+            {
+                var httpContext = new DefaultHttpContext { User = principal };
+                httpContext.Request.Scheme = "https";
+                httpContext.Request.Host = new HostString("portal.collegemanagement.edu");
+                httpContext.RequestServices = sp;
+                gatewayController.ControllerContext = new ControllerContext { HttpContext = httpContext };
+            }
+
+            var student1Principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "99901"),
+                new Claim(ClaimTypes.Role, "Student"),
+                new Claim("StudentId", studentTrackC.StudentId.ToString()),
+                new Claim("CampusId", anchorCampusId.ToString())
+            }, "TestAuth"));
+
+            var student2Principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "99902"),
+                new Claim(ClaimTypes.Role, "Student"),
+                new Claim("StudentId", studentWithoutEmail.StudentId.ToString()),
+                new Claim("CampusId", anchorCampusId.ToString())
+            }, "TestAuth"));
+
+            var accountantPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "99903"),
+                new Claim(ClaimTypes.Role, "Accountant"),
+                new Claim("CampusId", anchorCampusId.ToString())
+            }, "TestAuth"));
+
+            var adminPrincipal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "99904"),
+                new Claim(ClaimTypes.Role, "Admin"),
+                new Claim("CampusId", anchorCampusId.ToString())
+            }, "TestAuth"));
+
+            // Ensure PaymentGatewayConfigs has BaseAppUrl and FrontendPort columns
+            var extraConfigColumns = new (string ColName, string AlterSql)[]
+            {
+                ("BaseAppUrl", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `BaseAppUrl` VARCHAR(255) NULL;"),
+                ("FrontendPort", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `FrontendPort` INT NOT NULL DEFAULT 5173;")
+            };
+            foreach (var (colName, alterSql) in extraConfigColumns)
+            {
+                var colExists = await db.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayConfigs' AND column_name = {colName}").FirstOrDefaultAsync();
+                if (colExists == 0)
+                {
+                    await db.Database.ExecuteSqlRawAsync(alterSql);
+                }
+            }
+
+            // Ensure anchor campus config in DB has valid BaseAppUrl and FrontendPort
+            var anchorCfg = await db.PaymentGatewayConfigs.FirstOrDefaultAsync(c => c.CampusId == anchorCampusId);
+            if (anchorCfg == null)
+            {
+                anchorCfg = new PaymentGatewayConfig
+                {
+                    CampusId = anchorCampusId,
+                    BaseAppUrl = "http://localhost:5173",
+                    FrontendPort = 5173,
+                    PollingIntervalMs = 1200,
+                    MonitoringTimeoutSeconds = 600,
+                    Currency = "INR",
+                    Mcc = "8220",
+                    Provider = "Razorpay",
+                    CreatedAt = DateTime.UtcNow
+                };
+                db.PaymentGatewayConfigs.Add(anchorCfg);
+                await db.SaveChangesAsync();
+            }
+            else
+            {
+                anchorCfg.BaseAppUrl = "http://localhost:5173";
+                anchorCfg.FrontendPort = 5173;
+                anchorCfg.PollingIntervalMs = anchorCfg.PollingIntervalMs is >= 500 and <= 10000 ? anchorCfg.PollingIntervalMs : 1200;
+                anchorCfg.MonitoringTimeoutSeconds = anchorCfg.MonitoringTimeoutSeconds is >= 60 and <= 3600 ? anchorCfg.MonitoringTimeoutSeconds : 600;
+                await db.SaveChangesAsync();
+            }
+
+            // 10a. Student can read campus payment configuration for their enrolled campus
+            SetControllerContext(student1Principal);
+            var studentConfigResult = await gatewayController.GetConfig(anchorCampusId);
+            bool studentCanReadConfig = studentConfigResult is OkObjectResult okCfg && okCfg.Value is PaymentGatewayConfigDto;
+            var safeConfig = (studentConfigResult as OkObjectResult)?.Value as PaymentGatewayConfigDto;
+            Assert(studentCanReadConfig && safeConfig != null && safeConfig.CampusId == anchorCampusId,
+                "10a. Student can read payment gateway config for enrolled campus",
+                $"Status={(studentConfigResult as ObjectResult)?.StatusCode ?? 200}, CampusId={safeConfig?.CampusId}");
+
+            // 10b. Sensitive gateway fields are strictly redacted for student
+            bool sensitiveRedacted = safeConfig != null
+                && safeConfig.HasRazorpayKeySecret == false
+                && safeConfig.HasRazorpayWebhookSecret == false
+                && string.IsNullOrEmpty(safeConfig.WebhookUrl)
+                && !string.IsNullOrWhiteSpace(safeConfig.BaseAppUrl)
+                && safeConfig.PollingIntervalMs >= 500 && safeConfig.PollingIntervalMs <= 10000
+                && safeConfig.MonitoringTimeoutSeconds >= 60 && safeConfig.MonitoringTimeoutSeconds <= 3600
+                && safeConfig.FrontendPort >= 1 && safeConfig.FrontendPort <= 65535
+                && (safeConfig.BankAccounts == null || safeConfig.BankAccounts.All(a => a.IsActive));
+            Assert(sensitiveRedacted,
+                "10b. Sensitive gateway secrets/webhook URLs are redacted while base app URL, port, and polling settings are preserved for students",
+                $"SecretsPresence=({safeConfig?.HasRazorpayKeySecret},{safeConfig?.HasRazorpayWebhookSecret}), WebhookUrl='{safeConfig?.WebhookUrl}', BaseAppUrl='{safeConfig?.BaseAppUrl}'");
+
+            // 10c. Cross-campus configuration request by student is denied with 403 Forbidden
+            SetControllerContext(student1Principal);
+            var crossCampusResult = await gatewayController.GetConfig(anchorCampusId + 9999);
+            bool crossCampusBlocked = crossCampusResult is ObjectResult crossObj && crossObj.StatusCode == StatusCodes.Status403Forbidden;
+            Assert(crossCampusBlocked,
+                "10c. Student requesting payment config for another campus is denied with 403 Forbidden",
+                $"StatusCode={(crossCampusResult as ObjectResult)?.StatusCode}");
+
+            // 10d. Student can create payment QR order for their own fee account
+            SetControllerContext(student1Principal);
+            var studentOrderReq = new CreateGatewayOrderRequest
+            {
+                StudentId = studentTrackC.StudentId,
+                StudentFeeId = feeTrackC.StudentFeeId,
+                Amount = 100m,
+                PaymentMethod = "UPI_QR"
+            };
+            var studentOrderRes = await gatewayController.CreateOrder(studentOrderReq);
+            bool orderSuccess = studentOrderRes is OkObjectResult okOrd && okOrd.Value is CreateGatewayOrderResponse ordResp && ordResp.Success;
+            var createdOrderData = (studentOrderRes as OkObjectResult)?.Value as CreateGatewayOrderResponse;
+            Assert(orderSuccess && createdOrderData != null && !string.IsNullOrEmpty(createdOrderData.OrderId),
+                "10d. Student can create payment QR order for their own fee account",
+                $"OrderId={createdOrderData?.OrderId}, Success={createdOrderData?.Success}, Amount={createdOrderData?.Amount}");
+
+            // 10e. IDOR protection: Student attempting to create order for another student's fee account is denied with 403
+            SetControllerContext(student1Principal);
+            var idorOrderReq = new CreateGatewayOrderRequest
+            {
+                StudentId = studentWithoutEmail.StudentId, // Spoofing student 2's ID
+                StudentFeeId = fee2.StudentFeeId, // Target student 2's fee account
+                Amount = 100m,
+                PaymentMethod = "UPI_QR"
+            };
+            var idorOrderRes = await gatewayController.CreateOrder(idorOrderReq);
+            bool idorBlocked = (idorOrderRes is ObjectResult idorObj && idorObj.StatusCode == StatusCodes.Status403Forbidden)
+                || idorOrderRes is ForbidResult;
+            Assert(idorBlocked,
+                "10e. IDOR protection: Student creating order for another student's fee account is denied with 403 Forbidden",
+                $"ResultType={idorOrderRes.GetType().Name}, StatusCode={(idorOrderRes as ObjectResult)?.StatusCode}");
+
+            // 10f. Student UTR submission succeeds, status remains PendingVerification, and payment is NOT marked paid
+            var studentUtrPayload = new SubmitUtrRequest
+            {
+                StudentId = studentTrackC.StudentId,
+                StudentFeeId = feeTrackC.StudentFeeId,
+                Amount = 100m,
+                UtrNumber = $"UTR-STUDENT-OWN-{marker}",
+                OrderId = createdOrderData?.OrderId,
+                PaymentDate = DateTime.UtcNow
+            };
+            var utrJson = System.Text.Json.JsonSerializer.Serialize(studentUtrPayload);
+            var utrBytes = Encoding.UTF8.GetBytes(utrJson);
+            var submitContext = new DefaultHttpContext { User = student1Principal };
+            submitContext.Request.ContentType = "application/json";
+            submitContext.Request.Body = new MemoryStream(utrBytes);
+            submitContext.Request.ContentLength = utrBytes.Length;
+            submitContext.Request.Scheme = "https";
+            submitContext.Request.Host = new HostString("portal.collegemanagement.edu");
+            submitContext.RequestServices = sp;
+            gatewayController.ControllerContext = new ControllerContext { HttpContext = submitContext };
+
+            var studentSubmitRes = await gatewayController.SubmitUtr();
+            bool submitOk = studentSubmitRes is OkObjectResult okSub && okSub.Value is SubmitUtrResponse subData && subData.Status == "PendingVerification";
+            var submittedUtr = (studentSubmitRes as OkObjectResult)?.Value as SubmitUtrResponse;
+
+            // Verify fee account in DB is still Pending and PaidAmount is 0 (NOT marked paid upon submission)
+            var feeTrackCAfterUtr = await db.StudentFees.AsNoTracking().FirstAsync(f => f.StudentFeeId == feeTrackC.StudentFeeId);
+            bool feeRemainsPending = feeTrackCAfterUtr.PaidAmount == 0m && feeTrackCAfterUtr.Status == "Pending";
+            Assert(submitOk && submittedUtr != null && feeRemainsPending,
+                "10f. Student UTR submission succeeds, status is PendingVerification, and fee is not marked paid",
+                $"Status={submittedUtr?.Status}, FeePaid={feeTrackCAfterUtr.PaidAmount}, FeeStatus={feeTrackCAfterUtr.Status}");
+
+            // 10g. IDOR protection: Student submitting UTR for another student's fee account is denied with 403
+            var crossUtrPayload = new SubmitUtrRequest
+            {
+                StudentId = studentWithoutEmail.StudentId, // Spoofing other student ID
+                StudentFeeId = fee2.StudentFeeId, // Target other student fee
+                Amount = 100m,
+                UtrNumber = $"UTR-STUDENT-CROSS-{marker}",
+                PaymentDate = DateTime.UtcNow
+            };
+            var crossUtrJson = System.Text.Json.JsonSerializer.Serialize(crossUtrPayload);
+            var crossUtrBytes = Encoding.UTF8.GetBytes(crossUtrJson);
+            var crossSubmitContext = new DefaultHttpContext { User = student1Principal }; // Caller is student 1
+            crossSubmitContext.Request.ContentType = "application/json";
+            crossSubmitContext.Request.Body = new MemoryStream(crossUtrBytes);
+            crossSubmitContext.Request.ContentLength = crossUtrBytes.Length;
+            crossSubmitContext.Request.Scheme = "https";
+            crossSubmitContext.Request.Host = new HostString("portal.collegemanagement.edu");
+            crossSubmitContext.RequestServices = sp;
+            gatewayController.ControllerContext = new ControllerContext { HttpContext = crossSubmitContext };
+
+            var crossSubmitRes = await gatewayController.SubmitUtr();
+            bool crossUtrBlocked = crossSubmitRes is ObjectResult crossUtrObj && crossUtrObj.StatusCode == StatusCodes.Status403Forbidden;
+            Assert(crossUtrBlocked,
+                "10g. IDOR protection: Student submitting UTR for another student's fee account is denied with 403 Forbidden",
+                $"StatusCode={(crossSubmitRes as ObjectResult)?.StatusCode}");
+
+            // 10h. Administrative access preservation: Admin and Accountant retain full access to config and queue
+            SetControllerContext(accountantPrincipal);
+            var accountantConfigRes = await gatewayController.GetConfig(anchorCampusId);
+            bool accountantConfigOk = accountantConfigRes is OkObjectResult okAcc && okAcc.Value is PaymentGatewayConfigDto;
+            var accountantConfig = (accountantConfigRes as OkObjectResult)?.Value as PaymentGatewayConfigDto;
+
+            var accountantQueueRes = await gatewayController.GetPendingUtrs(anchorCampusId, null);
+            bool accountantQueueOk = accountantQueueRes is OkObjectResult okQ && okQ.Value is IEnumerable<PendingUtrResponse>;
+
+            SetControllerContext(adminPrincipal);
+            var adminConfigRes = await gatewayController.GetConfig(anchorCampusId);
+            bool adminConfigOk = adminConfigRes is OkObjectResult;
+
+            Assert(accountantConfigOk && accountantConfig != null && accountantQueueOk && adminConfigOk,
+                "10h. Preservation of Admin and Accountant administrative access to config and pending UTR queue",
+                $"AccountantConfig={accountantConfigOk}, QueueOk={accountantQueueOk}, AdminConfig={adminConfigOk}");
+
+            // 10i. Validation for Payment Gateway Configuration updates:
+            // Rejects invalid frontendPort (0), pollingIntervalMs (200), monitoringTimeoutSeconds (10) with HTTP 400
+            SetControllerContext(adminPrincipal);
+            var invalidPortReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 0,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 600,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidPortRes = await gatewayController.UpdateConfig(invalidPortReq);
+            bool portRejected = invalidPortRes is BadRequestObjectResult;
+
+            var invalidPollingReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 5173,
+                PollingIntervalMs = 200,
+                MonitoringTimeoutSeconds = 600,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidPollingRes = await gatewayController.UpdateConfig(invalidPollingReq);
+            bool pollingRejected = invalidPollingRes is BadRequestObjectResult;
+
+            var invalidTimeoutReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                FrontendPort = 5173,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 10,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var invalidTimeoutRes = await gatewayController.UpdateConfig(invalidTimeoutReq);
+            bool timeoutRejected = invalidTimeoutRes is BadRequestObjectResult;
+
+            // Valid update persists baseAppUrl and frontendPort
+            var validUpdateReq = new UpdatePaymentGatewayConfigRequest
+            {
+                CampusId = anchorCampusId,
+                BaseAppUrl = "http://localhost:5173",
+                FrontendPort = 5173,
+                PollingIntervalMs = 1500,
+                MonitoringTimeoutSeconds = 900,
+                Provider = "Razorpay",
+                Currency = "INR"
+            };
+            gatewayController.ModelState.Clear();
+            var validUpdateRes = await gatewayController.UpdateConfig(validUpdateReq);
+            bool updateOk = validUpdateRes is OkObjectResult;
+
+            var reloadedConfigRes = await gatewayController.GetConfig(anchorCampusId);
+            var reloadedConfig = (reloadedConfigRes as OkObjectResult)?.Value as PaymentGatewayConfigDto;
+            bool valuesPersisted = reloadedConfig != null
+                && reloadedConfig.BaseAppUrl == "http://localhost:5173"
+                && reloadedConfig.FrontendPort == 5173
+                && reloadedConfig.PollingIntervalMs == 1500
+                && reloadedConfig.MonitoringTimeoutSeconds == 900;
+
+            Assert(portRejected && pollingRejected && timeoutRejected && updateOk && valuesPersisted,
+                "10i. Payment gateway config validation enforces port, polling interval, timeout constraints and persists values",
+                $"PortRejected={portRejected}, PollingRejected={pollingRejected}, TimeoutRejected={timeoutRejected}, Persisted={valuesPersisted}");
         }
         catch (Exception ex)
         {
@@ -679,11 +1025,12 @@ public static class PaymentSettlementReceiptEmailTester
                 }
 
                 var studentIds = await db.Students
-                    .Where(s => s.AdmissionNo.StartsWith("QA-FEE-") || s.AdmissionNo.StartsWith("QA-NOEM-"))
+                    .Where(s => s.AdmissionNo.StartsWith("QA-FEE-") || s.AdmissionNo.StartsWith("QA-NOEM-") || s.AdmissionNo.StartsWith("QA-TRKC-"))
                     .Select(s => s.StudentId)
                     .ToListAsync();
                 if (testStudentId.HasValue && !studentIds.Contains(testStudentId.Value)) studentIds.Add(testStudentId.Value);
                 if (testStudentNoEmailId.HasValue && !studentIds.Contains(testStudentNoEmailId.Value)) studentIds.Add(testStudentNoEmailId.Value);
+                if (testStudentTrackCId.HasValue && !studentIds.Contains(testStudentTrackCId.Value)) studentIds.Add(testStudentTrackCId.Value);
 
                 var feeIds = studentIds.Any()
                     ? await db.StudentFees.Where(sf => studentIds.Contains(sf.StudentId)).Select(sf => sf.StudentFeeId).ToListAsync()
