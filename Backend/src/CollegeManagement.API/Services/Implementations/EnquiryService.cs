@@ -89,6 +89,24 @@ namespace CollegeManagement.API.Services.Implementations
             if (string.IsNullOrWhiteSpace(request.Status))
                 throw new ArgumentException("Status is required.");
 
+            // Concurrency & Ownership Enforcement:
+            // If another staff/role has already taken charge, prevent accidental overwrite by a different staff member
+            var existing = await _enquiryRepo.GetEnquiryByIdAsync(id);
+            if (existing != null && !string.IsNullOrWhiteSpace(existing.HandledByStaffName))
+            {
+                bool isSameStaff = string.Equals(existing.HandledByStaffName?.Trim(), request.HandledByStaffName?.Trim(), StringComparison.OrdinalIgnoreCase);
+                bool isAdminCaller = !string.IsNullOrWhiteSpace(request.HandledByRole) && request.HandledByRole.Contains("Admin", StringComparison.OrdinalIgnoreCase);
+
+                // If a different staff member tries to take charge of an already claimed lead,
+                // preserve the original handler who took charge.
+                if (!isSameStaff && !isAdminCaller)
+                {
+                    request.HandledByStaffName = existing.HandledByStaffName;
+                    request.HandledByRole = existing.HandledByRole;
+                    request.HandledByStaffId = existing.HandledByStaffId;
+                }
+            }
+
             return await _enquiryRepo.UpdateStatusAsync(id, request);
         }
 

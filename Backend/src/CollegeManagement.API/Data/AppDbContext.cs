@@ -526,6 +526,14 @@ namespace CollegeManagement.API.Data
                 entity.HasIndex(r => r.RoleName).IsUnique();
                 entity.Property(r => r.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(r => r.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasOne(r => r.Department)
+                    .WithMany()
+                    .HasForeignKey(r => r.DepartmentId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(r => r.Designation)
+                    .WithMany()
+                    .HasForeignKey(r => r.DesignationId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
             #endregion
             #region Subject

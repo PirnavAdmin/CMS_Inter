@@ -33,8 +33,11 @@ const ROLE_REIMBURSEMENT_PATHS = [
 ];
 
 function getRoleLower(user) {
-  const raw = user?.role ?? user?.Role ?? user?.roleName ?? "";
-  return String(raw).trim().toLowerCase();
+  const raw = user?.role ?? user?.Role ?? user?.roleName ?? user?.designation ?? user?.staffType ?? "";
+  const roleStr = String(raw).trim().toLowerCase();
+  const desigStr = String(user?.designation || user?.Designation || user?.designationName || "").trim().toLowerCase();
+  const staffTypeStr = String(user?.staffType || user?.StaffType || user?.roleType || "").trim().toLowerCase();
+  return `${roleStr} ${desigStr} ${staffTypeStr}`.trim();
 }
 
 function isAdminRole(roleLower) {
@@ -87,6 +90,31 @@ export function resolveNotificationTarget(notif, authUser = null) {
   const refId = !isGroupedMultiple && notif?.referenceId != null && Number(notif.referenceId) > 0 ? Number(notif.referenceId) : null;
 
   const existingQueryObj = Object.fromEntries(existingParams.entries());
+
+  // 0. Visitor Enquiries (Landing Page / Front Desk) - Role-Aware Routing
+  if (
+    typeLower.includes("enquir") ||
+    rawPath.includes("enquir") ||
+    titleLower.includes("enquiry")
+  ) {
+    if (roleLower.includes("reception") || roleLower.includes("non-teaching") || roleLower.includes("nonteaching")) {
+      return appendQueryParams("/non-teaching-dashboard/enquiries", {
+        ...existingQueryObj,
+        ...(refId ? { enquiryId: refId } : {}),
+      });
+    }
+    if (roleLower.includes("principal")) {
+      return appendQueryParams("/principal-dashboard/enquiry-management", {
+        ...existingQueryObj,
+        ...(refId ? { enquiryId: refId } : {}),
+      });
+    }
+    // Default for Admin, SuperAdmin, CollegeAdmin, Staff
+    return appendQueryParams("/dashboard/enquiry-management", {
+      ...existingQueryObj,
+      ...(refId ? { enquiryId: refId } : {}),
+    });
+  }
 
   // 1. Staff Attendance Regularization / My Attendance
   if (

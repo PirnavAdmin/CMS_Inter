@@ -960,6 +960,21 @@ export default function DepartmentManagementPage() {
     fetchMasterData(false);
   }, [fetchMasterData]);
 
+  // Listen for real-time updates from roles/other modules
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchMasterData(false);
+    };
+    window.addEventListener("departments-updated", handleUpdate);
+    window.addEventListener("designations-updated", handleUpdate);
+    window.addEventListener("roles-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("departments-updated", handleUpdate);
+      window.removeEventListener("designations-updated", handleUpdate);
+      window.removeEventListener("roles-updated", handleUpdate);
+    };
+  }, [fetchMasterData]);
+
   // Department Client-side Filtering
   const filteredDepartments = useMemo(() => {
     const isTeaching = staffType === "Teaching";

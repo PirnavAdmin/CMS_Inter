@@ -158,34 +158,40 @@ export default function PublicSiteLayout({
         <Link
           className="cms-landing-brand public-brand"
           to="/"
-          aria-label={`${content.collegeName} home`}
+          aria-label={`${content.collegeName || "Pirnav College"} home`}
           onClick={() => handleNavClick(NAV_ITEMS[0])}
         >
           <span className="landing-brand-logo">
-            <CampusBrandImage
-              slot="headerLogo"
-              src={logo}
-              alt={`${content.collegeName} logo`}
+            <img
+              src={content?.headerLogo || logo}
+              alt={`${content.collegeName || "Pirnav College"} logo`}
+              className="landing-brand-img"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = logo;
+              }}
             />
           </span>
         </Link>
 
-        {/* 8 Navigation Items: Home, About, Academics, Admissions, Student Services, CMS, Contact */}
+        {/* 7 Navigation Items: Home, About, Academics, Admissions, Student Services, CMS, Contact */}
         <nav
           className={`public-nav${menuOpen ? " is-open" : ""}`}
           aria-label="Public website navigation"
         >
           {NAV_ITEMS.map((item) => {
             const isActive = activeSection === item.id;
+            const isContact = item.id === "contact";
             return (
               <button
                 key={item.id}
                 type="button"
-                className={`public-nav-link${isActive ? " is-active" : ""}`}
+                className={`public-nav-link${isActive ? " is-active" : ""}${isContact ? " is-contact-highlight" : ""}`}
                 onClick={() => handleNavClick(item)}
               >
+                {isContact && <Phone size={13} className="nav-contact-icon" />}
                 <span>{item.label}</span>
-                {isActive && (
+                {isActive && !isContact && (
                   <motion.span
                     layoutId="activeNavIndicator"
                     className="public-nav-indicator"
@@ -219,8 +225,14 @@ export default function PublicSiteLayout({
       {typeof children === "function" ? pageContent : <main>{pageContent}</main>}
 
       {/* Footer with Integrated "Follow Us" Social Media Icons (from DB) and Campus Details */}
-            {/* Premium Restoran-Style Master Footer */}
-      <footer className="public-master-footer">
+      {/* Premium Restoran-Style Master Footer */}
+      <motion.footer
+        className="public-master-footer"
+        initial={{ opacity: 0, y: 32 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: false, amount: 0.1 }}
+        transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+      >
         <div className="footer-main-grid">
           {/* Column 1: College Brand & Social Media */}
           <div className="footer-col-brand">
@@ -376,7 +388,7 @@ export default function PublicSiteLayout({
             </div>
           </div>
         </div>
-      </footer>
+      </motion.footer>
     </div>
   );
 }

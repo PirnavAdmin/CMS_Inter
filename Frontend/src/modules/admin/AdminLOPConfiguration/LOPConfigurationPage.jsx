@@ -718,7 +718,7 @@ export default function LOPConfigurationPage() {
           </div>
         )}
 
-        {/* Navigation Tabs */}
+        {/* Modern Segmented Navigation Tabs */}
         <div className="lop-tabs" role="tablist" aria-label="LOP Configuration Sections">
           <button
             type="button"
@@ -728,8 +728,11 @@ export default function LOPConfigurationPage() {
             className="lop-tab-btn"
             onClick={() => setActiveTab("policy")}
           >
-            <SlidersHorizontal size={15} />
-            <span>Policy &amp; Calculator</span>
+            <SlidersHorizontal size={16} />
+            <div className="lop-tab-copy">
+              <span className="lop-tab-title">1. Policy &amp; Calculator</span>
+              <small className="lop-tab-sub">Rules &amp; Live Deduction Simulator</small>
+            </div>
           </button>
           <button
             type="button"
@@ -739,8 +742,11 @@ export default function LOPConfigurationPage() {
             className="lop-tab-btn"
             onClick={() => setActiveTab("preview")}
           >
-            <Users size={15} />
-            <span>Staff LOP Preview ({visiblePreviewItems.length})</span>
+            <Users size={16} />
+            <div className="lop-tab-copy">
+              <span className="lop-tab-title">2. Staff LOP Preview</span>
+              <small className="lop-tab-sub">Live Monthly Tally ({visiblePreviewItems.length} Staff)</small>
+            </div>
           </button>
           <button
             type="button"
@@ -750,8 +756,11 @@ export default function LOPConfigurationPage() {
             className="lop-tab-btn"
             onClick={() => setActiveTab("records")}
           >
-            <ClipboardList size={15} />
-            <span>Saved Records &amp; Overrides ({records.length})</span>
+            <ClipboardList size={16} />
+            <div className="lop-tab-copy">
+              <span className="lop-tab-title">3. Saved Records &amp; Overrides</span>
+              <small className="lop-tab-sub">Payroll Records &amp; Waivers ({records.length})</small>
+            </div>
           </button>
         </div>
 
@@ -959,6 +968,12 @@ export default function LOPConfigurationPage() {
         <div role="tabpanel" aria-labelledby="lop-tab-records" hidden={activeTab !== "records"}>
           {activeTab === "records" && (
             <div className="lop-table-section">
+              <div className="lop-alert lop-alert-info">
+                <ClipboardList size={16} aria-hidden="true" />
+                <span>
+                  <strong>Official Payroll &amp; Waiver Register:</strong> Holds finalized monthly LOP records and manual adjustments. When payroll runs, these official records determine exact payslip deductions. Use <strong>Waive</strong> to excuse a penalty without altering attendance.
+                </span>
+              </div>
               <DataTable
                 loading={recordsLoading}
                 title="Saved LOP Records & Overrides"

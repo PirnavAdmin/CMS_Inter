@@ -11,6 +11,16 @@ namespace CollegeManagement.API.DTOs.Roles
         [StringLength(255)]
         public string? Description { get; set; }
 
+        public int? DepartmentId { get; set; }
+
+        public int? DesignationId { get; set; }
+
+        [StringLength(100)]
+        public string? NewDepartmentName { get; set; }
+
+        [StringLength(100)]
+        public string? NewDesignationName { get; set; }
+
         [StringLength(20)]
         public string StaffType { get; set; } = "Both";
     }

@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   Inbox,
   Phone,
@@ -18,11 +20,14 @@ import {
   ExternalLink,
   ChevronRight,
   Filter,
+  Eye,
+  Lock,
 } from "lucide-react";
 import enquiryApi from "@/api/enquiryApi.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
 import { getAuthUser, getAuthItem } from "@/modules/auth/authStorage.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import notificationHubService from "@/services/notificationHubService.js";
 import "./EnquiriesListView.css";
 
 const STATUS_OPTIONS = ["All", "New", "In Progress", "Contacted", "Resolved"];
@@ -39,26 +44,52 @@ const CATEGORY_OPTIONS = [
 ];
 
 // Helper to determine active user's identity and normalized role for tracking
-function getActiveHandler() {
+function getActiveHandler(portalType = "admin") {
   const user = getAuthUser() || {};
   const storedRole = String(getAuthItem("role") || user.role || user.roleName || user.designation || "Staff");
   const name = user.name || user.fullName || user.userName || user.email || "Staff Member";
 
-  const norm = storedRole.trim().toLowerCase();
+  const norm = `${storedRole} ${user.designation || ""} ${portalType}`.trim().toLowerCase();
   let role = "Staff";
   if (norm.includes("admin")) role = "Admin";
   else if (norm.includes("principal")) role = "Principal";
-  else if (norm.includes("reception")) role = "Receptionist";
+  else if (norm.includes("reception") || portalType === "receptionist") role = "Receptionist";
 
-  return { name, role, rawRole: storedRole };
+  return { name, role, rawRole: storedRole, email: user.email, id: user.id || user.userId };
+}
+
+// Determines if this enquiry is already handled by the current user
+function checkIsHandledByMe(row, currentHandler) {
+  if (!row.handledByStaffName && !row.handledByRole) return false;
+  const rName = String(row.handledByStaffName || "").trim().toLowerCase();
+  const cName = String(currentHandler.name || "").trim().toLowerCase();
+  const rRole = String(row.handledByRole || "").trim().toLowerCase();
+  const cRole = String(currentHandler.role || "").trim().toLowerCase();
+
+  if (rName && cName && (rName === cName || cName.includes(rName) || rName.includes(cName))) {
+    return true;
+  }
+  if (rRole.includes("reception") && cRole.includes("reception")) {
+    return true;
+  }
+  if (rRole.includes("principal") && cRole.includes("principal")) {
+    return true;
+  }
+  if (rRole.includes("admin") && cRole.includes("admin")) {
+    return true;
+  }
+  return false;
 }
 
 export default function EnquiriesListView({ portalType = "admin" }) {
   const { selectedCampusId } = useCampusContext();
-  const currentHandler = useMemo(() => getActiveHandler(), []);
+  const [searchParams] = useSearchParams();
+  const urlEnquiryId = searchParams.get("enquiryId");
+  const currentHandler = useMemo(() => getActiveHandler(portalType), [portalType]);
 
   // Records state
   const [items, setItems] = useState([]);
+  const [highlightedId, setHighlightedId] = useState(null);
   const [stats, setStats] = useState({
     totalCount: 0,
     newCount: 0,
@@ -82,8 +113,9 @@ export default function EnquiriesListView({ portalType = "admin" }) {
   const [savingStatus, setSavingStatus] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
-  // Message preview modal
+  // Modals for read-only tracking view and message preview
   const [viewMessageEnquiry, setViewMessageEnquiry] = useState(null);
+  const [viewTrackEnquiry, setViewTrackEnquiry] = useState(null);
 
   const loadData = useCallback(
     async (signal) => {
@@ -124,15 +156,82 @@ export default function EnquiriesListView({ portalType = "admin" }) {
     [selectedCampusId, statusFilter, categoryFilter, searchTerm],
   );
 
+  // Initial load
   useEffect(() => {
     const controller = new AbortController();
     loadData(controller.signal);
     return () => controller.abort();
   }, [loadData]);
 
+  // Handle URL enquiryId highlight and auto-scroll
+  useEffect(() => {
+    if (!urlEnquiryId) return;
+    if (items.length === 0) return;
+
+    const match = items.find((i) => String(i.id) === String(urlEnquiryId));
+    if (match) {
+      setHighlightedId(match.id);
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`enq-row-${match.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [urlEnquiryId, items]);
+
+  // Real-time synchronization via SignalR, BroadcastChannel, CustomEvents, and periodic polling
+  useEffect(() => {
+    let channel;
+    try {
+      channel = new BroadcastChannel("cms-enquiries-channel");
+      channel.onmessage = (event) => {
+        if (event?.data?.type === "enquiry-updated") {
+          loadData();
+        }
+      };
+    } catch (_) {}
+
+    const handleCustomUpdate = () => loadData();
+    window.addEventListener("cms-enquiry-updated", handleCustomUpdate);
+
+    // Refresh when a user clicks an enquiry notification from the bell
+    const handleNotificationNavigate = (e) => {
+      const typeLower = String(e?.detail?.type || "").toLowerCase();
+      if (typeLower.includes("enquir") || e?.detail?.referenceId) {
+        loadData();
+      }
+    };
+    window.addEventListener("cms-notification-navigate", handleNotificationNavigate);
+
+    // Live SignalR alert subscription: automatically load newest enquiry when broadcast arrives
+    const unsubHub = notificationHubService.subscribe((payload) => {
+      const typeLower = String(payload?.type || "").toLowerCase();
+      const titleLower = String(payload?.title || "").toLowerCase();
+      if (typeLower.includes("enquir") || titleLower.includes("enquir")) {
+        loadData();
+      }
+    });
+
+    // Auto-refresh every 15 seconds when active
+    const pollTimer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadData();
+      }
+    }, 15000);
+
+    return () => {
+      if (channel) channel.close();
+      window.removeEventListener("cms-enquiry-updated", handleCustomUpdate);
+      window.removeEventListener("cms-notification-navigate", handleNotificationNavigate);
+      unsubHub?.();
+      clearInterval(pollTimer);
+    };
+  }, [loadData]);
+
   const openChargeModal = (enquiry) => {
     setActiveEnquiry(enquiry);
-    // If it's new, taking charge defaults status to 'Contacted' or 'In Progress'
     setModalStatus(enquiry.status === "New" ? "Contacted" : enquiry.status);
     setModalMethod(enquiry.contactMethodUsed || "Phone");
     setModalNotes(enquiry.responseNotes || "");
@@ -154,8 +253,17 @@ export default function EnquiriesListView({ portalType = "admin" }) {
       });
 
       setModalOpen(false);
-      setToastMessage(`✓ Tracked successfully: ${currentHandler.role} took charge and recorded follow-up.`);
+      setToastMessage(`✓ Tracked successfully: ${currentHandler.role} (${currentHandler.name}) took charge.`);
       setTimeout(() => setToastMessage(""), 5000);
+
+      // Broadcast update to all other tabs and screens
+      try {
+        const channel = new BroadcastChannel("cms-enquiries-channel");
+        channel.postMessage({ type: "enquiry-updated", enquiryId: activeEnquiry.id });
+        channel.close();
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent("cms-enquiry-updated", { detail: { enquiryId: activeEnquiry.id } }));
+
       await loadData();
     } catch (err) {
       alert(getApiErrorMessage(err) || "Failed to update enquiry status.");
@@ -409,10 +517,17 @@ export default function EnquiriesListView({ portalType = "admin" }) {
               <tbody>
                 {items.map((row) => {
                   const hasHandler = Boolean(row.handledByStaffName || row.handledByRole);
-                  const isNew = row.status === "New";
+                  const isNew = row.status === "New" && !hasHandler;
+                  const isHandledByMe = checkIsHandledByMe(row, currentHandler);
+                  const isHandledByOther = Boolean(hasHandler && !isHandledByMe);
+                  const isHighlighted = highlightedId === row.id;
 
                   return (
-                    <tr key={row.id} className={isNew ? "enq-row-new" : ""}>
+                    <tr
+                      key={row.id}
+                      id={`enq-row-${row.id}`}
+                      className={`${isNew ? "enq-row-new" : ""} ${isHighlighted ? "enq-row-highlighted" : ""}`}
+                    >
                       {/* Visitor Cell */}
                       <td>
                         <div className="enq-visitor-cell">
@@ -516,36 +631,84 @@ export default function EnquiriesListView({ portalType = "admin" }) {
 
                       {/* Status Cell */}
                       <td>
-                        <span
-                          className={`enq-status-badge ${
-                            row.status === "New"
-                              ? "is-new"
-                              : row.status === "In Progress"
-                                ? "is-progress"
-                                : row.status === "Contacted"
-                                  ? "is-contacted"
-                                  : row.status === "Resolved"
-                                    ? "is-resolved"
-                                    : "is-closed"
-                          }`}
-                        >
-                          <span className="enq-status-dot" />
-                          <span>{row.status}</span>
-                        </span>
+                        <div className="enq-status-cell-wrap">
+                          <span
+                            className={`enq-status-badge ${
+                              row.status === "New"
+                                ? "is-new"
+                                : row.status === "In Progress"
+                                  ? "is-progress"
+                                  : row.status === "Contacted"
+                                    ? "is-contacted"
+                                    : row.status === "Resolved"
+                                      ? "is-resolved"
+                                      : "is-closed"
+                            }`}
+                          >
+                            <span className="enq-status-dot" />
+                            <span>{row.status}</span>
+                          </span>
+
+                          {/* Clear indicator showing that another role already took charge and is following up */}
+                          {isHandledByOther && (
+                            <div
+                              className={`enq-status-sub-pill is-${(row.handledByRole || "staff").toLowerCase()}`}
+                              title={`Follow-up actively taken by ${row.handledByRole}: ${row.handledByStaffName || ""}`}
+                            >
+                              <Clock size={11} />
+                              <span>In Follow-up ({row.handledByRole})</span>
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions Cell */}
                       <td>
                         <div className="enq-actions-cell">
-                          <button
-                            type="button"
-                            className={`enq-charge-btn ${isNew ? "is-primary" : "is-secondary"}`}
-                            onClick={() => openChargeModal(row)}
-                            title={isNew ? "Take charge of this lead" : "Update conversation track"}
-                          >
-                            <UserCheck size={14} />
-                            <span>{isNew ? "Take Charge & Contact" : "Update Track"}</span>
-                          </button>
+                          {isNew ? (
+                            <button
+                              type="button"
+                              className="enq-charge-btn is-primary"
+                              onClick={() => openChargeModal(row)}
+                              title="Take charge of this lead"
+                            >
+                              <UserCheck size={14} />
+                              <span>Take Charge &amp; Contact</span>
+                            </button>
+                          ) : isHandledByMe ? (
+                            <button
+                              type="button"
+                              className="enq-charge-btn is-active-handler"
+                              onClick={() => openChargeModal(row)}
+                              title="Update your conversation track"
+                            >
+                              <UserCheck size={14} />
+                              <span>Update My Track</span>
+                            </button>
+                          ) : (
+                            /* Handled by another role (e.g. Receptionist took charge) -> Exclusive Ownership Locked */
+                            <div className="enq-other-handler-card">
+                              <span
+                                className={`enq-other-handler-badge is-${(row.handledByRole || "staff").toLowerCase()}`}
+                                title={`Already taken charge by ${row.handledByRole}: ${row.handledByStaffName || ""}`}
+                              >
+                                <UserCheck size={12} />
+                                <span>Taken by {row.handledByRole}</span>
+                              </span>
+                              <span className="enq-other-handler-staff" title={row.handledByStaffName || ""}>
+                                {row.handledByStaffName || "Follow-up ongoing"}
+                              </span>
+                              <button
+                                type="button"
+                                className="enq-view-details-btn"
+                                onClick={() => setViewTrackEnquiry(row)}
+                                title="View conversation and follow-up notes recorded by handler"
+                              >
+                                <Eye size={12} />
+                                <span>View Notes</span>
+                              </button>
+                            </div>
+                          )}
 
                           <div className="enq-quick-dials">
                             <a
@@ -590,7 +753,7 @@ export default function EnquiriesListView({ portalType = "admin" }) {
       </section>
 
       {/* Modal: Take Charge & Record Follow-up */}
-      {modalOpen && activeEnquiry && (
+      {modalOpen && activeEnquiry && typeof document !== "undefined" && createPortal(
         <div className="enq-modal-backdrop" onClick={() => !savingStatus && setModalOpen(false)}>
           <div
             className="enq-modal-dialog"
@@ -654,28 +817,45 @@ export default function EnquiriesListView({ portalType = "admin" }) {
               </div>
             </div>
 
-            {/* Charge Takeover Notification Banner */}
-            <div className="enq-handler-banner">
-              <div className="enq-handler-banner-icon">
-                {currentHandler.role === "Admin" ? (
+            {/* Charge Takeover Notification Banner / Locked Notice */}
+            {activeEnquiry && Boolean(activeEnquiry.handledByStaffName || activeEnquiry.handledByRole) && !checkIsHandledByMe(activeEnquiry, currentHandler) ? (
+              <div className="enq-handler-banner is-locked">
+                <div className="enq-handler-banner-icon is-locked">
                   <Shield size={20} />
-                ) : currentHandler.role === "Principal" ? (
-                  <GraduationCap size={20} />
-                ) : (
-                  <UserCheck size={20} />
-                )}
+                </div>
+                <div>
+                  <strong>
+                    Already taken charge of by:{" "}
+                    <span className="enq-banner-role">[{activeEnquiry.handledByRole}]</span> {activeEnquiry.handledByStaffName}
+                  </strong>
+                  <p>
+                    This visitor enquiry is actively being followed up by {activeEnquiry.handledByRole}. Another role cannot take charge of this enquiry.
+                  </p>
+                </div>
               </div>
-              <div>
-                <strong>
-                  You are taking charge as:{" "}
-                  <span className="enq-banner-role">[{currentHandler.role}]</span> {currentHandler.name}
-                </strong>
-                <p>
-                  This record will officially show that the {currentHandler.role} took charge of contacting this
-                  visitor.
-                </p>
+            ) : (
+              <div className="enq-handler-banner">
+                <div className="enq-handler-banner-icon">
+                  {currentHandler.role === "Admin" ? (
+                    <Shield size={20} />
+                  ) : currentHandler.role === "Principal" ? (
+                    <GraduationCap size={20} />
+                  ) : (
+                    <UserCheck size={20} />
+                  )}
+                </div>
+                <div>
+                  <strong>
+                    You are taking charge as:{" "}
+                    <span className="enq-banner-role">[{currentHandler.role}]</span> {currentHandler.name}
+                  </strong>
+                  <p>
+                    This record will officially show that the {currentHandler.role} took charge of contacting this
+                    visitor.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Form */}
             <form onSubmit={handleSaveCharge}>
@@ -688,6 +868,7 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                       value={modalStatus}
                       onChange={(e) => setModalStatus(e.target.value)}
                       required
+                      disabled={Boolean(activeEnquiry && Boolean(activeEnquiry.handledByStaffName || activeEnquiry.handledByRole) && !checkIsHandledByMe(activeEnquiry, currentHandler) && currentHandler.role !== "Admin")}
                     >
                       <option value="In Progress">In Progress (Active Communication)</option>
                       <option value="Contacted">Contacted (Spoke / Answered Questions)</option>
@@ -704,6 +885,7 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                       value={modalMethod}
                       onChange={(e) => setModalMethod(e.target.value)}
                       required
+                      disabled={Boolean(activeEnquiry && Boolean(activeEnquiry.handledByStaffName || activeEnquiry.handledByRole) && !checkIsHandledByMe(activeEnquiry, currentHandler) && currentHandler.role !== "Admin")}
                     >
                       <option value="Phone">Phone Call</option>
                       <option value="WhatsApp">WhatsApp Message</option>
@@ -722,6 +904,7 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                     value={modalNotes}
                     onChange={(e) => setModalNotes(e.target.value)}
                     required
+                    readOnly={Boolean(activeEnquiry && Boolean(activeEnquiry.handledByStaffName || activeEnquiry.handledByRole) && !checkIsHandledByMe(activeEnquiry, currentHandler) && currentHandler.role !== "Admin")}
                   />
                   <small className="enq-field-hint">
                     These notes and your identity ({currentHandler.role} — {currentHandler.name}) will be saved for
@@ -739,25 +922,149 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                 >
                   Cancel
                 </button>
-                <button type="submit" className="enq-btn-primary" disabled={savingStatus}>
-                  {savingStatus ? (
-                    <>
-                      <RefreshCw size={14} className="enq-spin" /> Saving...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 size={15} /> Save &amp; Record Charge
-                    </>
-                  )}
-                </button>
+                {activeEnquiry && Boolean(activeEnquiry.handledByStaffName || activeEnquiry.handledByRole) && !checkIsHandledByMe(activeEnquiry, currentHandler) && currentHandler.role !== "Admin" ? (
+                  <button type="button" className="enq-btn-secondary" onClick={() => setModalOpen(false)}>
+                    Close (Locked to Handler)
+                  </button>
+                ) : (
+                  <button type="submit" className="enq-btn-primary" disabled={savingStatus}>
+                    {savingStatus ? (
+                      <>
+                        <RefreshCw size={14} className="enq-spin" /> Saving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={15} /> Save &amp; Record Charge
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal: View Interaction Track & Follow-up Details (Read-Only) */}
+      {viewTrackEnquiry && typeof document !== "undefined" && createPortal(
+        <div className="enq-modal-backdrop" onClick={() => setViewTrackEnquiry(null)}>
+          <div
+            className="enq-modal-dialog"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-view-track-title"
+          >
+            <div className="enq-modal-header">
+              <div>
+                <h3 id="modal-view-track-title">Visitor Interaction &amp; Follow-up Details</h3>
+                <p>Enquiry record handled by {viewTrackEnquiry.handledByRole} ({viewTrackEnquiry.handledByStaffName || "Assigned Staff"})</p>
+              </div>
+              <button
+                type="button"
+                className="enq-modal-close"
+                onClick={() => setViewTrackEnquiry(null)}
+                aria-label="Close dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Visitor Summary */}
+            <div className="enq-modal-lead-summary">
+              <div className="enq-modal-lead-main">
+                <h4>{viewTrackEnquiry.fullName}</h4>
+                <div className="enq-modal-lead-meta">
+                  <span>
+                    <Phone size={13} /> {viewTrackEnquiry.mobile}
+                  </span>
+                  <span>
+                    <Mail size={13} /> {viewTrackEnquiry.email}
+                  </span>
+                  <span className="enq-modal-tag">{viewTrackEnquiry.enquiryType}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ownership locked banner */}
+            <div className="enq-handler-banner is-locked">
+              <div className="enq-handler-banner-icon is-locked">
+                <Shield size={20} />
+              </div>
+              <div>
+                <strong>
+                  Already taken charge of by:{" "}
+                  <span className="enq-banner-role">[{viewTrackEnquiry.handledByRole}]</span> {viewTrackEnquiry.handledByStaffName}
+                </strong>
+                <p>
+                  This visitor enquiry is being actively followed up by the {viewTrackEnquiry.handledByRole}. Another role cannot take charge of this enquiry.
+                </p>
+              </div>
+            </div>
+
+            <div className="enq-modal-body">
+              <div className="enq-view-meta">
+                <div>
+                  <strong>Current Status:</strong> <span className="enq-view-highlight-status">{viewTrackEnquiry.status}</span>
+                </div>
+                <div>
+                  <strong>Contact Method:</strong> <span>{viewTrackEnquiry.contactMethodUsed || "Phone Call"}</span>
+                </div>
+                {viewTrackEnquiry.contactedAt && (
+                  <div>
+                    <strong>Last Contacted:</strong>{" "}
+                    <span>
+                      {new Date(viewTrackEnquiry.contactedAt).toLocaleString("en-IN", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="enq-message-box" style={{ marginTop: "12px" }}>
+                <h4>Recorded Follow-up Notes:</h4>
+                <p>{viewTrackEnquiry.responseNotes || "No conversation notes recorded yet."}</p>
+              </div>
+
+              <div className="enq-message-box" style={{ marginTop: "12px", background: "#f8fafc" }}>
+                <h4>Original Visitor Message:</h4>
+                <p>{viewTrackEnquiry.message}</p>
+              </div>
+            </div>
+
+            <div className="enq-modal-footer">
+              {currentHandler.role === "Admin" && (
+                <button
+                  type="button"
+                  className="enq-btn-secondary"
+                  onClick={() => {
+                    const enq = viewTrackEnquiry;
+                    setViewTrackEnquiry(null);
+                    openChargeModal(enq);
+                  }}
+                  title="Admin Override: Reassign or update track"
+                >
+                  Admin Reassign
+                </button>
+              )}
+              <button
+                type="button"
+                className="enq-btn-primary"
+                onClick={() => setViewTrackEnquiry(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal: View Full Visitor Message */}
-      {viewMessageEnquiry && (
+      {viewMessageEnquiry && typeof document !== "undefined" && createPortal(
         <div className="enq-modal-backdrop" onClick={() => setViewMessageEnquiry(null)}>
           <div
             className="enq-modal-dialog is-view"
@@ -807,17 +1114,31 @@ export default function EnquiriesListView({ portalType = "admin" }) {
             </div>
 
             <div className="enq-modal-footer">
-              <button
-                type="button"
-                className="enq-btn-primary"
-                onClick={() => {
-                  const enq = viewMessageEnquiry;
-                  setViewMessageEnquiry(null);
-                  openChargeModal(enq);
-                }}
-              >
-                <UserCheck size={14} /> Take Charge / Follow Up
-              </button>
+              {viewMessageEnquiry && Boolean(viewMessageEnquiry.handledByStaffName || viewMessageEnquiry.handledByRole) && !checkIsHandledByMe(viewMessageEnquiry, currentHandler) ? (
+                <button
+                  type="button"
+                  className="enq-btn-secondary"
+                  onClick={() => {
+                    const enq = viewMessageEnquiry;
+                    setViewMessageEnquiry(null);
+                    setViewTrackEnquiry(enq);
+                  }}
+                >
+                  <Eye size={14} /> View Handler Track
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="enq-btn-primary"
+                  onClick={() => {
+                    const enq = viewMessageEnquiry;
+                    setViewMessageEnquiry(null);
+                    openChargeModal(enq);
+                  }}
+                >
+                  <UserCheck size={14} /> Take Charge / Follow Up
+                </button>
+              )}
               <button
                 type="button"
                 className="enq-btn-secondary"
@@ -827,7 +1148,8 @@ export default function EnquiriesListView({ portalType = "admin" }) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

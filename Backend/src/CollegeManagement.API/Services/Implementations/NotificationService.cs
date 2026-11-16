@@ -629,6 +629,8 @@ namespace CollegeManagement.API.Services.Implementations
                     u.UserId,
                     u.CollegeId,
                     RoleName = u.Role != null ? u.Role.RoleName : string.Empty,
+                    StaffDesignation = u.Staff != null ? u.Staff.Designation : string.Empty,
+                    StaffType = u.Staff != null ? u.Staff.StaffType : string.Empty,
                     HasAdminId = u.AdminId.HasValue,
                     StaffCampusId = u.Staff != null ? u.Staff.CampusId : null,
                     StudentCampusId = u.Student != null ? u.Student.CampusId : null
@@ -639,9 +641,12 @@ namespace CollegeManagement.API.Services.Implementations
                 .Where(u =>
                 {
                     var rLower = (u.RoleName ?? string.Empty).Trim().ToLowerInvariant();
+                    var dLower = (u.StaffDesignation ?? string.Empty).Trim().ToLowerInvariant();
+
                     bool roleMatched =
-                        (wantsAdmin && (u.HasAdminId || rLower.Contains("admin"))) ||
-                        (!string.IsNullOrEmpty(rLower) && nonAdminRoles.Any(rl => rLower == rl || rLower.Contains(rl) || rl.Contains(rLower)));
+                        (wantsAdmin && (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin"))) ||
+                        (!string.IsNullOrEmpty(rLower) && nonAdminRoles.Any(rl => rLower == rl || rLower.Contains(rl) || rl.Contains(rLower))) ||
+                        (!string.IsNullOrEmpty(dLower) && nonAdminRoles.Any(rl => dLower == rl || dLower.Contains(rl) || rl.Contains(dLower)));
 
                     if (!roleMatched) return false;
 
@@ -654,12 +659,12 @@ namespace CollegeManagement.API.Services.Implementations
                         bool campusMatched =
                             u.StaffCampusId == campusId.Value ||
                             u.StudentCampusId == campusId.Value ||
-                            (sameCollege && (u.HasAdminId || rLower.Contains("admin") || rLower == "principal"));
+                            (sameCollege && (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin") || rLower == "principal" || dLower == "principal" || rLower == "receptionist" || dLower == "receptionist"));
                         if (!campusMatched) return false;
                     }
                     else
                     {
-                        // Without a campusId, only notify legacy/default college admins to avoid cross-tenant leaks
+                        // Without a campusId, only notify legacy/default college staff to avoid cross-tenant leaks
                         if (u.CollegeId.HasValue && u.CollegeId.Value > 1) return false;
                     }
                     return true;

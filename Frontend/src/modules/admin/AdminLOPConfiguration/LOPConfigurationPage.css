@@ -107,11 +107,14 @@
   line-height: 1.4;
 }
 
-/* Accessible Tabs */
+/* Accessible Modern Segmented Tabs */
 .lop-tabs {
   display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--cms-border);
+  gap: 8px;
+  padding: 6px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.05));
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
   overflow-x: auto;
   scrollbar-width: thin;
 }
@@ -120,40 +123,64 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex: none;
-  min-height: 44px;
+  gap: 12px;
+  flex: 1 1 0;
+  min-width: 220px;
+  min-height: 52px;
   padding: 10px 16px;
-  border: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
   background: transparent;
   color: var(--cms-muted);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.15s ease;
+  transition: all 0.18s ease;
+  text-align: left;
 }
 
 .lop-tab-btn:hover {
   color: var(--cms-text);
+  background: var(--cms-surface);
 }
 
 .lop-tab-btn:focus-visible {
   outline: 2px solid var(--cms-primary, #5a6e38);
-  outline-offset: -2px;
-  border-radius: 6px;
+  outline-offset: 1px;
 }
 
 .lop-tab-btn[aria-selected="true"] {
   color: var(--cms-primary, #5a6e38);
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.lop-tab-btn[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  border-block-end: 3px solid var(--cms-primary, #5a6e38);
+.lop-tab-btn svg {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.lop-tab-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lop-tab-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: inherit;
+}
+
+.lop-tab-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cms-muted);
+}
+
+.lop-tab-btn[aria-selected="true"] .lop-tab-title {
+  color: var(--cms-primary, #5a6e38);
 }
 
 /* Policy Builder Workspace */
@@ -282,19 +309,10 @@
   align-items: start;
 }
 
-.lop-policy-form-card,
-.lop-simulator-card {
+.lop-policy-form-card {
   padding: 20px;
   display: grid;
   gap: 16px;
-}
-
-.lop-simulator-card {
-  position: sticky;
-  top: 16px;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 /* Fieldsets & Form Controls */
@@ -753,6 +771,74 @@
   font-size: 11.5px;
   color: var(--cms-muted);
   line-height: 1.4;
+}
+
+/* 3-Step Visual Guide Banner */
+.lop-guide-banner {
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(90, 110, 56, 0.06) 0%, rgba(90, 110, 56, 0.02) 100%);
+  border: 1px solid rgba(90, 110, 56, 0.2);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.lop-guide-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-primary, #5a6e38);
+}
+
+.lop-icon-guide {
+  color: var(--cms-primary, #5a6e38);
+}
+
+.lop-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lop-guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+}
+
+.lop-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--cms-primary, #5a6e38);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.lop-guide-step strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-bottom: 2px;
+}
+
+.lop-guide-step p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--cms-muted);
+  line-height: 1.35;
 }
 
 /* Clear Numbered Card Groups */
@@ -1290,102 +1376,312 @@
   color: var(--cms-muted);
 }
 
-.lop-sim-inputs-grid {
+/* Revamped Simulator Form Inputs */
+.lop-sim-form-sections {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
-.lop-sim-inputs-grid .lop-field :is(input, select) {
+.lop-sim-input-block {
+  padding: 12px 14px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.04));
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.lop-sim-block-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--cms-primary, #5a6e38);
+}
+
+.lop-sim-block-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.lop-sim-incidents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.lop-sim-incidents-grid .lop-field label,
+.lop-sim-block-grid .lop-field label {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.lop-sim-incidents-grid .lop-field input,
+.lop-sim-block-grid .lop-field input {
   min-height: 38px;
   padding: 6px 10px;
   font-size: 13px;
+  border-radius: 7px;
 }
 
-/* Deduction Receipt Slip */
-.lop-sim-receipt-card {
+/* Revamped Deduction Impact Card */
+.lop-sim-impact-card {
   display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--cms-subtle, rgba(128, 128, 128, 0.05));
-  border: 1px dashed var(--cms-border);
+  gap: 14px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
-.lop-receipt-header {
+.lop-impact-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: var(--cms-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.lop-receipt-month {
-  color: var(--cms-text);
-  font-weight: 700;
-}
-
-/* Prominent Top Stat Ribbon */
-.lop-sim-stat-ribbon {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--cms-surface);
-  border: 1px solid var(--cms-border);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cms-border);
 }
 
-.lop-stat-ribbon-item {
+.lop-impact-header-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-text);
+}
+
+.lop-impact-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  display: inline-block;
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.lop-impact-month {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.08));
+  color: var(--cms-text);
+}
+
+/* Grand Hero Metric (Take-Home & Deduction) */
+.lop-impact-hero {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.lop-impact-takehome-box {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(5, 150, 105, 0.03) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.28);
 }
 
-.lop-ribbon-label {
-  font-size: 10.5px;
+.lop-impact-label {
+  font-size: 11px;
   font-weight: 700;
-  color: var(--cms-muted);
+  color: #047857;
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
-.lop-ribbon-val {
-  font-size: 14px;
+.lop-impact-takehome-val {
+  font-size: 20px;
   font-weight: 800;
-  color: var(--cms-text);
-  white-space: nowrap;
+  color: #065f46;
+  margin: 3px 0;
+  line-height: 1.1;
 }
 
-.lop-receipt-breakdown {
+.lop-impact-sub {
+  font-size: 11px;
+  color: var(--cms-muted);
+}
+
+.lop-impact-deduction-badge {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.02) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+}
+
+.lop-impact-cut-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #b91c1c;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.lop-impact-cut-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #dc2626;
+  margin: 2px 0 4px;
+}
+
+.lop-impact-days-pill {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+/* Itemized Calculation Breakdown */
+.lop-impact-breakdown {
   display: grid;
-  gap: 7px;
-  padding: 8px 0;
-  border-top: 1px dashed var(--cms-border);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cms-border);
 }
 
-.lop-receipt-row {
+.lop-breakdown-heading {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.lop-impact-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.03));
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
   font-size: 12px;
-  color: var(--cms-text);
 }
 
-.lop-receipt-row strong {
+.lop-impact-item.is-lockout {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.lop-impact-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lop-impact-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lop-impact-icon.is-clock {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.lop-impact-icon.is-logout {
+  background: rgba(249, 115, 22, 0.15);
+  color: #ea580c;
+}
+
+.lop-impact-icon.is-shield-alert {
+  background: rgba(239, 68, 68, 0.18);
+  color: #dc2626;
+}
+
+.lop-impact-icon.is-absent {
+  background: rgba(220, 38, 38, 0.15);
+  color: #b91c1c;
+}
+
+.lop-impact-icon.is-halfday {
+  background: rgba(99, 102, 241, 0.15);
+  color: #4f46e5;
+}
+
+.lop-impact-item-left strong {
+  display: block;
+  font-size: 12px;
   font-weight: 700;
+  color: var(--cms-text);
+  line-height: 1.2;
 }
 
-.lop-receipt-row.is-rate-row {
-  margin-top: 4px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--cms-border);
+.lop-impact-item-left small {
+  display: block;
+  font-size: 10.5px;
+  color: var(--cms-muted);
+}
+
+.lop-impact-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.lop-impact-item-days {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cms-muted);
+}
+
+.lop-impact-item-cut {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #dc2626;
+}
+
+/* Daily Rate Formula Badge */
+.lop-impact-formula-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.05));
+  border: 1px dashed var(--cms-border);
   font-size: 11.5px;
   color: var(--cms-muted);
+  margin-top: 4px;
+}
+
+.lop-impact-formula-badge strong {
+  color: var(--cms-text);
 }
 
 .lop-sim-empty {
@@ -1399,22 +1695,27 @@
   color: var(--cms-muted);
 }
 
-.lop-sim-note {
+/* Exemption Trust Pill */
+.lop-impact-exemption-pill {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(16, 185, 129, 0.08);
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(5, 150, 105, 0.03) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
   font-size: 12px;
-  color: #047857;
+  color: #065f46;
   line-height: 1.4;
 }
 
-.lop-sim-note svg {
+.lop-impact-exemption-pill svg {
   color: #059669;
   flex-shrink: 0;
-  margin-top: 2px;
+}
+
+.lop-impact-exemption-pill strong {
+  color: #047857;
 }
 
 /* Tables & Filters */
@@ -1629,4 +1930,527 @@
   .lop-preview-box {
     grid-template-columns: 1fr;
   }
+}
+
+/* Clean Rule Box in Left Form */
+.lop-clean-rule-box {
+  padding: 14px 16px;
+  background: var(--cms-subtle, rgba(128, 128, 128, 0.04));
+  border: 1px solid var(--cms-border);
+  border-radius: 11px;
+  display: grid;
+  gap: 10px;
+}
+
+.lop-clean-rule-box.is-nested {
+  margin-top: -4px;
+  background: rgba(245, 158, 11, 0.04);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.lop-clean-rule-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text);
+}
+
+.lop-rule-icon.is-clock {
+  color: #d97706;
+}
+
+.lop-rule-icon.is-logout {
+  color: #ea580c;
+}
+
+/* Formula Highlight Pill */
+.lop-formula-highlight-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(90, 110, 56, 0.08) 0%, rgba(90, 110, 56, 0.02) 100%);
+  border: 1px solid rgba(90, 110, 56, 0.25);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--cms-text);
+}
+
+.lop-formula-highlight-pill svg {
+  color: var(--cms-primary, #5a6e38);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   ECO-FRIENDLY & USER-FRIENDLY LIVE POLICY SIMULATOR
+   (Strictly Contained Inside Box - No Overflowing / No Offscreen Content)
+   ============================================================ */
+
+.lop-simulator-card {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 120px);
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid rgba(90, 110, 56, 0.28) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 22px rgba(90, 110, 56, 0.08) !important;
+  overflow: hidden !important; /* Strict boundary: Never spills out of the card */
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.lop-simulator-card:hover {
+  border-color: rgba(90, 110, 56, 0.42) !important;
+  box-shadow: 0 8px 30px rgba(90, 110, 56, 0.12) !important;
+}
+
+/* 1. Header (Fixed at top of card, never scrolls away) */
+.lop-sim-eco-head {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(90, 110, 56, 0.09) 0%, rgba(90, 110, 56, 0.02) 100%);
+  border-bottom: 1px solid rgba(90, 110, 56, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.lop-sim-eco-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lop-sim-eco-title h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+  letter-spacing: -0.2px;
+}
+
+.lop-sim-eco-title p {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--cms-muted, #64748b);
+}
+
+.lop-icon-forest {
+  color: var(--cms-primary, #5a6e38);
+  flex-shrink: 0;
+}
+
+.lop-eco-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(90, 110, 56, 0.12);
+  border: 1px solid rgba(90, 110, 56, 0.25);
+  color: var(--cms-primary, #485e2b);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.lop-eco-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+  display: inline-block;
+  animation: pulseDot 2s infinite;
+}
+
+/* 2. Scrollable Container Body */
+.lop-sim-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
+}
+
+.lop-sim-body::-webkit-scrollbar {
+  width: 5px;
+}
+.lop-sim-body::-webkit-scrollbar-thumb {
+  background: rgba(90, 110, 56, 0.25);
+  border-radius: 4px;
+}
+
+/* 3. Hero Impact Card */
+.lop-eco-hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(90, 110, 56, 0.06) 0%, rgba(90, 110, 56, 0.01) 100%);
+  border: 1px solid rgba(90, 110, 56, 0.2);
+}
+
+.lop-eco-hero-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 8px;
+}
+
+.lop-eco-metric-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 9px;
+  transition: all 0.2s ease;
+}
+
+.lop-eco-metric-box.is-takehome {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.lop-eco-metric-box.is-clean {
+  background: rgba(90, 110, 56, 0.08);
+  border: 1px solid rgba(90, 110, 56, 0.22);
+}
+
+.lop-eco-metric-box.is-penalty {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.lop-eco-metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--cms-muted, #64748b);
+}
+
+.is-takehome .lop-eco-metric-label {
+  color: #047857;
+}
+
+.is-penalty .lop-eco-metric-label {
+  color: #b91c1c;
+}
+
+.lop-eco-metric-val {
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 2px 0;
+  color: var(--cms-text, #10203c);
+}
+
+.is-takehome .lop-eco-metric-val {
+  color: #065f46;
+}
+
+.is-penalty .lop-eco-metric-val {
+  color: #dc2626;
+}
+
+.lop-eco-metric-sub {
+  font-size: 10.5px;
+  color: var(--cms-muted, #64748b);
+}
+
+.lop-eco-pill {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(90, 110, 56, 0.15);
+  color: var(--cms-primary, #485e2b);
+}
+
+.is-penalty .lop-eco-pill {
+  background: rgba(239, 68, 68, 0.16);
+  color: #b91c1c;
+}
+
+.lop-eco-formula-strip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--cms-text, #10203c);
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.lop-eco-formula-strip svg {
+  color: var(--cms-primary, #5a6e38);
+  flex-shrink: 0;
+}
+
+/* 4. Scenarios */
+.lop-eco-scenarios-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lop-eco-section-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--cms-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.lop-eco-section-label svg {
+  color: var(--cms-primary, #5a6e38);
+}
+
+.lop-eco-scenarios-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lop-eco-pill-btn {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lop-eco-pill-btn:hover {
+  border-color: var(--cms-primary, #5a6e38);
+  background: rgba(90, 110, 56, 0.06);
+}
+
+.lop-eco-pill-btn.is-clean {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #065f46;
+}
+
+.lop-eco-pill-btn.is-warn {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+
+.lop-eco-pill-btn.is-alert,
+.lop-eco-pill-btn.is-critical {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #b91c1c;
+}
+
+/* 5. Staff & Salary Row */
+.lop-eco-staff-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.lop-eco-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lop-eco-field label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+}
+
+.lop-eco-field select,
+.lop-eco-field input {
+  height: 30px;
+  min-height: 30px;
+  padding: 2px 7px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #10203c);
+  transition: border-color 0.15s ease;
+}
+
+.lop-eco-field select:focus,
+.lop-eco-field input:focus {
+  border-color: var(--cms-primary, #5a6e38);
+  outline: none;
+}
+
+/* 6. Incidents Card (Compact 2-col micro-grid) */
+.lop-eco-incidents-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(90, 110, 56, 0.04) 0%, rgba(90, 110, 56, 0.01) 100%);
+  border: 1px solid rgba(90, 110, 56, 0.18);
+}
+
+.lop-eco-incidents-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c);
+}
+
+.lop-eco-incidents-head svg {
+  color: var(--cms-primary, #5a6e38);
+}
+
+.lop-eco-incidents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.lop-eco-incident-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.lop-eco-incident-item.is-span-2 {
+  grid-column: span 2;
+}
+
+.lop-eco-incident-item label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--cms-text, #10203c);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lop-eco-incident-item input {
+  width: 40px;
+  height: 24px;
+  padding: 1px 3px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid var(--cms-border, #cbd5e1);
+  background: var(--cms-subtle, rgba(0, 0, 0, 0.02));
+  color: var(--cms-text, #10203c);
+}
+
+.lop-eco-incident-item input:focus {
+  border-color: var(--cms-primary, #5a6e38);
+  outline: none;
+  background: #ffffff;
+}
+
+/* Icon colors */
+.is-amber { color: #d97706; }
+.is-orange { color: #ea580c; }
+.is-red { color: #dc2626; }
+.is-indigo { color: #4f46e5; }
+
+/* 7. Itemized Breakdown */
+.lop-eco-breakdown {
+  display: flex;
+  flex-direction: column;
+}
+
+.lop-eco-clean-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 10.5px;
+  color: #065f46;
+  font-weight: 600;
+}
+
+.lop-eco-receipt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lop-eco-receipt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--cms-border, #e2e8f0);
+  font-size: 10.5px;
+  color: var(--cms-text, #10203c);
+}
+
+.lop-eco-receipt-row.is-lockout {
+  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.lop-receipt-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 8. Trust footer */
+.lop-eco-trust-footer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: rgba(90, 110, 56, 0.07);
+  border: 1px solid rgba(90, 110, 56, 0.16);
+  font-size: 10px;
+  color: var(--cms-primary, #485e2b);
+  font-weight: 600;
+}
+
+.lop-eco-trust-footer svg {
+  flex-shrink: 0;
+  color: var(--cms-primary, #5a6e38);
 }
