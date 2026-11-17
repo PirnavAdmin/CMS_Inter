@@ -201,6 +201,30 @@ export const toPermissionMap = (permissions = []) => {
   if (map["subject-management"]) {
     map["classes"] = map["subject-management"];
   }
+  if (map["hostel-management"]) {
+    ["warden-rooms-beds", "warden-student-allocations", "warden-hostel-attendance", "warden-outpass-leaves", "warden-resident-students", "warden-hostel-reports"].forEach((k) => { map[k] = map["hostel-management"]; });
+  }
+  if (map["student-management"]) {
+    map["parent-children"] = map["student-management"];
+  }
+  if (map["fee-management"]) {
+    map["parent-fees-payments"] = map["fee-management"];
+    map["fees"] = map["fee-management"];
+  }
+  if (map["results"]) {
+    map["parent-academics-results"] = map["results"];
+  }
+  if (map["group-management"]) {
+    map["academics"] = map["group-management"];
+    map["courses"] = map["group-management"];
+  }
+  if (map["certificates"]) {
+    map["documents"] = map["certificates"];
+    map["parent-documents"] = map["certificates"];
+  }
+  if (map["transport"]) {
+    ["driver-todays-trips", "driver-route-stops", "driver-live-navigation", "driver-student-manifest"].forEach((k) => { map[k] = map["transport"]; });
+  }
 
   // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly
   const settingsScreens = [

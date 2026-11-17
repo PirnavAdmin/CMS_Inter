@@ -29,17 +29,17 @@ export const STUDENT_SIDEBAR_NAVIGATION = Object.freeze(
 // Canonical Parent portal navigation. The parent dashboard and permission
 // matrix use these stable IDs rather than generic administration labels.
 export const PARENT_SIDEBAR_NAVIGATION = Object.freeze([
-  { id: "parent-dashboard", label: "Dashboard", route: "/parent-dashboard", section: "Main", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-children", label: "My Children", route: "/parent-dashboard/children", section: "Student & Academics", legacyPermissionKeys: ["student-management"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-attendance", label: "Attendance", route: "/parent-dashboard/attendance", section: "Student & Academics", legacyPermissionKeys: ["attendance"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-academics-results", label: "Academics & Results", route: "/parent-dashboard/academics", section: "Student & Academics", legacyPermissionKeys: ["results"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-examinations", label: "Examinations", route: "/parent-dashboard/examinations", section: "Student & Academics", legacyPermissionKeys: ["examination"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-fees-payments", label: "Fees & Payments", route: "/parent-dashboard/fees", section: "Student & Academics", legacyPermissionKeys: ["fee-management"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-timetable", label: "Timetable", route: "/parent-dashboard/timetable", section: "Student & Academics", legacyPermissionKeys: ["timetable"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-communication", label: "Communication", route: "/parent-dashboard/communication", section: "Student & Academics", availableActions: [ACTIONS.VIEW] },
-  { id: "parent-announcements-events", label: "Announcements & Events", route: "/parent-dashboard/announcements", section: "Student & Academics", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-documents", label: "Documents", route: "/parent-dashboard/documents", section: "Student & Academics", legacyPermissionKeys: ["certificates"], availableActions: [ACTIONS.VIEW] },
-  { id: "parent-settings", label: "Settings", route: "/parent-dashboard/settings", section: "Settings", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-dashboard", permissionKey: "dashboard", label: "Dashboard", route: "/parent-dashboard", section: "Main", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-children", permissionKey: "student-management", label: "My Children", route: "/parent-dashboard/children", section: "Student & Academics", legacyPermissionKeys: ["student-management"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-attendance", permissionKey: "attendance", label: "Attendance", route: "/parent-dashboard/attendance", section: "Student & Academics", legacyPermissionKeys: ["attendance"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-academics-results", permissionKey: "results", label: "Academics & Results", route: "/parent-dashboard/academics", section: "Student & Academics", legacyPermissionKeys: ["results"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-examinations", permissionKey: "examination", label: "Examinations", route: "/parent-dashboard/examinations", section: "Student & Academics", legacyPermissionKeys: ["examination"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-fees-payments", permissionKey: "fee-management", label: "Fees & Payments", route: "/parent-dashboard/fees", section: "Student & Academics", legacyPermissionKeys: ["fee-management"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-timetable", permissionKey: "timetable", label: "Timetable", route: "/parent-dashboard/timetable", section: "Student & Academics", legacyPermissionKeys: ["timetable"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-communication", permissionKey: "reports-analytics", label: "Communication", route: "/parent-dashboard/communication", section: "Student & Academics", availableActions: [ACTIONS.VIEW] },
+  { id: "parent-announcements-events", permissionKey: "reports-analytics", label: "Announcements & Events", route: "/parent-dashboard/announcements", section: "Student & Academics", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-documents", permissionKey: "certificates", label: "Documents", route: "/parent-dashboard/documents", section: "Student & Academics", legacyPermissionKeys: ["certificates"], availableActions: [ACTIONS.VIEW] },
+  { id: "parent-settings", permissionKey: "settings", label: "Settings", route: "/parent-dashboard/settings", section: "Settings", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW] },
 ]);
 
 export const getParentNavigationItem = (route) =>
@@ -85,9 +85,26 @@ const FACULTY_ROUTE_SEGMENTS = Object.freeze({
 
 // Derived from the live Faculty sidebar so labels, groups, and display order
 // remain aligned with the Faculty dashboard.
+const FACULTY_PERMISSION_KEYS = Object.freeze({
+  dashboard: "dashboard",
+  profile: "profile",
+  timetable: "timetable",
+  classes: "subject-management",
+  attendance: "attendance",
+  marks: "marks-evaluation",
+  examduties: "examination",
+  myattendance: "staff-attendance",
+  leave: "staff-leave-management",
+  salary: "payroll",
+  reimbursements: "reimbursement",
+  holidays: "holiday-management",
+  settings: "settings",
+});
+
 export const FACULTY_SIDEBAR_NAVIGATION = Object.freeze(
   facultyNavItems.map((item) => ({
     id: item.id,
+    permissionKey: FACULTY_PERMISSION_KEYS[item.id] || item.id,
     label: item.label,
     route: `/faculty-dashboard${item.id === "dashboard" ? "" : `/${FACULTY_ROUTE_SEGMENTS[item.id] || item.id}`}`,
     section: item.group,
@@ -101,17 +118,17 @@ export const FACULTY_SIDEBAR_NAVIGATION = Object.freeze(
 // Canonical navigable Warden entries. Both the dashboard sidebar and the
 // Roles & Permissions matrix use these stable IDs instead of display labels.
 export const HOSTEL_WARDEN_NAVIGATION = Object.freeze([
-  { id: "warden-dashboard", label: "Dashboard", route: "/warden-dashboard", section: "Overview", availableActions: [ACTIONS.VIEW] },
-  { id: "warden-rooms-beds", label: "Rooms & Beds", route: "/warden-dashboard/rooms", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
-  { id: "warden-student-allocations", label: "Student Allocations", route: "/warden-dashboard/allocations", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
-  { id: "warden-hostel-attendance", label: "Hostel Attendance", route: "/warden-dashboard/attendance", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
-  { id: "warden-outpass-leaves", label: "Outpass & Leaves", route: "/warden-dashboard/leave-requests", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
-  { id: "warden-resident-students", label: "Resident Students", route: "/warden-dashboard/students", section: "Hostel Operations", availableActions: [ACTIONS.VIEW] },
-  { id: "warden-hostel-reports", label: "Hostel Reports", route: "/warden-dashboard/reports", section: "Hostel Operations", availableActions: [ACTIONS.VIEW] },
-  { id: "warden-my-attendance", label: "My Attendance", route: "/warden-dashboard/my-attendance", section: "My Workspace", availableActions: [ACTIONS.VIEW] },
-  { id: "warden-staff-leave", label: "Staff Leave Management", route: "/warden-dashboard/my-leaves", section: "My Workspace", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
-  { id: "warden-holidays", label: "Holidays", route: "/warden-dashboard/holidays", section: "My Workspace", availableActions: [ACTIONS.VIEW] },
-  { id: "warden-reimbursements", label: "Reimbursements", route: "/warden-dashboard/expenses", section: "My Workspace", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE] },
+  { id: "warden-dashboard", permissionKey: "dashboard", label: "Dashboard", route: "/warden-dashboard", section: "Overview", availableActions: [ACTIONS.VIEW] },
+  { id: "warden-rooms-beds", permissionKey: "hostel-management", label: "Rooms & Beds", route: "/warden-dashboard/rooms", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "warden-student-allocations", permissionKey: "hostel-management", label: "Student Allocations", route: "/warden-dashboard/allocations", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "warden-hostel-attendance", permissionKey: "hostel-management", label: "Hostel Attendance", route: "/warden-dashboard/attendance", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
+  { id: "warden-outpass-leaves", permissionKey: "hostel-management", label: "Outpass & Leaves", route: "/warden-dashboard/leave-requests", section: "Hostel Operations", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
+  { id: "warden-resident-students", permissionKey: "hostel-management", label: "Resident Students", route: "/warden-dashboard/students", section: "Hostel Operations", availableActions: [ACTIONS.VIEW] },
+  { id: "warden-hostel-reports", permissionKey: "hostel-management", label: "Hostel Reports", route: "/warden-dashboard/reports", section: "Hostel Operations", availableActions: [ACTIONS.VIEW] },
+  { id: "warden-my-attendance", permissionKey: "staff-attendance", label: "My Attendance", route: "/warden-dashboard/my-attendance", section: "My Workspace", availableActions: [ACTIONS.VIEW] },
+  { id: "warden-staff-leave", permissionKey: "staff-leave-management", label: "Staff Leave Management", route: "/warden-dashboard/my-leaves", section: "My Workspace", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT] },
+  { id: "warden-holidays", permissionKey: "holiday-management", label: "Holidays", route: "/warden-dashboard/holidays", section: "My Workspace", availableActions: [ACTIONS.VIEW] },
+  { id: "warden-reimbursements", permissionKey: "reimbursement", label: "Reimbursements", route: "/warden-dashboard/expenses", section: "My Workspace", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE] },
 ]);
 
 export const getHostelWardenNavigationItem = (route) =>
