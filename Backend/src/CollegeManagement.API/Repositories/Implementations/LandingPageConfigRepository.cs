@@ -141,7 +141,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ) VALUES (
                     @CampusId, @CollegeName, @LandingBadge, @LandingHeadline, @LandingDescription,
                     @FooterDescription, @ContactAddress, @ContactEmail, @ContactPhone, @OfficeHours,
-                    @SocialLinksJson, @HeaderLogo, @FooterLogo, @HeroImage, @DashboardLogo, @HeaderBrandJson,
+                    @SocialLinksJson, @HeaderLogo, @FooterLogo, @HeroImage,
+                    (CASE WHEN @ResetDashboardLogo = 1 THEN NULL ELSE @DashboardLogo END),
+                    @HeaderBrandJson,
                     @UpdatedByUserId, UTC_TIMESTAMP()
                 )
                 ON DUPLICATE KEY UPDATE
@@ -158,7 +160,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                     `HeaderLogo` = COALESCE(VALUES(`HeaderLogo`), `HeaderLogo`),
                     `FooterLogo` = COALESCE(VALUES(`FooterLogo`), `FooterLogo`),
                     `HeroImage` = COALESCE(VALUES(`HeroImage`), `HeroImage`),
-                    `DashboardLogo` = COALESCE(VALUES(`DashboardLogo`), `DashboardLogo`),
+                    `DashboardLogo` = CASE 
+                        WHEN @ResetDashboardLogo = 1 THEN NULL 
+                        WHEN VALUES(`DashboardLogo`) IS NOT NULL THEN VALUES(`DashboardLogo`) 
+                        ELSE `DashboardLogo` 
+                    END,
                     `HeaderBrandJson` = COALESCE(VALUES(`HeaderBrandJson`), `HeaderBrandJson`),
                     `UpdatedByUserId` = VALUES(`UpdatedByUserId`),
                     `UpdatedAt` = UTC_TIMESTAMP();
@@ -181,6 +187,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 request.FooterLogo,
                 request.HeroImage,
                 request.DashboardLogo,
+                ResetDashboardLogo = request.ResetDashboardLogo == true ? 1 : 0,
                 request.HeaderBrandJson,
                 UpdatedByUserId = updatedByUserId
             });

@@ -212,6 +212,7 @@ CREATE PROCEDURE `sp_LandingPageConfig_Save`(
     IN p_ContactEmail VARCHAR(150),
     IN p_ContactPhone VARCHAR(50),
     IN p_DashboardLogo VARCHAR(500),
+    IN p_ResetDashboardLogo TINYINT(1),
     IN p_HeaderLogo VARCHAR(500),
     IN p_FooterLogo VARCHAR(500),
     IN p_HeroImage VARCHAR(500),
@@ -243,7 +244,7 @@ BEGIN
         p_LandingBenefit1, p_LandingBenefit2, p_LandingBenefit3,
         p_LandingButton, p_LandingLoginButton, p_FooterDescription,
         p_ContactAddress, p_ContactEmail, p_ContactPhone,
-        p_DashboardLogo, p_HeaderLogo, p_FooterLogo, p_HeroImage,
+        CASE WHEN p_ResetDashboardLogo = 1 THEN NULL ELSE p_DashboardLogo END, p_HeaderLogo, p_FooterLogo, p_HeroImage,
         p_UserId, p_UserId, NOW(), NOW()
     )
     ON DUPLICATE KEY UPDATE
@@ -277,7 +278,11 @@ BEGIN
         ContactAddress = p_ContactAddress,
         ContactEmail = p_ContactEmail,
         ContactPhone = p_ContactPhone,
-        DashboardLogo = COALESCE(p_DashboardLogo, DashboardLogo),
+        DashboardLogo = CASE 
+            WHEN p_ResetDashboardLogo = 1 THEN NULL 
+            WHEN p_DashboardLogo IS NOT NULL THEN p_DashboardLogo 
+            ELSE DashboardLogo 
+        END,
         HeaderLogo = COALESCE(p_HeaderLogo, HeaderLogo),
         FooterLogo = COALESCE(p_FooterLogo, FooterLogo),
         HeroImage = COALESCE(p_HeroImage, HeroImage),

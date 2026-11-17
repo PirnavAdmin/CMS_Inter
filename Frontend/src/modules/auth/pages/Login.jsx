@@ -12,6 +12,7 @@ import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
 import { isSuperAdminRole } from "@/modules/super-admin/superAdminSession.js";
 import { isStaffPortalUnlocked } from "@/modules/faculty/profileCompletion.js";
+import { syncUserTheme } from "@/hooks/useTheme.js";
 
 const fields = [
   {
@@ -198,6 +199,7 @@ export default function Login() {
 
       if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
       setBusy(false);
+      await syncUserTheme({ force: true }).catch(() => {});
 
       if (isAdmin) {
         navigate("/dashboard", { replace: true });

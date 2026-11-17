@@ -16,6 +16,7 @@ import {
   ReceiptIndianRupee,
   Settings,
   ShieldCheck,
+  User,
   UserCheck,
   UserCog,
   Users,
@@ -330,6 +331,17 @@ export const ROLE_SEEDS = Object.freeze([
 ]);
 
 export const MODULE_PERMISSION_CONFIG = Object.freeze([
+  {
+    id: "profile",
+    name: "My Profile",
+    route: "/dashboard/profile",
+    section: "Overview",
+    icon: User,
+    availableActions: [ACTIONS.VIEW, ACTIONS.EDIT],
+    legacyPermissionKeys: ["my-profile"],
+    screens: [],
+  },
+
   {
     id: "dashboard",
     name: "Dashboard",
