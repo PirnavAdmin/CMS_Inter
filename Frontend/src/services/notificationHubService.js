@@ -1,6 +1,7 @@
 import { HttpTransportType, HubConnectionBuilder, LogLevel, HubConnectionState } from "@microsoft/signalr";
 import { getAuthToken } from "@/features/authStorage.js";
 import { env } from "@/config/env.js";
+import { applyRemotePreferences } from "@/services/userPreferencesService.js";
 
 const RECONNECT_COOLDOWN_MS = 5000;
 const BLIP_RETRY_DELAY_MS = 2500;
@@ -236,6 +237,13 @@ class NotificationHubService {
                 // ignore
               }
             });
+          });
+
+          this.connection.on("UserPreferencesUpdated", (payload) => {
+            if (!payload) return;
+            try {
+              applyRemotePreferences(payload);
+            } catch {}
           });
 
           this.connection.onclose(() => {

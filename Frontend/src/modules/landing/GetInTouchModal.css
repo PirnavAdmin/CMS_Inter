@@ -80,9 +80,9 @@
 }
 .get-in-touch-aside::after { position: absolute; right: -63px; bottom: -98px; width: 220px; height: 250px; border-radius: 54% 46% 0 0; background: rgba(181, 210, 165, .25); content: ""; transform: rotate(-23deg); }
 .get-in-touch-logo { position: relative; z-index: 1; width: min(208px, 78%); height: 48px; flex: 0 0 48px; object-fit: contain; object-position: left center; }
-.get-in-touch-script { position: relative; z-index: 1; margin-top: 18px; color: #557d48; font-family: Georgia, "Times New Roman", serif; font-size: clamp(25px, 2.5vw, 32px); font-style: italic; }
-.get-in-touch-aside h2 { position: relative; z-index: 1; max-width: 330px; margin: 5px 0 12px; color: #1d3021; font-family: Georgia, "Times New Roman", serif; font-size: clamp(30px, 3vw, 39px); line-height: 1.04; letter-spacing: -.035em; }
-.get-in-touch-aside h2 em { display: block; color: #5b844a; font-style: normal; }
+.get-in-touch-script { position: relative; z-index: 1; margin-top: 18px; color: #557d48; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; font-weight: 750; text-transform: uppercase; letter-spacing: 0.08em; }
+.get-in-touch-aside h2 { position: relative; z-index: 1; max-width: 330px; margin: 5px 0 12px; color: #1c2434; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: clamp(28px, 2.8vw, 36px); font-weight: 800; line-height: 1.15; letter-spacing: -.03em; }
+.get-in-touch-aside h2 em { display: inline; color: inherit; font-style: normal; }
 .get-in-touch-aside > p { position: relative; z-index: 1; max-width: 360px; margin: 0; color: #526151; font-size: 14px; line-height: 1.6; }
 .get-in-touch-contact-list { position: relative; z-index: 1; display: grid; gap: 15px; margin-top: 22px; }
 .get-in-touch-contact-list > a, .get-in-touch-contact-list > div { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 12px; color: inherit; text-decoration: none; }

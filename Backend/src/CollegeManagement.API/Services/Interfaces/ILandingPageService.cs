@@ -11,5 +11,6 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<LandingPageConfigDto?> SaveConfigAsync(SaveLandingPageConfigRequest request, int userId, CancellationToken ct = default);
         Task<LandingPageConfigDto?> GetPublicConfigAsync(string? collegeCode, int? collegeId, CancellationToken ct = default);
         Task<string> UploadImageAsync(IFormFile file, string slot, int collegeId, CancellationToken ct = default);
+        Task<int?> GetCollegeIdByCampusIdAsync(int campusId, CancellationToken ct = default);
     }
 }

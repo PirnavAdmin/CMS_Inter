@@ -165,8 +165,6 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
 
   const value = useMemo(() => {
     const canAccess = (moduleKey, actionKey = "view", screenKey = null) => {
-      // Profile is the personal user profile; always viewable by logged-in faculty
-      if (moduleKey === "profile") return true;
       return can(moduleKey, actionKey, permissions, user, screenKey);
     };
 
@@ -177,7 +175,9 @@ export function PermissionProvider({ children, permissions: permissionsProp }) {
     // Backwards compatibility for code that calls permissions.includes(...)
     const includes = (permString) => {
       if (!permString) return true;
-      if (permString === "VIEW_PROFILE") return true;
+      if (permString === "VIEW_PROFILE") {
+        return canAccess("profile", "view");
+      }
       if (permString === "VIEW_REIMBURSEMENTS") {
         return canAccess("reimbursement", "view") || canAccess("staff-reimbursements", "view");
       }
