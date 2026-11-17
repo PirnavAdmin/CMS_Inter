@@ -4,11 +4,12 @@ import { useSearchParams } from "react-router-dom";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
-import { getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import ParentPayFeeScreen from "./ParentPayFeeScreen.jsx";
+import ParentCollectPaymentModal from "../components/ParentCollectPaymentModal.jsx";
 import "../ParentDashboard.css";
 
-export default function ParentFeesPage() {
+export default function ParentFeesPage({ initialView }) {
   const {
     availableChildren: rawChildren,
     activeChildId,
@@ -18,11 +19,26 @@ export default function ParentFeesPage() {
     dataKey,
     currentAcademicYear,
     loading,
+    refreshActiveChild,
   } = useParentPortal();
   const availableChildren = (rawChildren || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
   const [searchParams, setSearchParams] = useSearchParams();
-  const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [isCollectPaymentOpen, setIsCollectPaymentOpen] = useState(false);
+
+  const isPayView = initialView === "pay" || searchParams.get("view") === "pay";
+
+  const handleOpenPayFee = () => {
+    setIsCollectPaymentOpen(true);
+  };
+
+  const handleClosePayFee = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("view");
+      return next;
+    });
+  };
 
   const handleOpenReceipt = (rec) => {
     setSelectedReceipt(rec);
@@ -43,32 +59,60 @@ export default function ParentFeesPage() {
   };
   const [toastMessage, setToastMessage] = useState("");
 
-  const isCurrentYear = currentAcademicYear === "2026-2027";
-  const feeKey = dataKey || child?.id;
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
-    : (child
-        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child?.id] || child?.fees : null)) || {
-            total: 0,
-            paid: 0,
-            pending: 0,
-            status: "—",
-            dueDate: "—",
-            breakdown: [],
-            receipts: [],
-          }
-        : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [] });
+    : (child?.fees || {
+        total: 0,
+        paid: 0,
+        pending: 0,
+        status: "—",
+        dueDate: "—",
+        breakdown: [],
+        receipts: [],
+      });
 
-  const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
-  const breakdownPaid = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.paid || 0), 0);
-  const breakdownPending = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.pending || 0), 0);
+  const receiptsList = rawChildFee.receipts || [];
+  const approvedReceiptsTotal = receiptsList
+    .filter((r) => !/reject|fail|cancel|pending/i.test(r.status || ""))
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const paidAmount = Math.max(Number(rawChildFee.paid || 0), approvedReceiptsTotal);
+  const totalAmount = Math.max(Number(rawChildFee.total || 0), paidAmount);
+  const pendingAmount = Math.max(0, totalAmount - paidAmount);
+  const feeStatus = pendingAmount === 0 && totalAmount > 0 ? "Paid" : paidAmount > 0 ? "Partial" : (totalAmount > 0 ? "Due" : "—");
+  const dueDateStr = pendingAmount === 0 ? "All Dues Cleared" : (rawChildFee.dueDate || "—");
+
+  let remPaid = paidAmount;
+  const rawBreakdownItems = (rawChildFee.breakdown && rawChildFee.breakdown.length > 0)
+    ? rawChildFee.breakdown
+    : [];
+
+  const reconciledBreakdown = rawBreakdownItems.map((b) => {
+    const bAmt = Number(b.amount || 0);
+    const bPaid = Math.min(bAmt, remPaid);
+    remPaid = Math.max(0, remPaid - bPaid);
+    const bPending = Math.max(0, bAmt - bPaid);
+    const bStatus = bPending === 0 && bAmt > 0 ? "Paid" : bPaid > 0 ? "Partial" : "Due";
+    return {
+      ...b,
+      category: b.category || b.feeType || "Fee Component",
+      amount: bAmt,
+      paid: bPaid,
+      pending: bPending,
+      due: dueDateStr,
+      status: bStatus,
+    };
+  });
 
   const childFee = {
     ...rawChildFee,
-    total: breakdownTotal > 0 ? breakdownTotal : rawChildFee.total,
-    paid: breakdownTotal > 0 ? breakdownPaid : rawChildFee.paid,
-    pending: breakdownTotal > 0 ? breakdownPending : rawChildFee.pending,
-    status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
+    total: totalAmount,
+    paid: paidAmount,
+    pending: pendingAmount,
+    status: feeStatus,
+    dueDate: dueDateStr,
+    breakdown: reconciledBreakdown,
+    receipts: receiptsList,
   };
 
   useEffect(() => {
@@ -78,6 +122,34 @@ export default function ParentFeesPage() {
       if (match) setSelectedReceipt(match);
     }
   }, [searchParams, childFee?.receipts]);
+
+  useEffect(() => {
+    const handleFeeSettled = () => {
+      refreshActiveChild?.();
+      setToastMessage("✓ Payment records updated from Accounts Office.");
+    };
+
+    window.addEventListener?.("cms-fee-settled", handleFeeSettled);
+    window.addEventListener?.("cms-fee-utr-approved", handleFeeSettled);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("cms-fee-events");
+      bc.onmessage = (msg) => {
+        if (msg?.data?.type === "UTR_APPROVED" || msg?.data?.type === "PAYMENT_SETTLED") {
+          refreshActiveChild?.();
+          const amt = Number(msg.data?.amount || 0);
+          setToastMessage(amt > 0 ? `✓ Payment of ₹${amt.toLocaleString()} approved by Accounts Office!` : "✓ Fee payment approved by Accounts Office!");
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener?.("cms-fee-settled", handleFeeSettled);
+      window.removeEventListener?.("cms-fee-utr-approved", handleFeeSettled);
+      if (bc) bc.close();
+    };
+  }, [refreshActiveChild]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -114,6 +186,18 @@ export default function ParentFeesPage() {
             </p>
           </div>
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (isPayView) {
+    return (
+      <DashboardLayout
+        title="Pay Fee"
+        subtitle={`Pay fees for your child securely online • ${child.name} (${child.group})`}
+        breadcrumb={["Parent Portal", "Fees & Payments", "Pay Fee"]}
+      >
+        <ParentPayFeeScreen onBack={handleClosePayFee} />
       </DashboardLayout>
     );
   }
@@ -201,6 +285,40 @@ export default function ParentFeesPage() {
               </div>
             </div>
           </div>
+
+          {/* 5th Card: PAY FEE */}
+          <div
+            className="parent-stat-card parent-pay-fee-stat-card"
+            onClick={handleOpenPayFee}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="parent-stat-icon-wrap green">
+              <Wallet size={24} />
+            </div>
+            <div className="parent-stat-info">
+              <div className="parent-stat-label">PAY FEE</div>
+              <div className="parent-stat-value" style={{ fontSize: 18 }}>{(childFee?.pending || 0) === 0 ? "Paid in Full" : "Pay Online"}</div>
+              <div className="parent-stat-subtext">
+                {(childFee?.pending || 0) === 0 ? (
+                  <span className="cms-badge cms-badge-active" style={{ fontSize: 12, padding: "3px 8px", display: "inline-block" }}>
+                    ✓ All Dues Cleared
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="parent-pay-now-action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenPayFee();
+                    }}
+                  >
+                    Pay Now →
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Fee Category Breakdown */}
@@ -273,6 +391,7 @@ export default function ParentFeesPage() {
                     <th>Payment Method</th>
                     <th>Transaction Ref</th>
                     <th>Purpose / Narration</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -287,6 +406,11 @@ export default function ParentFeesPage() {
                         <td style={{ fontSize: 12, color: "var(--cms-muted)" }}>{rec.txnId}</td>
                         <td>{rec.paidFor}</td>
                         <td>
+                          <span className={`cms-badge ${rec.status === "Approved" || !rec.status || rec.status === "Success" ? "cms-badge-active" : /pending|awaiting/i.test(rec.status) ? "cms-badge-warn" : "cms-badge-danger"}`}>
+                            {rec.status === "Approved" || !rec.status || rec.status === "Success" ? "Approved" : /pending|awaiting/i.test(rec.status) ? "Pending Approval" : rec.status}
+                          </span>
+                        </td>
+                        <td>
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-outline"
@@ -299,7 +423,7 @@ export default function ParentFeesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
+                      <td colSpan="8" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
                         No payment receipts recorded for Academic Year {currentAcademicYear}.
                       </td>
                     </tr>
@@ -377,6 +501,16 @@ export default function ParentFeesPage() {
             </div>
           </Modal>
         )}
+
+        {/* Collect Payment Omnichannel Modal */}
+        <ParentCollectPaymentModal
+          isOpen={isCollectPaymentOpen}
+          onClose={() => setIsCollectPaymentOpen(false)}
+          initialChildId={activeChildId}
+          onPaymentSuccess={() => {
+            refreshActiveChild?.();
+          }}
+        />
       </div>
     </DashboardLayout>
   );

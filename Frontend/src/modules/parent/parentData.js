@@ -109,10 +109,10 @@ export const initialChildren = [
     },
     fees: {
       total: 70000,
-      paid: 65000,
-      pending: 5000,
-      status: "Partial",
-      dueDate: "15 Nov 2026",
+      paid: 70000,
+      pending: 0,
+      status: "Paid",
+      dueDate: "—",
     },
   },
 ];
@@ -1012,15 +1012,15 @@ export const storedFeeRecords = {
   },
   "863": {
     total: 70000,
-    paid: 65000,
-    pending: 5000,
-    dueDate: "15 Nov 2026",
-    status: "Partial",
+    paid: 70000,
+    pending: 0,
+    dueDate: "—",
+    status: "Paid",
     breakdown: [
       { category: "Tuition Fee", amount: 50000, paid: 50000, pending: 0, due: "Paid", status: "Paid" },
       { category: "Laboratory Fee", amount: 10000, paid: 10000, pending: 0, due: "Paid", status: "Paid" },
       { category: "Examination Fee", amount: 5000, paid: 5000, pending: 0, due: "Paid", status: "Paid" },
-      { category: "Amenities & Library", amount: 5000, paid: 0, pending: 5000, due: "15 Nov 2026", status: "Due" },
+      { category: "Amenities & Library", amount: 5000, paid: 5000, pending: 0, due: "Paid", status: "Paid" },
     ],
     receipts: [
       { id: "rec-863-01", receiptNo: "REC-2026-0920", date: "12 Jun 2026", amount: 40000, method: "UPI / GooglePay", txnId: "UPI26061244321", paidFor: "Admission & Term 1 Tuition", status: "Success" },
@@ -1032,7 +1032,7 @@ export const storedFeeRecords = {
     paid: 28000,
     pending: 17500,
     dueDate: "15 Oct 2026",
-    status: "Partial",
+    status: "Paid",
     breakdown: [
       { category: "Tuition Fee", amount: 35000, paid: 25000, pending: 10000, due: "15 Oct 2026", status: "Partial" },
       { category: "Laboratory Fee", amount: 6000, paid: 3000, pending: 3000, due: "15 Oct 2026", status: "Partial" },
@@ -1142,7 +1142,7 @@ export const storedFeeRecords = {
     paid: 26000,
     pending: 19500,
     dueDate: "20 Oct 2026",
-    status: "Partial",
+    status: "Paid",
     breakdown: [
       { category: "Tuition Fee", amount: 35000, paid: 23000, pending: 12000, due: "20 Oct 2026", status: "Partial" },
       { category: "Laboratory Fee", amount: 6000, paid: 3000, pending: 3000, due: "20 Oct 2026", status: "Partial" },

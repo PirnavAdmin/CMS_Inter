@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Calendar, Clock, MapPin, FileText, CheckCircle2, AlertTriangle, Download, Printer, Eye, Users } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
-import { upcomingExamsData } from "../parentData.js";
+
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -92,8 +92,6 @@ export default function ParentExaminationsPage() {
         syllabus: `Official curriculum for ${r.examName}. Maximum Total Marks: ${r.maxMarks}. Grade: ${r.grade}.`,
       }));
     }
-    const fallback = upcomingExamsData[activeChildId] || upcomingExamsData["860"] || [];
-    if (fallback.length > 0) return fallback;
     return [];
   }, [activeExam, results, child, dataKey, activeChildId]);
 

@@ -565,6 +565,7 @@ export default function AppRoutes() {
           <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
           <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
           <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
+          <Route path="/parent-dashboard/pay-fee" element={<ParentFeesPage initialView="pay" />} />
           <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
           <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
           <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />

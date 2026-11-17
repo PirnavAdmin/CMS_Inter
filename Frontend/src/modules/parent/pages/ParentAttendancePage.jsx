@@ -4,7 +4,6 @@ import { useSearchParams } from "react-router-dom";
 import { CalendarCheck, Users, CheckCircle2, XCircle, AlertCircle, Clock, Filter, Eye, ChevronRight, Calendar } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal, transformSubjectAttendance } from "../context/ParentPortalContext.jsx";
-import { recentAttendanceLogs, subjectAttendanceData } from "../parentData.js";
 import { Modal } from "@/shared/components/Ui.jsx";
 import { getStudentAttendanceSubjects, getStudentDailyAttendanceLogs } from "@/api/parentApi.js";
 // context imports
@@ -137,8 +136,8 @@ export default function ParentAttendancePage() {
       return transformSubjectAttendance(liveSubjects);
     }
     if (child?.attendance?.subjectRecords && child.attendance.subjectRecords.length > 0) return child.attendance.subjectRecords;
-    return subjectAttendanceData[activeChildId] || subjectAttendanceData["860"] || [];
-  }, [liveSubjects, child?.attendance?.subjectRecords, activeChildId]);
+    return [];
+  }, [liveSubjects, child?.attendance?.subjectRecords]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -252,13 +251,10 @@ export default function ParentAttendancePage() {
         // Sort descending by date (most recent first)
         formattedLogs.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
 
-        const fallbackLogs = formattedLogs && formattedLogs.length > 0
-          ? formattedLogs
-          : (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["860"] || []);
-        setDailyLogs(fallbackLogs);
+        setDailyLogs(formattedLogs || []);
       } catch {
         if (!cancelled) {
-          setDailyLogs(recentAttendanceLogs[activeChildId] || recentAttendanceLogs["860"] || []);
+          setDailyLogs([]);
         }
       } finally {
         if (!cancelled) {
