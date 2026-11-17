@@ -42,6 +42,11 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] bool includeInactive = true,
             [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(Enumerable.Empty<DepartmentResponseDto>());
+            }
+
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType) 
                 ? staffType 
                 : (!string.IsNullOrWhiteSpace(type) ? type : facultyType);
@@ -76,6 +81,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(DepartmentSummaryDto), StatusCodes.Status200OK)]
         public async Task<ActionResult<DepartmentSummaryDto>> GetSummary([FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new DepartmentSummaryDto());
+            }
+
             var summary = await _departmentService.GetSummaryAsync(campusId);
             return Ok(summary);
         }

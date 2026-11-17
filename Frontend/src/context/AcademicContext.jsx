@@ -124,7 +124,13 @@ export function AcademicProvider({ children }) {
 
   // Filter boards based on selected campus's affiliated boards
   const boards = useMemo(() => {
-    if (!selectedCampus) return allBoards;
+    const u = getAuthUser();
+    const isTenantCollege = Boolean(u?.collegeId && Number(u.collegeId) > 1);
+
+    if (!selectedCampus) {
+      if (isTenantCollege) return [];
+      return allBoards;
+    }
 
     const affiliated = Array.isArray(selectedCampus.affiliatedBoards) && selectedCampus.affiliatedBoards.length > 0
       ? selectedCampus.affiliatedBoards
@@ -138,8 +144,9 @@ export function AcademicProvider({ children }) {
       ? selectedCampus.boards.map((n) => normalize(n))
       : [];
 
-    // If campus does not have any board restrictions defined, return allBoards
+    // If campus does not have any board restrictions defined
     if (!affiliated.length && !boardIds.length && !boardNames.length) {
+      if (isTenantCollege) return [];
       return allBoards;
     }
 
@@ -181,6 +188,7 @@ export function AcademicProvider({ children }) {
       }));
     }
 
+    if (isTenantCollege) return [];
     return allBoards;
   }, [allBoards, selectedCampus]);
 

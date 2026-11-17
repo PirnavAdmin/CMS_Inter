@@ -61,6 +61,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<DepartmentResponseDto>();
+            }
+
             var conn = await GetOpenConnectionAsync();
             var depts = await conn.QueryAsync<DepartmentResponseDto>(
                 "sp_GetDepartments",
@@ -161,6 +166,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return new DepartmentSummaryDto();
+            }
+
             var conn = await GetOpenConnectionAsync();
             var summary = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(
                 "sp_GetDepartmentSummary",

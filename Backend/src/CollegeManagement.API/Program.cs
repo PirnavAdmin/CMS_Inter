@@ -1567,8 +1567,8 @@ catch (Exception ex)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var deptColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId';
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId'
         ").FirstOrDefaultAsync();
         if (deptColExists == 0)
         {
@@ -1576,8 +1576,8 @@ catch (Exception ex)
         }
 
         var desigColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId';
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId'
         ").FirstOrDefaultAsync();
         if (desigColExists == 0)
         {
@@ -1585,8 +1585,8 @@ catch (Exception ex)
         }
 
         var stColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType';
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType'
         ").FirstOrDefaultAsync();
         if (stColExists == 0)
         {

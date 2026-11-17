@@ -93,6 +93,20 @@ namespace CollegeManagement.API.Filters
             var ownedSet = new HashSet<int>(ownedCampuses);
             int effectiveCampusId = ownedCampuses.Count > 0 ? ownedCampuses[0] : NoCampusSentinel;
 
+            // Ensure any optional campus parameter declared on the action descriptor is initialized
+            foreach (var p in context.ActionDescriptor.Parameters)
+            {
+                if ((string.Equals(p.Name, "campusId", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(p.Name, "selectedCampusId", StringComparison.OrdinalIgnoreCase)) &&
+                    (p.ParameterType == typeof(int) || p.ParameterType == typeof(int?)))
+                {
+                    if (!context.ActionArguments.ContainsKey(p.Name) || context.ActionArguments[p.Name] == null)
+                    {
+                        context.ActionArguments[p.Name] = effectiveCampusId;
+                    }
+                }
+            }
+
             foreach (var key in context.ActionArguments.Keys.ToList())
             {
                 var arg = context.ActionArguments[key];

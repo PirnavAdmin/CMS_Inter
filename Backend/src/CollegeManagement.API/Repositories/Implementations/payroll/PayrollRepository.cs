@@ -136,17 +136,35 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         public async Task<IEnumerable<SalaryStructureDto>>
             GetSalaryStructuresAsync(
                 string? staffType,
-                string? search)
+                string? search,
+                int? campusId = null)
         {
+            if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<SalaryStructureDto>();
+            }
+
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
 
-            return await QueryAsync<SalaryStructureDto>(
+            var list = (await QueryAsync<SalaryStructureDto>(
                 "sp_PayrollSalaryStructure_GetAll",
                 parameters,
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure)).ToList();
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var conn = await GetOpenConnectionAsync();
+                var deptCampusRows = await conn.QueryAsync<(int DepartmentId, int CampusId)>(
+                    "SELECT DepartmentId, CampusId FROM Departments WHERE CampusId IS NOT NULL;");
+                var deptCampusMap = deptCampusRows.ToDictionary(x => x.DepartmentId, x => x.CampusId);
+
+                list = list.Where(s => s.DepartmentId.HasValue && deptCampusMap.TryGetValue(s.DepartmentId.Value, out var cId) && cId == campusId.Value).ToList();
+            }
+
+            return list;
         }
 
         public async Task<SalaryStructureDto?>
