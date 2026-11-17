@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
+import { Activity, Bell, Building2, CreditCard, LayoutDashboard, LogOut, Palette, Settings, ShieldCheck, Users, X, User, ChevronDown } from "lucide-react";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import { useTheme } from "@/hooks/useTheme.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
-import SuperAdminNotificationPopover from "../components/SuperAdminNotificationPopover.jsx";
 import { clearAuthSession } from "@/modules/auth/authStorage.js";
 import { logoutPreview } from "../superAdminSession.js";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import "./SuperAdminLayout.css";
 import "../SuperAdminTheme.css";
+import useProfilePhoto from "../useProfilePhoto.js";
 
 const groups = [
   ["Overview", [["dashboard", "Dashboard", LayoutDashboard]]],
@@ -27,11 +27,12 @@ const navigationIcons = {
 };
 
 export default function SuperAdminLayout() {
+  const [profilePhoto] = useProfilePhoto();
   const { session, data, message, clearMessage } = useSuperAdmin();
   const platformName = String(data?.settings?.platformName || "").trim() || "PIRNAV CMS";
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
-  const unreadCount = (data?.notifications || []).filter((n) => n.read !== "Read" && !n.isRead).length;
+  const unreadCount = 0;
   const { palette } = useTheme();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -108,10 +109,7 @@ export default function SuperAdminLayout() {
               )}
             </button>
 
-            <SuperAdminNotificationPopover
-              isOpen={notifOpen}
-              onClose={() => setNotifOpen(false)}
-            />
+            {notifOpen && <div className="sa-profile-dropdown" role="status"><div className="sa-dropdown-user-header"><strong>Notifications</strong><p>Platform notifications are not available yet.</p></div></div>}
           </div>
 
           <div className="sa-profile-wrap" ref={profileRef}>
@@ -122,7 +120,7 @@ export default function SuperAdminLayout() {
               aria-expanded={profileOpen}
               title="Super Administrator Menu"
             >
-              <span className="sa-avatar"><User size={19} aria-hidden="true" /></span>
+              <span className="sa-avatar">{profilePhoto ? <img src={profilePhoto} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "50%" }} /> : <User size={19} aria-hidden="true" />}</span>
               <div className="sa-profile-meta">
                 <strong>{session.name}</strong>
                 <small>Super Admin</small>
@@ -152,6 +150,17 @@ export default function SuperAdminLayout() {
                   <span>My Profile</span>
                 </button>
 
+                <button
+                  type="button"
+                  className="sa-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate("/super-admin/settings?tab=platform_identity");
+                  }}
+                >
+                  <Palette size={15} className="sa-dd-icon" />
+                  <span>Theme Appearance</span>
+                </button>
                 <button
                   type="button"
                   className="sa-dropdown-item"

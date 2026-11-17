@@ -217,12 +217,16 @@
   .academic-calendar .academic-planner-context-label { font-size:13px; line-height:1.5; }
   .academic-calendar .academic-planner-actions { gap:9px; }
   .academic-calendar .academic-planner-actions .cms-btn { min-height:40px; padding:9px 15px; border-radius:11px; font-weight:600; box-shadow:var(--planner-shadow); }
-  .academic-calendar .academic-calendar-summary { max-width:1080px; gap:14px; }
-  .academic-calendar .academic-calendar-summary > div { min-height:80px; box-sizing:border-box; padding:12px 20px; gap:14px; background:var(--cms-surface); border-radius:14px; }
+  .academic-calendar .academic-calendar-summary { width:100%; gap:14px; }
+  .academic-calendar .academic-calendar-summary > div { --summary-accent:#22a447; min-height:80px; box-sizing:border-box; padding:12px 20px; gap:14px; background:linear-gradient(115deg,color-mix(in srgb,var(--summary-accent) 10%,var(--cms-surface)),var(--cms-surface) 85%); border-color:color-mix(in srgb,var(--summary-accent) 32%,var(--cms-border)); border-radius:14px; }
+  .academic-calendar .academic-calendar-summary > div:nth-child(2) { --summary-accent:#2875d9; }
+  .academic-calendar .academic-calendar-summary > div:nth-child(3) { --summary-accent:#8b46d9; }
+  .academic-calendar .academic-calendar-summary > div:nth-child(4) { --summary-accent:#e58a20; }
   .academic-calendar .academic-calendar-summary > div > div { min-width:0; gap:5px; }
   .academic-calendar .academic-calendar-summary > div > div > span { color:var(--cms-text); font-size:13px; font-weight:600; overflow-wrap:anywhere; }
   .academic-calendar .academic-calendar-summary strong { font-size:27px; font-weight:700; }
-  .academic-calendar .academic-planner-summary-icon { width:52px; height:52px; border-radius:50%; color:var(--cms-primary,#617c00); background:var(--cms-primary-soft,#eef3dc); }
+  .academic-calendar .academic-planner-summary-icon { width:52px; height:52px; border-radius:12px; color:var(--summary-accent); background:color-mix(in srgb,var(--summary-accent) 15%,var(--cms-surface)); }
+  .academic-calendar .academic-planner-summary-icon svg { color:inherit; }
   .academic-calendar .academic-summary-bars { display:none; }
   .academic-calendar .academic-planner-layout { grid-template-columns:minmax(0,1fr) minmax(290px,32%); gap:16px; }
   .academic-calendar .academic-planner-main,
@@ -254,23 +258,26 @@
   .academic-calendar .academic-planner-panel-heading h2 { display:flex; align-items:center; gap:12px; font-size:19px; font-weight:700; line-height:1.3; }
   .academic-calendar .academic-planner-panel-heading h2 svg { flex-shrink:0; color:var(--cms-primary,#617c00); }
   .academic-calendar .academic-planner-panel-heading button { font-size:13px; white-space:nowrap; }
-  .academic-calendar .academic-planner-upcoming > button { gap:14px; padding:12px 0; }
-  .academic-calendar .academic-planner-upcoming > button:first-child { padding-top:0; }
-  .academic-calendar .academic-planner-upcoming > button:last-child { padding-bottom:0; }
+  .academic-calendar .academic-planner-upcoming,
+  .academic-calendar .academic-planner-categories { overflow-y:auto; overflow-x:hidden; scrollbar-width:thin; scrollbar-color:var(--cms-primary) transparent; scrollbar-gutter:stable; overscroll-behavior:contain; padding-right:6px; }
+  .academic-calendar .academic-planner-upcoming { grid-auto-rows:90px; max-height:450px; }
+  .academic-calendar .academic-planner-upcoming > button,
+  .academic-calendar .academic-planner-upcoming > button:first-child,
+  .academic-calendar .academic-planner-upcoming > button:last-child { box-sizing:border-box; height:90px; gap:14px; padding:10px 0; }
   .academic-calendar .academic-planner-upcoming .academic-planner-date-badge { width:62px; min-width:62px; height:54px; border-radius:11px; }
   .academic-calendar .academic-planner-date-badge strong { font-size:21px; }
   .academic-calendar .academic-planner-date-badge > span { font-size:12px; }
   .academic-calendar .academic-planner-upcoming-copy { flex:1; position:relative; padding-right:16px; gap:5px; }
-  .academic-calendar .academic-planner-upcoming-copy strong { font-size:14px; font-weight:600; line-height:1.4; }
+  .academic-calendar .academic-planner-upcoming-copy strong { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:14px; font-weight:600; line-height:1.4; }
   .academic-calendar .academic-planner-upcoming-copy strong i { position:absolute; right:0; top:8px; width:9px; height:9px; }
   .academic-calendar .academic-planner-upcoming-copy > span,
   .academic-calendar .academic-planner-upcoming-copy small { font-size:12px; line-height:1.4; }
   .academic-calendar .academic-planner-upcoming-copy small { color:var(--cms-muted); }
-  .academic-calendar .academic-planner-categories { gap:0; }
-  .academic-calendar .academic-planner-categories > div { min-height:44px; padding:8px 4px; border-bottom:1px solid var(--cms-border); font-size:13px; gap:14px; }
+  .academic-calendar .academic-planner-categories { gap:0; grid-auto-rows:44px; max-height:220px; }
+  .academic-calendar .academic-planner-categories > div { box-sizing:border-box; min-height:0; height:44px; padding:8px 4px; border-bottom:1px solid var(--cms-border); font-size:13px; gap:14px; }
   .academic-calendar .academic-planner-categories > div:last-child { border-bottom:0; }
   .academic-calendar .academic-planner-categories i { width:11px; height:11px; box-shadow:0 0 0 5px color-mix(in srgb,currentColor 6%,transparent); }
-  .academic-calendar .academic-planner-categories span { min-width:0; overflow-wrap:anywhere; }
+  .academic-calendar .academic-planner-categories span { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   .academic-calendar .academic-planner-categories strong { font-size:13px; font-weight:600; }
   .academic-calendar .academic-selected-events { margin-top:16px; padding-top:16px; border-top:1px solid var(--cms-border); }
   .academic-calendar .academic-selected-card { display:flex; align-items:center; gap:8px; min-width:0; }

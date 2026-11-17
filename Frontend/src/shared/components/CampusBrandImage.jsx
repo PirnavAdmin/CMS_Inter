@@ -75,7 +75,7 @@ export function HeaderBrand({ configuration, alt = "College logo", onFitChange, 
   const ornament = { display: "flex", alignItems: "center", margin: 0, gap: 4, color: brand.dashboardSubtitleColor, height: 5, flex: "0 0 5px", fontSize: 8, lineHeight: 1, overflow: "hidden" };
   const rule = { height: 1, margin: 0, flex: 1, minWidth: 0, background: "currentColor", opacity: 0.6 };
   return <span {...props} style={{ ...props.style, display: "flex", alignItems: "center", gap: 8, width: "100%", height: "100%", minWidth: 0, maxWidth: "100%", overflow: "hidden", transform: "none", filter: "none" }}>
-    <CampusLogoImage slot="dashboardLogo" configuration={configuration || {}} src={configuration?.dashboardLogo || crest} alt={alt} style={{ width: Number(brand.dashboardLogoSize), height: Number(brand.dashboardLogoSize), maxWidth: "35%", maxHeight: "100%", minWidth: 0, flexShrink: 0, objectFit: "contain" }} onError={(event) => {
+    <CampusLogoImage slot="dashboardLogo" configuration={configuration || {}} src={crest} alt={alt} style={{ width: Number(brand.dashboardLogoSize), height: Number(brand.dashboardLogoSize), maxWidth: "35%", maxHeight: "100%", minWidth: 0, flexShrink: 0, objectFit: "contain" }} onError={(event) => {
       if (event.currentTarget.src !== new URL(crest, window.location.href).href) event.currentTarget.src = crest;
     }} />
     <span ref={textBox} style={{ display: "flex", flexDirection: "column", justifyContent: "center", margin: 0, flex: "1 1 0", height: "100%", minWidth: 0, overflow: "hidden", fontFamily: "Georgia, 'Times New Roman', serif", textAlign: brand.dashboardTitleAlign }}>
@@ -211,9 +211,14 @@ function CampusLogoImage({ slot = "dashboardLogo", src, alt, configuration, ...p
     (typeof src === "string" && src.includes("pirnav-colleges-logo")) ||
     src === pirnavCollegesLogo;
 
-  const rawSrc = isDark && isDefaultPirnavLogo ? pirnavCollegesLogoDark : initialSrc;
+  const themedSrc = isDark && isDefaultPirnavLogo ? pirnavCollegesLogoDark : initialSrc;
+  // Bypass previously cached HTTP-200 avatar placeholders for dashboard uploads.
+  const rawSrc = slot === "dashboardLogo" && /^\/uploads\//i.test(themedSrc)
+    ? `${themedSrc}${themedSrc.includes("?") ? "&" : "?"}branding=dashboard-v2`
+    : themedSrc;
   const isLogoSlot = ["dashboardLogo", "loginLogo", "headerLogo", "footerLogo"].includes(slot) || !slot;
   const [displaySrc, setDisplaySrc] = useState(() => logoCache.get(rawSrc) || rawSrc);
+  const [failedSrc, setFailedSrc] = useState(null);
 
   useEffect(() => {
     setDisplaySrc(logoCache.get(rawSrc) || rawSrc);
@@ -235,9 +240,14 @@ function CampusLogoImage({ slot = "dashboardLogo", src, alt, configuration, ...p
   return (
     <img
       {...props}
-      src={displaySrc || rawSrc}
+      src={slot === "dashboardLogo" && failedSrc === rawSrc ? crest : displaySrc || rawSrc}
       alt={alt}
       onError={(event) => {
+        if (slot === "dashboardLogo") {
+          logoCache.delete(rawSrc);
+          setFailedSrc(rawSrc);
+          return;
+        }
         const fallback = src || pirnavCollegesLogo;
         try {
           if (event.currentTarget.src !== new URL(fallback, window.location.href).href) {

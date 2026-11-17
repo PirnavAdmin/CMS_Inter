@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { syncUserTheme } from "@/hooks/useTheme.js";
 import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/modules/auth/authStorage.js";
 import { getJwtExpiryState } from "@/api/apiClient.js";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
@@ -288,6 +290,12 @@ export default function ProtectedRoute({
   const token = isPreview ? "" : storedToken;
   const tokenState = token ? getJwtExpiryState(token) : null;
   const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
+
+  useEffect(() => {
+    if (token && !isTokenExpired) {
+      syncUserTheme().catch(() => {});
+    }
+  }, [token, isTokenExpired]);
 
   if (!token || isTokenExpired) {
     if (isTokenExpired) clearAuthSession();

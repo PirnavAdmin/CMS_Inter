@@ -1,3 +1,5 @@
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import { readableActivityMessage } from "./activityMessage.js";
 import React, { useState, useMemo, useEffect } from "react";
 import {
   ClipboardList,
@@ -169,9 +171,9 @@ export default function AuditLogsPage() {
         userName: user,
         userRole: role,
         action: normalizedAction,
-        module: mod,
+        module: /\/api\//i.test(mod) ? (/landing-page/i.test(mod) ? "Landing Page" : "Platform Service") : mod,
         college: col,
-        details: cleanActivityDetails(a.message || a.details || a.description)
+        details: readableActivityMessage(cleanActivityDetails(a.message || a.details || a.description))
       };
     }).sort((a, b) => new Date(b.at) - new Date(a.at));
   }, [rawActivities]);
@@ -312,7 +314,7 @@ export default function AuditLogsPage() {
       <header className="sal-header-card">
         <div className="sal-header-left">
           <div className="sal-title-icon">
-            <ClipboardList size={22} />
+            <ThreeDIcon name="audit-logs" size={32} />
           </div>
           <div className="sal-header-text">
             <h1 className="sal-header-title">Audit Logs</h1>

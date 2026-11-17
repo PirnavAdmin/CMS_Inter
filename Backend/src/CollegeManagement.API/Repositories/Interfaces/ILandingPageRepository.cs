@@ -9,5 +9,6 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<LandingPageConfigDto?> GetByCollegeIdAsync(int collegeId, CancellationToken ct = default);
         Task<LandingPageConfigDto?> SaveAsync(SaveLandingPageConfigRequest request, int userId, CancellationToken ct = default);
         Task<LandingPageConfigDto?> GetPublicAsync(string? collegeCode, int? collegeId, CancellationToken ct = default);
+        Task<int?> GetCollegeIdByCampusIdAsync(int campusId, CancellationToken ct = default);
     }
 }

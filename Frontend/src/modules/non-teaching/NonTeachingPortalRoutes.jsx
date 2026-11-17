@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import NonTeachingLayout from "./layout/NonTeachingLayout.jsx";
+import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
 
 const NonTeachingDashboardHome = lazy(() => import("./pages/NonTeachingDashboardHome.jsx"));
 const NonTeachingProfile = lazy(() => import("./pages/NonTeachingProfile.jsx"));
@@ -45,76 +46,94 @@ export default function NonTeachingPortalRoutes() {
         <Route
           path="profile"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingProfile />
-            </Suspense>
+            <ProtectedRoute requiredModule="profile">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingProfile />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route
           path="attendance"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingAttendance />
-            </Suspense>
+            <ProtectedRoute requiredModule="staff-attendance" requiredScreen="my-attendance">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingAttendance />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route path="my-attendance" element={<Navigate to="/non-teaching-dashboard/attendance" replace />} />
         <Route
           path="leave"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingLeave />
-            </Suspense>
+            <ProtectedRoute requiredModule="staff-leave-management" requiredScreen="staff-leave">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingLeave />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route path="staff-leave" element={<Navigate to="/non-teaching-dashboard/leave" replace />} />
         <Route
           path="tasks"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingTasks />
-            </Suspense>
+            <ProtectedRoute requiredModule="dashboard">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingTasks />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route
           path="payslip"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingPayslip />
-            </Suspense>
+            <ProtectedRoute requiredModule="payroll">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingPayslip />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route path="payslips" element={<Navigate to="/non-teaching-dashboard/payslip" replace />} />
         <Route
           path="announcements"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingAnnouncements />
-            </Suspense>
+            <ProtectedRoute requiredModule="reports-analytics">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingAnnouncements />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route
           path="department"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingDepartment />
-            </Suspense>
+            <ProtectedRoute requiredModule="department-designation">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingDepartment />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route
           path="support"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <NonTeachingSupport />
-            </Suspense>
+            <ProtectedRoute requiredModule="settings">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <NonTeachingSupport />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route
           path="enquiries"
           element={
-            <Suspense fallback={<PortalLoadingFallback />}>
-              <ReceptionistEnquiriesPage />
-            </Suspense>
+            <ProtectedRoute requiredModule="enquiry-management">
+              <Suspense fallback={<PortalLoadingFallback />}>
+                <ReceptionistEnquiriesPage />
+              </Suspense>
+            </ProtectedRoute>
           }
         />
         <Route path="*" element={<Navigate to="/non-teaching-dashboard" replace />} />

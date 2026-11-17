@@ -46,6 +46,11 @@ namespace CollegeManagement.API.Services.Implementations
             return await _repository.GetPublicAsync(collegeCode, collegeId, ct);
         }
 
+        public async Task<int?> GetCollegeIdByCampusIdAsync(int campusId, CancellationToken ct = default)
+        {
+            return await _repository.GetCollegeIdByCampusIdAsync(campusId, ct);
+        }
+
         public async Task<string> UploadImageAsync(IFormFile file, string slot, int collegeId, CancellationToken ct = default)
         {
             if (file == null || file.Length == 0)

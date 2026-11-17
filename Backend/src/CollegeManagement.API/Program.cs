@@ -302,6 +302,7 @@ builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
 builder.Services.AddScoped<IEnquiryRepository, EnquiryRepository>();
 builder.Services.AddScoped<ILandingPageConfigRepository, LandingPageConfigRepository>();
+builder.Services.AddScoped<IUserPreferencesRepository, UserPreferencesRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
 builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
@@ -1568,7 +1569,7 @@ catch (Exception ex)
 
         var deptColExists = await db.Database.SqlQueryRaw<int>(@"
             SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId';
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId'
         ").FirstOrDefaultAsync();
         if (deptColExists == 0)
         {
@@ -1577,7 +1578,7 @@ catch (Exception ex)
 
         var desigColExists = await db.Database.SqlQueryRaw<int>(@"
             SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId';
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId'
         ").FirstOrDefaultAsync();
         if (desigColExists == 0)
         {
@@ -1586,7 +1587,7 @@ catch (Exception ex)
 
         var stColExists = await db.Database.SqlQueryRaw<int>(@"
             SELECT COUNT(*) FROM information_schema.COLUMNS 
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType';
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType'
         ").FirstOrDefaultAsync();
         if (stColExists == 0)
         {

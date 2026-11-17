@@ -4,6 +4,7 @@ import { Lock, Mail, Bus, ShieldCheck, AlertCircle, Eye, EyeOff, KeyRound, Spark
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import { loginUser } from "@/modules/auth/authService.js";
 import { saveAuthSession, clearAuthSession } from "@/modules/auth/authStorage.js";
+import { syncUserTheme } from "@/hooks/useTheme.js";
 
 export default function DriverLoginPage({ onLoginSuccess }) {
   const [email, setEmail] = useState("penetirajesh123@gmail.com");
@@ -35,6 +36,7 @@ export default function DriverLoginPage({ onLoginSuccess }) {
       }
 
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, rememberMe);
+      await syncUserTheme({ force: true }).catch(() => {});
 
       if (onLoginSuccess) {
         onLoginSuccess(result);

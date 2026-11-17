@@ -6,6 +6,8 @@ import StudentNavbar from "./StudentNavbar.jsx";
 import "../StudentDashboard.css";
 import { StudentProfileProvider, useStudentProfile } from "../context/StudentProfileContext.jsx";
 import useTheme from "@/hooks/useTheme.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
 
 const SIDEBAR_WIDTH_KEY = "studentPortal.sidebarWidth";
 const DEFAULT_SIDEBAR_WIDTH = 218;
@@ -35,6 +37,23 @@ export default function StudentLayout() {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const resizeStart = useRef(null);
   const [mobile, setMobile] = useState(() => window.matchMedia("(max-width: 900px)").matches);
+
+  useEffect(() => {
+    getCurrentUserPermissions()
+      .then((res) => {
+        if (res?.data && Array.isArray(res.data)) {
+          const authUser = getAuthUser();
+          if (authUser) {
+            const updated = { ...authUser, permissions: res.data };
+            try {
+              window.localStorage.setItem("user", JSON.stringify(updated));
+              window.sessionStorage.setItem("user", JSON.stringify(updated));
+            } catch {}
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 900px)");

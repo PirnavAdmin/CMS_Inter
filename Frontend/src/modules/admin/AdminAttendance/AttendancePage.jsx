@@ -672,7 +672,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
            }
          } else setReport(monthlyReport);
        } else if (!staff && currentView === "Defaulters") {
-         const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: 75 } });
+         const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: attendanceThreshold === "" ? 0 : Number(attendanceThreshold) } });
          setRows(asList(body(r)));
        } else if (staff) {
          const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
@@ -723,7 +723,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
   
 
  return () => window.clearTimeout(timer);
- }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view]);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view, f.view === "Defaulters" ? attendanceThreshold : null]);
 
  const markAllPresent = () => {
    if (holidayLocked) return say("Attendance cannot be marked on a holiday or while the holiday calendar is unavailable.", "error");

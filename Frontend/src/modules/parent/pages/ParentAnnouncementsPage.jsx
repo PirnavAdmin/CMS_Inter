@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Megaphone, Calendar, Search, Eye, CheckCircle2, Clock, MapPin } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
-import { collegeAnnouncements, upcomingEvents } from "../parentData.js";
+
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -15,13 +15,9 @@ export default function ParentAnnouncementsPage() {
     refreshHolidays,
   } = useParentPortal();
 
-  const allAnnouncements = contextAnnouncements && contextAnnouncements.length > 0
-    ? contextAnnouncements
-    : collegeAnnouncements;
+  const allAnnouncements = contextAnnouncements || [];
 
-  const baseEvents = contextEvents && contextEvents.length > 0
-    ? contextEvents
-    : upcomingEvents;
+  const baseEvents = contextEvents || [];
 
   const categories = ["all", "Examinations", "Academic", "Holidays", "Events"];
 

@@ -931,6 +931,10 @@ export const apiEndpoints = {
     updateStatus: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/status`,
     contactConfig: "/api/v1/enquiries/contact-config",
   },
+  userPreferences: {
+    get: "/api/v1/user-preferences",
+    save: "/api/v1/user-preferences",
+  },
   landingPageConfig: {
     get: "/api/v1/landing-page-config",
     save: "/api/v1/landing-page-config",

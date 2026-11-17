@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Settings,
   Building2,
@@ -66,7 +67,14 @@ export default function GlobalSettingsPage() {
   const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   // Active Navigation Tab
-  const [activeTab, setActiveTab] = useState("platform_reminders");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = ["platform_reminders", "college_code_series", "platform_identity", "regional_display", "security_access"].includes(requestedTab) ? requestedTab : "platform_reminders";
+  const setActiveTab = (tab) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    next.set("tab", tab);
+    return next;
+  });
 
   // Form State — Platform & Reminders (Main real-time fields)
   const [platformName, setPlatformName] = useState("PIRNAV CMS");
@@ -88,8 +96,6 @@ export default function GlobalSettingsPage() {
   const [enforce2FA, setEnforce2FA] = useState(false);
   const [maxLoginAttempts, setMaxLoginAttempts] = useState(5);
 
-  const [smtpHost, setSmtpHost] = useState("smtp.pirnav.edu.in");
-  const [smtpPort, setSmtpPort] = useState(587);
   const [smsGateway, setSmsGateway] = useState("Enabled");
 
   // ── College Code & Number Series State ──
@@ -280,15 +286,6 @@ export default function GlobalSettingsPage() {
 
           <button
             type="button"
-            className={`gsp-tab-btn ${activeTab === "platform_identity" ? "active" : ""}`}
-            onClick={() => setActiveTab("platform_identity")}
-          >
-            <Palette size={16} className="gsp-tab-icon" />
-            <span>Theme Appearance</span>
-          </button>
-
-          <button
-            type="button"
             className={`gsp-tab-btn ${activeTab === "regional_display" ? "active" : ""}`}
             onClick={() => setActiveTab("regional_display")}
           >
@@ -303,15 +300,6 @@ export default function GlobalSettingsPage() {
           >
             <ShieldCheck size={16} className="gsp-tab-icon" />
             <span>Security & Access</span>
-          </button>
-
-          <button
-            type="button"
-            className={`gsp-tab-btn ${activeTab === "integrations" ? "active" : ""}`}
-            onClick={() => setActiveTab("integrations")}
-          >
-            <Link2 size={16} className="gsp-tab-icon" />
-            <span>Integrations</span>
           </button>
         </aside>
 
@@ -1014,60 +1002,6 @@ export default function GlobalSettingsPage() {
           )}
 
           {/* ════ TAB 6: Integrations ════ */}
-          {activeTab === "integrations" && (
-            <div className="gsp-form">
-              <div className="gsp-form-header">
-                <div className="gsp-section-title-icon tone-amber">
-                  <Link2 size={20} />
-                </div>
-                <div>
-                  <h2 className="gsp-form-title">Platform Gateways & Integrations</h2>
-                  <p className="gsp-form-subtitle">
-                    Configure email notification delivery (SMTP) and SMS gateways.
-                  </p>
-                </div>
-              </div>
-
-              <div className="gsp-form-grid">
-                <div className="gsp-field-group">
-                  <label className="gsp-field-label">SMTP Gateway Host</label>
-                  <div className="gsp-input-wrap">
-                    <Send size={15} className="gsp-input-icon" />
-                    <input
-                      type="text"
-                      className="gsp-input"
-                      value={smtpHost}
-                      onChange={(e) => setSmtpHost(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="gsp-field-group">
-                  <label className="gsp-field-label">SMTP Port</label>
-                  <div className="gsp-input-wrap">
-                    <Layers size={15} className="gsp-input-icon" />
-                    <input
-                      type="number"
-                      className="gsp-input"
-                      value={smtpPort}
-                      onChange={(e) => setSmtpPort(Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="gsp-form-actions">
-                <button
-                  type="button"
-                  className="gsp-btn-save"
-                  onClick={() => showToast("Gateway settings updated.")}
-                >
-                  <Save size={14} />
-                  <span>Save Gateways</span>
-                </button>
-              </div>
-            </div>
-          )}
         </main>
       </div>
       <ThemePalettePicker

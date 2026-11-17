@@ -444,7 +444,7 @@ export default function CollegeSubscriptionsPage() {
       <header className="csp-header">
         <div className="csp-header-left">
           <div className="csp-header-icon">
-            <ThreeDIcon name="fees" size={36} />
+            <ThreeDIcon name="certificates" size={36} />
           </div>
           <div>
             <h1 className="csp-title">College Subscriptions</h1>

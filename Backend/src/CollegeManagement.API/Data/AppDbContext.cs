@@ -295,6 +295,7 @@ namespace CollegeManagement.API.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<UserPreference> UserPreferences { get; set; }
         public DbSet<ParentStudentMapping> ParentStudentMappings { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }

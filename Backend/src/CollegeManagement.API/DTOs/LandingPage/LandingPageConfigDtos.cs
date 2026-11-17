@@ -60,6 +60,7 @@ namespace CollegeManagement.API.DTOs.LandingPage
         public string? FooterLogo { get; set; }
         public string? HeroImage { get; set; }
         public string? DashboardLogo { get; set; }
+        public bool? ResetDashboardLogo { get; set; }
         public string? HeaderBrandJson { get; set; }
     }
 }

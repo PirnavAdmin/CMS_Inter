@@ -17,10 +17,22 @@ export const getStudentTransportFacilityFee = async (studentId) => {
   const type = String(read("studentType", "StudentType", "residentialType", "ResidentialType", "isResidential", "IsResidential")).toLowerCase();
   if (!["non-residential", "non residential", "day scholar", "dayscholar", "false", "1", "0"].includes(type)
     || !/^(yes|true|1)$/i.test(String(read("transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired")))) return null;
+  // Admission uses this saved field for its monthly facility fee preview.
+  // Use a returned amount directly; never invent a rate when it is absent.
+  const savedMonthlyFee = read("transportMonthlyFee", "TransportMonthlyFee");
+  if (savedMonthlyFee !== "" && Number.isFinite(Number(savedMonthlyFee)) && Number(savedMonthlyFee) >= 0) {
+    return { amount: Number(savedMonthlyFee), plan: "Monthly", detail: String(read("pickupPointName", "PickupPointName", "pickupStop", "PickupStop") || "") };
+  }
   const pickup = read("pickupPointId", "PickupPointId", "pickupPoint", "PickupPoint", "pickupPointName", "PickupPointName");
   const route = read("routeId", "RouteId", "busRouteId", "BusRouteId", "busRoute", "BusRoute", "routeName", "RouteName", "busRouteName", "BusRouteName");
   const campus = read("campusId", "CampusId");
-  const result = await apiClient.get(apiEndpoints.transport.pickupPoints, { params: { ...(campus ? { CampusId: campus } : {}), PageNumber: 1, PageSize: 1000 }, skipGlobalLoader: true });
+  let result;
+  try {
+    result = await apiClient.get(apiEndpoints.transport.pickupPoints, { params: { ...(campus ? { CampusId: campus } : {}), PageNumber: 1, PageSize: 1000 }, skipGlobalLoader: true });
+  } catch (error) {
+    if (error.response?.status === 403) throw new Error("Your student account does not have permission to read the assigned pickup-point rate.");
+    throw error;
+  }
   const payload = getPayload(result.data);
   const points = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.$values ?? payload?.data ?? payload?.Data ?? payload?.results ?? payload?.Results ?? [];
   const matches = (selected, ...values) => Boolean(selected) && values.some((value) => String(value ?? "").trim().toLowerCase() === String(selected).trim().toLowerCase());

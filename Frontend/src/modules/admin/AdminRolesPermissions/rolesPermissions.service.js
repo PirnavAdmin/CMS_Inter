@@ -7,7 +7,7 @@ import {
   ROLE_SEEDS,
   USER_ASSIGNMENT_FALLBACK,
 } from "./rolesPermissions.constants.js";
-import { normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
+import { normalizeModuleKey, normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
 
@@ -149,16 +149,7 @@ export function transformBackendPermissionsToMatrix(rawPermissions = []) {
 
   items.forEach((item) => {
     const rawModule = item.moduleKey || item.moduleId || item.subModule || item.module || "";
-    let modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
-    if (modId === "staff-reimbursements" || modId === "staff-reimbursement" || modId === "reimbursements") {
-      modId = "reimbursement";
-    }
-    if (modId === "reports") {
-      modId = "reports-analytics";
-    }
-    if (modId === "inventory") {
-      modId = "inventory-management";
-    }
+    let modId = normalizeModuleKey(rawModule);
     if (!modId) return;
 
     if (!moduleMap.has(modId)) {
@@ -362,7 +353,7 @@ export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULE
   }
   const keys = ROLE_SIDEBAR_MODULE_KEYS[normalizeRoleCode(roleCode)];
   if (keys === null) return catalog;
-  if (!keys) return [];
+  if (!keys) return catalog;
   const order = new Map(keys.map((key, index) => [key, index]));
   return catalog
     .filter((module) => order.has(module.id))
@@ -488,7 +479,7 @@ export async function getUserPermissions(userId, roleCode) {
   } catch (err) {
     console.warn("Live getUserPermissions failed:", err?.message);
   }
-  return getRolePermissions(roleCode || "ADMIN", roleCode);
+  return getRolePermissions(roleCode || "UNASSIGNED", roleCode);
 }
 
 export async function getUserRoleDetails(userId) {
@@ -679,9 +670,29 @@ export function exportPermissionsToCsv(role, matrix = [], modules = []) {
     ["Module ID", "Module Name", "Section", "Module Access", "View", "Add/Create", "Edit/Update", "Delete"],
   ];
   const moduleById = new Map((modules || []).map((module) => [module.id, module]));
-  const actionsByModule = new Map(matrix.map((permission) => [permission.module || permission.id, permission.actions || []]));
+  const actionsByModule = new Map();
+  (matrix || []).forEach((permission) => {
+    const rawKey = String(permission.module || permission.id || "").trim().toLowerCase();
+    const normKey = normalizeModuleKey(rawKey);
+    const actions = permission.actions || [];
+    if (rawKey) actionsByModule.set(rawKey, actions);
+    if (normKey) actionsByModule.set(normKey, actions);
+  });
+
   const exportRows = modules.length
-    ? modules.map((module) => ({ module: module.id, actions: actionsByModule.get(module.id) || [] }))
+    ? modules.map((module) => {
+        const permKey = String(module.permissionKey || "").trim().toLowerCase();
+        const idKey = String(module.id || "").trim().toLowerCase();
+        const actions = (
+          (permKey && actionsByModule.get(permKey)) ||
+          (permKey && actionsByModule.get(normalizeModuleKey(permKey))) ||
+          actionsByModule.get(idKey) ||
+          actionsByModule.get(normalizeModuleKey(idKey)) ||
+          (module.legacyPermissionKeys || []).map((k) => actionsByModule.get(k) || actionsByModule.get(normalizeModuleKey(k))).find(Boolean) ||
+          []
+        );
+        return { module: module.permissionKey || module.id, name: module.name, section: module.section, actions };
+      })
     : matrix;
 
   exportRows.forEach((mod) => {

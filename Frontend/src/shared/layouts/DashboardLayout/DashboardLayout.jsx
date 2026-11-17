@@ -196,7 +196,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
-      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon, moduleKey: "timetable" },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
       { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
     ],
@@ -278,27 +278,27 @@ export const parentMenu = [
   {
     section: "Main",
     items: [
-      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.id },
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.permissionKey || getParentNavigationItem("/parent-dashboard")?.id },
     ],
   },
   {
     section: "Student & Academics",
     items: [
-      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.id },
-      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.id },
-      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.id },
-      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.id },
-      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.id },
-      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.id },
-      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.id },
-      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.id },
-      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.id },
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.permissionKey || getParentNavigationItem("/parent-dashboard/children")?.id },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.permissionKey || getParentNavigationItem("/parent-dashboard/attendance")?.id },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.permissionKey || getParentNavigationItem("/parent-dashboard/academics")?.id },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.permissionKey || getParentNavigationItem("/parent-dashboard/examinations")?.id },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.permissionKey || getParentNavigationItem("/parent-dashboard/fees")?.id },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.permissionKey || getParentNavigationItem("/parent-dashboard/timetable")?.id },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.permissionKey || getParentNavigationItem("/parent-dashboard/communication")?.id },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.permissionKey || getParentNavigationItem("/parent-dashboard/announcements")?.id },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.permissionKey || getParentNavigationItem("/parent-dashboard/documents")?.id },
     ],
   },
   {
     section: "Settings",
     items: [
-      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.id },
+      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.permissionKey || getParentNavigationItem("/parent-dashboard/settings")?.id },
     ],
   },
 ];
@@ -307,27 +307,27 @@ export const wardenMenu = [
   {
     section: "Overview",
     items: [
-      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.id },
+      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard")?.id },
     ],
   },
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
-      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
-      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
-      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
+      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
+      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
+      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
+      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
     ],
   },
   {
     section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
-      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
-      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
-      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
+      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
     ],
   },
 ];
@@ -802,7 +802,7 @@ export default function DashboardLayout({
       else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && !isExamCell && (user.permissions || user.rolePermissions)) {
+    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
       return base
         .map((group) => ({
           ...group,
