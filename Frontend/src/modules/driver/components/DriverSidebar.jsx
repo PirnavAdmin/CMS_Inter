@@ -4,9 +4,12 @@ import { X, LogOut } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { can, ACTIONS } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 
 export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, onClose }) {
   const { driverProfile } = useDriverData();
+  const authUser = getAuthUser();
 
   const menuSections = [
     {
@@ -55,10 +58,19 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
       </div>
 
       <nav className="dp-sidebar-nav">
-        {menuSections.map((section) => (
-          <div key={section.title} className="dp-nav-section-group">
-            <div className="dp-nav-section-title">{section.title}</div>
-            {section.items.map((item) => {
+        {menuSections.map((section) => {
+          const visibleItems = section.items.filter((item) => {
+            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            if (authUser?.permissions || authUser?.rolePermissions) {
+              return can(item.moduleKey, ACTIONS.VIEW, authUser?.permissions, authUser);
+            }
+            return true;
+          });
+          if (!visibleItems.length) return null;
+          return (
+            <div key={section.title} className="dp-nav-section-group">
+              <div className="dp-nav-section-title">{section.title}</div>
+              {visibleItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
@@ -77,7 +89,8 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
               );
             })}
           </div>
-        ))}
+        );
+      })}
       </nav>
 
       <div className="dp-sidebar-footer">

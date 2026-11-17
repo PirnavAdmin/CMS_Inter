@@ -1,6 +1,8 @@
 import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import { ACTIONS, PERMISSION_DEPENDENCIES } from "./rolesPermissions.constants.js";
 
+export { ACTIONS, PERMISSION_DEPENDENCIES };
+
 const normalizeCode = (value = "") =>
   String(value)
     .trim()
