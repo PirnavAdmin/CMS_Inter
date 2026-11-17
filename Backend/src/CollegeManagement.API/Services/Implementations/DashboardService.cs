@@ -26,16 +26,12 @@ public class DashboardService : IDashboardService
     public async Task<DashboardSummaryResponseDto> GetSummaryAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
     {
         var targetDate = date?.Date ?? DateTime.UtcNow.Date;
-        if (_cache == null) return await _repository.GetKPIsAsync(boardId, academicYearId, targetDate, campusId, ct);
-        string key = $"dashboard:kpis:{academicYearId}:{boardId}:{campusId}:{targetDate:yyyyMMdd}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetKPIsAsync(boardId, academicYearId, targetDate, campusId, ct), TimeSpan.FromSeconds(30));
+        return await _repository.GetKPIsAsync(boardId, academicYearId, targetDate, campusId, ct);
     }
 
     public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
     {
-        if (_cache == null) return await _repository.GetStudentsOverviewAsync(boardId, academicYearId, campusId, ct);
-        string key = $"dashboard:students_overview:{academicYearId}:{boardId}:{campusId}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetStudentsOverviewAsync(boardId, academicYearId, campusId, ct), TimeSpan.FromMinutes(2));
+        return await _repository.GetStudentsOverviewAsync(boardId, academicYearId, campusId, ct);
     }
 
     public async Task<dynamic> GetAdmissionTrendAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
@@ -46,25 +42,19 @@ public class DashboardService : IDashboardService
 
     public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        if (_cache == null) return await _repository.GetGroupDistributionAsync(boardId, academicYearId, campusId, ct);
-        string key = $"dashboard:group_dist:{academicYearId}:{boardId}:{campusId}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetGroupDistributionAsync(boardId, academicYearId, campusId, ct), TimeSpan.FromMinutes(5));
+        return await _repository.GetGroupDistributionAsync(boardId, academicYearId, campusId, ct);
     }
 
     public async Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, DateTime? date = null, int? campusId = null, CancellationToken ct = default)
     {
         var targetDate = date?.Date ?? DateTime.UtcNow.Date;
-        if (_cache == null) return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, targetDate, viewBy, campusId, ct);
-        string key = $"dashboard:student_att:{academicYearId}:{boardId}:{campusId}:{viewBy}:{targetDate:yyyyMMdd}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetStudentAttendanceAsync(boardId, academicYearId, targetDate, viewBy, campusId, ct), TimeSpan.FromMinutes(1));
+        return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, targetDate, viewBy, campusId, ct);
     }
 
     public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, int? campusId = null, CancellationToken ct = default)
     {
         var targetDate = date?.Date ?? DateTime.UtcNow.Date;
-        if (_cache == null) return await _repository.GetStaffAttendanceAsync(boardId, targetDate, staffType, campusId, ct);
-        string key = $"dashboard:staff_att:{boardId}:{campusId}:{staffType}:{targetDate:yyyyMMdd}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetStaffAttendanceAsync(boardId, targetDate, staffType, campusId, ct), TimeSpan.FromMinutes(1));
+        return await _repository.GetStaffAttendanceAsync(boardId, targetDate, staffType, campusId, ct);
     }
 
     public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
@@ -77,9 +67,7 @@ public class DashboardService : IDashboardService
     public async Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
         var today = DateTime.UtcNow.Date;
-        if (_cache == null) return await _repository.GetUpcomingExaminationsAsync(boardId, academicYearId, today, 6, campusId, ct);
-        string key = $"dashboard:upcoming_exams:{academicYearId}:{boardId}:{campusId}:{today:yyyyMMdd}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetUpcomingExaminationsAsync(boardId, academicYearId, today, 6, campusId, ct), TimeSpan.FromMinutes(5));
+        return await _repository.GetUpcomingExaminationsAsync(boardId, academicYearId, today, 6, campusId, ct);
     }
 
     public async Task<TodaysHighlightsResponseDto> GetTodaysHighlightsAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
@@ -115,9 +103,7 @@ public class DashboardService : IDashboardService
 
     public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, int? campusId = null, CancellationToken ct = default)
     {
-        if (_cache == null) return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct);
-        string key = $"dashboard:upcoming_holidays:{academicYearId}:{boardId}:{campusId}:{limit}";
-        return await _cache.GetOrCreateAsync(key, () => _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct), TimeSpan.FromMinutes(10));
+        return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct);
     }
 
     public async Task<PrincipalDashboardResponseDto> GetPrincipalDashboardAsync(int? academicYearId, int? boardId, DateTime? date, int campusId, CancellationToken ct = default)

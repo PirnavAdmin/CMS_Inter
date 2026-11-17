@@ -103,12 +103,7 @@ export const getSectionsDetails = (params, config = {}) => {
   return api.get("/api/v1/reports/details/sections", { params, ...defaultOpt(config) });
 };
 
-// --- 4. Audit Logs ---
-export const getAuditLogs = (params, config = {}) => {
-  return api.get("/api/v1/reports/details/audit-logs", { params, ...defaultOpt(config) });
-};
-
-// --- 5. Export Handlers ---
+// --- 4. Export Handlers ---
 export const exportReportPdf = (reportType, params, config = {}) => {
   return api.get("/api/v1/reports/export/pdf", {
     params: { reportType, ...params },

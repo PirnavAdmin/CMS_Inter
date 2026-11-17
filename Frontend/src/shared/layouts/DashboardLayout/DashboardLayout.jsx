@@ -650,6 +650,7 @@ export default function DashboardLayout({
   showBoardSelector = true,
   showAcademicYearSelector = true,
   hidePageHeader = false,
+  contentClassName = "",
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -1516,15 +1517,15 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="cms-content">
-          {!hidePageHeader && <div className="cms-page-head">
+        <main className={`cms-content ${contentClassName}`.trim()}>
+          {!hidePageHeader && (title || actions || backLink) ? <div className="cms-page-head">
             {backLink ? (
               <div className="cms-page-heading-with-back">
                 {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
               </div>
             ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
-          </div>}
+          </div> : null}
 
           {children}
         </main>
