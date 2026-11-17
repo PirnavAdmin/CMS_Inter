@@ -3379,10 +3379,9 @@ export default function RolesPermissionsPage() {
       title="Roles & Permissions"
       subtitle="Configure system roles, module and screen-wise permissions, and user role assignments."
       breadcrumb={["Home", "Administration", "Roles & Permissions"]}
-    >
-      <main className="rbac-page">
-        {/* Back Navigation */}
-        <div className="cms-back-nav-bar" style={{ marginBottom: "-4px" }}>
+      backLinkPosition="below"
+      backLink={
+        <div className="cms-back-nav-bar">
           <Link
             to="/dashboard/settings"
             className="cms-back-link"
@@ -3401,8 +3400,8 @@ export default function RolesPermissionsPage() {
             <ArrowLeft size={16} /> Back to Settings
           </Link>
         </div>
-
-
+      }
+      actions={
         <div className="rbac-tabs" role="tablist" aria-label="Roles and permissions sections">
           <button
             type="button"
@@ -3424,7 +3423,9 @@ export default function RolesPermissionsPage() {
           </button>
           {routeNote ? <span className="rbac-route-note"><Check size={14} /> {routeNote}</span> : null}
         </div>
-
+      }
+    >
+      <main className="rbac-page">
         {loading ? <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div> : null}
         {error && !loading ? (
           <EmptyState

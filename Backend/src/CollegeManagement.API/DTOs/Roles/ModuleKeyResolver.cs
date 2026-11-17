@@ -140,11 +140,14 @@ namespace CollegeManagement.API.DTOs.Roles
             { "exam-cell-settings", "Settings" },
             { "inventory-settings", "Settings" },
             { "roles-permissions", "Roles & Permissions" },
-            { "profile", "Dashboard" },
-            { "driver-profile", "Dashboard" },
-            { "accountant-profile", "Dashboard" },
-            { "exam-cell-profile", "Dashboard" },
-            { "inventory-profile", "Dashboard" }
+            { "profile", "My Profile" },
+            { "my-profile", "My Profile" },
+            { "driver-profile", "My Profile" },
+            { "accountant-profile", "My Profile" },
+            { "exam-cell-profile", "My Profile" },
+            { "inventory-profile", "My Profile" },
+            { "warden-profile", "My Profile" },
+            { "parent-profile", "My Profile" }
         };
 
         public static string ResolveToSubModule(string? moduleId)

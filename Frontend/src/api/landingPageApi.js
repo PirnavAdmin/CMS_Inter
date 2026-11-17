@@ -17,7 +17,8 @@ export const landingPageApi = {
   async saveConfig(payload) {
     try {
       const response = await apiClient.put(apiEndpoints.landingPage.saveConfig, payload);
-      return response.data?.data ?? response.data ?? null;
+      if (response.data?.success === false) throw new Error(response.data.message || "Configuration could not be saved.");
+      return response.data && Object.hasOwn(response.data, "data") ? response.data.data : response.data ?? null;
     } catch (err) {
       console.error("Failed to save landing page config to server:", err);
       throw err;
