@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Settings,
   Building2,
@@ -31,11 +32,12 @@ import {
   Sliders,
 } from "lucide-react";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import { isValidSuperAdminEmail } from "../superAdminValidation.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import settingsIllustration from "@/assets/settings-3d/campus-configuration.png";
-import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
-import { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
+import { useTheme } from "@/hooks/useTheme.js";
+import ThemePalettePicker, { THEME_OPTIONS } from "@/shared/components/ThemePalettePicker.jsx";
 import {
   getCollegeCodeSeriesSettings,
   saveCollegeCodeSeriesSettings,
@@ -61,10 +63,18 @@ function Toast({ msg, type, onClose }) {
 
 export default function GlobalSettingsPage() {
   const { data, refresh } = useSuperAdmin?.() || { data: {} };
-  const { theme, toggleTheme, palette, setPalette } = useTheme();
+  const { theme, toggleTheme, palette, customColor } = useTheme();
+  const [themePickerOpen, setThemePickerOpen] = useState(false);
 
   // Active Navigation Tab
-  const [activeTab, setActiveTab] = useState("platform_reminders");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const activeTab = ["platform_reminders", "college_code_series", "platform_identity", "regional_display", "security_access", "integrations"].includes(requestedTab) ? requestedTab : "platform_reminders";
+  const setActiveTab = (tab) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    next.set("tab", tab);
+    return next;
+  });
 
   // Form State — Platform & Reminders (Main real-time fields)
   const [platformName, setPlatformName] = useState("PIRNAV CMS");
@@ -146,12 +156,19 @@ export default function GlobalSettingsPage() {
   // Handle Save Platform Reminders
   const handleSave = async (e) => {
     e?.preventDefault();
+    const cleanName = platformName.trim();
+    const cleanEmail = supportEmail.trim();
+    const reminder = Number(renewalDays);
+    if (cleanName.length < 2 || cleanName.length > 100) { showToast("Platform name must be between 2 and 100 characters.", "error"); return; }
+    if (!isValidSuperAdminEmail(cleanEmail)) { showToast("Enter a valid support email address.", "error"); return; }
+    if (!Number.isSafeInteger(reminder) || reminder < 1 || reminder > 365) { showToast("Renewal reminder lead time must be a whole number from 1 to 365 days.", "error"); return; }
+    if (saving) return;
     setSaving(true);
     try {
       const payload = {
-        platformName: platformName.trim(),
-        supportEmail: supportEmail.trim(),
-        renewalDays: Number(renewalDays) || 30,
+        platformName: cleanName,
+        supportEmail: cleanEmail,
+        renewalDays: reminder,
       };
 
       await superAdminApi.updateSettings(payload);
@@ -174,6 +191,10 @@ export default function GlobalSettingsPage() {
   // Handle Save College Code Series
   const handleSaveCodeSeries = (e) => {
     e?.preventDefault();
+    const startNumber = Number(codeSeries.startNumber);
+    const currentSequence = Number(codeSeries.currentSequence);
+    if (!/^[A-Za-z0-9-]{1,12}$/.test(String(codeSeries.prefix || "").trim())) { showToast("Code prefix must use 1–12 letters, numbers, or hyphens.", "error"); return; }
+    if (!Number.isSafeInteger(startNumber) || startNumber < 1 || !Number.isSafeInteger(currentSequence) || currentSequence < 0) { showToast("Sequence numbers must be valid whole numbers (start at 1 or higher; current count may be 0).", "error"); return; }
     saveCollegeCodeSeriesSettings(codeSeries);
     showToast("College Code & Number Series configuration saved successfully!");
   };
@@ -263,15 +284,6 @@ export default function GlobalSettingsPage() {
           >
             <Hash size={16} className="gsp-tab-icon" />
             <span>College Code & Series</span>
-          </button>
-
-          <button
-            type="button"
-            className={`gsp-tab-btn ${activeTab === "platform_identity" ? "active" : ""}`}
-            onClick={() => setActiveTab("platform_identity")}
-          >
-            <Palette size={16} className="gsp-tab-icon" />
-            <span>Platform Appearance</span>
           </button>
 
           <button
@@ -741,7 +753,7 @@ export default function GlobalSettingsPage() {
             </form>
           )}
 
-          {/* ════ TAB 3: Platform Identity & Theme Appearance ════ */}
+          {/* ════ TAB 3: Theme Appearance ════ */}
           {activeTab === "platform_identity" && (
             <div className="gsp-form">
               <div className="gsp-form-header">
@@ -749,7 +761,7 @@ export default function GlobalSettingsPage() {
                   <Palette size={20} />
                 </div>
                 <div>
-                  <h2 className="gsp-form-title">Platform Appearance & Theme Palettes</h2>
+                  <h2 className="gsp-form-title">Theme Appearance</h2>
                   <p className="gsp-form-subtitle">
                     Customize your platform color theme palette and toggle between Dark and Light mode.
                   </p>
@@ -790,38 +802,17 @@ export default function GlobalSettingsPage() {
                 </div>
               </div>
 
-              {/* Palette Selection Grid */}
+              {/* Admin-style theme colour picker */}
               <div className="gsp-palette-picker-section">
-                <label className="gsp-field-label">Active Theme Palette Accent:</label>
-                <div className="gsp-palettes-grid">
-                  {THEME_OPTIONS.map((opt) => {
-                    const isSelected = (palette || "olive") === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={`gsp-palette-tile ${isSelected ? "is-selected" : ""}`}
-                        onClick={() => {
-                          setPalette(opt.id);
-                          showToast(`Applied ${opt.name} theme palette.`);
-                        }}
-                      >
-                        <div className="gsp-swatch-row">
-                          {opt.swatches.map((color, i) => (
-                            <span
-                              key={i}
-                              className="gsp-swatch-circle"
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                        <div className="gsp-palette-name-row">
-                          <span>{opt.name}</span>
-                          {isSelected && <Check size={14} className="gsp-palette-check" />}
-                        </div>
-                      </button>
-                    );
-                  })}
+                <label className="gsp-field-label">Active Theme</label>
+                <div className="gsp-active-theme-row">
+                  <div className="gsp-active-theme-summary">
+                    <span className="gsp-active-theme-swatch" style={{ backgroundColor: palette === "custom" ? customColor : THEME_OPTIONS.find((option) => option.id === palette)?.swatches?.[0] || "#647900" }} />
+                    <strong>{palette === "custom" ? "Custom" : THEME_OPTIONS.find((option) => option.id === palette)?.name || "Current Olive"}</strong>
+                  </div>
+                  <button type="button" className="gsp-mode-toggle-btn" onClick={() => setThemePickerOpen(true)}>
+                    <Palette size={15} /> Pick a theme colour
+                  </button>
                 </div>
               </div>
 
@@ -1078,6 +1069,12 @@ export default function GlobalSettingsPage() {
           )}
         </main>
       </div>
+      <ThemePalettePicker
+        open={themePickerOpen}
+        onOpenChange={setThemePickerOpen}
+        hideTrigger={true}
+        isAdmin={true}
+      />
     </div>
   );
 }

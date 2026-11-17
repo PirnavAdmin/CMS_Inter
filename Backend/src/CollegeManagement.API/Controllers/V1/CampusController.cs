@@ -1,12 +1,17 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Dapper;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Campus;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -23,12 +28,39 @@ namespace CollegeManagement.API.Controllers.V1
     public class CampusController : ControllerBase
     {
         private readonly ICampusService _campusService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly AppDbContext _db;
         private readonly ILogger<CampusController> _logger;
 
-        public CampusController(ICampusService campusService, ILogger<CampusController> logger)
+        public CampusController(
+            ICampusService campusService,
+            IJwtTokenHelper jwtTokenHelper,
+            AppDbContext db,
+            ILogger<CampusController> logger)
         {
             _campusService = campusService;
+            _jwtTokenHelper = jwtTokenHelper;
+            _db = db;
             _logger = logger;
+        }
+
+        private int? GetScopedCollegeId()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            if (User.IsInRole("Super Admin") || string.Equals(_jwtTokenHelper.GetRole(User), "Super Admin", System.StringComparison.OrdinalIgnoreCase))
+                return null;
+            return _jwtTokenHelper.GetCollegeId(User);
+        }
+
+        private async Task<HashSet<int>?> GetOwnedCampusIdsAsync(int? collegeId, CancellationToken ct)
+        {
+            if (!collegeId.HasValue || collegeId.Value <= 0) return null;
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
+            var ids = await conn.QueryAsync<int>(
+                "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId;",
+                new { CollegeId = collegeId.Value });
+            return new HashSet<int>(ids);
         }
 
         /// <summary>
@@ -45,6 +77,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Getting campuses (Search: {Search}, IsActive: {IsActive}, BoardId: {BoardId})", search, isActive, boardId);
             var result = await _campusService.GetAllCampusesAsync(search, isActive, boardId, cancellationToken);
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null)
+            {
+                result = result.Where(c => ownedIds.Contains(c.CampusId)).ToList();
+            }
             return Ok(result);
         }
 
@@ -57,6 +94,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetActiveHeaderCampuses(CancellationToken cancellationToken = default)
         {
             var result = await _campusService.GetActiveHeaderCampusesAsync(cancellationToken);
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null)
+            {
+                result = result.Where(c => ownedIds.Contains(c.CampusId)).ToList();
+            }
             return Ok(result);
         }
 
@@ -70,6 +112,25 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? selectedCampusId = null,
             CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null)
+            {
+                var scopedCampuses = (await _campusService.GetAllCampusesAsync(null, null, null, cancellationToken))
+                    .Where(c => ownedIds.Contains(c.CampusId))
+                    .ToList();
+                var active = scopedCampuses.Count(c => c.IsActive);
+                var selected = selectedCampusId.HasValue
+                    ? scopedCampuses.FirstOrDefault(c => c.CampusId == selectedCampusId.Value)
+                    : scopedCampuses.FirstOrDefault(c => c.IsHQ) ?? scopedCampuses.FirstOrDefault();
+                return Ok(new CampusStatsDto
+                {
+                    TotalCampuses = scopedCampuses.Count,
+                    ActiveInHeader = active,
+                    InactiveBranches = scopedCampuses.Count - active,
+                    SelectedBranch = selected
+                });
+            }
+
             var stats = await _campusService.GetCampusStatsAsync(selectedCampusId, cancellationToken);
             return Ok(stats);
         }
@@ -83,6 +144,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetCampusById(int id, CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var result = await _campusService.GetCampusByIdAsync(id, cancellationToken);
             return Ok(result);
         }
@@ -95,6 +158,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(IEnumerable<AffiliatedBoardDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetCampusAffiliatedBoards(int id, CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var result = await _campusService.GetAffiliatedBoardsByCampusIdAsync(id, cancellationToken);
             return Ok(result);
         }
@@ -113,6 +178,15 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(ModelState);
 
             var created = await _campusService.CreateCampusAsync(dto, cancellationToken);
+            var scopedCollegeId = GetScopedCollegeId();
+            if (scopedCollegeId.HasValue && scopedCollegeId.Value > 0 && created.CampusId > 0)
+            {
+                var conn = _db.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(cancellationToken);
+                await conn.ExecuteAsync(
+                    "UPDATE Campuses SET CollegeId = @CollegeId WHERE CampusId = @CampusId;",
+                    new { CollegeId = scopedCollegeId.Value, CampusId = created.CampusId });
+            }
             return CreatedAtAction(nameof(GetCampusById), new { id = created.CampusId }, created);
         }
 
@@ -126,6 +200,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> UpdateCampus(int id, [FromBody] UpdateCampusDto dto, CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
+
             if (id != dto.CampusId)
                 dto.CampusId = id;
 
@@ -146,6 +223,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> DeleteCampus(int id, CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var success = await _campusService.DeleteCampusAsync(id, cancellationToken);
             return Ok(new { success, message = "Campus branch deleted successfully." });
         }
@@ -159,6 +238,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ToggleCampusStatus(int id, CancellationToken cancellationToken = default)
         {
+            var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
+            if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var success = await _campusService.ToggleCampusStatusAsync(id, cancellationToken);
             return Ok(new { success, message = "Campus status toggled successfully." });
         }

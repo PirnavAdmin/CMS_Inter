@@ -31,10 +31,11 @@ namespace CollegeManagement.API.DTOs.Evaluations
         public decimal LowestMarks { get; set; }
         public string? ExamPattern { get; set; }
         public string? ExamType { get; set; }
-        public string Mode => (string.Equals(ExamType, "Objective", StringComparison.OrdinalIgnoreCase) 
-            || string.Equals(SubjectType, "Objective", StringComparison.OrdinalIgnoreCase) 
-            || (ExamPattern != null && (ExamPattern.ToUpper().Contains("OBJECTIVE") || ExamPattern.ToUpper().Contains("JEE") || ExamPattern.ToUpper().Contains("NEET") || ExamPattern.ToUpper().Contains("PATTERN")))) 
-            ? "OBJECTIVE" : "REGULAR";
+        public string? ScheduleMode { get; set; }
+        public string? ScheduleExamMode { get; set; }
+        public string Mode => Helpers.ExaminationFormatHelper.IsObjectiveConfiguration(ExamPattern, ExamType, SubjectType, ScheduleMode, ScheduleExamMode)
+            ? "OBJECTIVE"
+            : "REGULAR";
         public int ExamTotalMarks { get; set; } = 600;
         public decimal ExamPassPercentage { get; set; } = 35;
         public bool IsPractical { get; set; }

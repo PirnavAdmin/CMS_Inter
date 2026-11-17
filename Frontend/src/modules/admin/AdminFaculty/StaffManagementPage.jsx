@@ -314,7 +314,9 @@ export const nonTeachingDesignationMap = {
   "Hostel Management": ["Hostel Warden", "Assistant Warden", "Attender / Peon", "Cleaner"],
   "Campus Operations": ["Operations Manager", "Facility Supervisor", "Office Assistant"],
   Operations: ["Operations Manager", "Facility Supervisor", "Office Assistant"],
-  "Student Affairs": ["Student Affairs Officer", "Counselor", "Office Assistant"],
+  "Student Affairs": ["Student Affairs Officer", "Counselor", "Office Assistant", "Receptionist"],
+  "Physical Education & Sports": ["Physical Director", "Sports Coach", "Assistant Physical Director", "Gym Instructor", "Ground Attendant", "Sports Manager"],
+  "Physical Education": ["Physical Director", "Sports Coach", "Assistant Physical Director", "Gym Instructor", "Ground Attendant", "Sports Manager"],
   "IT & Systems Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
   "IT Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
   "Examinations Cell": ["Examination Incharge", "Data Entry Operator", "Clerk"],
@@ -522,86 +524,33 @@ export const normalizeStaffRecord = (raw) => {
 
 export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = [], selectedCampus = null) => {
   const isTeaching = String(staffType || "").toLowerCase().includes("teach") && !String(staffType || "").toLowerCase().includes("non");
-  const prefix = isTeaching ? "PCTCH" : "PCNT";
   const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-  const requestedStaffType = isTeaching ? "Teaching" : "Non-Teaching";
   const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
 
-  const readSeriesSettings = async (campusId) => {
-    try {
-      const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
-        params: campusId != null ? { campusId } : undefined,
-      });
-      return response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
-    } catch {
-      return {};
-    }
-  };
-
-  const nextIdFromStaffRecords = (staffRecords, settings = {}) => {
-    const configuredPrefix = String(settings.prefix || prefix).trim();
-    const numberLength = Math.max(1, Number(settings.numberLength) || 4);
-    const startNumber = Math.max(1, Number(settings.startNumber) || 1);
-    let maxSequence = startNumber - 1;
-
-    // Respect the database-tracked current sequence if available
-    const dbSequence = settings.currentSequence ?? settings.CurrentSequence;
-    if (dbSequence != null && !isNaN(dbSequence)) {
-      maxSequence = Math.max(maxSequence, Number(dbSequence));
-    }
-
-    for (const record of staffRecords) {
-      const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").trim();
-      if (!employeeId.toUpperCase().startsWith(configuredPrefix.toUpperCase())) continue;
-      const suffix = employeeId.slice(configuredPrefix.length);
-      if (!/^\d+$/.test(suffix)) continue;
-      maxSequence = Math.max(maxSequence, Number(suffix));
-    }
-
-    return `${configuredPrefix}${String(maxSequence + 1).padStart(numberLength, "0")}`;
-  };
-
-  let staffRecords = null;
   try {
-    const params = {
-      PageNumber: 1,
-      PageSize: 1000,
-      StaffType: requestedStaffType,
-      ...(campusId != null && campusId !== "" ? { CampusId: Number(campusId) || campusId } : {}),
-    };
-    const response = await staffApi.getStaffPaged(params);
+    // 1. Fetch live preview directly from official Settings -> ID & Number Series API
+    const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
+      params: campusId != null ? { campusId } : undefined,
+    });
     const data = response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
-    const candidates = [
-      data?.items,
-      data?.Items,
-      data?.staff,
-      data?.Staff,
-      data?.results,
-      data?.Results,
-      data?.data?.items,
-      data?.data?.Items,
-      Array.isArray(data) ? data : null,
-    ];
-    staffRecords = candidates.find(Array.isArray) ?? null;
-  } catch {
-    // Use records already loaded by the staff page if the API is unavailable.
+    if (data?.livePreview && typeof data.livePreview === "string") {
+      return data.livePreview;
+    }
+  } catch (err) {
+    console.warn("Number series getByCode livePreview error:", err);
   }
 
-  if (!Array.isArray(staffRecords)) {
-    staffRecords = Array.isArray(existingRecords) ? existingRecords : [];
+  // 2. Fallback to staff next-employee-id endpoint
+  try {
+    const res = await staffApi.getNextEmployeeId(isTeaching ? "Teaching" : "Non-Teaching", campusId);
+    const nextId = res?.data?.nextEmployeeId || res?.data?.employeeId;
+    if (nextId) return nextId;
+  } catch (err) {
+    console.warn("Staff getNextEmployeeId endpoint error:", err);
   }
 
-  staffRecords = staffRecords.filter((record) => {
-    if (selectedCampus && !isStaffMatchingCampus(record, selectedCampus)) return false;
-    const type = String(record?.staffType ?? record?.StaffType ?? "").toLowerCase();
-    const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").toUpperCase();
-    return isTeaching
-      ? (!type.includes("non") && type.includes("teach")) || employeeId.startsWith(prefix)
-      : type.includes("non") || employeeId.startsWith(prefix);
-  });
-
-  const settings = await readSeriesSettings(campusId);
-  return nextIdFromStaffRecords(staffRecords, settings);
+  // 3. Fallback default
+  return isTeaching ? "MTCH0001" : "MNT0001";
 };
 
 export const resolveBoardCode = (staffRecord, boardsList = []) => {
@@ -741,6 +690,9 @@ export const NON_TEACHING_ROLE_NAMES = [
   "Hostel Warden",
   "Driver",
   "Attendant",
+  "Receptionist",
+  "Sports Manager",
+  "Sport manager",
 ];
 
 const teachingFields = [
@@ -773,7 +725,7 @@ const nonTeachingSteps = [
     ["guardianName", "Father's / Husband's Name"],
     ["gender", "Gender", "select", ["Male", "Female", "Other"]],
     ["dateOfBirth", "Date of Birth", "date"],
-    ["maritalStatus", "Marital Status", "text", [], false],
+    ["maritalStatus", "Marital Status", "select", ["Single", "Married", "Divorced", "Widowed"], false],
     ["bloodGroup", "Blood Group", "select", ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], false],
     ["nationality", "Nationality", "text", [], false],
     ["aadhaar", "Aadhaar Number"],
@@ -783,7 +735,7 @@ const nonTeachingSteps = [
   // Step 1: Contact & Address
   [
     ["mobile", "Mobile"],
-    ["email", "Email", "email", [], false],
+    ["email", "Email", "email", [], true],
     ["pin", "PINCODE"],
     ["country", "Country"],
     ["state", "State"],
@@ -896,7 +848,7 @@ const portalSteps = [
 const portalFields = [
   [
     ["guardianName", "Father's / Husband's Name", "text", [], false],
-    ["maritalStatus", "Marital Status", "text", [], false],
+    ["maritalStatus", "Marital Status", "select", ["Single", "Married", "Divorced", "Widowed"], false],
     ["nationality", "Nationality", "text", [], false],
     ["aadhaar", "Aadhaar Number", "text", [], false],
     ["pan", "PAN Number", "text", [], false],
@@ -2388,15 +2340,23 @@ function useStaffRoles(staffType) {
           const activeRoles = data.filter((r) => {
             if (!r) return false;
             if (r.isActive === false || r.status === "Inactive") return false;
+            const rName = String(r.roleName || r.name || "").toLowerCase();
+            const isKnownNonTeaching = NON_TEACHING_ROLE_NAMES.some((nt) => nt.toLowerCase() === rName) ||
+              rName.includes("reception") || rName.includes("driver") || rName.includes("cleaner") || rName.includes("account");
+            const isKnownTeaching = TEACHING_ROLE_NAMES.some((t) => t.toLowerCase() === rName) ||
+              rName.includes("lecturer") || rName.includes("faculty") || rName.includes("teacher") || rName.includes("hod");
+
             const st = String(r.staffType || r.StaffType || "").trim().toLowerCase();
             if (st) {
               if (isTeaching) {
+                if (isKnownNonTeaching) return false;
                 return st === "teaching" || st === "both" || st === "all";
               } else {
+                if (isKnownTeaching && !isKnownNonTeaching && st === "teaching") return false;
                 return st === "non-teaching" || st === "nonteaching" || st === "both" || st === "all";
               }
             }
-            return true;
+            return isTeaching ? !isKnownNonTeaching : true;
           });
 
           if (isMounted && activeRoles.length > 0) {
@@ -2835,11 +2795,17 @@ function Field({
             })
             : null;
           const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : value === "Accountant" ? 7 : undefined;
+          const autoDept = matchedRole?.departmentName || matchedRole?.DepartmentName;
+          const autoDeptId = matchedRole?.departmentId || matchedRole?.DepartmentId;
+          const autoDesig = matchedRole?.designationName || matchedRole?.DesignationName;
+          const autoDesigId = matchedRole?.designationId || matchedRole?.DesignationId;
           return {
             ...prev,
             role: value,
             roleName: value,
             roleId: roleIdVal ? Number(roleIdVal) : undefined,
+            ...(autoDept ? { department: autoDept, ...(autoDeptId ? { departmentId: Number(autoDeptId) } : {}) } : {}),
+            ...(autoDesig ? { designation: autoDesig, ...(autoDesigId ? { designationId: Number(autoDesigId) } : {}) } : {}),
           };
         }
         if (name === "department") {
@@ -5660,6 +5626,36 @@ function TeachingForm({ records, setRecords, existing }) {
         }
       }
 
+      // Upload Document Files (Driving License, Aadhaar, PAN, Certificates, Bank Proof)
+      if (targetId) {
+        const docFieldsToUpload = [
+          { key: "drivingLicence_file", type: "drivingLicence" },
+          { key: "aadhaarDocument_file", type: "aadhaar" },
+          { key: "panDocument_file", type: "pan" },
+          { key: "qualificationCertificate_file", type: "qualification" },
+          { key: "experienceCertificate_file", type: "experience" },
+          { key: "resume_file", type: "resume" },
+          { key: "bankProof_file", type: "bankProof" },
+          { key: "otherDocuments_file", type: "otherDocuments" },
+        ];
+
+        for (const doc of docFieldsToUpload) {
+          const fileToUpload = values[doc.key];
+          if (fileToUpload instanceof File) {
+            try {
+              const docFormData = new FormData();
+              docFormData.append("DocumentType", doc.type);
+              docFormData.append("File", fileToUpload);
+              await apiClient.post(apiEndpoints.faculty.uploadDocument(targetId), docFormData, {
+                headers: { "Content-Type": "multipart/form-data" },
+              });
+            } catch (docErr) {
+              console.warn(`Failed to upload ${doc.type} document:`, docErr);
+            }
+          }
+        }
+      }
+
       const record = {
         ...payload,
         id: targetId,
@@ -5673,15 +5669,19 @@ function TeachingForm({ records, setRecords, existing }) {
         profileCompletion: existing?.profileCompletion || 30,
         addedOn: existing?.addedOn || new Date().toISOString().split("T")[0]
       };
-      if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       window.dispatchEvent(new Event("staff-records-updated"));
+      const successMsg = existing
+        ? "Teaching staff profile updated successfully."
+        : "Teaching staff created and invitation email sent successfully.";
+      try {
+        sessionStorage.setItem("staff_toast_message", successMsg);
+      } catch { }
+      setToast(successMsg);
       if (existing) {
-        setToast("Teaching staff profile updated successfully.");
-        n(`/dashboard/staff/teaching`);
+        n(`/dashboard/staff/teaching`, { state: { toast: successMsg } });
       } else {
-        setToast("Teaching staff created and invitation email sent successfully.");
-        n(`/dashboard/staff/teaching`);
+        n(`/dashboard/staff/teaching`, { state: { toast: successMsg } });
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -5703,18 +5703,9 @@ function TeachingForm({ records, setRecords, existing }) {
         setErrors(nextErrors);
         return;
       }
-      console.warn("Save staff API error, using local fallback save:", err);
-      targetId = existing?.id || Date.now();
-      const record = { ...payload, id: targetId, profileCompletion: existing?.profileCompletion || 25, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
-      if (!existing) incrementSeriesSequence("employee-id");
-      setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
-      if (existing) {
-        setToast("Teaching staff profile updated successfully.");
-        n(`/dashboard/staff/teaching`);
-      } else {
-        setToast("Teaching staff created and invitation email sent successfully.");
-        n(`/dashboard/staff/teaching`);
-      }
+      console.error("Save staff API error:", err);
+      setToast(errMsg);
+      setErrors({ api: errMsg });
     } finally {
       setSubmitting(false);
     }
@@ -6118,11 +6109,21 @@ function NonTeachingForm({ records, setRecords, existing }) {
       const record = { ...payload, id: targetId, photoPath: finalPhotoPath, profilePhoto: finalPhotoPath, photoUrl: finalPhotoPath, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
+      window.dispatchEvent(new Event("staff-records-updated"));
+
+      const successMsg = existing
+        ? "Non-teaching staff profile updated successfully."
+        : "Non-teaching staff profile saved successfully and login credentials dispatched.";
+
+      try {
+        sessionStorage.setItem("staff_toast_message", successMsg);
+      } catch { }
+      setToast(successMsg);
+
       if (existing) {
-        setToast("Non-teaching staff profile updated successfully.");
-        n(`/dashboard/staff/non-teaching`);
+        n(`/dashboard/staff/non-teaching`, { state: { toast: successMsg } });
       } else {
-        n(`/dashboard/staff/${record.id}`);
+        n(`/dashboard/staff/${record.id}`, { state: { toast: successMsg } });
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -6160,17 +6161,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
         setStep(errorStep);
         return;
       }
-      console.warn("Save non-teaching staff API error:", err);
-      targetId = existing?.id || Date.now();
-      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
-      if (!existing) incrementSeriesSequence("employee-id");
-      setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
-      if (existing) {
-        setToast("Non-teaching staff profile updated successfully.");
-        n(`/dashboard/staff/non-teaching`);
-      } else {
-        n(`/dashboard/staff/${record.id}`);
-      }
+      console.error("Save non-teaching staff API error:", err);
+      setToast(errMsg);
+      setErrors({ api: errMsg });
     } finally {
       setSubmitting(false);
     }
@@ -10135,6 +10128,35 @@ export default function StaffManagementPage() {
     write(ACTIVITY_STORE, next);
   };
 
+  // Handle cross-navigation toast notifications (e.g., after saving staff records)
+  useEffect(() => {
+    let msg = loc.state?.toast;
+    if (!msg) {
+      try {
+        msg = sessionStorage.getItem("staff_toast_message");
+        if (msg) sessionStorage.removeItem("staff_toast_message");
+      } catch { }
+    }
+    if (msg) {
+      setToast(msg);
+      if (loc.state?.toast) {
+        try {
+          n(loc.pathname + loc.search, { replace: true, state: {} });
+        } catch { }
+      }
+    }
+  }, [loc.pathname, loc.search, loc.state]);
+
+  // Global listener for staff toast events
+  useEffect(() => {
+    const handleToastEvent = (e) => {
+      const msg = e.detail?.message || (typeof e.detail === "string" ? e.detail : "");
+      if (msg) setToast(msg);
+    };
+    window.addEventListener("staff-show-toast", handleToastEvent);
+    return () => window.removeEventListener("staff-show-toast", handleToastEvent);
+  }, []);
+
   // Initial Staff Load (GET /api/v1/staff filtered by selected Board)
   useEffect(() => {
     let isMounted = true;
@@ -10161,7 +10183,12 @@ export default function StaffManagementPage() {
       }
     }
     loadInit();
-    return () => { isMounted = false; };
+    const handleUpdated = () => { loadInit(); };
+    window.addEventListener("staff-records-updated", handleUpdated);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("staff-records-updated", handleUpdated);
+    };
   }, [selectedBoard, selectedCampus]);
 
   // Fetch staff record from API whenever id changes

@@ -352,16 +352,19 @@
 .sa-shell .sa-content {
   padding-left: 18px;
   padding-right: 18px;
+  padding-bottom: 8px;
 }
 
 .sa-shell .sa-content > :is(
   .rcf-page, .sa-dashboard-page, .plans-page, .cap-page, .csp-page,
   .rnp-page, .sal-page-container, .pip-page-container, .gsp-page,
   .mpp-page, .aca-page, .renewals-page, .gmp-page, .cmp-page,
-  .acp-page, .cap-page-container, .sac-page
+  .acp-page, .cap-page-container, .sac-page, .sa-page
 ) {
   padding-left: 0;
   padding-right: 0;
+  padding-bottom: 8px;
+  min-height: auto;
 }
 
 /* Page roots sit inside the content wrapper, so avoid a second top inset. */
@@ -369,7 +372,7 @@
   .rcf-page, .sa-dashboard-page, .plans-page, .cap-page, .csp-page,
   .rnp-page, .sal-page-container, .pip-page-container, .gsp-page,
   .mpp-page, .aca-page, .renewals-page, .gmp-page, .cmp-page,
-  .acp-page, .cap-page-container, .sac-page
+  .acp-page, .cap-page-container, .sac-page, .sa-page
 ) {
   padding-top: 0;
 }
@@ -504,6 +507,11 @@
 }
 
 .sa-shell[data-dashboard-palette] .spp-v3-recommend-label {
+  background: var(--sa-primary);
+  color: var(--cms-on-primary, #fff);
+}
+
+.sa-shell[data-dashboard-palette] .spp-v3-billing small {
   background: var(--sa-primary);
   color: var(--cms-on-primary, #fff);
 }
@@ -799,7 +807,7 @@
 .sa-shell[data-dashboard-palette] :is(
   .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
   .csp-export-btn, .csp-assign-btn, .csp-page-btn.is-active, .csp-drawer-tab.is-active,
-  .cap-page-btn.is-active, .cap-drawer-tab.is-active,
+  .cap-add-btn, .cap-page-btn.is-active, .cap-drawer-tab.is-active,
   .rnp-btn-export, .rnp-btn-primary, .rnp-page-btn.is-active,
   .sal-tab-btn.active, .sal-btn-export, .sal-page-num-btn.active,
   .gsp-tab-btn.active, .gsp-btn-primary, .gsp-save-btn,
@@ -820,7 +828,7 @@
 
 .sa-shell[data-dashboard-palette] :is(
   .pip-tab-btn.active, .pip-btn-export, .csp-export-btn, .csp-assign-btn,
-  .rnp-btn-export, .rnp-btn-primary, .sal-tab-btn.active,
+  .cap-add-btn, .rnp-btn-export, .rnp-btn-primary, .sal-tab-btn.active,
   .sal-btn-export, .gsp-tab-btn.active, .gsp-btn-primary,
   .gsp-save-btn, .spp-tab-btn.is-active, .spp-btn-create,
   .spp-v3-create, .spp-v3-billing button.active, .aca-btn-primary
@@ -833,7 +841,7 @@
 .sa-shell[data-dashboard-palette] :is(
   .pip-tab-btn.active, .pip-btn-export, .pip-page-num-btn.active,
   .csp-export-btn, .csp-page-btn.is-active, .csp-drawer-tab.is-active,
-  .cap-page-btn.is-active, .cap-drawer-tab.is-active,
+  .cap-add-btn, .cap-page-btn.is-active, .cap-drawer-tab.is-active,
   .rnp-btn-export, .rnp-btn-primary, .rnp-page-btn.is-active,
   .sal-tab-btn.active, .sal-btn-export, .sal-page-num-btn.active,
   .gsp-tab-btn.active, .gsp-btn-primary, .gsp-save-btn,

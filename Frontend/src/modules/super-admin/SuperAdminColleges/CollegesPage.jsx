@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
+import { Modal } from "@/shared/components/Ui.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
@@ -30,6 +30,9 @@ import {
   X,
   SearchX,
   Sparkles,
+  LoaderCircle,
+  CheckCircle2 as ToastSuccessIcon,
+  AlertTriangle,
 } from "lucide-react";
 import "./CollegesPage.css";
 
@@ -49,6 +52,15 @@ export default function CollegesPage() {
 
   // Confirmation dialog state
   const [confirm, setConfirm] = useState(null);
+  const [confirmProcessing, setConfirmProcessing] = useState(false);
+  const confirmProcessingRef = useRef(false);
+  const [statusToast, setStatusToast] = useState(null);
+
+  useEffect(() => {
+    if (!statusToast) return undefined;
+    const timeoutId = window.setTimeout(() => setStatusToast(null), 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [statusToast]);
 
   // Filter, search & view mode state
   const [searchTerm, setSearchTerm] = useState("");
@@ -231,22 +243,52 @@ export default function CollegesPage() {
 
   // Toggle Status
   const handleStatusToggle = (college) => {
+    if (confirmProcessingRef.current) return;
     const isCurrentlyActive = (college.status || college.collegeStatus) === "Active";
     const nextStatus = isCurrentlyActive ? "Inactive" : "Active";
     const cid = college.collegeId || college.id;
 
     setConfirm({
-      title: `${isCurrentlyActive ? "Suspend" : "Activate"} College?`,
-      message: `Are you sure you want to ${isCurrentlyActive ? "suspend operations for" : "reactivate"} "${college.name}"? ${isCurrentlyActive ? "Logins for students and staff under this college will be paused." : ""}`,
+      title: `${isCurrentlyActive ? "Deactivate" : "Activate"} College?`,
+      message: `Are you sure you want to ${isCurrentlyActive ? "deactivate" : "activate"} "${college.name}"? ${isCurrentlyActive ? "Logins for students and staff under this college will be paused." : ""}`,
       run: async () => {
-        await update(`Updated college status to ${nextStatus}`, null, {
-          module: "Colleges",
-          actionType: "Status change",
-          collegeId: cid,
-          status: nextStatus,
-        });
+        if (confirmProcessingRef.current) return;
+        confirmProcessingRef.current = true;
+        setConfirmProcessing(true);
+        try {
+          const ok = await update(`Updated college status to ${nextStatus}`, null, {
+            module: "Colleges",
+            actionType: "Status change",
+            collegeId: cid,
+            status: nextStatus,
+          });
+          if (ok) {
+            setConfirm(null);
+            setStatusToast({
+              type: "success",
+              message: `College ${nextStatus === "Active" ? "activated" : "deactivated"} successfully`,
+            });
+          } else {
+            setStatusToast({
+              type: "error",
+              message: `Could not ${nextStatus === "Active" ? "activate" : "deactivate"} the college. Please try again.`,
+            });
+          }
+        } catch (error) {
+          setStatusToast({
+            type: "error",
+            message: error?.response?.data?.message || error?.message || `Could not ${nextStatus === "Active" ? "activate" : "deactivate"} the college. Please try again.`,
+          });
+        } finally {
+          confirmProcessingRef.current = false;
+          setConfirmProcessing(false);
+        }
       },
     });
+  };
+
+  const cancelStatusConfirmation = () => {
+    if (!confirmProcessingRef.current) setConfirm(null);
   };
 
   // Reset Password for Admin
@@ -920,15 +962,36 @@ export default function CollegesPage() {
 
       {/* Confirmation Dialog */}
       {confirm && (
-        <ConfirmDialog
+        <Modal
           title={confirm.title}
-          message={confirm.message}
-          onCancel={() => setConfirm(null)}
-          onConfirm={() => {
-            confirm.run();
-            setConfirm(null);
-          }}
-        />
+          size="sm"
+          className="cms-confirm-dialog rnp-status-confirm"
+          closeDisabled={confirmProcessing}
+          closeOnOverlay={!confirmProcessing}
+          onClose={cancelStatusConfirmation}
+          footer={(
+            <>
+              <button className="cms-btn cms-btn-ghost" onClick={cancelStatusConfirmation} disabled={confirmProcessing}>
+                Cancel
+              </button>
+              <button className="cms-btn cms-btn-primary" onClick={confirm.run} disabled={confirmProcessing}>
+                {confirmProcessing ? <><LoaderCircle size={15} className="rnp-processing-spinner" /> Processing...</> : "Confirm"}
+              </button>
+            </>
+          )}
+        >
+          <div className="cms-confirm-content">
+            <p className="cms-confirm-message">{confirm.message}</p>
+          </div>
+        </Modal>
+      )}
+
+      {statusToast && (
+        <div className={`rnp-status-toast is-${statusToast.type}`} role={statusToast.type === "error" ? "alert" : "status"}>
+          {statusToast.type === "success" ? <ToastSuccessIcon size={18} /> : <AlertTriangle size={18} />}
+          <span>{statusToast.message}</span>
+          <button type="button" onClick={() => setStatusToast(null)} aria-label="Dismiss notification"><X size={15} /></button>
+        </div>
       )}
     </div>
   );

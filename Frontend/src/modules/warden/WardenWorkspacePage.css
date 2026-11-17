@@ -1,1 +1,82 @@
-.warden-workspace{min-width:0;padding:24px;background:#f4f8ff;min-height:calc(100vh - 64px);color:#14213d}.warden-breadcrumb{font-size:12px;color:#59708d;font-weight:700}.warden-breadcrumb span{padding:0 7px;color:#8ca0b8}.warden-heading{display:flex;justify-content:space-between;gap:16px;margin:10px 0 20px}.warden-heading h1{margin:0;font-size:26px;color:#102a56}.warden-heading p,.warden-panel-head p,.warden-note{margin:5px 0 0;color:#61758e;font-size:13px}.warden-toolbar,.warden-actions,.warden-inline-form{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.warden-toolbar{justify-content:space-between;margin-bottom:14px}.warden-toolbar label{font-weight:700;font-size:13px}.warden-toolbar select{margin-left:7px}.warden-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:12px;margin-bottom:16px}.warden-summary,.warden-panel{background:#fff;border:1px solid #d8e7f8;border-radius:14px;box-shadow:0 3px 12px rgba(20,68,125,.06)}.warden-summary{padding:14px;display:flex;gap:10px;align-items:center}.warden-summary-icon{height:38px;width:38px;display:grid;place-items:center;border-radius:10px;background:#e7f0ff;color:#2463c6}.warden-summary-icon.green{background:#e7f8ed;color:#168348}.warden-summary-icon.violet{background:#f0eaff;color:#7245c6}.warden-summary-icon.amber{background:#fff4d9;color:#b87800}.warden-summary-icon.rose{background:#ffeaee;color:#c43955}.warden-summary small{display:block;color:#64748b;font-size:11px;font-weight:700}.warden-summary strong{display:block;margin-top:3px;font-size:15px;color:#152b50}.warden-panel{margin-top:16px;padding:18px}.warden-panel-head{display:flex;justify-content:space-between;gap:12px;margin-bottom:14px}.warden-panel h2{font-size:16px;margin:0;color:#102a56}.warden-primary,.warden-secondary{border-radius:8px;border:1px solid #2368d5;padding:9px 12px;font-weight:700;display:inline-flex;gap:7px;align-items:center;cursor:pointer}.warden-primary{background:#2768d8;color:white}.warden-secondary{background:white;color:#1e5cb8;border-color:#b9d1f5}.warden-primary:disabled,.warden-secondary:disabled{opacity:.55;cursor:not-allowed}.warden-form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}.warden-form label{display:grid;gap:6px;font-size:12px;font-weight:700;color:#3c5270}.warden-form .wide{grid-column:1/-1}.warden-form input,.warden-form select,.warden-form textarea,.warden-inline-form input,.warden-toolbar select{border:1px solid #cbdced;border-radius:8px;padding:9px;background:#fff;font:inherit;color:#152b50}.warden-form textarea{min-height:68px;resize:vertical}.warden-inline-form input{flex:1;min-width:230px}.warden-table-wrap{overflow:auto;border:1px solid #dce8f5;border-radius:10px}.warden-table-wrap table{border-collapse:collapse;width:100%;min-width:720px;font-size:12.5px}.warden-table-wrap th{background:#eff6ff;color:#49617d;text-align:left;padding:11px;font-size:11px;text-transform:uppercase}.warden-table-wrap td{padding:11px;border-top:1px solid #e7eef7;color:#31445d}.warden-chip{display:inline-flex;padding:4px 8px;border-radius:999px;background:#edf2f7;color:#4b6078;font-size:11px;font-weight:800}.warden-chip.approved,.warden-chip.present,.warden-chip.paid{background:#e7f8ed;color:#168348}.warden-chip.pending,.warden-chip.under-review,.warden-chip.submitted{background:#fff4d9;color:#956300}.warden-chip.rejected,.warden-chip.absent{background:#ffeaee;color:#b4233e}.warden-empty{padding:20px;text-align:center;color:#71839a}.warden-empty p{margin:6px 0 0}.warden-error{background:#fff0f1;border:1px solid #ffc8cf;color:#aa2840;border-radius:9px;padding:10px 12px;margin-bottom:14px;font-size:13px}.warden-note{padding:9px 10px;background:#f3f8ff;border-radius:8px}@media(max-width:1100px){.warden-summary-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:720px){.warden-workspace{padding:16px}.warden-summary-grid,.warden-form{grid-template-columns:1fr}.warden-heading h1{font-size:22px}.warden-panel{padding:14px}.warden-actions{width:100%}.warden-actions button{flex:1;justify-content:center}}
+.warden-workspace {
+  min-width: 0;
+  min-height: calc(100vh - 64px);
+  padding: 24px;
+  background: var(--cms-bg);
+  color: var(--cms-text);
+}
+
+.warden-breadcrumb { color: var(--cms-muted); font-size: 12px; font-weight: 700; }
+.warden-breadcrumb span { color: var(--cms-primary); padding: 0 7px; }
+.warden-heading { display: flex; justify-content: space-between; gap: 16px; margin: 10px 0 20px; }
+.warden-heading h1 { margin: 0; color: var(--cms-text); font-size: 26px; }
+.warden-heading p, .warden-panel-head p, .warden-note { margin: 5px 0 0; color: var(--cms-muted); font-size: 13px; }
+
+.warden-toolbar, .warden-actions, .warden-inline-form { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.warden-toolbar { justify-content: space-between; margin-bottom: 14px; }
+.warden-toolbar label, .warden-form label { color: var(--cms-text); font-size: 13px; font-weight: 700; }
+.warden-toolbar select { margin-left: 7px; }
+
+.warden-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.warden-summary, .warden-panel { background: var(--cms-surface); border: 1px solid var(--cms-border); border-radius: 14px; box-shadow: var(--cms-shadow); }
+.warden-summary { padding: 14px; display: flex; gap: 10px; align-items: center; }
+.warden-summary-icon { height: 38px; width: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--cms-primary-soft); color: var(--cms-primary); }
+.warden-summary-icon.green { background: var(--cms-green-soft); color: var(--cms-green); }
+.warden-summary-icon.violet { background: var(--cms-violet-soft); color: var(--cms-violet); }
+.warden-summary-icon.amber { background: var(--cms-amber-soft); color: var(--cms-amber); }
+.warden-summary-icon.rose { background: var(--cms-red-soft); color: var(--cms-red); }
+.warden-summary small { display: block; color: var(--cms-muted); font-size: 11px; font-weight: 700; }
+.warden-summary strong { display: block; margin-top: 3px; color: var(--cms-text); font-size: 15px; }
+
+.warden-panel { margin-top: 16px; padding: 18px; }
+.warden-panel-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.warden-panel h2 { margin: 0; color: var(--cms-text); font-size: 16px; }
+
+.warden-primary, .warden-secondary { display: inline-flex; align-items: center; gap: 7px; border-radius: 8px; padding: 9px 12px; font-weight: 700; cursor: pointer; }
+.warden-primary { border: 1px solid var(--cms-primary); background: var(--cms-primary); color: #fff; }
+.warden-primary:hover:not(:disabled) { border-color: var(--cms-primary-hover, var(--cms-primary-dark)); background: var(--cms-primary-hover, var(--cms-primary-dark)); }
+.warden-secondary { border: 1px solid var(--cms-primary-border); background: var(--cms-surface); color: var(--cms-primary); }
+.warden-secondary:hover:not(:disabled) { background: var(--cms-primary-soft); }
+.warden-primary:disabled, .warden-secondary:disabled { opacity: .55; cursor: not-allowed; }
+
+.warden-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.warden-form label { display: grid; gap: 6px; font-size: 12px; }
+.warden-form .wide { grid-column: 1 / -1; }
+.warden-form input, .warden-form select, .warden-form textarea, .warden-inline-form input, .warden-toolbar select, .warden-holiday-controls input { border: 1px solid var(--cms-border); border-radius: 8px; padding: 9px; background: var(--cms-surface); color: var(--cms-text); font: inherit; }
+.warden-form input:focus, .warden-form select:focus, .warden-form textarea:focus, .warden-inline-form input:focus, .warden-toolbar select:focus, .warden-holiday-controls input:focus { outline: 0; border-color: var(--cms-primary); box-shadow: 0 0 0 3px var(--cms-primary-soft); }
+.warden-form textarea { min-height: 68px; resize: vertical; }
+.warden-inline-form input { flex: 1; min-width: 230px; }
+
+.warden-table-wrap { overflow: auto; border: 1px solid var(--cms-border); border-radius: 10px; }
+.warden-table-wrap table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 12.5px; }
+.warden-table-wrap th { padding: 11px; background: var(--cms-primary-soft); color: var(--cms-primary-dark); text-align: left; font-size: 11px; text-transform: uppercase; }
+.warden-table-wrap td { padding: 11px; border-top: 1px solid var(--cms-border); color: var(--cms-text); }
+.warden-table-wrap tbody tr:hover { background: var(--cms-hover); }
+.warden-chip { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: var(--cms-subtle); color: var(--cms-muted); font-size: 11px; font-weight: 800; }
+.warden-chip.approved, .warden-chip.present, .warden-chip.paid { background: var(--cms-green-soft); color: var(--cms-green); }
+.warden-chip.pending, .warden-chip.under-review, .warden-chip.submitted { background: var(--cms-amber-soft); color: var(--cms-amber); }
+.warden-chip.rejected, .warden-chip.absent { background: var(--cms-red-soft); color: var(--cms-red); }
+.warden-empty { padding: 20px; color: var(--cms-muted); text-align: center; }
+.warden-empty p { margin: 6px 0 0; }
+.warden-error { margin-bottom: 14px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--cms-red) 35%, var(--cms-border)); border-radius: 9px; background: var(--cms-red-soft); color: var(--cms-red); font-size: 13px; }
+.warden-note { padding: 9px 10px; border-left: 3px solid var(--cms-primary); border-radius: 8px; background: var(--cms-primary-soft); }
+
+.warden-holiday-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.warden-view-toggle { display: inline-flex; overflow: hidden; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-subtle); }
+.warden-view-toggle button, .warden-icon-button, .warden-dialog-close { border: 0; padding: 8px 10px; background: transparent; color: var(--cms-primary); cursor: pointer; }
+.warden-view-toggle button.active { background: var(--cms-primary); color: #fff; }
+.warden-calendar-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.warden-calendar-entry { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--cms-border); border-radius: 10px; background: var(--cms-surface); color: var(--cms-text); cursor: pointer; text-align: left; }
+.warden-calendar-entry:hover { border-color: var(--cms-primary); box-shadow: var(--cms-shadow); }
+.warden-calendar-entry strong { color: var(--cms-primary); }
+.warden-calendar-entry small { color: var(--cms-muted); }
+.warden-dialog-backdrop { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(2, 6, 16, .55); }
+.warden-dialog { position: relative; width: 100%; max-width: 560px; padding: 24px; border: 1px solid var(--cms-border); border-radius: 14px; background: var(--cms-surface); color: var(--cms-text); box-shadow: var(--cms-shadow-lg); }
+.warden-dialog h2 { margin: 0; color: var(--cms-text); }
+.warden-dialog-close { position: absolute; top: 8px; right: 8px; }
+.warden-dialog dl { display: grid; grid-template-columns: 145px 1fr; gap: 10px; }
+.warden-dialog dt { color: var(--cms-muted); font-weight: 800; }
+.warden-dialog dd { margin: 0; }
+
+@media (max-width: 1100px) { .warden-summary-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 720px) { .warden-workspace { padding: 16px; } .warden-summary-grid, .warden-form { grid-template-columns: 1fr; } .warden-heading h1 { font-size: 22px; } .warden-panel { padding: 14px; } .warden-actions { width: 100%; } .warden-actions button { flex: 1; justify-content: center; } .warden-dialog dl { grid-template-columns: 1fr; gap: 3px; } }

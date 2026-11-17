@@ -91,6 +91,7 @@ const DASHBOARD_API = {
 };
 
 const QUICK_ACTIONS = [
+  { label: "Enquiries", to: "/dashboard/enquiry-management", icon: addStudentIcon, tone: "teal" },
   { label: "Add Student", to: "/dashboard/admission?view=new", icon: addStudentIcon, tone: "green" },
   { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
   { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },

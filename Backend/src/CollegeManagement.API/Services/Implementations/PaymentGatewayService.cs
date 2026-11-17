@@ -26,6 +26,8 @@ public class PaymentGatewayService : IPaymentGatewayService
     private readonly AppUrlResolver _urlResolver;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<PaymentGatewayService> _logger;
+    private readonly IPaymentEmailOutboxService? _emailOutboxService;
+    private readonly IHostEnvironment? _hostEnvironment;
 
     private sealed record EffectiveGatewayConfig(
         string PayeeVpa,
@@ -38,7 +40,8 @@ public class PaymentGatewayService : IPaymentGatewayService
         int PollingIntervalMs,
         bool EnableCounterUpiQr,
         bool EnableRazorpay,
-        bool EnableOfflineUtr);
+        bool EnableOfflineUtr,
+        bool IsLiveMode);
 
     public PaymentGatewayService(
         AppDbContext context,
@@ -46,7 +49,9 @@ public class PaymentGatewayService : IPaymentGatewayService
         IPaymentSettlementService settlementService,
         AppUrlResolver urlResolver,
         IHttpClientFactory httpClientFactory,
-        ILogger<PaymentGatewayService> logger)
+        ILogger<PaymentGatewayService> logger,
+        IPaymentEmailOutboxService? emailOutboxService = null,
+        IHostEnvironment? hostEnvironment = null)
     {
         _context = context;
         _settings = settings.Value;
@@ -54,6 +59,8 @@ public class PaymentGatewayService : IPaymentGatewayService
         _urlResolver = urlResolver;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
+        _emailOutboxService = emailOutboxService;
+        _hostEnvironment = hostEnvironment;
     }
 
     public async Task<CreateGatewayOrderResponse> CreateOrderAsync(
@@ -154,6 +161,29 @@ public class PaymentGatewayService : IPaymentGatewayService
             var payloadHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payloadFingerprint))).ToLowerInvariant();
 
             var hasRazorpayKeys = IsConfiguredSecret(cfg.KeyId) && IsConfiguredSecret(cfg.KeySecret);
+            bool isRazorpayTestKey = !string.IsNullOrWhiteSpace(cfg.KeyId) && cfg.KeyId.Trim().StartsWith("rzp_test_", StringComparison.OrdinalIgnoreCase);
+            bool isGatewayTestMode = isRazorpayTestKey || !cfg.IsLiveMode;
+
+            if ((request.PaymentMethod == "RAZORPAY" || (request.PaymentMethod == "UPI_QR" && cfg.EnableRazorpay && hasRazorpayKeys)) && hasRazorpayKeys)
+            {
+                if (cfg.IsLiveMode && isRazorpayTestKey)
+                {
+                    return new CreateGatewayOrderResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "Gateway configuration mismatch: Live Mode is enabled, but a Razorpay test key ('rzp_test_') is configured."
+                    };
+                }
+
+                if (_hostEnvironment?.IsProduction() == true && isGatewayTestMode)
+                {
+                    return new CreateGatewayOrderResponse
+                    {
+                        Success = false,
+                        ErrorMessage = "Razorpay test-mode payments are blocked in Production environment."
+                    };
+                }
+            }
             var useRazorpayProvider = cfg.EnableRazorpay && hasRazorpayKeys;
 
             string orderId;
@@ -327,7 +357,8 @@ public class PaymentGatewayService : IPaymentGatewayService
                 PayeeVpa = resolvedPayeeVpa,
                 PayeeName = resolvedPayeeName,
                 PaymentLink = paymentLink,
-                KeyId = useRazorpayProvider ? cfg.KeyId : null
+                KeyId = useRazorpayProvider ? cfg.KeyId : null,
+                IsTestMode = useRazorpayProvider && isGatewayTestMode
             };
         }
         catch (Exception ex)
@@ -388,13 +419,93 @@ public class PaymentGatewayService : IPaymentGatewayService
             };
         }
 
+        if (!IsConfiguredSecret(cfg.KeyId))
+        {
+            return new SettlementResult
+            {
+                Success = false,
+                ErrorMessage = "Payment gateway KeyId is not configured on the server."
+            };
+        }
+
+        bool isTestKey = cfg.KeyId!.Trim().StartsWith("rzp_test_", StringComparison.OrdinalIgnoreCase);
+        if ((cfg.IsLiveMode && isTestKey) || (_hostEnvironment?.IsProduction() == true && (isTestKey || !cfg.IsLiveMode)))
+        {
+            _logger.LogWarning("Blocked test-mode Razorpay settlement for OrderId={OrderId}", request.OrderId);
+            return new SettlementResult
+            {
+                Success = false,
+                ErrorMessage = "Razorpay test-mode transactions cannot be settled as live fee payments in this environment."
+            };
+        }
+
+        // Confirm authoritative payment state directly with Razorpay API
+        try
+        {
+            var razorpayClient = new Razorpay.Api.RazorpayClient(cfg.KeyId, cfg.KeySecret);
+            var rpPayment = razorpayClient.Payment.Fetch(request.RazorpayPaymentId);
+
+            var rpStatus = TryReadAttribute(rpPayment, "status") ?? string.Empty;
+            var rpOrderId = TryReadAttribute(rpPayment, "order_id") ?? string.Empty;
+            var rpCurrency = TryReadAttribute(rpPayment, "currency") ?? string.Empty;
+            long rpPaise = Convert.ToInt64(rpPayment["amount"]);
+            decimal rpAmount = rpPaise / 100m;
+
+            if (!string.Equals(rpOrderId, request.OrderId, StringComparison.Ordinal))
+            {
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = "Gateway payment does not belong to this order."
+                };
+            }
+
+            if (!string.Equals(rpStatus, "captured", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Gateway payment status is '{rpStatus}', not 'captured'."
+                };
+            }
+
+            if (!string.Equals(rpCurrency, txn.Currency, StringComparison.OrdinalIgnoreCase))
+            {
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = $"Gateway currency mismatch ({rpCurrency} vs expected {txn.Currency})."
+                };
+            }
+
+            if (Math.Abs(rpAmount - txn.Amount) > 0.01m)
+            {
+                return new SettlementResult
+                {
+                    Success = false,
+                    ErrorMessage = "Gateway captured amount does not match expected fee order amount."
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Razorpay Payment.Fetch failed during verification for OrderId={OrderId}, PaymentId={PaymentId}",
+                request.OrderId, request.RazorpayPaymentId);
+            return new SettlementResult
+            {
+                Success = false,
+                ErrorMessage = "Unable to confirm payment state with Razorpay gateway."
+            };
+        }
+
+        var methodLabel = isTestKey || !cfg.IsLiveMode ? "Razorpay Test" : "Razorpay Online";
         return await _settlementService.SettlePaymentAsync(
             request.OrderId,
             txn.StudentId,
             txn.StudentFeeId,
             txn.FeeInstallmentId,
             txn.Amount,
-            "Razorpay Online",
+            methodLabel,
             request.RazorpayPaymentId,
             request.RazorpayPaymentId,
             adminUserId);
@@ -408,22 +519,109 @@ public class PaymentGatewayService : IPaymentGatewayService
             .FirstOrDefaultAsync(t => t.OrderId == orderId && t.StudentFeeId == studentFeeId);
 
         if (txn == null)
-            return new GatewayStatusResponse { Success = false, Status = "NotFound" };
+            return new GatewayStatusResponse { Success = false, Status = "NotFound", PaymentStatus = "NotFound", VerificationStatus = "NotFound" };
 
         // Active fallback reconciliation with Razorpay (throttled every >= 5s) when polling unsettled orders
         if (txn.Status is "Created" or "Pending")
         {
             var canSync = (DateTime.UtcNow - (txn.LastGatewaySyncAtUtc ?? DateTime.MinValue)).TotalSeconds >= 5;
-            if (canSync)
+            if (canSync || (txn.ExpiresAt.HasValue && txn.ExpiresAt.Value <= DateTime.UtcNow))
             {
                 await TrySyncWithRazorpayAsync(txn);
                 txn = await _context.PaymentGatewayTransactions
                     .AsNoTracking()
                     .FirstOrDefaultAsync(t => t.Id == txn.Id) ?? txn;
             }
+
+            // Transition stale Created/Pending order past ExpiresAt to Expired
+            if (txn.Status is "Created" or "Pending" && txn.ExpiresAt.HasValue && txn.ExpiresAt.Value <= DateTime.UtcNow)
+            {
+                var tracked = await _context.PaymentGatewayTransactions.FirstOrDefaultAsync(t => t.Id == txn.Id);
+                if (tracked != null && tracked.Status is "Created" or "Pending")
+                {
+                    tracked.Status = "Expired";
+                    tracked.FailureReason ??= "Payment session expired before confirmation.";
+                    tracked.RowVersion = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                    txn = tracked;
+                }
+            }
         }
 
         var isPaid = txn.Status == "Captured" || txn.Status == "Paid";
+        int? receiptId = null;
+        string? receiptNo = txn.ReceiptNumber;
+        DateTime? paymentDate = txn.PaymentDate;
+
+        if (isPaid && txn.FeePaymentId.HasValue)
+        {
+            var rec = await _context.FeeReceipts.AsNoTracking()
+                .Where(r => r.FeePaymentId == txn.FeePaymentId.Value)
+                .Select(r => new { r.FeeReceiptId, r.ReceiptNumber })
+                .FirstOrDefaultAsync();
+            receiptId = rec?.FeeReceiptId;
+            if (!string.IsNullOrWhiteSpace(rec?.ReceiptNumber))
+                receiptNo = rec.ReceiptNumber;
+
+            var pmtDate = await _context.FeePayments.AsNoTracking()
+                .Where(p => p.FeePaymentId == txn.FeePaymentId.Value)
+                .Select(p => (DateTime?)p.PaymentDate)
+                .FirstOrDefaultAsync();
+            if (pmtDate.HasValue) paymentDate = pmtDate.Value;
+        }
+
+        string emailStatus = "NOT_REQUESTED";
+        DateTime? emailSentAt = null;
+        string? emailErr = null;
+
+        if (_emailOutboxService != null)
+        {
+            if (txn.FeePaymentId.HasValue)
+            {
+                var map = await _emailOutboxService.GetAggregatedStatusByFeePaymentIdsAsync(new[] { txn.FeePaymentId.Value });
+                if (map.TryGetValue(txn.FeePaymentId.Value, out var tuple))
+                {
+                    emailStatus = tuple.Status;
+                    emailSentAt = tuple.SentAt;
+                    emailErr = tuple.FailureReason;
+                }
+            }
+            else if (txn.Status is "PendingVerification" or "Rejected")
+            {
+                var map = await _emailOutboxService.GetAggregatedStatusByTransactionIdsAsync(new[] { txn.Id });
+                if (map.TryGetValue(txn.Id, out var tuple))
+                {
+                    emailStatus = tuple.Status;
+                    emailSentAt = tuple.SentAt;
+                    emailErr = tuple.FailureReason;
+                }
+            }
+        }
+
+        var cfg = await ResolveEffectiveConfigAsync(txn.CampusId);
+        bool isTestMode = (!cfg.IsLiveMode) || (cfg.KeyId?.Trim().StartsWith("rzp_test_", StringComparison.OrdinalIgnoreCase) == true);
+
+        string canonicalPaymentStatus = txn.Status switch
+        {
+            "Captured" or "Paid" => "Settled",
+            "PendingVerification" => "PendingVerification",
+            "Created" or "Pending" => "PendingPayment",
+            "Rejected" => "Rejected",
+            "Expired" => "Expired",
+            "Reversed" => "Reversed",
+            _ => "Failed"
+        };
+
+        string verificationStatus = txn.Status switch
+        {
+            "Captured" or "Paid" => "Verified",
+            "PendingVerification" => "Pending",
+            "Rejected" => "Rejected",
+            "Expired" => "Expired",
+            "Reversed" => "Reversed",
+            "Failed" => "Failed",
+            _ => "Unverified"
+        };
 
         return new GatewayStatusResponse
         {
@@ -433,42 +631,85 @@ public class PaymentGatewayService : IPaymentGatewayService
             Status = txn.Status,
             IsPaid = isPaid,
             Amount = txn.Amount,
-            ReceiptNumber = txn.ReceiptNumber,
+            ReceiptNumber = receiptNo,
             FeePaymentId = txn.FeePaymentId,
-            TransactionId = txn.GatewayPaymentId,
-            FailureReason = txn.FailureReason
+            TransactionId = txn.GatewayPaymentId ?? txn.UtrNumber,
+            FailureReason = txn.FailureReason,
+            PaymentStatus = canonicalPaymentStatus,
+            VerificationStatus = verificationStatus,
+            SettledAmount = isPaid ? txn.Amount : null,
+            PaymentMethod = txn.PaymentMethod,
+            TransactionReference = !string.IsNullOrWhiteSpace(txn.UtrNumber) ? txn.UtrNumber : (txn.GatewayPaymentId ?? txn.OrderId),
+            PaymentDate = paymentDate,
+            ReceiptId = receiptId,
+            ReceiptAvailable = isPaid && receiptId.HasValue && txn.FeePaymentId.HasValue,
+            EmailNotificationStatus = emailStatus,
+            EmailDeliveryStatus = emailStatus,
+            EmailSentAt = emailSentAt,
+            EmailFailureReason = emailErr,
+            IsTestMode = isTestMode
         };
     }
 
-    public async Task<SettlementResult> ProcessWebhookAsync(
+    public Task<SettlementResult> ProcessWebhookAsync(
         string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId = null)
-    {
-        if (eventType != "payment.captured" && eventType != "order.paid" && eventType != "qr_code.credited")
-        {
-            _logger.LogInformation("Ignoring webhook event: {EventType}", eventType);
-            return new SettlementResult { Success = true, AlreadySettled = false };
-        }
+        => ProcessWebhookAsync(eventType, orderId, paymentId, amount, qrCodeId, currency: null, failureReason: null);
 
+    public async Task<SettlementResult> ProcessWebhookAsync(
+        string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId, string? currency, string? failureReason)
+    {
         PaymentGatewayTransaction? txn = null;
 
         if (!string.IsNullOrWhiteSpace(qrCodeId))
         {
             txn = await _context.PaymentGatewayTransactions
-                .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.GatewayQrCodeId == qrCodeId);
         }
 
         if (txn == null && !string.IsNullOrWhiteSpace(orderId))
         {
             txn = await _context.PaymentGatewayTransactions
-                .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.OrderId == orderId);
+        }
+
+        if (eventType is "payment.failed" or "qr_code.closed")
+        {
+            if (txn != null && txn.Status is "Created" or "Pending")
+            {
+                txn.Status = eventType == "qr_code.closed" ? "Expired" : "Failed";
+                txn.FailureReason = string.IsNullOrWhiteSpace(failureReason)
+                    ? (eventType == "qr_code.closed" ? "QR code expired/closed before payment." : "Payment failed at gateway.")
+                    : failureReason.Trim();
+                txn.RowVersion = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+            return new SettlementResult { Success = true, AlreadySettled = false };
+        }
+
+        if (eventType != "payment.captured" && eventType != "order.paid" && eventType != "qr_code.credited")
+        {
+            _logger.LogInformation("Ignoring webhook event: {EventType}", eventType);
+            return new SettlementResult { Success = true, AlreadySettled = false };
         }
 
         if (txn == null)
         {
             _logger.LogWarning("Webhook received for unknown OrderId={OrderId}, QrCodeId={QrCodeId}", orderId, qrCodeId);
             return new SettlementResult { Success = false, ErrorMessage = "Order not found." };
+        }
+
+        var cfg = await ResolveEffectiveConfigAsync(txn.CampusId);
+        bool isTestKey = !string.IsNullOrWhiteSpace(cfg.KeyId) && cfg.KeyId.Trim().StartsWith("rzp_test_", StringComparison.OrdinalIgnoreCase);
+        if ((cfg.IsLiveMode && isTestKey) || (_hostEnvironment?.IsProduction() == true && (isTestKey || !cfg.IsLiveMode)))
+        {
+            _logger.LogWarning("Webhook rejected for OrderId={OrderId}: Razorpay test mode cannot settle in this environment.", txn.OrderId);
+            return new SettlementResult { Success = false, ErrorMessage = "Test-mode webhook cannot settle live payments." };
+        }
+
+        if (!string.IsNullOrWhiteSpace(currency) && !string.Equals(currency.Trim(), txn.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Webhook currency mismatch for OrderId={OrderId}: {Currency} vs {Expected}", txn.OrderId, currency, txn.Currency);
+            return new SettlementResult { Success = false, ErrorMessage = "Webhook currency does not match order currency." };
         }
 
         if (Math.Abs(amount - txn.Amount) > 0.01m)
@@ -483,13 +724,17 @@ public class PaymentGatewayService : IPaymentGatewayService
             };
         }
 
+        var methodLabel = txn.PaymentMethod == "UPI_QR"
+            ? "UPI"
+            : (isTestKey || !cfg.IsLiveMode ? "Razorpay Test" : "Razorpay Online");
+
         return await _settlementService.SettlePaymentAsync(
             txn.OrderId,
             txn.StudentId,
             txn.StudentFeeId,
             txn.FeeInstallmentId,
             txn.Amount,
-            txn.PaymentMethod == "UPI_QR" ? "UPI" : "Razorpay Online",
+            methodLabel,
             paymentId,
             paymentId,
             txn.CollectedByUserId);
@@ -497,6 +742,20 @@ public class PaymentGatewayService : IPaymentGatewayService
 
     public async Task<string?> ResolveWebhookSecretAsync(int? campusId = null)
     {
+        if (campusId.HasValue && campusId.Value > 0)
+        {
+            var campusCfg = await _context.PaymentGatewayConfigs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CampusId == campusId.Value);
+
+            if (campusCfg != null)
+            {
+                return IsConfiguredSecret(campusCfg.RazorpayWebhookSecret)
+                    ? campusCfg.RazorpayWebhookSecret
+                    : null;
+            }
+        }
+
         var cfg = await ResolveEffectiveConfigAsync(campusId);
         return IsConfiguredSecret(cfg.WebhookSecret) ? cfg.WebhookSecret : null;
     }
@@ -559,12 +818,60 @@ public class PaymentGatewayService : IPaymentGatewayService
             : _urlResolver.GetFrontendBaseUrl();
         var webhookUrl = $"{resolvedApiUrl}/api/v1/fee-payments/gateway/webhook";
 
+        List<CampusBankAccountDto> bankAccounts = new();
+        int? activeBankAccountId = null;
+        if (campusId.HasValue && campusId.Value > 0)
+        {
+            var dbAccounts = await _context.CampusBankAccounts.AsNoTracking()
+                .Where(a => a.CampusId == campusId.Value)
+                .OrderByDescending(a => a.IsActive)
+                .ThenBy(a => a.BankName)
+                .ToListAsync();
+
+            if (dbAccounts.Count == 0 && config != null && !string.IsNullOrWhiteSpace(config.BankName) && !string.IsNullOrWhiteSpace(config.AccountNumber))
+            {
+                var seeded = new CampusBankAccount
+                {
+                    CampusId = campusId.Value,
+                    BankName = config.BankName.Trim(),
+                    AccountHolderName = (config.AccountHolderName ?? string.Empty).Trim(),
+                    AccountNumber = config.AccountNumber.Trim(),
+                    IfscCode = (config.IfscCode ?? string.Empty).Trim().ToUpperInvariant(),
+                    BranchName = config.BranchName?.Trim(),
+                    AccountType = string.Equals(config.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.CampusBankAccounts.Add(seeded);
+                await _context.SaveChangesAsync();
+                dbAccounts.Add(seeded);
+            }
+
+            var active = dbAccounts.FirstOrDefault(a => a.IsActive) ?? dbAccounts.FirstOrDefault();
+            activeBankAccountId = active?.Id;
+            bankAccounts = dbAccounts.Select(MapToBankAccountDto).ToList();
+
+            if (active != null && config != null)
+            {
+                config.BankName = active.BankName;
+                config.AccountHolderName = active.AccountHolderName;
+                config.AccountNumber = active.AccountNumber;
+                config.IfscCode = active.IfscCode;
+                config.BranchName = active.BranchName;
+                config.AccountType = active.AccountType;
+            }
+        }
+
+        var isDev = _hostEnvironment?.IsDevelopment() ?? true;
+        var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
+        var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
+        var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : (isDev ? 5173 : 443);
+        var defaultBaseUrl = !string.IsNullOrWhiteSpace(_settings.BaseAppUrl)
+            ? _settings.BaseAppUrl.TrimEnd('/')
+            : (isDev ? "http://localhost:5173" : resolvedApiUrl);
+
         if (config == null)
         {
-            var defaultInterval = Math.Clamp(_settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200, 500, 10000);
-            var defaultTimeout = Math.Clamp(_settings.Polling.TimeoutSeconds > 0 ? _settings.Polling.TimeoutSeconds : 600, 60, 3600);
-            var defaultPort = (_settings.FrontendPort is >= 1 and <= 65535) ? _settings.FrontendPort : 5173;
-
             return new PaymentGatewayConfigDto
             {
                 Id = 0,
@@ -590,12 +897,19 @@ public class PaymentGatewayService : IPaymentGatewayService
                 EnableOfflineUtr = false,
                 PollingIntervalMs = defaultInterval,
                 MonitoringTimeoutSeconds = defaultTimeout,
-                BaseAppUrl = _settings.BaseAppUrl ?? string.Empty,
+                BaseAppUrl = defaultBaseUrl,
                 FrontendPort = defaultPort,
                 WebhookUrl = webhookUrl,
-                UpdatedAt = null
+                UpdatedAt = null,
+                BankAccounts = bankAccounts,
+                ActiveBankAccountId = activeBankAccountId
             };
         }
+
+        var effectivePort = (config.FrontendPort is >= 1 and <= 65535) ? config.FrontendPort : defaultPort;
+        var effectiveBaseUrl = !string.IsNullOrWhiteSpace(config.BaseAppUrl) ? config.BaseAppUrl.TrimEnd('/') : defaultBaseUrl;
+        var effectivePolling = (config.PollingIntervalMs is >= 500 and <= 10000) ? config.PollingIntervalMs : defaultInterval;
+        var effectiveTimeout = (config.MonitoringTimeoutSeconds is >= 60 and <= 3600) ? config.MonitoringTimeoutSeconds : defaultTimeout;
 
         return new PaymentGatewayConfigDto
         {
@@ -620,12 +934,14 @@ public class PaymentGatewayService : IPaymentGatewayService
             AutoCapture = config.AutoCapture,
             EnableRazorpay = config.EnableRazorpay,
             EnableOfflineUtr = config.EnableOfflineUtr,
-            PollingIntervalMs = config.PollingIntervalMs,
-            MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
-            BaseAppUrl = config.BaseAppUrl ?? string.Empty,
-            FrontendPort = config.FrontendPort,
+            PollingIntervalMs = effectivePolling,
+            MonitoringTimeoutSeconds = effectiveTimeout,
+            BaseAppUrl = effectiveBaseUrl,
+            FrontendPort = effectivePort,
             WebhookUrl = webhookUrl,
-            UpdatedAt = config.UpdatedAt
+            UpdatedAt = config.UpdatedAt,
+            BankAccounts = bankAccounts,
+            ActiveBankAccountId = activeBankAccountId
         };
     }
 
@@ -639,6 +955,21 @@ public class PaymentGatewayService : IPaymentGatewayService
 
         // DB-aware validation BEFORE mutating or adding any entity so validation errors cause zero partial DB updates.
         var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (request.FrontendPort < 1 || request.FrontendPort > 65535)
+        {
+            errors[nameof(request.FrontendPort)] = new[] { "Frontend port must be an integer between 1 and 65535." };
+        }
+
+        if (request.PollingIntervalMs < 500 || request.PollingIntervalMs > 10000)
+        {
+            errors[nameof(request.PollingIntervalMs)] = new[] { "Polling interval must be an integer between 500 and 10000 ms." };
+        }
+
+        if (request.MonitoringTimeoutSeconds < 60 || request.MonitoringTimeoutSeconds > 3600)
+        {
+            errors[nameof(request.MonitoringTimeoutSeconds)] = new[] { "Monitoring timeout must be an integer between 60 and 3600 seconds." };
+        }
 
         if (request.EnableRazorpay)
         {
@@ -682,6 +1013,7 @@ public class PaymentGatewayService : IPaymentGatewayService
             config = new PaymentGatewayConfig
             {
                 CampusId = request.CampusId,
+                FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173,
                 CreatedAt = DateTime.UtcNow
             };
             _context.PaymentGatewayConfigs.Add(config);
@@ -717,10 +1049,50 @@ public class PaymentGatewayService : IPaymentGatewayService
         config.PollingIntervalMs = request.PollingIntervalMs;
         config.MonitoringTimeoutSeconds = request.MonitoringTimeoutSeconds;
         config.BaseAppUrl = (request.BaseAppUrl ?? string.Empty).Trim();
-        config.FrontendPort = request.FrontendPort;
+        config.FrontendPort = (request.FrontendPort is >= 1 and <= 65535) ? request.FrontendPort : 5173;
 
         config.UpdatedAt = DateTime.UtcNow;
         config.UpdatedByUserId = userId;
+
+        // Keep active CampusBankAccount in sync if bank fields were supplied
+        if (request.CampusId.HasValue && !string.IsNullOrWhiteSpace(request.BankName) && !string.IsNullOrWhiteSpace(request.AccountNumber))
+        {
+            var activeAcc = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == request.CampusId.Value && a.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (activeAcc != null)
+            {
+                activeAcc.BankName = config.BankName;
+                activeAcc.AccountHolderName = config.AccountHolderName;
+                if (!request.AccountNumber.Contains('*') && !request.AccountNumber.StartsWith("XXXX", StringComparison.OrdinalIgnoreCase))
+                {
+                    activeAcc.AccountNumber = config.AccountNumber;
+                }
+                activeAcc.IfscCode = config.IfscCode;
+                activeAcc.BranchName = config.BranchName;
+                activeAcc.AccountType = config.AccountType;
+                activeAcc.UpdatedAt = DateTime.UtcNow;
+                activeAcc.UpdatedByUserId = userId;
+            }
+            else
+            {
+                var newAcc = new CampusBankAccount
+                {
+                    CampusId = request.CampusId.Value,
+                    BankName = config.BankName,
+                    AccountHolderName = config.AccountHolderName,
+                    AccountNumber = config.AccountNumber,
+                    IfscCode = config.IfscCode,
+                    BranchName = config.BranchName,
+                    AccountType = config.AccountType,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUserId = userId
+                };
+                _context.CampusBankAccounts.Add(newAcc);
+            }
+        }
 
         await _context.SaveChangesAsync();
 
@@ -731,6 +1103,242 @@ public class PaymentGatewayService : IPaymentGatewayService
             Data = reloaded
         };
     }
+
+    // ========================= CAMPUS BANK ACCOUNTS (MULTI-ACCOUNT) =========================
+
+    public async Task<List<CampusBankAccountDto>> GetBankAccountsAsync(int campusId)
+    {
+        var accounts = await _context.CampusBankAccounts.AsNoTracking()
+            .Where(a => a.CampusId == campusId)
+            .OrderByDescending(a => a.IsActive)
+            .ThenBy(a => a.BankName)
+            .ToListAsync();
+
+        if (accounts.Count == 0)
+        {
+            var config = await _context.PaymentGatewayConfigs.AsNoTracking()
+                .Where(c => c.CampusId == campusId)
+                .FirstOrDefaultAsync();
+
+            if (config != null && !string.IsNullOrWhiteSpace(config.BankName) && !string.IsNullOrWhiteSpace(config.AccountNumber))
+            {
+                var seeded = new CampusBankAccount
+                {
+                    CampusId = campusId,
+                    BankName = config.BankName.Trim(),
+                    AccountHolderName = (config.AccountHolderName ?? string.Empty).Trim(),
+                    AccountNumber = config.AccountNumber.Trim(),
+                    IfscCode = (config.IfscCode ?? string.Empty).Trim().ToUpperInvariant(),
+                    BranchName = config.BranchName?.Trim(),
+                    AccountType = string.Equals(config.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.CampusBankAccounts.Add(seeded);
+                await _context.SaveChangesAsync();
+                accounts.Add(seeded);
+            }
+        }
+
+        return accounts.Select(MapToBankAccountDto).ToList();
+    }
+
+    public async Task<CampusBankAccountDto?> GetBankAccountByIdAsync(int id)
+    {
+        var account = await _context.CampusBankAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == id);
+        return account == null ? null : MapToBankAccountDto(account);
+    }
+
+    public async Task<CampusBankAccountDto> CreateBankAccountAsync(CreateCampusBankAccountRequest request, int? userId)
+    {
+        var existingCount = await _context.CampusBankAccounts
+            .Where(a => a.CampusId == request.CampusId)
+            .CountAsync();
+
+        var shouldBeActive = request.IsActive || existingCount == 0;
+
+        if (shouldBeActive)
+        {
+            var otherAccounts = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == request.CampusId && a.IsActive)
+                .ToListAsync();
+            foreach (var acc in otherAccounts)
+            {
+                acc.IsActive = false;
+                acc.UpdatedAt = DateTime.UtcNow;
+                acc.UpdatedByUserId = userId;
+            }
+        }
+
+        var entity = new CampusBankAccount
+        {
+            CampusId = request.CampusId,
+            BankName = request.BankName.Trim(),
+            AccountHolderName = request.AccountHolderName.Trim(),
+            AccountNumber = request.AccountNumber.Trim(),
+            IfscCode = request.IfscCode.Trim().ToUpperInvariant(),
+            BranchName = request.BranchName?.Trim(),
+            AccountType = string.Equals(request.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current",
+            IsActive = shouldBeActive,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = userId
+        };
+
+        _context.CampusBankAccounts.Add(entity);
+        await _context.SaveChangesAsync();
+
+        if (shouldBeActive)
+        {
+            await SyncActiveBankAccountToConfigAsync(entity, userId);
+        }
+
+        return MapToBankAccountDto(entity);
+    }
+
+    public async Task<CampusBankAccountDto> UpdateBankAccountAsync(int id, UpdateCampusBankAccountRequest request, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null)
+            throw new KeyNotFoundException($"Campus bank account {id} not found.");
+
+        entity.BankName = request.BankName.Trim();
+        entity.AccountHolderName = request.AccountHolderName.Trim();
+        if (!string.IsNullOrWhiteSpace(request.AccountNumber) && !request.AccountNumber.Contains('*') && !request.AccountNumber.StartsWith("XXXX", StringComparison.OrdinalIgnoreCase))
+        {
+            entity.AccountNumber = request.AccountNumber.Trim();
+        }
+        entity.IfscCode = request.IfscCode.Trim().ToUpperInvariant();
+        entity.BranchName = request.BranchName?.Trim();
+        entity.AccountType = string.Equals(request.AccountType?.Trim(), "Savings", StringComparison.OrdinalIgnoreCase) ? "Savings" : "Current";
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedByUserId = userId;
+
+        if (request.IsActive && !entity.IsActive)
+        {
+            var otherAccounts = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == entity.CampusId && a.Id != id && a.IsActive)
+                .ToListAsync();
+            foreach (var acc in otherAccounts)
+            {
+                acc.IsActive = false;
+                acc.UpdatedAt = DateTime.UtcNow;
+                acc.UpdatedByUserId = userId;
+            }
+            entity.IsActive = true;
+        }
+
+        await _context.SaveChangesAsync();
+
+        if (entity.IsActive)
+        {
+            await SyncActiveBankAccountToConfigAsync(entity, userId);
+        }
+
+        return MapToBankAccountDto(entity);
+    }
+
+    public async Task<bool> DeleteBankAccountAsync(int id, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null) return false;
+
+        var campusId = entity.CampusId;
+        var wasActive = entity.IsActive;
+
+        _context.CampusBankAccounts.Remove(entity);
+        await _context.SaveChangesAsync();
+
+        if (wasActive)
+        {
+            var nextAccount = await _context.CampusBankAccounts
+                .Where(a => a.CampusId == campusId)
+                .OrderBy(a => a.Id)
+                .FirstOrDefaultAsync();
+
+            if (nextAccount != null)
+            {
+                nextAccount.IsActive = true;
+                nextAccount.UpdatedAt = DateTime.UtcNow;
+                nextAccount.UpdatedByUserId = userId;
+                await _context.SaveChangesAsync();
+                await SyncActiveBankAccountToConfigAsync(nextAccount, userId);
+            }
+        }
+
+        return true;
+    }
+
+    public async Task<CampusBankAccountDto> ActivateBankAccountAsync(int id, int? userId)
+    {
+        var entity = await _context.CampusBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (entity == null)
+            throw new KeyNotFoundException($"Campus bank account {id} not found.");
+
+        var otherAccounts = await _context.CampusBankAccounts
+            .Where(a => a.CampusId == entity.CampusId && a.Id != id && a.IsActive)
+            .ToListAsync();
+
+        foreach (var acc in otherAccounts)
+        {
+            acc.IsActive = false;
+            acc.UpdatedAt = DateTime.UtcNow;
+            acc.UpdatedByUserId = userId;
+        }
+
+        entity.IsActive = true;
+        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedByUserId = userId;
+
+        await _context.SaveChangesAsync();
+
+        await SyncActiveBankAccountToConfigAsync(entity, userId);
+
+        return MapToBankAccountDto(entity);
+    }
+
+    private async Task SyncActiveBankAccountToConfigAsync(CampusBankAccount bankAccount, int? userId)
+    {
+        var config = await _context.PaymentGatewayConfigs
+            .Where(c => c.CampusId == bankAccount.CampusId)
+            .FirstOrDefaultAsync();
+
+        if (config == null)
+        {
+            config = new PaymentGatewayConfig
+            {
+                CampusId = bankAccount.CampusId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.PaymentGatewayConfigs.Add(config);
+        }
+
+        config.BankName = bankAccount.BankName;
+        config.AccountHolderName = bankAccount.AccountHolderName;
+        config.AccountNumber = bankAccount.AccountNumber;
+        config.IfscCode = bankAccount.IfscCode;
+        config.BranchName = bankAccount.BranchName;
+        config.AccountType = bankAccount.AccountType;
+        config.UpdatedAt = DateTime.UtcNow;
+        config.UpdatedByUserId = userId;
+
+        await _context.SaveChangesAsync();
+    }
+
+    private static CampusBankAccountDto MapToBankAccountDto(CampusBankAccount a) => new()
+    {
+        Id = a.Id,
+        CampusId = a.CampusId,
+        BankName = a.BankName,
+        AccountHolderName = a.AccountHolderName,
+        AccountNumber = a.AccountNumber,
+        IfscCode = a.IfscCode,
+        BranchName = a.BranchName,
+        AccountType = a.AccountType,
+        IsActive = a.IsActive,
+        CreatedAt = a.CreatedAt,
+        UpdatedAt = a.UpdatedAt
+    };
 
     // ========================= PRIVATE HELPERS =========================
 
@@ -762,10 +1370,12 @@ public class PaymentGatewayService : IPaymentGatewayService
                 PollingIntervalMs: config.PollingIntervalMs > 0 ? config.PollingIntervalMs : _settings.Polling.IntervalMs,
                 EnableCounterUpiQr: config.EnableCounterUpiQr,
                 EnableRazorpay: config.EnableRazorpay,
-                EnableOfflineUtr: config.EnableOfflineUtr);
+                EnableOfflineUtr: config.EnableOfflineUtr,
+                IsLiveMode: config.IsLiveMode);
         }
 
         var hasAppSettingsRazorpay = IsConfiguredSecret(_settings.Razorpay.KeyId) && IsConfiguredSecret(_settings.Razorpay.KeySecret);
+        bool appSettingsIsLive = hasAppSettingsRazorpay && _settings.Razorpay.KeyId!.Trim().StartsWith("rzp_live_", StringComparison.OrdinalIgnoreCase);
 
         return new EffectiveGatewayConfig(
             PayeeVpa: string.Empty,
@@ -778,7 +1388,8 @@ public class PaymentGatewayService : IPaymentGatewayService
             PollingIntervalMs: _settings.Polling.IntervalMs > 0 ? _settings.Polling.IntervalMs : 1200,
             EnableCounterUpiQr: false,
             EnableRazorpay: hasAppSettingsRazorpay,
-            EnableOfflineUtr: false);
+            EnableOfflineUtr: false,
+            IsLiveMode: appSettingsIsLive);
     }
 
     private static bool IsConfiguredSecret(string? value)
@@ -819,16 +1430,23 @@ public class PaymentGatewayService : IPaymentGatewayService
 
             if (payments == null || !payments.Any()) return;
 
+            bool isTestKey = cfg.KeyId!.Trim().StartsWith("rzp_test_", StringComparison.OrdinalIgnoreCase);
+            if ((cfg.IsLiveMode && isTestKey) || (_hostEnvironment?.IsProduction() == true && (isTestKey || !cfg.IsLiveMode)))
+                return;
+
             var captured = payments.FirstOrDefault(p =>
                 string.Equals(p["status"]?.ToString(), "captured", StringComparison.OrdinalIgnoreCase));
 
             if (captured == null) return;
 
             var paymentId = captured["id"]?.ToString() ?? "";
+            var capturedCurrency = TryReadAttribute(captured, "currency") ?? txn.Currency;
             var capturedPaise = Convert.ToInt64(captured["amount"]);
             var capturedAmount = capturedPaise / 100m;
 
-            if (Math.Abs(capturedAmount - txn.Amount) <= 0.01m && !string.IsNullOrWhiteSpace(paymentId))
+            if (string.Equals(capturedCurrency, txn.Currency, StringComparison.OrdinalIgnoreCase)
+                && Math.Abs(capturedAmount - txn.Amount) <= 0.01m
+                && !string.IsNullOrWhiteSpace(paymentId))
             {
                 await _settlementService.SettlePaymentAsync(
                     txn.OrderId,

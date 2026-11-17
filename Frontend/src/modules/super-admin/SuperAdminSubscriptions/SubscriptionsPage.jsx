@@ -65,7 +65,7 @@ function AccountUsageView({ section }) {
   const savePlan = (event) => {
     event.preventDefault(); setError("");
     const name = editing.name.trim(); const price = Number(editing.price); const limit = Number(editing.limit); const durationDays = Number(editing.durationDays);
-    if (!name || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(durationDays) || durationDays < 1) { setError("Enter a plan name, non-negative price, and positive whole-number duration and account limit."); return; }
+    if (name.length < 2 || name.length > 60 || !/^(?:\d+)(?:\.\d{1,2})?$/.test(String(editing.price)) || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(durationDays) || durationDays < 1) { setError("Enter a plan name (2–60 characters), a non-negative price with up to 2 decimal places, and positive whole-number duration and account limit values."); return; }
     if (data.plans.some((plan) => plan.name !== editing.originalName && plan.name.toLowerCase() === name.toLowerCase())) { setError("Plan name already exists."); return; }
     const plan = { ...editing, name, price, limit, durationDays, description: editing.description.trim() };
     delete plan.isNew; delete plan.originalName;

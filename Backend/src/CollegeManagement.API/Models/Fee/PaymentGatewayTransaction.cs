@@ -53,6 +53,9 @@ public class PaymentGatewayTransaction
     [MaxLength(200)]
     public string? BankName { get; set; }
 
+    /// <summary>Actual payment date reported by payer/collector during UTR submission.</summary>
+    public DateTime? PaymentDate { get; set; }
+
     /// <summary>Payment amount in minor-unit precision.</summary>
     [Column(TypeName = "decimal(18,2)")]
     public decimal Amount { get; set; }
@@ -76,6 +79,10 @@ public class PaymentGatewayTransaction
     /// <summary>SHA-256 idempotency key to prevent double-settlement.</summary>
     [MaxLength(256)]
     public string? IdempotencyKey { get; set; }
+
+    /// <summary>Optional client-supplied idempotency key to block duplicate UTR verification requests.</summary>
+    [MaxLength(128)]
+    public string? ClientIdempotencyKey { get; set; }
 
     /// <summary>SHA-256 fingerprint hash of the request payload to detect tampering conflicts.</summary>
     [MaxLength(128)]
@@ -115,4 +122,5 @@ public class PaymentGatewayTransaction
     public Student? Student { get; set; }
     public StudentFee? StudentFee { get; set; }
     public FeePayment? FeePayment { get; set; }
+    public ICollection<PaymentProofAttachment> ProofAttachments { get; set; } = new System.Collections.Generic.List<PaymentProofAttachment>();
 }

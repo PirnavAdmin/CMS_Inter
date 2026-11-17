@@ -8,8 +8,10 @@ namespace CollegeManagement.API.Services.Interfaces
     {
         Task<int> PublishEventNotificationsAsync(int eventId);
         Task<(List<NotificationDto> Items, int TotalCount, int UnreadCount)> GetUserNotificationsAsync(int userId, int page = 1, int pageSize = 20, bool? unreadOnly = null);
+        Task<(List<NotificationDto> Items, int UnreadCount)> GetUserNotificationHistoryAsync(int userId, int limit = 10);
         Task<int> GetUnreadCountAsync(int userId);
         Task<bool> MarkAsReadAsync(int notificationId, int userId);
+        Task<bool> MarkGroupAsReadAsync(string groupKey, int userId);
         Task<bool> MarkAllAsReadAsync(int userId);
 
         // Centralized Dispatcher Methods

@@ -438,8 +438,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (!existingMarks.Any()) return false;
 
             var first = existingMarks.First();
-            bool isObjective = string.Equals(first.Examination?.ExamPattern, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) 
-                || (first.Examination?.ExamPattern != null && first.Examination.ExamPattern.ToUpper().Contains("OBJECTIVE"));
+            var limits = await GetExamFormatAndComponentLimitsAsync(examinationId, subjectId);
+            bool isObjective = limits.IsObjective || ExaminationFormatHelper.IsObjectivePattern(first.Examination?.ExamPattern);
 
             var itemsToUpsert = new List<object>();
 
@@ -474,10 +474,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                                 : (update.Theory.HasValue ? update.Theory.Value : target.TotalMarks));
 
                         int score = (int)Math.Round(singleScore, MidpointRounding.AwayFromZero);
+                        if (!isAbsent && (score < 0 || score > limits.MaxMarks))
+                        {
+                            throw new CollegeManagement.API.Exceptions.ValidationException($"Obtained marks ({score}) must be between 0 and {limits.MaxMarks}.");
+                        }
                         totalMarks = isAbsent ? 0 : score;
                         internalMarks = 0;
                         practicalMarks = 0;
-                        theoryMarks = totalMarks;
+                        theoryMarks = 0;
                     }
                     else
                     {
@@ -539,6 +543,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_GetActiveSubjectsByGroup",
                 new { p_GroupId = groupId },
                 commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<(bool IsObjective, decimal MaxMarks, decimal InternalMax, decimal PracticalMax, decimal TheoryMax, decimal PassingMarks)> GetExamFormatAndComponentLimitsAsync(
+            int examinationId, int subjectId, System.Threading.CancellationToken ct = default)
+        {
+            return await ExaminationFormatHelper.ResolveFormatAndComponentLimitsAsync(Connection, examinationId, subjectId, ct);
         }
 
         // =========================================================================

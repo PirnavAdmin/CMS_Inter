@@ -25,18 +25,19 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import DashboardLayout, { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { Modal, SkeletonRow, Toast } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import GatewayPaymentPanel from "./components/GatewayPaymentPanel.jsx";
+import PaymentConfirmation from "./components/PaymentConfirmation.jsx";
 import { savedAcademicLevelLabel, savedStructureSummary, savedStructureTotal } from "./services/feeStructureSummary.js";
 import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, normalizeFeeDetails, sumFeeValues } from "@/features/fees/feeDetails.js";
 import OfflineUtrQueueTab from "./components/OfflineUtrQueueTab.jsx";
 import PaymentReversalModal from "./components/PaymentReversalModal.jsx";
-import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData } from "./services/paymentGatewaySession.js";
+import { backendOverdue, canReversePayment, collectionPayload, gatewayTransactionIdFor, hasPaymentReversalRole, isReversedPayment, pendingInstallments, gatewayData, paymentUiState } from "./services/paymentGatewaySession.js";
 import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
@@ -63,8 +64,8 @@ const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport 
 const LEDGER_TABS = [
   { id: "Fee Collection", label: "Fee Collection" },
   { id: "Student Fee Ledger", label: "Fee Accounts" },
-  { id: "Payment History", label: "Payment History" },
   { id: "Pending UTRs", label: "Pending UTR Queue" },
+  { id: "Payment History", label: "Payment History" },
 ];
 const feeSetupSlugs = { "Fee Types": "fee-types", "Fee Structure": "fee-structure", "Hostel Fees": "hostel-fees", "Transport Fees": "transport-fees", Scholarships: "scholarships", Fine: "fine" };
 const feeLedgerSlugs = { "Fee Collection": "fee-collection", "Student Fee Ledger": "fee-accounts", "Payment History": "payment-history", "Pending UTRs": "pending-utrs" };
@@ -99,6 +100,13 @@ const getCollection = (payload) => {
   if (Array.isArray(data?.Results)) return data.Results;
   if (Array.isArray(data?.$values)) return data.$values;
   return [];
+};
+
+const feeAccountRows = (payload) => {
+  const data = payload?.data ?? payload?.Data ?? payload;
+  if (payload?.success === false || data?.success === false) throw new Error("The fee account request was not successful. Refresh to try again.");
+  if (Array.isArray(data) || ["data", "Data", "items", "Items", "results", "Results", "$values"].some(key => Array.isArray(data?.[key]))) return getCollection(payload);
+  throw new Error("The backend did not return a fee account list. Refresh or contact the backend team.");
 };
 
 const getObject = (payload) => {
@@ -891,7 +899,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
   return Array.from(grouped.values()).map((row) => {
     const feeItems = dedupeConfiguredFeeItems(row.feeItems).filter((feeItem) => !isDedicatedFacilityFeeType(feeItem));
     return {
-      ...row,
+    ...row,
       feeItems,
       totalFee: savedStructureTotal(row.totalFee, feeItems),
     };
@@ -1069,6 +1077,11 @@ const normalizeReceipt = (payload, fallback = {}) => {
     ?? row?.amount;
   return {
     ...(row || fallback),
+    feePaymentId: read(data, "feePaymentId", "FeePaymentId", "paymentId", "PaymentId") || fallback.feePaymentId || row?.feePaymentId,
+    studentFeeId: read(data, "studentFeeId", "StudentFeeId") || fallback.studentFeeId,
+    gatewayConfirmed: data.gatewayConfirmed ?? fallback.gatewayConfirmed,
+    emailDeliveryStatus: data.emailDeliveryStatus ?? data.emailStatus ?? fallback.emailDeliveryStatus ?? fallback.emailStatus,
+    remainingBalance: data.remainingBalance ?? data.outstandingBalance ?? fallback.remainingBalance,
     status: isReversedPayment(data) || isReversedPayment(fallback) ? "Reversed" : row?.status,
     receiptNo: textValue(data, "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber") || fallback.receiptNo || "-",
     amount: optionalNumberValue(data, "amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount") ?? fallback.amount ?? row?.amount,
@@ -1969,7 +1982,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 }
 
 /* ---------------------------- Collect payment ---------------------------- */
-function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending }) {
+function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending, authorize }) {
   const pending = pendingInstallments(account);
   const [mode, setMode] = useState("UPI_QR");
   const [gatewayLocked, setGatewayLocked] = useState(false);
@@ -2024,6 +2037,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
       : "Select pending fee schedules";
 
   const save = async () => {
+    if (authorize && !authorize()) return setError("Fee collection permission is required.");
     if (savingRef.current || cashUncertain) return null;
     try { collectionPayload(account, target, selectedInstallmentIds, amount); }
     catch (failure) { return setError(failure.message); }
@@ -2061,11 +2075,17 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
         receiptNumber: "",
         discount: discountValue,
         fine: fineValue,
-        transactionReference: reference,
+        transactionReference: method === "Cash" ? null : reference,
         note,
       }, { requireRealBackend: true, skipNetworkRetry: true, signal: controller.signal });
       if (controller.signal.aborted) return null;
       const saved = gatewayData(response.data);
+      if (paymentUiState(saved) === "PENDING_VERIFICATION") {
+        setCashUncertain(true);
+        setSaving(false);
+        setError("Payment details submitted successfully. Your payment is pending verification. Check the verification queue before collecting again.");
+        return null;
+      }
       if (!read(saved, "feePaymentId", "paymentId", "id") || !textValue(saved, "receiptNo", "receiptNumber")
         || !(numberValue(saved, "amount", "paidAmount") > 0)
         || (saved.status && !["paid", "success", "completed"].includes(normalizeKey(saved.status)))) {
@@ -2074,6 +2094,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
       }
       setSaving(false);
       return onSaved({
+        ...saved,
         amount: numberValue(saved, "amount", "Amount", "paidAmount", "PaidAmount") || value,
         baseAmount: numberValue(saved, "baseAmount", "BaseAmount", "amount", "Amount") || value,
         discount: numberValue(saved, "discount", "Discount", "discountAmount", "DiscountAmount"),
@@ -2119,7 +2140,7 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
           {[["UPI_QR", "Dynamic UPI QR"], ["RAZORPAY", "Card / NetBanking"], ["BANK_TRANSFER", "Bank Transfer / UTR"], ["CASH", "Cash / Manual"]].map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={mode === id} className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`} disabled={gatewayLocked || saving || cashUncertain} onClick={() => { setMode(id); setError(""); }}>{label}</button>)}
         </div>
         <fieldset className="cms-fee-gateway-fields" disabled={gatewayLocked || saving || cashUncertain}>
-        <div className="cms-form-grid cols-3">
+        <div className={`cms-form-grid ${mode === "CASH" && method === "Cash" ? "cols-2" : "cols-3"}`}>
           <div className="cms-field full">
             <label>Pay Towards</label>
             <details className="cms-fee-pay-towards">
@@ -2159,12 +2180,15 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
             <label htmlFor="collect-date">Payment Date</label>
             <input id="collect-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </div>
-          <div className="cms-field">
+          {method !== "Cash" && <div className="cms-field">
             <label htmlFor="collect-method">Payment Method <span className="req">*</span></label>
-            <select id="collect-method" value={method} onChange={(event) => setMethod(event.target.value)}>
+            <select id="collect-method" value={method} onChange={(event) => {
+              setMethod(event.target.value);
+              if (event.target.value === "Cash" && error === "Transaction / Reference Number is required for this payment method") setError("");
+            }}>
               {PAYMENT_METHODS.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-          </div>
+          </div>}
           <div className="cms-field">
             <label htmlFor="collect-discount">Discount</label>
             <input id="collect-discount" type="number" min="0" value={discount} onChange={(event) => setDiscount(event.target.value)} />
@@ -2173,18 +2197,22 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
             <label htmlFor="collect-fine">Fine</label>
             <input id="collect-fine" type="number" min="0" value={fine} onChange={(event) => setFine(event.target.value)} />
           </div>
-          <div className="cms-field">
+          {method !== "Cash" && <div className="cms-field">
             <label htmlFor="collect-ref">Transaction / Reference Number {isReferenceRequired ? <span className="req">*</span> : null}</label>
             <input id="collect-ref" value={reference} placeholder={method === "Cash" ? "Optional for cash" : "Reference number"} onChange={(event) => setReference(event.target.value)} />
-          </div>
+          </div>}
           <div className="cms-field full">
             <label htmlFor="collect-note">Note</label>
             <textarea id="collect-note" value={note} onChange={(event) => setNote(event.target.value)} />
           </div>
           </> : null}
         </div>
+        {mode === "CASH" && method === "Cash" ? <details>
+          <summary className="cms-fee-note">Other manual payment methods</summary>
+          <div className="cms-form-actions">{PAYMENT_METHODS.filter(item => item !== "Cash").map(item => <button key={item} type="button" className="cms-btn cms-btn-ghost" onClick={() => { setMethod(item); setError(""); }}>{item}</button>)}</div>
+        </details> : null}
         </fieldset>
-        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={onPending} /> : null}
+        {mode !== "CASH" ? <GatewayPaymentPanel key={mode} authorize={authorize} mode={mode} campusId={campusId} account={account} target={target} selectedIds={selectedInstallmentIds} amount={amount} onLockChange={setGatewayLocked} onFooterChange={setGatewayFooter} onSaved={onSaved} onPending={onPending} /> : null}
         {error ? <p className="cms-error">{error}</p> : null}
         {cashUncertain ? <p className="cms-error" role="alert">Review payment history before collecting again; this request may already have been recorded.</p> : null}
       </div>
@@ -2194,100 +2222,9 @@ function CollectPaymentModal({ account, campusId, onClose, onSaved, onPending })
 
 /* ------------------------------- Receipt -------------------------------- */
 function ReceiptModal({ receipt, onClose }) {
-  const receiptRef = useRef(null);
-  const printControllerRef = useRef(null);
-  const [printing, setPrinting] = useState(false);
-  const [printError, setPrintError] = useState("");
-  useEffect(() => {
-    setPrintError("");
-    setPrinting(false);
-    return () => { printControllerRef.current?.abort(); printControllerRef.current = null; };
-  }, [receipt]);
-
-  const printReceipt = async () => {
-    if (printControllerRef.current) return;
-    const controller = new AbortController();
-    printControllerRef.current = controller;
-    setPrinting(true);
-    setPrintError("");
-    try {
-      await printReceiptElement(receiptRef.current, controller.signal);
-    } catch (error) {
-      if (!controller.signal.aborted) setPrintError(error.message || "The receipt could not be printed. Please try again.");
-    } finally {
-      if (printControllerRef.current === controller) {
-        printControllerRef.current = null;
-        setPrinting(false);
-      }
-    }
-  };
-
-  const paidAmount = receipt.amount === null || receipt.amount === undefined || receipt.amount === "" ? NaN : Number(receipt.amount);
-  const money = (value) => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))
-    ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value))
-    : "-";
-  const availableBreakdown = (receipt.breakdown || []).filter((item) => item.feeType && item.paidAmount !== null && item.paidAmount !== undefined && Number.isFinite(Number(item.paidAmount)) && Number(item.paidAmount) >= 0);
-  const breakdownTotal = availableBreakdown.reduce((sum, item) => sum + Number(item.paidAmount), 0);
-  const paymentItems = availableBreakdown.length && Number.isFinite(paidAmount) && Math.abs(breakdownTotal - paidAmount) < 0.005
-    ? availableBreakdown
-    : [{ id: "payment", feeType: "Fee Payment", paidAmount: receipt.amount }];
-  const words = Number.isFinite(paidAmount) ? amountToWords(paidAmount) : "";
-  const institutionName = receipt.collegeName || COLLEGE_NAME;
-  const studentRows = [
-    ["Student Name", receipt.studentName], ["Admission Number", receipt.admissionNo],
-    ["Group / Course", receipt.group], ["Program", receipt.program],
-    ["Section", receipt.section], ["Academic Year", receipt.academicYear], ["Campus", receipt.campusName],
-  ];
-  const contact = [receipt.collegeAddress, receipt.collegePhone ? 'Phone: ' + receipt.collegePhone : "", receipt.collegeEmail ? 'Email: ' + receipt.collegeEmail : ""].filter(Boolean);
-
-  return (
-    <Modal title="Payment Receipt" onClose={onClose} footer={<>
-      <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-      <button className="cms-btn cms-btn-primary" onClick={printReceipt} disabled={printing}><Printer size={14} />{printing ? "Preparing Receipt..." : "Print Receipt"}</button>
-    </>}>
-      {printError ? <p className="cms-error" role="alert">{printError}</p> : null}
-      <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
-        <header className="cms-fee-receipt-head">
-          <img src={collegeLogo} alt={institutionName + " logo"} />
-          <div><strong>{institutionName}</strong>{contact.map((line) => <span key={line}>{line}</span>)}</div>
-        </header>
-        <h3 className="cms-fee-receipt-title">FEE PAYMENT RECEIPT</h3>
-        {isReversedPayment(receipt) ? <p className="cms-fee-reversal-warning" role="alert">REVERSED PAYMENT — This receipt is retained as a historical record. It does not represent a current credit to the student's fee account.</p> : null}
-        <div className="cms-fee-receipt-meta">
-          <span><b>Receipt Number</b> {receipt.receiptNo || "-"}</span>
-          <span><b>Payment Date</b> {receipt.date ? formatDate(receipt.date) : "-"}</span>
-          <span><b>Payment Status</b> {receipt.status || "-"}</span>
-          <span><b>Transaction Reference</b> {receipt.reference || "-"}</span>
-        </div>
-        <section className="cms-fee-receipt-section">
-          <h4>Student Information</h4>
-          <table className="cms-fee-receipt-info-table"><tbody>
-            {studentRows.map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value || "-"}</td></tr>)}
-          </tbody></table>
-        </section>
-        <section className="cms-fee-receipt-section cms-fee-receipt-payment-section">
-          <h4>Payment Details</h4>
-          <table className="cms-fee-receipt-payment-table">
-            <colgroup><col style={{ width: "10%" }} /><col style={{ width: "60%" }} /><col style={{ width: "30%" }} /></colgroup>
-            <thead><tr><th scope="col">S.No</th><th scope="col">Fee Particulars</th><th scope="col" className="num">Amount (INR)</th></tr></thead>
-            <tbody>{paymentItems.map((item, index) => <tr key={item.id + "-" + index}><td>{index + 1}</td><td>{item.feeType}</td><td className="num">{money(item.paidAmount)}</td></tr>)}</tbody>
-            <tfoot><tr><th colSpan={2} scope="row">Total Paid</th><td className="num">{money(receipt.amount)}</td></tr></tfoot>
-          </table>
-        </section>
-        <div className="cms-fee-receipt-payment-summary">
-          <div><span>Payment Mode</span><strong>{receipt.method || "-"}</strong></div>
-          {receipt.reference ? <div><span>Transaction Reference</span><strong>{receipt.reference}</strong></div> : null}
-        </div>
-        <div className="cms-fee-receipt-total"><span>Total Amount Paid</span><strong>{money(receipt.amount)}</strong></div>
-        {words ? <div className="cms-fee-receipt-words"><span>Amount in Words</span><strong>{words}</strong></div> : null}
-        <div className="cms-fee-signature"><span>Student / Parent Signature</span><span>Received By / Authorized Signatory</span></div>
-        <p className="cms-fee-receipt-note">This is a computer-generated fee payment receipt.<br />Thank you for your payment.</p>
-      </div>
-    </Modal>
-  );
+  return <PaymentConfirmation payment={receipt} onClose={onClose} />;
 }
 
-/* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false, reversalAuthorized = false, onReverse, reversalBlocked = new Set() }) {
   const accountPrintRef = useRef(null);
   const money = value => value == null ? "Unavailable" : formatCurrency(value);
@@ -2588,7 +2525,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Student Fee Ledger</h2>
-        <span className="cms-badge cms-badge-info">{rows.length} of {accounts.length} students</span>
+        <span className="cms-badge cms-badge-info">{error && !accounts.length ? "Unavailable" : `${rows.length} of ${accounts.length} students`}</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls">
         <div className="cms-fee-search">
@@ -2613,9 +2550,10 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
             </tr>
           </thead>
           <tbody>
+            {!loading && error && rows.length > 0 ? <tr><td colSpan={11} role="alert" className="cms-fee-empty-row">Unable to refresh fee accounts: {error} Showing previously loaded accounts; values may be outdated.</td></tr> : null}
             {loading ? (
               Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
-            ) : error ? (
+            ) : error && !rows.length ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">No students match the current search and filters.</td></tr>
@@ -2651,7 +2589,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
   );
 }
 
-function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false, error = "" }) {
+function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false, error = "", collectionAuthorized = true }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const setSearchTerm = (value) => {
@@ -2675,7 +2613,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Fee Collection</h2>
-        <span className="cms-badge cms-badge-info">{rows.length} accounts</span>
+        <span className="cms-badge cms-badge-info">{error && !accounts.length ? "Unavailable" : `${rows.length} accounts`}</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
@@ -2692,9 +2630,10 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
             </tr>
           </thead>
           <tbody>
+            {!loading && error && rows.length > 0 ? <tr><td colSpan={9} role="alert" className="cms-fee-empty-row">Unable to refresh fee accounts: {error} Showing previously loaded accounts; values may be outdated.</td></tr> : null}
             {loading ? (
               Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
-            ) : error ? (
+            ) : error && !rows.length ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">No fee accounts match the current search and filters.</td></tr>
@@ -2709,7 +2648,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
                 <td>{item.nextDueDate ? formatDate(item.nextDueDate) : "-"}</td>
                 <td><StatusBadge status={item.feeStatus} /></td>
                 <td>
-                  <button className="cms-action-btn" title="Open fee account" aria-label="Open fee account" disabled={item.balance === 0} onClick={() => onCollect(item.id)}>
+                  <button className="cms-action-btn" title="Open fee account" aria-label="Open fee account" disabled={!collectionAuthorized || item.balance === 0} onClick={() => onCollect(item.id)}>
                     <WalletCards size={15} />
                   </button>
                 </td>
@@ -2734,7 +2673,7 @@ const structureDropdownRows = (payload) => {
   return rows;
 };
 
-function StructureFormModal({ initial, structures = [], onClose, onSaved, onPersistenceError, feeTypes, masters, masterErrors = {}, masterLoading = false, yearFeeMode = "same", yearIncrementType = "percentage", yearIncrementValue = "", onDraftTotalChange }) {
+function StructureFormModal({ initial, structures = [], onClose, onSaved, onPersistenceError, feeTypes, masters, masterErrors = {}, masterLoading = false, authorize, yearFeeMode = "same", yearIncrementType = "percentage", yearIncrementValue = "", onDraftTotalChange }) {
   const initialProgram = initial?.programId || "";
   const initialValues = initial || {
     boardId: masters.selectedBoardId ? String(masters.selectedBoardId) : "",
@@ -2959,6 +2898,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
   };
 
   const save = async () => {
+    if (authorize && !authorize(initial?.id ? "edit" : "create")) return setError("Fee setup permission is required.");
     if (savingRef.current || persistenceUnverified) return null;
     const configuredItems = dedupeConfiguredFeeItems(values.feeItems).filter((item) => item.structureItemId || item.required || Number(item.originalAmount || 0) > 0);
     const activeItems = configuredItems.filter((item) => item.selected !== false);
@@ -3227,7 +3167,7 @@ const scholarshipPayload = (item) => ({
   IsActive: item.status !== "Inactive",
 });
 
-function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
+function FeeTypesTab({ authorize = () => true, feeTypes, onChange, onToast, onRefresh }) {
   const [formItem, setFormItem] = useState(null);
   const [deletingId, setDeletingId] = useState("");
   const [page, setPage] = useState(1);
@@ -3239,6 +3179,7 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
   }, [page, totalPages]);
 
   const saveType = async (item, message) => {
+    if (!authorize(Number(item.id) ? "edit" : "create")) throw new Error("Fee setup permission is required.");
     if (Number(item.id)) {
       await apiClient.put(apiEndpoints.fee.updateFeeType(item.id), feeTypePayload(item));
     } else {
@@ -3250,6 +3191,7 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
   };
 
   const deleteType = async (item) => {
+    if (!authorize("delete")) return onToast("Fee setup delete permission is required.");
     setDeletingId(item.id);
     try {
       if (Number(item.id)) {
@@ -3273,7 +3215,7 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
           <h2>Fee Types</h2>
           <p>Manage the reusable master list of fee types.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fee Type</button>
+        <button disabled={!authorize("create")} className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fee Type</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         <div className="cms-table-wrap cms-fee-config-wrap">
@@ -3289,8 +3231,8 @@ function FeeTypesTab({ feeTypes, onChange, onToast, onRefresh }) {
                   <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit fee type" aria-label="Edit fee type" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn" title="Delete fee type" aria-label="Delete fee type" disabled={deletingId === item.id} onClick={() => deleteType(item)}><Trash2 size={15} /></button>
+                      <button disabled={!authorize("edit")} type="button" className="cms-action-btn" title="Edit fee type" aria-label="Edit fee type" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Delete fee type" aria-label="Delete fee type" disabled={!authorize("delete") || deletingId === item.id} onClick={() => deleteType(item)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3386,7 +3328,7 @@ function ScholarshipFormModal({ initial, scholarships, onClose, onSaved }) {
   );
 }
 
-function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
+function ScholarshipsTab({ authorize = () => true, scholarships, onChange, onToast, onRefresh }) {
   const [formItem, setFormItem] = useState(null);
   const [deletingId, setDeletingId] = useState("");
   const [page, setPage] = useState(1);
@@ -3398,6 +3340,7 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
   }, [page, totalPages]);
 
   const saveScholarship = async (nextScholarships, message, item) => {
+    if (!authorize(Number(item.id) ? "edit" : "create")) throw new Error("Fee setup permission is required.");
     const payload = scholarshipPayload(item);
     if (Number(item.id)) {
       await apiClient.put(apiEndpoints.fee.updateScholarship(item.id), payload);
@@ -3411,6 +3354,7 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
   };
 
   const deleteScholarship = async (item) => {
+    if (!authorize("delete")) return onToast("Fee setup delete permission is required.");
     setDeletingId(item.id);
     try {
       if (Number(item.id)) {
@@ -3434,7 +3378,7 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
           <h2>Scholarships</h2>
           <p>Manage scholarship and concession schemes available for student fee assignments.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Scholarship</button>
+        <button disabled={!authorize("create")} className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Scholarship</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         <div className="cms-table-wrap">
@@ -3456,8 +3400,8 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
                   <td className="cms-fee-value-col">{scholarshipValueLabel(item)}</td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit scholarship" aria-label="Edit scholarship" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn" title="Delete scholarship" aria-label="Delete scholarship" disabled={deletingId === item.id} onClick={() => deleteScholarship(item)}><Trash2 size={15} /></button>
+                      <button disabled={!authorize("edit")} type="button" className="cms-action-btn" title="Edit scholarship" aria-label="Edit scholarship" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn" title="Delete scholarship" aria-label="Delete scholarship" disabled={!authorize("delete") || deletingId === item.id} onClick={() => deleteScholarship(item)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3580,7 +3524,7 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
   );
 }
 
-function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
+function FineTab({ authorize = () => true, fineRules, feeTypes, loading, error, onToast, onRefresh }) {
   const [formItem, setFormItem] = useState(null);
   const [deletingId, setDeletingId] = useState("");
   const [page, setPage] = useState(1);
@@ -3601,6 +3545,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
   });
 
   const saveFineRule = async (item, message) => {
+    if (!authorize(item.fineRuleId || item.id ? "edit" : "create")) throw new Error("Fee setup permission is required.");
     const id = item.fineRuleId || item.id;
     if (id) {
       await apiClient.put(apiEndpoints.fee.fineRuleById(id), fineRulePayload(item));
@@ -3613,6 +3558,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
   };
 
   const deleteFineRule = async (item) => {
+    if (!authorize("delete")) return onToast("Fee setup delete permission is required.");
     const id = item.fineRuleId || item.id;
     if (!id) return;
     setDeletingId(String(item.id));
@@ -3634,7 +3580,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
           <h2>Fine</h2>
           <p>Configure overdue fee fine rules for unpaid fee schedules.</p>
         </div>
-        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fine Rule</button>
+        <button disabled={!authorize("create")} className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fine Rule</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -3654,8 +3600,8 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
                   <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn delete" title="Deactivate fine rule" aria-label="Deactivate fine rule" disabled={deletingId === String(item.id)} onClick={() => deleteFineRule(item)}><Trash2 size={15} /></button>
+                      <button disabled={!authorize("edit")} type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate fine rule" aria-label="Deactivate fine rule" disabled={!authorize("delete") || deletingId === String(item.id)} onClick={() => deleteFineRule(item)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3681,7 +3627,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
   );
 }
 
-function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
+function StructureTab({ authorize = () => true, structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
   const [actionTarget, setActionTarget] = useState(null);
   const [yearFeeMode, setYearFeeMode] = useState("");
@@ -3721,6 +3667,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   }, [page, totalPages]);
 
   const copyStructure = (row) => {
+    if (!authorize("create")) return onToast("Fee setup create permission is required.");
     if (row.feeItems?.some(item => item.feeTypeNameMissing)) {
       onToast("This structure has unresolved fee types. Their names and mappings must be corrected before copying.");
       return;
@@ -3744,6 +3691,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const editStructure = async (row) => {
+    if (!authorize("edit")) return onToast("Fee setup edit permission is required.");
     setIsAdding(false);
     setFirstYearTotal(0);
     setLoadingEditId(row.id);
@@ -3769,6 +3717,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const deleteStructure = async (row) => {
+    if (!authorize("delete")) return onToast("Fee setup delete permission is required.");
     if (!row.id) return;
     setDeletingId(row.id);
     try {
@@ -3783,6 +3732,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const requestStructureAction = (action, row) => {
+    if (!authorize(action === "copy" ? "create" : action)) return onToast("Fee setup permission is required.");
     if (row.members || action === "delete") setActionTarget({ action, row });
     else if (action === "edit") editStructure(row);
     else copyStructure(row);
@@ -3806,6 +3756,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   };
 
   const openAddStructure = () => {
+    if (!authorize("create")) return onToast("Fee setup create permission is required.");
     if (loading) return;
     if (yearFeeMode !== "same" && yearFeeMode !== "different") {
       onToast("Please select a fee configuration option (Same Fees or Different Fees) before adding a fee structure.");
@@ -3880,7 +3831,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
     <div className="cms-card">
       <div className="cms-card-head">
         <h2>Fee Structure</h2>
-        <button className="cms-btn cms-btn-primary" onClick={openAddStructure}><Plus size={14} /> Add Fee Structure</button>
+        <button disabled={!authorize("create")} className="cms-btn cms-btn-primary" onClick={openAddStructure}><Plus size={14} /> Add Fee Structure</button>
       </div>
       <div className="cms-table-wrap">
         <table className="cms-table cms-fee-setup-table cms-fee-structure-table">
@@ -3944,9 +3895,9 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
                   <td className="num cms-fee-total-col">{activeTotal === undefined ? "Unavailable" : formatCurrency(activeTotal)}</td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button className="cms-action-btn" title="Edit fee structure" aria-label="Edit fee structure" disabled={loadingEditId === row.id} onClick={() => requestStructureAction("edit", row)}><Pencil size={15} /></button>
-                      <button className="cms-action-btn" title="Copy fee structure" aria-label="Copy fee structure" onClick={() => requestStructureAction("copy", row)}><Copy size={15} /></button>
-                      <button className="cms-action-btn" title="Delete fee structure" aria-label="Delete fee structure" disabled={deletingId === row.id} onClick={() => requestStructureAction("delete", row)}><Trash2 size={15} /></button>
+                      <button className="cms-action-btn" title="Edit fee structure" aria-label="Edit fee structure" disabled={!authorize("edit") || loadingEditId === row.id} onClick={() => requestStructureAction("edit", row)}><Pencil size={15} /></button>
+                      <button disabled={!authorize("create")} className="cms-action-btn" title="Copy fee structure" aria-label="Copy fee structure" onClick={() => requestStructureAction("copy", row)}><Copy size={15} /></button>
+                      <button className="cms-action-btn" title="Delete fee structure" aria-label="Delete fee structure" disabled={!authorize("delete") || deletingId === row.id} onClick={() => requestStructureAction("delete", row)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -3963,6 +3914,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
       </div>
       {editing ? (
         <StructureFormModal
+          authorize={authorize}
           initial={Object.keys(editing).length ? editing : null}
           onClose={() => { setEditing(null); setIsAdding(false); setFirstYearTotal(0); }}
           onSaved={(message) => { setEditing(null); setIsAdding(false); setFirstYearTotal(0); onToast(message); onRefresh(); }}
@@ -3994,7 +3946,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   );
 }
 
-function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh }) {
+function HostelFeesTab({ authorize = () => true, configs, masters, loading, error, onToast, onRefresh }) {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState("");
@@ -4041,6 +3993,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
   }, [page, totalPages]);
 
   const saveConfig = async () => {
+    if (!authorize(editing?.id ? "edit" : "create")) return onToast("Fee setup permission is required.");
     const feeAmount = Number(editing.feeAmount);
     if (!editing.hostelId || !editing.roomTypeId || !Number.isFinite(feeAmount) || feeAmount <= 0) {
       onToast("Select hostel block, room type, and enter a valid hostel fee");
@@ -4074,6 +4027,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
   };
 
   const deleteConfig = async (item) => {
+    if (!authorize("delete")) return onToast("Fee setup delete permission is required.");
     const id = item.feeConfigId || item.id;
     if (!id) return;
     setDeletingId(String(item.id));
@@ -4095,7 +4049,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
           <h2>Hostel Fees</h2>
           <p>Dedicated hostel fee configuration, separate from normal Fee Types.</p>
         </div>
-        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!blockOptions.length || !roomTypeOptions.length || loading}><Plus size={14} /> Add Hostel Fee</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!authorize("create") || !blockOptions.length || !roomTypeOptions.length || loading}><Plus size={14} /> Add Hostel Fee</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -4126,8 +4080,8 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
                   <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
-                      <button type="button" className="cms-action-btn delete" title="Deactivate hostel fee" aria-label="Deactivate hostel fee" disabled={deletingId === String(item.id)} onClick={() => deleteConfig(item)}><Trash2 size={15} /></button>
+                      <button disabled={!authorize("edit")} type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate hostel fee" aria-label="Deactivate hostel fee" disabled={!authorize("delete") || deletingId === String(item.id)} onClick={() => deleteConfig(item)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -4212,7 +4166,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
   );
 }
 
-function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRefresh }) {
+function TransportFeesTab({ authorize = () => true, routes, pickupPoints, loading, error, onToast, onRefresh }) {
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
@@ -4245,6 +4199,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
   const openEdit = (item) => setEditing(createDraft(item));
 
   const saveTransportFee = async () => {
+    if (!authorize(editing?.id ? "edit" : "create")) return onToast("Fee setup permission is required.");
     const monthlyFee = Number(editing.monthlyFee);
     const distanceKm = Number(editing.distanceKm);
     if (!editing.routeId || !editing.pickupName || !Number.isFinite(monthlyFee) || monthlyFee < 0 || !Number.isFinite(distanceKm) || distanceKm < 0) {
@@ -4286,7 +4241,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
           <h2>Transport Fees</h2>
           <p>Route and pickup-point based transport fare configuration.</p>
         </div>
-        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!routes.length || loading}><Plus size={14} /> Add Transport Fee</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!authorize("create") || !routes.length || loading}><Plus size={14} /> Add Transport Fee</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
         {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
@@ -4315,7 +4270,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
                   <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
-                      <button type="button" className="cms-action-btn" title="Edit transport fee" aria-label="Edit transport fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                      <button disabled={!authorize("edit")} type="button" className="cms-action-btn" title="Edit transport fee" aria-label="Edit transport fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
                     </div>
                   </td>
                 </tr>
@@ -4384,7 +4339,8 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
   );
 }
 
-function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFees, transportFees, fineRules, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
+function FeeSetupTab({ authorize, setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFees, transportFees, fineRules, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
+  const allow = useCallback((action) => !authorize || authorize(action, setupTab), [authorize, setupTab]);
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Fee setup">
@@ -4401,9 +4357,10 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
           </button>
         ))}
       </div>
-      {setupTab === "Fee Types" ? <FeeTypesTab feeTypes={feeTypes} onChange={onFeeTypesChange} onToast={onToast} onRefresh={onRefresh} /> : null}
+      {!allow("view") ? <div className="cms-alert cms-alert-error" role="alert">This fee setup section is unavailable with your current permissions or live API configuration.</div> : <>
+      {setupTab === "Fee Types" ? <FeeTypesTab authorize={allow} feeTypes={feeTypes} onChange={onFeeTypesChange} onToast={onToast} onRefresh={onRefresh} /> : null}
       {setupTab === "Fee Structure" ? (
-        <StructureTab
+        <StructureTab authorize={allow}
           structures={structures}
           onToast={onToast}
           onRefresh={onRefresh}
@@ -4415,7 +4372,7 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
         />
       ) : null}
       {setupTab === "Hostel Fees" ? (
-        <HostelFeesTab
+        <HostelFeesTab authorize={allow}
           configs={hostelFees.configs}
           masters={hostelFees.masters}
           loading={hostelFees.loading}
@@ -4425,7 +4382,7 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
         />
       ) : null}
       {setupTab === "Transport Fees" ? (
-        <TransportFeesTab
+        <TransportFeesTab authorize={allow}
           routes={transportFees.routes}
           pickupPoints={transportFees.pickupPoints}
           loading={transportFees.loading}
@@ -4434,13 +4391,14 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
           onRefresh={onRefresh}
         />
       ) : null}
-      {setupTab === "Scholarships" ? <ScholarshipsTab scholarships={scholarships} onChange={onScholarshipsChange} onToast={onToast} onRefresh={onRefresh} /> : null}
-      {setupTab === "Fine" ? <FineTab fineRules={fineRules.rows} feeTypes={feeTypes} loading={fineRules.loading} error={fineRules.error} onToast={onToast} onRefresh={onRefresh} /> : null}
+      {setupTab === "Scholarships" ? <ScholarshipsTab authorize={allow} scholarships={scholarships} onChange={onScholarshipsChange} onToast={onToast} onRefresh={onRefresh} /> : null}
+      {setupTab === "Fine" ? <FineTab authorize={allow} fineRules={fineRules.rows} feeTypes={feeTypes} loading={fineRules.loading} error={fineRules.error} onToast={onToast} onRefresh={onRefresh} /> : null}
+      </>}
     </div>
   );
 }
 
-function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors, gatewayScope, gatewayAccess, onSettled, onToast, onExport, exporting, onReverse, reversalBlocked }) {
+function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors, gatewayScope, gatewayAccess, onSettled, onToast, onExport, exporting, onReverse, reversalBlocked, collectionAuthorized = true, viewAuthorized = true }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-gateway-toolbar">
@@ -4460,10 +4418,12 @@ function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts,
       </div>
       <button type="button" className="cms-btn cms-btn-ghost cms-fee-mini-btn" disabled={exporting || !gatewayAccess.export} onClick={onExport}>{exporting ? "Exporting…" : "Export Payments Ledger (CSV)"}</button>
       </div>
+      {!viewAuthorized ? <div className="cms-alert cms-alert-error" role="alert">This section is unavailable with your current finance permissions.</div> : <>
       {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} fineRules={fineRules} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
-      {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
+      {ledgerTab === "Fee Collection" ? <FeeCollectionTab collectionAuthorized={collectionAuthorized} accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
       {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} reversalAuthorized={gatewayAccess.reverse} onReverse={onReverse} reversalBlocked={reversalBlocked} /> : null}
       {ledgerTab === "Pending UTRs" ? <OfflineUtrQueueTab scope={gatewayScope} canView={gatewayAccess.view} canReview={gatewayAccess.review} onSettled={onSettled} onToast={onToast} Pagination={TablePagination} /> : null}
+      </>}
     </div>
   );
 }
@@ -4590,10 +4550,22 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "",
 }
 
 /* -------------------------------- Page ---------------------------------- */
-export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTab = FEE_SETUP_TABS[0], initialLedgerTab = LEDGER_TABS[0].id } = {}) {
+function EmbeddedFeeLayout({ title, subtitle, actions, children }) {
+  return <div className="cms-fee-shared-page">
+    <header className="cms-page-head">
+      <div className="cms-page-title"><img className="cms-page-title-icon" src={adminIconAssets.feeManagement} alt="" /><div className="cms-page-title-copy"><h1>{title}</h1><p>{subtitle}</p></div></div>
+      <div className="cms-fee-head-actions">{actions}</div>
+    </header>
+    {children}
+  </div>;
+}
+
+export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTab = FEE_SETUP_TABS[0], initialLedgerTab = LEDGER_TABS[0].id, embedded = false, authorize } = {}) {
+  const PageLayout = embedded ? EmbeddedFeeLayout : DashboardLayout;
+  const authorizeCollection = useCallback(() => !authorize || authorize("collect", "fee-collection"), [authorize]);
   const gatewayPermissions = useEffectivePermissions();
   const gatewayAccess = {
-    view: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canView("fee-management"),
+    view: !gatewayPermissions.loading && !gatewayPermissions.error && (authorize ? authorize("view", "fee-collection") : gatewayPermissions.canView("fee-management")),
     review: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.APPROVE_REJECT, "fee-collection"),
     export: !gatewayPermissions.loading && !gatewayPermissions.error && gatewayPermissions.canDo("fee-management", ACTIONS.EXPORT),
     reverse: !gatewayPermissions.loading && !gatewayPermissions.error && hasPaymentReversalRole(getAuthUser() || {}, getAuthItem("role"))
@@ -4611,6 +4583,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const selectedCampusValue = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
   const [searchParams, setSearchParams] = useSearchParams();
   const { tab, setupTab, ledgerTab, overviewTab } = resolveFeeView(searchParams, initialTab, initialSetupTab, initialLedgerTab);
+  const permissionScreen = tab === "Fee Setup" ? setupTab : tab === "Overview" ? "overview"
+    : ledgerTab === "Student Fee Ledger" ? "student-fees" : ledgerTab === "Payment History" ? "payment-history" : "fee-collection";
+  const sectionAuthorized = !authorize || authorize("view", permissionScreen);
   const lastSetupTab = useRef(setupTab);
   const lastLedgerTab = useRef(ledgerTab);
   useEffect(() => {
@@ -4688,6 +4663,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const paymentHistoryRequestRef = useRef(0);
   const loadedTabsRef = useRef(new Set());
   const feeDetailCacheRef = useRef(new Map());
+  useEffect(() => {
+    // Retain rows during same-scope refreshes, but never retain another campus/year's rows.
+    accountRequestRef.current.ledger += 1;
+    accountRequestRef.current.collection += 1;
+    setLedgerAccounts([]); setCollectionAccounts([]);
+    setAccountErrors({ ledger: "", collection: "" });
+    feeDetailCacheRef.current.clear();
+    return () => {
+      accountRequestRef.current.ledger += 1;
+      accountRequestRef.current.collection += 1;
+    };
+  }, [selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
 
   const contextBoardOptions = useMemo(() => (
     toSelectOptions(
@@ -4772,13 +4759,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     accountRequestRef.current = { ...accountRequestRef.current, [source]: requestId };
     setAccountLoading((current) => ({ ...current, [source]: true }));
     setAccountErrors((current) => ({ ...current, [source]: "" }));
-    if (source === "collection") {
-      setCollectionAccounts([]);
-    } else {
-      setLedgerAccounts([]);
-    }
     try {
       const response = await apiClient.get(endpoint, {
+        requireRealBackend: true,
         params: cleanParams({
           campusId: selectedCampusValue,
           boardId: selectedBoardId,
@@ -4786,10 +4769,13 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         }),
       });
       if (accountRequestRef.current[source] !== requestId) return;
-      const rows = getCollection(response.data);
+      const rows = feeAccountRows(response.data);
       const context = await loadAccountContext(rows);
       if (accountRequestRef.current[source] !== requestId) return;
-      const initialAccounts = normalizeFeeAccountRows(rows, context);
+      const initialAccounts = normalizeFeeAccountDataset(normalizeFeeAccountRows(rows, context));
+      // The list is authoritative; optional detail enrichment must not discard it.
+      if (source === "collection") setCollectionAccounts(initialAccounts);
+      else setLedgerAccounts(initialAccounts);
       const unresolvedAccounts = initialAccounts.filter((account) => (
         (!account.paymentPlan || (account.paymentPlan === "Installment Payment" && !account.installments?.length))
         && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
@@ -4797,9 +4783,10 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       const detailRequests = new Map();
       // Cap initial pre-fetch to at most 6 accounts to prevent exhausting DB connections; full details load on demand when account is opened
       unresolvedAccounts.slice(0, 6).forEach((account) => {
-        const endpoint = account.studentId
-          ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
-          : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
+        const accountId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
+        const endpoint = accountId
+          ? apiEndpoints.fee.studentFeeDetails(accountId)
+          : apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId);
         if (!detailRequests.has(endpoint)) detailRequests.set(endpoint, account);
       });
       const detailEntries = await Promise.all(Array.from(detailRequests.entries()).map(async ([endpoint, account]) => {
@@ -4916,7 +4903,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       apiClient.get(apiEndpoints.hostel.fees),
       apiClient.get(apiEndpoints.hostel.blocks),
       apiClient.get(apiEndpoints.hostel.roomTypes),
-      apiClient.get(apiEndpoints.fee.fineRules, { silent: true, skipErrorLog: true }),
+      apiClient.get(apiEndpoints.fee.fineRules, { requireRealBackend: true, params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
     ]);
     if (structureRequestRef.current !== requestId) return;
     const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];
@@ -5046,7 +5033,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
     if (structureRequestRef.current === requestId) setStructureLoading(false);
-  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue]);
+  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
 
   const openCollectPayment = (id) => {
     navigateFeeAccount(id, "collection");
@@ -5157,13 +5144,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       }
       if (tab === "Overview") loadOverviewData();
     };
+    const refreshOnFocus = () => {
+      // The native file picker restores window focus. Reloading here clears
+      // selectedDetail and unmounts the active payment form and its File state.
+      if (!collecting) refreshFeeAccounts();
+    };
     window.addEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
-    window.addEventListener("focus", refreshFeeAccounts);
+    window.addEventListener("focus", refreshOnFocus);
     return () => {
       window.removeEventListener(STUDENT_FEES_UPDATED_EVENT, refreshFeeAccounts);
-      window.removeEventListener("focus", refreshFeeAccounts);
+      window.removeEventListener("focus", refreshOnFocus);
     };
-  }, [ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
+  }, [collecting, ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;
@@ -5186,27 +5178,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   };
   const paymentSaved = async (saved) => {
     if (gatewayScopeRef.current !== gatewayScopeKey) return;
-    const scopeAtPayment = gatewayScopeKey;
     const accountAtPayment = selected;
     setCollecting(false);
     setToast(`Payment of ${formatCurrency(saved.amount)} confirmed${saved.receiptNo ? ` - receipt ${saved.receiptNo}` : ""}`);
-    refreshAfterSettlement();
-    if (!saved.gatewayConfirmed) {
-      setReceipt(normalizeReceipt(saved, accountAtPayment));
-      setPaymentHistoryExtras((current) => [withPaymentContext(saved, [accountAtPayment]), ...current]);
-      return;
-    }
-    if (!saved.receiptNo) { setToast("Payment confirmed. The backend has not returned a receipt number; review Payment History."); return; }
-    try {
-      const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(saved.receiptNo), { requireRealBackend: true, skipGlobalLoader: true });
-      if (gatewayScopeRef.current !== scopeAtPayment) return;
-      const official = gatewayData(response.data);
-      const receiptNumber = textValue(official, "receiptNumber", "receiptNo");
-      if (receiptNumber !== saved.receiptNo || !read(official, "receiptDate", "paymentDate", "date") || Math.abs(Number(official.amount) - Number(saved.amount)) > 0.005 || !Number.isFinite(Number(official.amount))) throw new Error("The official receipt does not match the confirmed payment.");
-      setReceipt(normalizeReceipt(official, { ...accountAtPayment, ...saved }));
-    } catch (failure) {
-      if (gatewayScopeRef.current === scopeAtPayment) setToast(`Payment confirmed. Official receipt unavailable: ${getApiErrorMessage(failure)}. View it from Payment History once available.`);
-    }
+    setReceipt(normalizeReceipt(saved, accountAtPayment));
+    await refreshAfterSettlement();
   };
 
   const requestReversal = (transaction) => {
@@ -5233,11 +5209,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     ? { ...transaction, status: "Reversed", gatewayStatus: "Reversed", isReversed: true } : transaction;
 
   return (
-    <DashboardLayout
+    <PageLayout
       title="Fee Management"
       subtitle="Manage fee structures, scholarships, student balances and collections."
       breadcrumb={["Administration"]}
-      actions={<PaymentSettingsLink />}
+      actions={<PaymentSettingsLink accountant={embedded} />}
     >
       <div className="cms-fee-tabs" role="tablist">
         {TABS.map((item) => (
@@ -5254,9 +5230,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         ))}
       </div>
 
+      {tab === "Overview" && !sectionAuthorized ? <div className="cms-alert cms-alert-error" role="alert">This section is unavailable with your current finance permissions.</div> : <>
       {tab === "Overview" ? <OverviewTab overviewTab={overviewTab} setOverviewTab={setOverviewTab} accounts={overviewAccounts} dashboard={dashboardData} dueRows={dueRows} dashboardLoaded={dashboardLoaded} /> : null}
       {tab === "Fee Setup" ? (
         <FeeSetupTab
+          authorize={authorize}
           setupTab={setupTab}
           onSetupTabChange={setSetupTab}
           feeTypes={feeTypes}
@@ -5275,24 +5253,24 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           masterErrors={masterErrors}
         />
       ) : null}
-      {tab === "Student Fee Ledger" && selectedBase && !selected ? <div className="cms-card cms-card-body" role="status">
+      {tab === "Student Fee Ledger" && sectionAuthorized && selectedBase && !selected ? <div className="cms-card cms-card-body" role="status">
         <p>{selectedDetailError || "Loading saved student fee details..."}</p>
         {selectedDetailError ? <button className="cms-btn cms-btn-ghost" onClick={() => setSelectedDetailVersion(value => value + 1)}>Retry</button> : null}
         <button className="cms-btn cms-btn-ghost" onClick={() => { navigateFeeAccount(null); setCollecting(false); }}>Back</button>
       </div> : null}
-      {tab === "Student Fee Ledger" && selected && !collecting ? (
+      {tab === "Student Fee Ledger" && sectionAuthorized && selected && !collecting ? (
         <StudentFeeAccountScreen
           account={{ ...selected, transactions: selected.transactions.map(withConfirmedReversal) }}
           onClose={() => { navigateFeeAccount(null); setCollecting(false); }}
-          onCollect={() => setCollecting(true)}
+          onCollect={() => { if (authorizeCollection()) setCollecting(true); }}
           onReceipt={setReceipt}
-          allowCollect={selectedSource === "collection"}
+          allowCollect={selectedSource === "collection" && authorizeCollection()}
           reversalAuthorized={gatewayAccess.reverse}
           onReverse={requestReversal}
           reversalBlocked={reversalBlocked}
         />
       ) : null}
-      {tab === "Student Fee Ledger" && ((!selected && !selectedBase) || collecting) ? (
+      {tab === "Student Fee Ledger" && (!sectionAuthorized || (!selected && !selectedBase) || collecting) ? (
         <StudentFeeLedgerSection
           ledgerTab={ledgerTab}
           onLedgerTabChange={setLedgerTab}
@@ -5302,7 +5280,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           fineRules={fineRules}
           onView={(id) => navigateFeeAccount(id, "ledger")}
           onPrint={printStudentStatement}
-          onCollect={openCollectPayment}
+          onCollect={(id) => { if (authorizeCollection()) openCollectPayment(id); }}
+          collectionAuthorized={authorizeCollection()}
+          viewAuthorized={sectionAuthorized}
           onReceipt={setReceipt}
           masters={syncedMasters}
           loading={accountLoading}
@@ -5318,10 +5298,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         />
       ) : null}
 
-      {selected && collecting ? (
+      {sectionAuthorized && selected && collecting && authorizeCollection() ? (
         <CollectPaymentModal
           key={`${selected.id}:${gatewayScopeKey}`}
           account={selected}
+          authorize={authorizeCollection}
           campusId={selectedCampusValue}
           onClose={() => setCollecting(false)}
           onSaved={paymentSaved}
@@ -5329,10 +5310,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         />
       ) : null}
 
-      {receipt ? <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} /> : null}
-      {reversing ? <PaymentReversalModal key={`${gatewayScopeKey}:${gatewayTransactionIdFor(reversing)}`} transaction={reversing} authorized={gatewayAccess.reverse} onClose={() => setReversing(null)} onSuccess={paymentReversed} onAttemptState={reversalAttemptState} /> : null}
+      {sectionAuthorized && receipt ? <ReceiptModal receipt={receipt} onClose={() => setReceipt(null)} /> : null}
+      {sectionAuthorized && reversing ? <PaymentReversalModal key={`${gatewayScopeKey}:${gatewayTransactionIdFor(reversing)}`} transaction={reversing} authorized={gatewayAccess.reverse} onClose={() => setReversing(null)} onSuccess={paymentReversed} onAttemptState={reversalAttemptState} /> : null}
 
+      </>}
       <Toast message={toast} onClose={() => setToast("")} />
-    </DashboardLayout>
+    </PageLayout>
   );
 }

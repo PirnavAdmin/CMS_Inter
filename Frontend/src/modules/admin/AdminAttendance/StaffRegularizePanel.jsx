@@ -199,12 +199,14 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
     setPendingLoading(true);
     setPendingError("");
     try {
+      const includeTarget = Boolean(highlightedRegId && !pendingDept && !pendingType && !pendingDebouncedSearch);
       const res = await attendanceService.getRegularizations({
         status: "Pending",
         campusId: campusId ? Number(campusId) : undefined,
         departmentId: pendingDept ? Number(pendingDept) : undefined,
         requestType: pendingType || undefined,
         search: pendingDebouncedSearch || undefined,
+        regId: includeTarget ? Number(highlightedRegId) : undefined,
       });
       if (seq !== pendingSeq.current) return;
       setPendingRaw(extractList(res));
@@ -214,7 +216,7 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
     } finally {
       if (seq === pendingSeq.current) setPendingLoading(false);
     }
-  }, [campusId, pendingDept, pendingType, pendingDebouncedSearch]);
+  }, [campusId, pendingDept, pendingType, pendingDebouncedSearch, highlightedRegId]);
 
   // Load Regularization Request History from backend endpoint with explicit query parameters
   const loadHistory = useCallback(async () => {
@@ -222,12 +224,14 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
     setHistoryLoading(true);
     setHistoryError("");
     try {
+      const includeTarget = Boolean(highlightedRegId && !historyDept && !historyStatus && !historyType && !historyDebouncedSearch);
       const res = await attendanceService.getRegularizations({
         campusId: campusId ? Number(campusId) : undefined,
         departmentId: historyDept ? Number(historyDept) : undefined,
         status: historyStatus || undefined,
         requestType: historyType || undefined,
         search: historyDebouncedSearch || undefined,
+        regId: includeTarget ? Number(highlightedRegId) : undefined,
       });
       if (seq !== historySeq.current) return;
       setHistoryRaw(extractList(res));
@@ -237,7 +241,7 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
     } finally {
       if (seq === historySeq.current) setHistoryLoading(false);
     }
-  }, [campusId, historyDept, historyStatus, historyType, historyDebouncedSearch]);
+  }, [campusId, historyDept, historyStatus, historyType, historyDebouncedSearch, highlightedRegId]);
 
   useEffect(() => {
     loadPending();
@@ -247,14 +251,25 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
     loadHistory();
   }, [loadHistory]);
 
-  // Real-time refresh when a SignalR/resync notification arrives on this admin session
+  // Real-time refresh when SignalR / notification click arrives on this admin session
   useEffect(() => {
     const onResync = () => {
       loadPending();
       loadHistory();
     };
+    const onNotifNavigate = () => {
+      autoRoutedRegIdRef.current = "";
+      loadPending();
+      loadHistory();
+    };
     window.addEventListener("cms-notifications-resync", onResync);
-    return () => window.removeEventListener("cms-notifications-resync", onResync);
+    window.addEventListener("cms-attendance-resync", onResync);
+    window.addEventListener("cms-notification-navigate", onNotifNavigate);
+    return () => {
+      window.removeEventListener("cms-notifications-resync", onResync);
+      window.removeEventListener("cms-attendance-resync", onResync);
+      window.removeEventListener("cms-notification-navigate", onNotifNavigate);
+    };
   }, [loadPending, loadHistory]);
 
   const istTodayKey = getIstDateKey(new Date());
@@ -342,6 +357,8 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
       setReviewModal(null);
       setRemarks("");
       await Promise.all([loadPending(), loadHistory()]);
+      window.dispatchEvent(new CustomEvent("cms-attendance-resync"));
+      window.dispatchEvent(new CustomEvent("cms-notifications-resync"));
     } catch (err) {
       onNotify?.(getApiErrorMessage(err) || "Failed to process regularization request.", "error");
       await Promise.all([loadPending(), loadHistory()]);
@@ -401,12 +418,16 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
         {showReviewAudit && (
           <td>
             {isPending ? (
-              <span className="att-reg-unreviewed-note">Unreviewed (carried forward)</span>
+              <span className="att-reg-unreviewed-note">Pending Admin Review</span>
             ) : (
               <div className="att-reg-audit-cell">
-                <span>{r.reviewedByAdminName || `User #${r.reviewedByUserId || "—"}`}</span>
-                <small>{formatIstDateTime(r.reviewedAt)}</small>
-                {r.adminRemarks && <small className="att-reg-remarks-text">{r.adminRemarks}</small>}
+                {r.reviewedByAdminName && (
+                  <strong className="att-reg-reviewer-name">{r.reviewedByAdminName}</strong>
+                )}
+                <span className="att-reg-review-date">{formatIstDateTime(r.reviewedAt)}</span>
+                {r.adminRemarks && (
+                  <small className="att-reg-remarks-text" title={r.adminRemarks}>{r.adminRemarks}</small>
+                )}
               </div>
             )}
           </td>
@@ -575,7 +596,7 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
                 role="region"
                 aria-labelledby="att-reg-pending-heading"
               >
-                <table className="cms-table att-table">
+                <table className="cms-table att-table att-reg-table">
                   <thead>
                     <tr>
                       <th>ID</th>
@@ -717,7 +738,7 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
                 role="region"
                 aria-labelledby="att-reg-history-heading"
               >
-                <table className="cms-table att-table">
+                <table className="cms-table att-table att-reg-table">
                   <thead>
                     <tr>
                       <th>ID</th>

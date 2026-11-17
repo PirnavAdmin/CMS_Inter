@@ -87,10 +87,10 @@ const normalizeGroup = (item) => {
   return {
     id: id,
     groupId: id,
-    boardId: String(item.boardId),
-    board: item.boardName || "-",
-    name: item.groupName || "-",
-    code: item.groupCode || "-",
+    boardId: String(read(item, "boardId", "BoardId", "id", "Id") || item?.boardId || ""),
+    board: read(item, "boardName", "BoardName", "board", "Board") || "-",
+    name: read(item, "groupName", "GroupName", "name", "Name") || "-",
+    code: read(item, "groupCode", "GroupCode", "code", "Code") || "-",
     description: item.description ?? "",
     status: item.isActive ? "Active" : "Inactive",
   };
@@ -160,7 +160,11 @@ const groupApi = {
         ? await apiClient.put(apiEndpoints.masterGroups.update(id), payload)
         : await apiClient.post(apiEndpoints.masterGroups.create, payload),
     );
-    const savedId = responseData(response)?.groupId;
+    const dataObj = responseData(response);
+    const savedId =
+      read(dataObj, "groupId", "GroupId", "masterGroupId", "MasterGroupId", "id", "Id") ??
+      read(response?.data, "groupId", "GroupId", "masterGroupId", "MasterGroupId", "id", "Id") ??
+      (dataObj && typeof dataObj === "object" && !Array.isArray(dataObj) ? dataObj.groupId : undefined);
     if (!validId(savedId) || (id && Number(savedId) !== Number(id)))
       throw new Error(
         "The save response did not confirm the GroupId. Reload the list before retrying.",
@@ -457,6 +461,8 @@ function CourseGroupFormPage() {
       nextErrors.name = "Group Name must be at most 100 characters.";
     if (values.code.trim().length > 30)
       nextErrors.code = "Group Code must be at most 30 characters.";
+    if (!/^[A-Za-z0-9_-]+$/.test(values.code.trim()))
+      nextErrors.code = "Group Code can contain only letters, numbers, hyphen and underscore.";
     if (!availableLevels) nextErrors.board = "No academic levels are configured for this board.";
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
@@ -551,7 +557,7 @@ function CourseGroupFormPage() {
 function CourseGroupListPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { selectedBoardId } = useAcademicContext();
+  const { selectedBoard, selectedBoardId, boards } = useAcademicContext();
   const [rows, setRows] = useState([]);
   const [boardLevels, setBoardLevels] = useState({ boardId: "", text: "", loading: true, error: "" });
   const [levelsRetry, setLevelsRetry] = useState(0);
@@ -578,15 +584,28 @@ function CourseGroupListPage() {
     return () => { active = false; };
   }, [selectedBoardId, levelsRetry]);
 
-  const displayedRows = useMemo(() => rows.map((row) => ({
-    ...row,
-    availableLevels: row.boardId === boardLevels.boardId ? boardLevels.text : "",
-    levelsLoading: row.boardId === String(selectedBoardId)
-      && (boardLevels.boardId !== row.boardId || boardLevels.loading),
-    levelsError: row.boardId !== String(selectedBoardId)
-      ? "This group's board does not match the selected board."
-      : boardLevels.boardId === row.boardId ? boardLevels.error : "",
-  })), [rows, selectedBoardId, boardLevels]);
+  const displayedRows = useMemo(() => rows.map((row) => {
+    let boardName = row.board && row.board !== "-" ? row.board : "";
+    if (!boardName) {
+      if (String(row.boardId) === String(selectedBoardId)) {
+        boardName = read(selectedBoard, "boardName", "BoardName", "name", "Name") || "";
+      }
+      if (!boardName && Array.isArray(boards)) {
+        const found = boards.find((b) => String(b.id || b.boardId) === String(row.boardId));
+        if (found) boardName = read(found, "boardName", "BoardName", "name", "Name") || "";
+      }
+    }
+    return {
+      ...row,
+      board: boardName || "-",
+      availableLevels: row.boardId === boardLevels.boardId ? boardLevels.text : "",
+      levelsLoading: row.boardId === String(selectedBoardId)
+        && (boardLevels.boardId !== row.boardId || boardLevels.loading),
+      levelsError: row.boardId !== String(selectedBoardId)
+        ? "This group's board does not match the selected board."
+        : boardLevels.boardId === row.boardId ? boardLevels.error : "",
+    };
+  }), [rows, selectedBoardId, selectedBoard, boards, boardLevels]);
 
   useEffect(() => {
     if (location.state?.groupMessage) navigate(location.pathname, { replace: true, state: null });

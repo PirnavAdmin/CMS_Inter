@@ -325,11 +325,11 @@ public class CertificatesController : ControllerBase
                 var studentName = !string.IsNullOrWhiteSpace(result.StudentName) ? result.StudentName : request.AdmissionNo;
                 var notifTitle = "New Certificate Request";
                 var notifMessage = $"{studentName} ({request.AdmissionNo}) submitted a request for {request.CertificateType}.";
-                var actionUrl = "/dashboard/certificates";
+                var actionUrl = $"/dashboard/certificates?certificateId={result.CertificateId}";
 
-                await _notificationService.SendToRoleAsync("Admin", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
-                await _notificationService.SendToRoleAsync("Principal", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
-                await _notificationService.SendToRoleAsync("Exam Cell", result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
+                await _notificationService.SendToRolesAsync(new[] { "Admin", "Super Admin", "Principal", "Exam Cell" }, result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
+
+
             }
             catch
             {
@@ -384,7 +384,7 @@ public class CertificatesController : ControllerBase
                     $"Your {cert.CertificateType} certificate request has been generated and is pending final approval.",
                     "Certificates",
                     id,
-                    "/student/certificates");
+                    $"/student-dashboard/certificates?certificateId={id}");
             }
         }
         catch { }
@@ -418,7 +418,7 @@ public class CertificatesController : ControllerBase
                         $"Your {cert.CertificateType} certificate application (#{id}) has been APPROVED.",
                         "Certificates",
                         id,
-                        "/student/certificates");
+                        $"/student-dashboard/certificates?certificateId={id}");
                 }
                 await _notificationService.SendToRolesAsync(
                     new[] { "Parent" },
@@ -427,7 +427,7 @@ public class CertificatesController : ControllerBase
                     $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been approved.",
                     "Certificates",
                     id,
-                    "/parent/certificates");
+                    $"/parent-dashboard/documents?certificateId={id}");
             }
         }
         catch { }
@@ -461,7 +461,7 @@ public class CertificatesController : ControllerBase
                         $"Your {cert.CertificateType} certificate (#{id}) has been ISSUED and is ready for download.",
                         "Certificates",
                         id,
-                        $"/student/certificates");
+                        $"/student-dashboard/certificates?certificateId={id}");
                 }
                 await _notificationService.SendToRolesAsync(
                     new[] { "Parent" },
@@ -470,7 +470,7 @@ public class CertificatesController : ControllerBase
                     $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been issued and is available for download.",
                     "Certificates",
                     id,
-                    "/parent/certificates");
+                    $"/parent-dashboard/documents?certificateId={id}");
             }
         }
         catch { }

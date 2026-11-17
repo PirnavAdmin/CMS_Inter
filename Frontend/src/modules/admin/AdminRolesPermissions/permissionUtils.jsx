@@ -222,9 +222,18 @@ export const toPermissionMap = (permissions = []) => {
 
 export function normalizeRoleCode(value = "") {
   const code = normalizeCode(value);
+  if (
+    code === "ADMINISTRATOR" ||
+    code === "SYSTEM_ADMINISTRATOR" ||
+    code === "COLLEGE_ADMIN" ||
+    code === "COLLEGE_ADMINISTRATOR"
+  ) {
+    return "ADMIN";
+  }
   if (code === "ACCOUNTS" || code === "ACCOUNT" || code === "ACCOUNTING" || code === "FINANCE") return "ACCOUNTANT";
   if (code.includes("LIBRAR")) return "LIBRARIAN";
   if (code === "DRIVER") return "BUS_DRIVER";
+  if (code === "RECEPTION" || code === "RECEPTIONIST" || code === "FRONT_DESK" || code === "FRONT_OFFICE") return "RECEPTIONIST";
   return code;
 }
 export const ROLE_PRIORITY_ORDER = Object.freeze([
@@ -294,6 +303,20 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
+  // Administrators have full access
+  if (hasRole("ADMIN", user)) return true;
+
+  // Enquiry Management accessible to Admin, Principal, Receptionist, Non-Teaching
+  if (normMod === "enquiry-management" || normMod === "enquiries") {
+    if (hasRole("ADMIN", user) || hasRole("PRINCIPAL", user) || hasRole("RECEPTIONIST", user)) {
+      return true;
+    }
+    const roleStr = String(user?.role || user?.roleName || user?.roleCode || "").toLowerCase();
+    if (roleStr.includes("reception") || roleStr.includes("principal") || roleStr.includes("admin") || roleStr.includes("nonteaching") || roleStr.includes("non-teaching")) {
+      return true;
+    }
+  }
+
 
   const rawSource = permissions ?? user?.permissions ?? user?.rolePermissions;
 
@@ -318,18 +341,8 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
-  // Check specific screen permission first if requested
-  if (normScr) {
-    const screenLookupKey = `${normMod}:${normScr}`;
-    if (Array.isArray(permissionMap[screenLookupKey])) {
-      return permissionMap[screenLookupKey].includes(normAct);
-    }
-    if (Array.isArray(permissionMap[normScr])) {
-      return permissionMap[normScr].includes(normAct);
-    }
-  }
-
-  // Fallback to module-level permission
+  // Screen routes inherit their parent module grant. Legacy screen records are
+  // retained for compatibility, but do not override the module-level policy.
   const moduleActions = permissionMap[normMod];
   if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
     return true;

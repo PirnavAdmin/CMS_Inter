@@ -425,7 +425,7 @@ namespace CollegeManagement.API.Controllers
                         $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
                         "Payroll",
                         payslipId,
-                        "/dashboard/payroll/payslips");
+                        $"/faculty-dashboard/payslips?payslipId={payslipId}");
                 }
                 catch { }
             }
@@ -493,7 +493,7 @@ namespace CollegeManagement.API.Controllers
                         $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
                         "Payroll",
                         null,
-                        "/dashboard/payroll/payslips");
+                        "/faculty-dashboard/payslips");
                 }
                 catch { }
             }
@@ -568,7 +568,7 @@ namespace CollegeManagement.API.Controllers
                             $"Your salary payslip #{numericId.Value} has been marked as Paid. Net payable: ₹{slip.NetSalary:N0}.",
                             "Payroll",
                             numericId.Value,
-                            "/dashboard/payroll/payslips");
+                            $"/faculty-dashboard/payslips?payslipId={numericId.Value}");
                     }
                 }
                 catch { }

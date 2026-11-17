@@ -1,10 +1,12 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   AlertTriangle,
+  Briefcase,
+  Building2,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -14,6 +16,8 @@ import {
   Download,
   Eye,
   Filter,
+  Globe,
+  GraduationCap,
   Layers,
   MoreVertical,
   Pencil,
@@ -22,8 +26,10 @@ import {
   RotateCcw,
   Save,
   Search,
+  Shield,
   ShieldCheck,
   Sliders,
+  Sparkles,
   UserMinus,
   UserPlus,
   Users,
@@ -46,6 +52,7 @@ import {
   deleteRole,
   updateRole,
   exportPermissionsToCsv,
+  getRoleEligibleModules,
   getModulesAndPermissions,
   getRolePermissions,
   getRoles,
@@ -53,6 +60,10 @@ import {
   getUserPermissions,
   getUserRoleDetails,
   getUserRoleAssignments,
+  getDepartmentLookup,
+  getDesignationLookup,
+  createQuickDepartment,
+  createQuickDesignation,
   removeRoleFromUser,
   updateRolePermissions,
   updateUserPermissions,
@@ -105,23 +116,19 @@ const getUniqueMembers = (members = []) => {
 
 function getEditablePermissionTargets(modules = [], selectedRole, busy = false) {
   if (!selectedRole || selectedRole.isProtected || busy) return [];
-  return modules.flatMap((module) => {
-    const screens = module.screens || [];
-    if (screens.length > 0) {
-      return screens.flatMap((screen) =>
-        (screen.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
-          moduleId: module.id,
-          screenId: screen.id,
-          action,
-        })),
-      );
-    }
-    return (module.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
-      moduleId: module.id,
-      screenId: null,
+  return modules.flatMap((module) =>
+    (module.availableActions || MATRIX_ACTION_KEYS).map((action) => ({
+      moduleId: module.permissionKey || module.id,
       action,
-    }));
-  });
+    })),
+  );
+}
+
+function getUniquePermissionModules(modules = []) {
+  return [...new Map(modules.map((module) => [module.permissionKey || module.id, {
+    ...module,
+    id: module.permissionKey || module.id,
+  }])).values()];
 }
 
 function getPermissionRestriction({ selectedRole, saving }) {
@@ -224,11 +231,385 @@ function initials(name = "User") {
 }
 
 
+// Helper to deduplicate items by name (lowercased trimmed string)
+function deduplicateByName(items = []) {
+  const seen = new Set();
+  const result = [];
+  for (const item of items) {
+    if (!item) continue;
+    const rawName = (item.name || item.departmentName || item.designationName || item.Name || "").trim();
+    if (!rawName) continue;
+    const key = rawName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      ...item,
+      _cleanName: rawName,
+      _cleanId: String(item.id ?? item.departmentId ?? item.designationId ?? item.DepartmentId ?? item.DesignationId ?? ""),
+    });
+  }
+  return result;
+}
+
+// Custom Searchable Select Dropdown
+function RbacSearchSelect({
+  id,
+  value,
+  onChange,
+  placeholder = "Select...",
+  groups = null,
+  options = [],
+  icon: LeadingIcon = null,
+  disabled = false,
+  onAddNew = null,
+  addNewLabel = "+ Add New...",
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = useRef(null);
+
+  // Close when clicking outside or pressing Escape
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+        setSearch("");
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const getItemId = (item) =>
+    item._cleanId !== undefined
+      ? String(item._cleanId)
+      : String(item?.id ?? item?.departmentId ?? item?.designationId ?? item?.DepartmentId ?? item?.DesignationId ?? "");
+
+  const getItemName = (item) =>
+    item._cleanName !== undefined
+      ? item._cleanName
+      : String(item?.name ?? item?.departmentName ?? item?.designationName ?? item?.Name ?? "").trim();
+
+  const getItemStaffType = (item) => String(item?.staffType ?? item?.StaffType ?? "").trim();
+
+  // Deduplicate and flatten all options to identify the selected item
+  const allFlattenedOptions = useMemo(() => {
+    const rawList = groups ? groups.flatMap((g) => g.items || []) : (options || []);
+    return deduplicateByName(rawList);
+  }, [groups, options]);
+
+  const selectedItem = useMemo(() => {
+    if (value === undefined || value === null || value === "") return null;
+    const targetId = String(value).trim();
+    return allFlattenedOptions.find((o) => getItemId(o) === targetId) || null;
+  }, [value, allFlattenedOptions]);
+
+  // Filter items by search query
+  const query = search.trim().toLowerCase();
+
+  const filterItem = (item) => {
+    if (!query) return true;
+    const name = getItemName(item).toLowerCase();
+    const st = getItemStaffType(item).toLowerCase();
+    return name.includes(query) || st.includes(query);
+  };
+
+  const processedGroups = useMemo(() => {
+    if (!groups) return null;
+    return groups
+      .map((g) => ({
+        label: g.label,
+        items: (g.items || []).filter(filterItem),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [groups, query]);
+
+  const processedOptions = useMemo(() => {
+    if (groups) return [];
+    return (options || []).filter(filterItem);
+  }, [groups, options, query]);
+
+  const totalResultsCount = groups
+    ? (processedGroups || []).reduce((acc, g) => acc + g.items.length, 0)
+    : (processedOptions || []).length;
+
+  const handleSelect = (item) => {
+    const id = getItemId(item);
+    onChange(id, item);
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onChange("", null);
+    setSearch("");
+  };
+
+  return (
+    <div className="rbac-custom-select-wrapper" ref={wrapperRef}>
+      <button
+        type="button"
+        id={id}
+        className={`rbac-select-trigger ${isOpen ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`}
+        onClick={() => !disabled && setIsOpen((prev) => !prev)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+      >
+        <div className="rbac-select-trigger-content">
+          {LeadingIcon ? <LeadingIcon size={15} className="rbac-select-trigger-icon" /> : null}
+          {selectedItem ? (
+            <span className="rbac-select-value">
+              {getItemName(selectedItem)}
+              {getItemStaffType(selectedItem) ? (
+                <span className={`rbac-select-option-badge is-${getItemStaffType(selectedItem).toLowerCase().replace(/[^a-z]/g, "")}`}>
+                  {getItemStaffType(selectedItem)}
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="rbac-select-placeholder">{placeholder}</span>
+          )}
+        </div>
+        <div className="rbac-select-trigger-actions">
+          {selectedItem && !disabled ? (
+            <span
+              role="button"
+              tabIndex={0}
+              className="rbac-select-clear-btn"
+              onClick={handleClear}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleClear(e);
+              }}
+              title="Clear selection"
+            >
+              <X size={12} />
+            </span>
+          ) : null}
+          <ChevronDown size={14} className="rbac-select-caret" />
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="rbac-select-popover" role="listbox">
+          <div className="rbac-select-search-wrap">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder={`Search ${placeholder.replace(/--|Select|\(Optional\)/gi, "").trim()}...`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search ? (
+              <button
+                type="button"
+                className="rbac-select-clear-btn"
+                onClick={() => setSearch("")}
+                title="Clear search"
+              >
+                <X size={12} />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="rbac-select-options-list">
+            {totalResultsCount === 0 ? (
+              <div className="rbac-select-empty">No matching options found.</div>
+            ) : groups ? (
+              processedGroups.map((group, gi) => (
+                <div key={gi} className="rbac-select-group">
+                  <div className="rbac-select-group-header">{group.label}</div>
+                  {group.items.map((item) => {
+                    const id = getItemId(item);
+                    const isSelected = selectedItem && getItemId(selectedItem) === id;
+                    const st = getItemStaffType(item);
+                    return (
+                      <div
+                        key={id}
+                        className={`rbac-select-option-item ${isSelected ? "is-selected" : ""}`}
+                        onClick={() => handleSelect(item)}
+                        role="option"
+                        aria-selected={isSelected}
+                      >
+                        <div className="rbac-select-option-label">
+                          <span>{getItemName(item)}</span>
+                          {st ? (
+                            <span className={`rbac-select-option-badge is-${st.toLowerCase().replace(/[^a-z]/g, "")}`}>
+                              {st}
+                            </span>
+                          ) : null}
+                        </div>
+                        {isSelected ? <Check size={14} className="rbac-select-check" /> : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            ) : (
+              processedOptions.map((item) => {
+                const id = getItemId(item);
+                const isSelected = selectedItem && getItemId(selectedItem) === id;
+                const st = getItemStaffType(item);
+                return (
+                  <div
+                    key={id}
+                    className={`rbac-select-option-item ${isSelected ? "is-selected" : ""}`}
+                    onClick={() => handleSelect(item)}
+                    role="option"
+                    aria-selected={isSelected}
+                  >
+                    <div className="rbac-select-option-label">
+                      <span>{getItemName(item)}</span>
+                      {st ? (
+                        <span className={`rbac-select-option-badge is-${st.toLowerCase().replace(/[^a-z]/g, "")}`}>
+                          {st}
+                        </span>
+                      ) : null}
+                    </div>
+                    {isSelected ? <Check size={14} className="rbac-select-check" /> : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {onAddNew ? (
+            <div
+              className="rbac-select-add-action"
+              onClick={() => {
+                setIsOpen(false);
+                setSearch("");
+                onAddNew();
+              }}
+            >
+              <Plus size={14} />
+              <span>{addNewLabel}</span>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateRoleModal({ onClose, onCreateSuccess }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [staffType, setStaffType] = useState("Non-Teaching");
+  const [departmentId, setDepartmentId] = useState("");
+  const [designationId, setDesignationId] = useState("");
+
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [loadingLookups, setLoadingLookups] = useState(true);
+
+  const [isAddingNewDept, setIsAddingNewDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [isAddingNewDesig, setIsAddingNewDesig] = useState(false);
+  const [newDesigName, setNewDesigName] = useState("");
+
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        setLoadingLookups(true);
+        const [deptList, desigList] = await Promise.all([
+          getDepartmentLookup(),
+          getDesignationLookup(),
+        ]);
+        if (isMounted) {
+          setDepartments(Array.isArray(deptList) ? deptList : []);
+          setDesignations(Array.isArray(desigList) ? desigList : []);
+        }
+      } catch (err) {
+        console.warn("Error loading lookups:", err);
+      } finally {
+        if (isMounted) setLoadingLookups(false);
+      }
+    }
+    loadData();
+    return () => { isMounted = false; };
+  }, []);
+
+  const nonTeachingDepts = useMemo(() => {
+    return deduplicateByName(departments.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      return st.includes("non") || st === "both";
+    }));
+  }, [departments]);
+
+  const teachingDepts = useMemo(() => {
+    return deduplicateByName(departments.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      return !st.includes("non") && (st.includes("teach") || st === "both");
+    }));
+  }, [departments]);
+
+  const deptGroups = useMemo(() => {
+    return [
+      { label: "Non-Teaching Departments", items: nonTeachingDepts },
+      { label: "Teaching Departments", items: teachingDepts },
+    ];
+  }, [nonTeachingDepts, teachingDepts]);
+
+  const filteredDesignations = useMemo(() => {
+    const list = designations.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      const matchesStaffType = staffType === "Both"
+        ? true
+        : staffType === "Teaching"
+          ? (!st.includes("non") && (st.includes("teach") || st === "both" || !st))
+          : (st.includes("non") || st === "both" || !st);
+
+      const desigDeptId = d.departmentId || d.DepartmentId;
+      const matchesDept = departmentId ? String(desigDeptId) === String(departmentId) : true;
+      return matchesStaffType && matchesDept;
+    });
+    return deduplicateByName(list);
+  }, [designations, staffType, departmentId]);
+
+  const handleDeptChange = (val, foundItem) => {
+    setDepartmentId(val);
+    setIsAddingNewDept(false);
+    const found = foundItem || departments.find((d) => String(d.departmentId || d.DepartmentId || d.id) === String(val));
+    if (found) {
+      const st = String(found.staffType || found.StaffType || "").toLowerCase();
+      if (st.includes("non")) setStaffType("Non-Teaching");
+      else if (st.includes("teach")) setStaffType("Teaching");
+    }
+  };
+
+  const handleDesigChange = (val, foundItem) => {
+    setDesignationId(val);
+    setIsAddingNewDesig(false);
+    const found = foundItem || designations.find((d) => String(d.id || d.designationId || d.DesignationId) === String(val));
+    if (found) {
+      const desigName = found.name || found.designationName || found.Name;
+      if (!name.trim() && desigName) {
+        setName(desigName);
+      }
+      const dDeptId = found.departmentId || found.DepartmentId;
+      if (dDeptId && !departmentId) {
+        setDepartmentId(String(dDeptId));
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -236,11 +617,50 @@ function CreateRoleModal({ onClose, onCreateSuccess }) {
     setCreating(true);
     setError(null);
     try {
-      const res = await createRole({
+      let effectiveDeptId = departmentId ? Number(departmentId) : null;
+      if (isAddingNewDept && newDeptName.trim()) {
+        try {
+          const createdDept = await createQuickDepartment({
+            departmentName: newDeptName.trim(),
+            staffType: staffType || "Non-Teaching",
+          });
+          const newDeptId = createdDept?.departmentId || createdDept?.id || createdDept?.DepartmentId;
+          if (newDeptId) effectiveDeptId = Number(newDeptId);
+        } catch (deptErr) {
+          console.warn("createQuickDepartment warning:", deptErr);
+        }
+      }
+
+      let effectiveDesigId = designationId ? Number(designationId) : null;
+      if (isAddingNewDesig && newDesigName.trim()) {
+        try {
+          const createdDesig = await createQuickDesignation({
+            name: newDesigName.trim(),
+            departmentId: effectiveDeptId,
+            staffType: staffType || "Non-Teaching",
+          });
+          const newDesigId = createdDesig?.id || createdDesig?.designationId || createdDesig?.Id;
+          if (newDesigId) effectiveDesigId = Number(newDesigId);
+        } catch (desigErr) {
+          console.warn("createQuickDesignation warning:", desigErr);
+        }
+      }
+
+      const payload = {
         name: name.trim(),
         description: description.trim(),
-      });
-      onCreateSuccess(res?.data || { name: name.trim() });
+        staffType,
+        departmentId: effectiveDeptId,
+        designationId: effectiveDesigId,
+        newDepartmentName: isAddingNewDept && newDeptName.trim() ? newDeptName.trim() : null,
+        newDesignationName: isAddingNewDesig && newDesigName.trim() ? newDesigName.trim() : null,
+      };
+      const res = await createRole(payload);
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.removeItem("cms_cached_departments");
+        window.sessionStorage.removeItem("cms_cached_designations");
+      }
+      onCreateSuccess(res?.data || { name: name.trim(), staffType });
     } catch (err) {
       setError(err?.message || "Failed to create role.");
       setCreating(false);
@@ -255,11 +675,17 @@ function CreateRoleModal({ onClose, onCreateSuccess }) {
         aria-modal="true"
         aria-labelledby="create-role-title"
         onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: "540px" }}
       >
         <div className="rbac-dialog-head">
-          <div>
-            <h3 id="create-role-title">Create New Role</h3>
-            <p>Define a new role and configure its module and screen permissions.</p>
+          <div className="rbac-dialog-head-content">
+            <div className="rbac-dialog-icon-circle">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h3 id="create-role-title">Create New Role</h3>
+              <p>Configure role categorization, department, designation, and initial permissions.</p>
+            </div>
           </div>
           <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
             <X size={18} />
@@ -268,26 +694,217 @@ function CreateRoleModal({ onClose, onCreateSuccess }) {
 
         <form onSubmit={handleSubmit} className="rbac-clone-form">
           {error ? <div className="rbac-alert-error">{error}</div> : null}
+
+          {/* 1. Role Name (FIRST) */}
           <div className="rbac-form-field">
-            <label htmlFor="create-role-name">Role Name *</label>
-            <input
-              id="create-role-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Lab Technician, Deputy Warden"
-              required
-              autoFocus
-            />
+            <label htmlFor="create-role-name" className="rbac-field-label">
+              <Shield size={13} className="rbac-field-label-icon" />
+              <span>Role Name <span className="rbac-required">*</span></span>
+            </label>
+            <div className="rbac-input-icon-wrap">
+              <Shield size={14} className="rbac-input-leading-icon" />
+              <input
+                id="create-role-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Receptionist, Lab Assistant, Accountant"
+                required
+                autoFocus
+              />
+            </div>
           </div>
+
+          {/* 2. Staff Classification */}
           <div className="rbac-form-field">
-            <label htmlFor="create-role-desc">Description</label>
+            <label className="rbac-field-label">
+              <Sliders size={13} className="rbac-field-label-icon" />
+              <span>Staff Classification <span className="rbac-required">*</span></span>
+            </label>
+            <div className="rbac-staff-type-toggle">
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Non-Teaching" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Non-Teaching")}
+              >
+                <Briefcase size={13} />
+                <span>Non-Teaching</span>
+              </button>
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Teaching" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Teaching")}
+              >
+                <GraduationCap size={13} />
+                <span>Teaching</span>
+              </button>
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Both" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Both")}
+              >
+                <Globe size={13} />
+                <span>Both / Universal</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Department Field */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="create-role-dept" className="rbac-field-label">
+                <Building2 size={13} className="rbac-field-label-icon" />
+                <span>Department</span>
+              </label>
+              {!isAddingNewDept ? (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn"
+                  onClick={() => setIsAddingNewDept(true)}
+                >
+                  <Plus size={11} />
+                  <span>New Department</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn is-cancel"
+                  onClick={() => { setIsAddingNewDept(false); setNewDeptName(""); }}
+                >
+                  <X size={11} />
+                  <span>Select from list</span>
+                </button>
+              )}
+            </div>
+
+            {isAddingNewDept ? (
+              <div className="rbac-inline-create-box">
+                <div className="rbac-inline-input-wrap">
+                  <Building2 size={14} className="rbac-inline-icon" />
+                  <input
+                    type="text"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    placeholder="Type new department name (e.g. Front Office / Reception)..."
+                    autoFocus
+                  />
+                  {newDeptName ? (
+                    <button
+                      type="button"
+                      className="rbac-inline-clear-btn"
+                      onClick={() => setNewDeptName("")}
+                      title="Clear"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="rbac-inline-hint">
+                  This department will be created and linked to this role automatically.
+                </p>
+              </div>
+            ) : (
+              <RbacSearchSelect
+                id="create-role-dept"
+                value={departmentId}
+                onChange={handleDeptChange}
+                placeholder="-- Select Department (Optional) --"
+                icon={Building2}
+                disabled={loadingLookups}
+                groups={staffType === "Both" ? deptGroups : null}
+                options={staffType === "Non-Teaching" ? nonTeachingDepts : staffType === "Teaching" ? teachingDepts : []}
+                onAddNew={() => setIsAddingNewDept(true)}
+                addNewLabel="+ Add New Department..."
+              />
+            )}
+          </div>
+
+          {/* 4. Designation Field */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="create-role-desig" className="rbac-field-label">
+                <Briefcase size={13} className="rbac-field-label-icon" />
+                <span>Designation</span>
+              </label>
+              {!isAddingNewDesig ? (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn"
+                  onClick={() => setIsAddingNewDesig(true)}
+                >
+                  <Plus size={11} />
+                  <span>New Designation</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn is-cancel"
+                  onClick={() => { setIsAddingNewDesig(false); setNewDesigName(""); }}
+                >
+                  <X size={11} />
+                  <span>Select from list</span>
+                </button>
+              )}
+            </div>
+
+            {isAddingNewDesig ? (
+              <div className="rbac-inline-create-box">
+                <div className="rbac-inline-input-wrap">
+                  <Briefcase size={14} className="rbac-inline-icon" />
+                  <input
+                    type="text"
+                    value={newDesigName}
+                    onChange={(e) => {
+                      setNewDesigName(e.target.value);
+                      if (!name.trim()) setName(e.target.value);
+                    }}
+                    placeholder="Type new designation name (e.g. Receptionist)..."
+                    autoFocus
+                  />
+                  {newDesigName ? (
+                    <button
+                      type="button"
+                      className="rbac-inline-clear-btn"
+                      onClick={() => setNewDesigName("")}
+                      title="Clear"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="rbac-inline-hint">
+                  This designation will be created and linked to this role automatically.
+                </p>
+              </div>
+            ) : (
+              <RbacSearchSelect
+                id="create-role-desig"
+                value={designationId}
+                onChange={handleDesigChange}
+                placeholder="-- Select Designation (Optional) --"
+                icon={Briefcase}
+                disabled={loadingLookups}
+                options={filteredDesignations}
+                onAddNew={() => setIsAddingNewDesig(true)}
+                addNewLabel="+ Add New Designation..."
+              />
+            )}
+          </div>
+
+          {/* 5. Description */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="create-role-desc" className="rbac-field-label">
+                <span>Description</span>
+              </label>
+              <span className="rbac-optional-hint">(Optional)</span>
+            </div>
             <textarea
               id="create-role-desc"
-              rows={3}
+              rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Responsibilities, scope, and access purpose of this role"
+              placeholder="Responsibilities and access scope of this role..."
             />
           </div>
 
@@ -296,7 +913,17 @@ function CreateRoleModal({ onClose, onCreateSuccess }) {
               Cancel
             </button>
             <button type="submit" className="cms-btn cms-btn-primary" disabled={creating || !name.trim()}>
-              {creating ? "Creating..." : "Create Role"}
+              {creating ? (
+                <>
+                  <span className="rbac-spinner-sm" />
+                  <span>Creating...</span>
+                </>
+              ) : (
+                <>
+                  <Plus size={14} />
+                  <span>Create Role</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -309,9 +936,105 @@ function CreateRoleModal({ onClose, onCreateSuccess }) {
 function EditRoleModal({ role, onClose, onEditSuccess }) {
   const [name, setName] = useState(role?.name || "");
   const [description, setDescription] = useState(role?.description || "");
+  const [staffType, setStaffType] = useState(role?.staffType || "Non-Teaching");
+  const [departmentId, setDepartmentId] = useState(role?.departmentId ? String(role.departmentId) : "");
+  const [designationId, setDesignationId] = useState(role?.designationId ? String(role.designationId) : "");
   const [isActive, setIsActive] = useState(role?.isActive ?? true);
+
+  const [departments, setDepartments] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [loadingLookups, setLoadingLookups] = useState(true);
+
+  const [isAddingNewDept, setIsAddingNewDept] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [isAddingNewDesig, setIsAddingNewDesig] = useState(false);
+  const [newDesigName, setNewDesigName] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        setLoadingLookups(true);
+        const [deptList, desigList] = await Promise.all([
+          getDepartmentLookup(),
+          getDesignationLookup(),
+        ]);
+        if (isMounted) {
+          setDepartments(Array.isArray(deptList) ? deptList : []);
+          setDesignations(Array.isArray(desigList) ? desigList : []);
+        }
+      } catch (err) {
+        console.warn("Error loading lookups in edit:", err);
+      } finally {
+        if (isMounted) setLoadingLookups(false);
+      }
+    }
+    loadData();
+    return () => { isMounted = false; };
+  }, []);
+
+  const nonTeachingDepts = useMemo(() => {
+    return deduplicateByName(departments.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      return st.includes("non") || st === "both";
+    }));
+  }, [departments]);
+
+  const teachingDepts = useMemo(() => {
+    return deduplicateByName(departments.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      return !st.includes("non") && (st.includes("teach") || st === "both");
+    }));
+  }, [departments]);
+
+  const deptGroups = useMemo(() => {
+    return [
+      { label: "Non-Teaching Departments", items: nonTeachingDepts },
+      { label: "Teaching Departments", items: teachingDepts },
+    ];
+  }, [nonTeachingDepts, teachingDepts]);
+
+  const filteredDesignations = useMemo(() => {
+    const list = designations.filter((d) => {
+      const st = String(d.staffType || d.StaffType || "").toLowerCase();
+      const matchesStaffType = staffType === "Both"
+        ? true
+        : staffType === "Teaching"
+          ? (!st.includes("non") && (st.includes("teach") || st === "both" || !st))
+          : (st.includes("non") || st === "both" || !st);
+
+      const desigDeptId = d.departmentId || d.DepartmentId;
+      const matchesDept = departmentId ? String(desigDeptId) === String(departmentId) : true;
+      return matchesStaffType && matchesDept;
+    });
+    return deduplicateByName(list);
+  }, [designations, staffType, departmentId]);
+
+  const handleDeptChange = (val, foundItem) => {
+    setDepartmentId(val);
+    setIsAddingNewDept(false);
+    const found = foundItem || departments.find((d) => String(d.departmentId || d.DepartmentId || d.id) === String(val));
+    if (found) {
+      const st = String(found.staffType || found.StaffType || "").toLowerCase();
+      if (st.includes("non")) setStaffType("Non-Teaching");
+      else if (st.includes("teach")) setStaffType("Teaching");
+    }
+  };
+
+  const handleDesigChange = (val, foundItem) => {
+    setDesignationId(val);
+    setIsAddingNewDesig(false);
+    const found = foundItem || designations.find((d) => String(d.id || d.designationId || d.DesignationId) === String(val));
+    if (found) {
+      const dDeptId = found.departmentId || found.DepartmentId;
+      if (dDeptId && !departmentId) {
+        setDepartmentId(String(dDeptId));
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -319,12 +1042,54 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await updateRole(role.id, {
+      let effectiveDeptId = departmentId ? Number(departmentId) : null;
+      if (isAddingNewDept && newDeptName.trim()) {
+        try {
+          const createdDept = await createQuickDepartment({
+            departmentName: newDeptName.trim(),
+            staffType: staffType || "Non-Teaching",
+          });
+          const newDeptId = createdDept?.departmentId || createdDept?.id || createdDept?.DepartmentId;
+          if (newDeptId) effectiveDeptId = Number(newDeptId);
+        } catch (deptErr) {
+          console.warn("createQuickDepartment warning:", deptErr);
+        }
+      }
+
+      let effectiveDesigId = designationId ? Number(designationId) : null;
+      if (isAddingNewDesig && newDesigName.trim()) {
+        try {
+          const createdDesig = await createQuickDesignation({
+            name: newDesigName.trim(),
+            departmentId: effectiveDeptId,
+            staffType: staffType || "Non-Teaching",
+          });
+          const newDesigId = createdDesig?.id || createdDesig?.designationId || createdDesig?.Id;
+          if (newDesigId) effectiveDesigId = Number(newDesigId);
+        } catch (desigErr) {
+          console.warn("createQuickDesignation warning:", desigErr);
+        }
+      }
+
+      const payload = {
         name: name.trim(),
         description: description.trim(),
+        staffType,
+        departmentId: effectiveDeptId,
+        designationId: effectiveDesigId,
+        newDepartmentName: isAddingNewDept && newDeptName.trim() ? newDeptName.trim() : null,
+        newDesignationName: isAddingNewDesig && newDesigName.trim() ? newDesigName.trim() : null,
         isActive,
+      };
+      const res = await updateRole(role.id, payload);
+      if (typeof window !== "undefined" && window.sessionStorage) {
+        window.sessionStorage.removeItem("cms_cached_departments");
+        window.sessionStorage.removeItem("cms_cached_designations");
+      }
+      onEditSuccess(res?.data || {
+        ...role,
+        ...payload,
       });
-      onEditSuccess(res?.data || { ...role, name: name.trim(), description: description.trim(), isActive });
     } catch (err) {
       setError(err?.message || "Failed to update role.");
       setSaving(false);
@@ -339,11 +1104,17 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
         aria-modal="true"
         aria-labelledby="edit-role-title"
         onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: "540px" }}
       >
         <div className="rbac-dialog-head">
-          <div>
-            <h3 id="edit-role-title">Edit Role</h3>
-            <p>Update title and description for <strong>{role?.name}</strong>.</p>
+          <div className="rbac-dialog-head-content">
+            <div className="rbac-dialog-icon-circle">
+              <Pencil size={18} />
+            </div>
+            <div>
+              <h3 id="edit-role-title">Edit Role</h3>
+              <p>Update title, classification, and metadata for <strong>{role?.name}</strong>.</p>
+            </div>
           </div>
           <button type="button" className="rbac-dialog-close" onClick={onClose} aria-label="Close dialog">
             <X size={18} />
@@ -352,37 +1123,233 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
 
         <form onSubmit={handleSubmit} className="rbac-clone-form">
           {error ? <div className="rbac-alert-error">{error}</div> : null}
+
+          {/* 1. Role Name (FIRST) */}
           <div className="rbac-form-field">
-            <label htmlFor="edit-role-name">Role Name *</label>
-            <input
-              id="edit-role-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoFocus
-            />
+            <label htmlFor="edit-role-name" className="rbac-field-label">
+              <Shield size={13} className="rbac-field-label-icon" />
+              <span>Role Name <span className="rbac-required">*</span></span>
+            </label>
+            <div className="rbac-input-icon-wrap">
+              <Shield size={14} className="rbac-input-leading-icon" />
+              <input
+                id="edit-role-name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Lab Technician"
+                required
+              />
+            </div>
           </div>
+
+          {/* 2. Staff Classification */}
           <div className="rbac-form-field">
-            <label htmlFor="edit-role-desc">Description</label>
+            <label className="rbac-field-label">
+              <Sliders size={13} className="rbac-field-label-icon" />
+              <span>Staff Classification</span>
+            </label>
+            <div className="rbac-staff-type-toggle">
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Non-Teaching" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Non-Teaching")}
+              >
+                <Briefcase size={13} />
+                <span>Non-Teaching</span>
+              </button>
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Teaching" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Teaching")}
+              >
+                <GraduationCap size={13} />
+                <span>Teaching</span>
+              </button>
+              <button
+                type="button"
+                className={`rbac-type-btn ${staffType === "Both" ? "is-active" : ""}`}
+                onClick={() => setStaffType("Both")}
+              >
+                <Globe size={13} />
+                <span>Both / Universal</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Department */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="edit-role-dept" className="rbac-field-label">
+                <Building2 size={13} className="rbac-field-label-icon" />
+                <span>Department</span>
+              </label>
+              {!isAddingNewDept ? (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn"
+                  onClick={() => setIsAddingNewDept(true)}
+                >
+                  <Plus size={11} />
+                  <span>New Department</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn is-cancel"
+                  onClick={() => { setIsAddingNewDept(false); setNewDeptName(""); }}
+                >
+                  <X size={11} />
+                  <span>Select from list</span>
+                </button>
+              )}
+            </div>
+
+            {isAddingNewDept ? (
+              <div className="rbac-inline-create-box">
+                <div className="rbac-inline-input-wrap">
+                  <Building2 size={14} className="rbac-inline-icon" />
+                  <input
+                    type="text"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.target.value)}
+                    placeholder="Type new department name (e.g. Front Office / Reception)..."
+                    autoFocus
+                  />
+                  {newDeptName ? (
+                    <button
+                      type="button"
+                      className="rbac-inline-clear-btn"
+                      onClick={() => setNewDeptName("")}
+                      title="Clear"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="rbac-inline-hint">
+                  This department will be created and linked to this role automatically.
+                </p>
+              </div>
+            ) : (
+              <RbacSearchSelect
+                id="edit-role-dept"
+                value={departmentId}
+                onChange={handleDeptChange}
+                placeholder="-- No Department Assigned --"
+                icon={Building2}
+                disabled={loadingLookups}
+                groups={staffType === "Both" ? deptGroups : null}
+                options={staffType === "Non-Teaching" ? nonTeachingDepts : staffType === "Teaching" ? teachingDepts : []}
+                onAddNew={() => setIsAddingNewDept(true)}
+                addNewLabel="+ Add New Department..."
+              />
+            )}
+          </div>
+
+          {/* 4. Designation */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="edit-role-desig" className="rbac-field-label">
+                <Briefcase size={13} className="rbac-field-label-icon" />
+                <span>Designation</span>
+              </label>
+              {!isAddingNewDesig ? (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn"
+                  onClick={() => setIsAddingNewDesig(true)}
+                >
+                  <Plus size={11} />
+                  <span>New Designation</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="rbac-pill-action-btn is-cancel"
+                  onClick={() => { setIsAddingNewDesig(false); setNewDesigName(""); }}
+                >
+                  <X size={11} />
+                  <span>Select from list</span>
+                </button>
+              )}
+            </div>
+
+            {isAddingNewDesig ? (
+              <div className="rbac-inline-create-box">
+                <div className="rbac-inline-input-wrap">
+                  <Briefcase size={14} className="rbac-inline-icon" />
+                  <input
+                    type="text"
+                    value={newDesigName}
+                    onChange={(e) => {
+                      setNewDesigName(e.target.value);
+                      if (!name.trim()) setName(e.target.value);
+                    }}
+                    placeholder="Type new designation name (e.g. Receptionist)..."
+                    autoFocus
+                  />
+                  {newDesigName ? (
+                    <button
+                      type="button"
+                      className="rbac-inline-clear-btn"
+                      onClick={() => setNewDesigName("")}
+                      title="Clear"
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : null}
+                </div>
+                <p className="rbac-inline-hint">
+                  This designation will be created and linked to this role automatically.
+                </p>
+              </div>
+            ) : (
+              <RbacSearchSelect
+                id="edit-role-desig"
+                value={designationId}
+                onChange={handleDesigChange}
+                placeholder="-- No Designation Assigned --"
+                icon={Briefcase}
+                disabled={loadingLookups}
+                options={filteredDesignations}
+                onAddNew={() => setIsAddingNewDesig(true)}
+                addNewLabel="+ Add New Designation..."
+              />
+            )}
+          </div>
+
+          {/* 5. Description */}
+          <div className="rbac-form-field">
+            <div className="rbac-field-label-row">
+              <label htmlFor="edit-role-desc" className="rbac-field-label">
+                <span>Description</span>
+              </label>
+              <span className="rbac-optional-hint">(Optional)</span>
+            </div>
             <textarea
               id="edit-role-desc"
-              rows={3}
+              rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Role description"
             />
           </div>
-          <div className="rbac-form-field" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <input
-              id="edit-role-active"
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              style={{ width: "16px", height: "16px" }}
-            />
-            <label htmlFor="edit-role-active" style={{ margin: 0, cursor: "pointer" }}>
-              Active (Enabled in assignments and system logins)
+
+          {/* 6. Active Toggle */}
+          <div className="rbac-active-toggle-card">
+            <label className="rbac-switch-label">
+              <input
+                id="edit-role-active"
+                type="checkbox"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+              />
+              <span className="rbac-switch-slider" />
+              <div className="rbac-switch-text">
+                <strong>Active Status</strong>
+                <span>Enabled for staff assignments and system authentication</span>
+              </div>
             </label>
           </div>
 
@@ -391,7 +1358,17 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
               Cancel
             </button>
             <button type="submit" className="cms-btn cms-btn-primary" disabled={saving || !name.trim()}>
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? (
+                <>
+                  <span className="rbac-spinner-sm" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Check size={14} />
+                  <span>Save Changes</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -400,7 +1377,6 @@ function EditRoleModal({ role, onClose, onEditSuccess }) {
     document.body,
   );
 }
-
 
 function CloneRoleModal({ role, onClose, onCloneSuccess }) {
   const [name, setName] = useState(role ? `${role.name} (Copy)` : "");
@@ -532,9 +1508,18 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, onCloneRole,
                 <span className="rbac-role-copy">
                   <strong>{role.name}</strong>
                   <span className="rbac-role-flags">
+                    {role.staffType && role.staffType !== "Both" ? (
+                      <em className={`rbac-staff-type-badge is-${String(role.staffType).toLowerCase().replace(/[^a-z0-9]/g, "")}`}>
+                        {role.staffType}
+                      </em>
+                    ) : null}
                     {role.isProtected ? <em>Protected</em> : null}
-                    {role.discoveredFrom ? <em>Configured</em> : null}
                   </span>
+                  {(role.departmentName || role.designationName) ? (
+                    <span className="rbac-role-dept-desig">
+                      {[role.departmentName, role.designationName].filter(Boolean).join(" • ")}
+                    </span>
+                  ) : null}
                 </span>
               </button>
               <div className="rbac-role-item-actions">
@@ -1219,6 +2204,57 @@ function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, erro
   );
 }
 
+function ModulePermissionMatrix({ modules, permissionRows, selectedRole, saving, query, onQuery, onToggle, markAllState, onMarkAll, onApplyPreset, onExportCsv, statusFilter, onStatusFilterChange }) {
+  const [sectionFilter, setSectionFilter] = useState("all");
+  useEffect(() => {
+    setSectionFilter("all");
+  }, [selectedRole?.id]);
+  const actionsByModule = useMemo(() => new Map((permissionRows || []).map((row) => [String(row.module || "").trim().toLowerCase(), new Set(row.actions || [])])), [permissionRows]);
+  const actionsForModule = useCallback((module) => {
+    const moduleId = String(module.permissionKey || module.id).trim().toLowerCase();
+    // A direct row is an explicit role/member decision, including an empty
+    // action list created by switching a legacy-granted item off. Only fall
+    // back to legacy grants before that direct decision exists.
+    if (actionsByModule.has(moduleId)) return new Set(actionsByModule.get(moduleId));
+    return new Set((module.legacyPermissionKeys || []).flatMap((key) => [...(actionsByModule.get(String(key).trim().toLowerCase()) || [])]));
+  }, [actionsByModule]);
+  const sections = useMemo(() => [...new Set(modules.map((module) => module.section).filter(Boolean))].sort(), [modules]);
+  const filteredModules = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return modules.filter((module) => {
+      const actions = actionsForModule(module);
+      const granted = actions.size > 0;
+      const matchesText = !needle || [module.name, module.id, module.section].some((value) => String(value || "").toLowerCase().includes(needle));
+      const matchesSection = sectionFilter === "all" || module.section === sectionFilter;
+      const matchesStatus = statusFilter === "all" || (statusFilter === "granted" && granted) || (statusFilter === "denied" && !granted) || (statusFilter === "partial" && granted && actions.size < (module.availableActions || MATRIX_ACTION_KEYS).length);
+      return matchesText && matchesSection && matchesStatus;
+    });
+  }, [actionsForModule, modules, query, sectionFilter, statusFilter]);
+  const restriction = getPermissionRestriction({ selectedRole, saving });
+
+  return <div className="rbac-permission-wrap">
+    <div className="rbac-presets-bar">
+      <span className="rbac-presets-label">Quick Presets:</span>
+      <button type="button" className="rbac-preset-pill is-full" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.FULL_ACCESS)}><CheckCircle2 size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.FULL_ACCESS]}</button>
+      <button type="button" className="rbac-preset-pill is-view" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.VIEW_ONLY)}><Eye size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.VIEW_ONLY]}</button>
+      <button type="button" className="rbac-preset-pill is-operational" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.OPERATIONAL)}><Sliders size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.OPERATIONAL]}</button>
+      <button type="button" className="rbac-preset-pill is-revoke" disabled={restriction.disabled} onClick={() => onApplyPreset(PERMISSION_PRESETS.REVOKE_ALL)}><XCircle size={13} /> {PRESET_LABELS[PERMISSION_PRESETS.REVOKE_ALL]}</button>
+    </div>
+    <div className="rbac-permission-toolbar">
+      <div className="rbac-permission-toolbar-top"><div className="rbac-permission-title-group"><h3>Permissions</h3><span className="rbac-module-count-badge">{filteredModules.length} {filteredModules.length === 1 ? "module" : "modules"}</span></div><button type="button" className="rbac-export-btn" onClick={onExportCsv}><Download size={14} /> Export CSV</button></div>
+      <div className="rbac-permission-toolbar-bottom"><div className="rbac-search-wrapper"><SearchBox value={query} onChange={onQuery} placeholder="Search modules..." label="Search modules" /></div><div className="rbac-toolbar-filters"><select className="rbac-status-filter rbac-section-filter" value={sectionFilter} onChange={(event) => setSectionFilter(event.target.value)} aria-label="Filter modules by section"><option value="all">All Sections ({modules.length})</option>{sections.map((section) => <option key={section} value={section}>{section}</option>)}</select><select className="rbac-status-filter" value={statusFilter} onChange={(event) => onStatusFilterChange(event.target.value)} aria-label="Filter modules by permission status"><option value="all">All Modules</option><option value="granted">Granted Only</option><option value="denied">Denied Only</option><option value="partial">Partial Only</option></select><MarkAllControl {...markAllState} roleName={selectedRole?.name} onChange={onMarkAll} /></div></div>
+    </div>
+    {filteredModules.length ? <div className="rbac-matrix rbac-module-matrix" role="table" aria-label={`${selectedRole?.name || "Role"} module permissions`}><div className="rbac-matrix-row rbac-matrix-head" role="row"><span role="columnheader">Module</span><span role="columnheader">Module Access</span>{MATRIX_ACTION_COLUMNS.map((action) => <span role="columnheader" key={action.key}>{action.label}</span>)}</div>{filteredModules.map((module, index) => {
+      const Icon = module.icon || ShieldCheck;
+      const actions = actionsForModule(module);
+      const availableActions = (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey);
+      const showSection = index === 0 || filteredModules[index - 1].section !== module.section;
+      const permissionKey = module.permissionKey || module.id;
+      return <Fragment key={module.id}>{showSection ? <div className="rbac-matrix-section-row" role="rowheader">{module.section}</div> : null}<div className="rbac-matrix-row rbac-matrix-module-row" role="row"><div className="rbac-module-cell" role="cell"><span className="rbac-module-icon"><Icon size={19} /></span><div><strong>{module.name}</strong><small>{module.section}</small></div></div><div className="rbac-matrix-action-cell" role="cell"><PermissionToggle checked={actions.size > 0} disabled={restriction.disabled} disabledReason={restriction.reason} label={`Module access for ${module.name}`} onChange={(checked) => onToggle({ roleId: selectedRole?.id, moduleId: permissionKey, action: ACTIONS.VIEW, checked })} /></div>{MATRIX_ACTION_COLUMNS.map((action) => <div className="rbac-matrix-action-cell" role="cell" key={action.key}><PermissionToggle checked={actions.has(action.key)} disabled={restriction.disabled || !availableActions.includes(action.key)} disabledReason={!availableActions.includes(action.key) ? "Action not applicable for this module" : restriction.reason} label={`${action.label} ${module.name}`} onChange={(checked) => onToggle({ roleId: selectedRole?.id, moduleId: permissionKey, action: action.key, checked })} /></div>)}</div></Fragment>;
+    })}</div> : <EmptyState title="No modules found" message="Try a different module name, section, or permission filter." />}
+  </div>;
+}
+
 function RoleDetails({
   selectedRole,
   selectedMember,
@@ -1238,7 +2274,7 @@ function RoleDetails({
 }) {
   const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
-    const modConfig = modules.find((m) => m.id === moduleId);
+    const modConfig = modules.find((m) => (m.permissionKey || m.id) === moduleId);
     if (!modConfig || !MATRIX_ACTION_KEYS.includes(action)) return;
 
     const previousPermissions = [...permissions];
@@ -1323,7 +2359,10 @@ function RoleDetails({
 
     let selectedCount = 0;
     editablePermissionTargets.forEach(({ moduleId, screenId, action }) => {
-      const mod = permissionMap.get(moduleId);
+      const configuredModule = modules.find((module) => module.id === moduleId);
+      const mod = permissionMap.get(moduleId) || (configuredModule?.legacyPermissionKeys || [])
+        .map((legacyKey) => permissionMap.get(legacyKey))
+        .find(Boolean);
       if (!mod) return;
       if (screenId) {
         const scr = mod.screens.get(screenId);
@@ -1346,7 +2385,7 @@ function RoleDetails({
     if (markAllState.disabled) return;
     const shouldEnable = !markAllState.checked;
 
-    const nextPermissions = modules.map((module) => {
+    const nextPermissions = getUniquePermissionModules(modules).map((module) => {
       const modScreens = module.screens || [];
       const screens = modScreens.map((screen) => {
         const available = screen.availableActions || MATRIX_ACTION_KEYS;
@@ -1355,7 +2394,7 @@ function RoleDetails({
           actions: shouldEnable ? MATRIX_ACTION_KEYS.filter((a) => available.includes(a)) : [],
         };
       });
-      const actions = shouldEnable ? MATRIX_ACTION_KEYS : [];
+      const actions = shouldEnable ? (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey) : [];
       return {
         module: module.id,
         actions,
@@ -1370,7 +2409,7 @@ function RoleDetails({
 
   const applyPreset = useCallback((presetKey) => {
     if (!selectedRole || selectedRole.isProtected || loading || saving) return;
-    const nextPermissions = modules.map((module) => {
+    const nextPermissions = getUniquePermissionModules(modules).map((module) => {
       const modScreens = module.screens || [];
       const screens = modScreens.map((screen) => {
         const available = screen.availableActions || MATRIX_ACTION_KEYS;
@@ -1475,7 +2514,7 @@ function RoleDetails({
         <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div>
       ) : (
         <>
-          <PermissionMatrix
+          <ModulePermissionMatrix
             modules={modules}
             permissionRows={permissions}
             selectedRole={selectedRole}
@@ -1976,6 +3015,7 @@ export default function RolesPermissionsPage() {
   const [allRoles, setAllRoles] = useState([]);
   const [manageableRoles, setManageableRoles] = useState([]);
   const [modules, setModules] = useState([]);
+  const [moduleCatalog, setModuleCatalog] = useState([]);
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [roleMembers, setRoleMembers] = useState([]);
@@ -1997,6 +3037,7 @@ export default function RolesPermissionsPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
+  const permissionRequestRef = useRef(0);
   const selectedRoleIdRef = useRef(null);
   const pageRequestRef = useRef(0);
   const roleCountsRequestRef = useRef(0);
@@ -2018,7 +3059,7 @@ export default function RolesPermissionsPage() {
       setManageableRoles(getManageableRoles(nextAllRoles));
       setSelectedRole((role) => (
         role
-          ? nextAllRoles.find((nextRole) => String(nextRole.id) === String(role.id)) || role
+          ? getManageableRoles(nextAllRoles).find((nextRole) => String(nextRole.id) === String(role.id)) || getManageableRoles(nextAllRoles)[0] || null
           : role
       ));
     } catch (err) {
@@ -2033,15 +3074,18 @@ export default function RolesPermissionsPage() {
 
   const loadPermissions = useCallback(async (role) => {
     if (!role) return;
+    const requestId = permissionRequestRef.current + 1;
+    permissionRequestRef.current = requestId;
     setPermissionLoading(true);
     try {
       const response = await getRolePermissions(role.id, role.code);
+      if (permissionRequestRef.current !== requestId) return;
       setPermissions(response.data);
       setLastSavedPermissions(response.data);
     } catch (err) {
-      setToast({ type: "error", message: err?.message || "Unable to load role permissions." });
+      if (permissionRequestRef.current === requestId) setToast({ type: "error", message: err?.message || "Unable to load role permissions." });
     } finally {
-      setPermissionLoading(false);
+      if (permissionRequestRef.current === requestId) setPermissionLoading(false);
     }
   }, []);
 
@@ -2106,14 +3150,16 @@ export default function RolesPermissionsPage() {
       const nextManageableRoles = getManageableRoles(nextAllRoles);
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
-      setModules(modulesResponse.data);
+      setModuleCatalog(modulesResponse.data);
       const searchParams = routeParamsRef.current;
       const persistedRoleId = searchParams?.get("roleId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_role_id") : null) || selectedRoleIdRef.current;
       const persistedUserId = searchParams?.get("userId") || (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("rbac_selected_user_id") : null);
 
       const role = (persistedRoleId
-        ? nextAllRoles.find((r) => String(r.id) === String(persistedRoleId) || String(r.roleId) === String(persistedRoleId) || String(r.code).toLowerCase() === String(persistedRoleId).toLowerCase())
-        : null) || nextAllRoles[0] || null;
+        ? nextManageableRoles.find((r) => String(r.id) === String(persistedRoleId) || String(r.roleId) === String(persistedRoleId) || String(r.code).toLowerCase() === String(persistedRoleId).toLowerCase())
+        : null) || nextManageableRoles[0] || null;
+
+      setModules(role ? getRoleEligibleModules(role.code, modulesResponse.data) : []);
 
       if (role) {
         try {
@@ -2184,6 +3230,11 @@ export default function RolesPermissionsPage() {
     updateRoleRoute({ roleId: String(role.id || role.roleId || role.code), userId: null });
     setSelectedRole(role);
     setSelectedMember(null);
+    setPermissions([]);
+    setLastSavedPermissions([]);
+    setPermissionQuery("");
+    setModules([]);
+    setModules(getRoleEligibleModules(role.code, moduleCatalog));
     await loadPermissions(role);
     await loadRoleMembers(role);
   };
@@ -2241,7 +3292,7 @@ export default function RolesPermissionsPage() {
   useEffect(() => {
     if (loading || permissionLoading || !allRoles.length || !requestedRoleId) return undefined;
     const key = requestedRoleId + ":" + requestedUserId;
-    const role = allRoles.find((item) => [item.id, item.roleId, item.code].some((id) => id != null && String(id).toLowerCase() === requestedRoleId.toLowerCase()));
+    const role = manageableRoles.find((item) => [item.id, item.roleId, item.code].some((id) => id != null && String(id).toLowerCase() === requestedRoleId.toLowerCase()));
     if (!role || selectionRestoreRef.current === key) return undefined;
     const sameRole = String(role.id) === String(selectedRole?.id);
     const sameMember = requestedUserId ? [selectedMember?.id, selectedMember?.userId].some((id) => id != null && String(id) === requestedUserId) : !selectedMember;
@@ -2250,6 +3301,9 @@ export default function RolesPermissionsPage() {
     let active = true;
     const restore = async () => {
       setSelectedRole(role);
+      setPermissions([]);
+      setLastSavedPermissions([]);
+      setModules(getRoleEligibleModules(role.code, moduleCatalog));
       const members = await selectionLoadersRef.current.members(role);
       if (!active) return;
       const member = requestedUserId ? (members || []).find((item) => [item.id, item.userId].some((id) => id != null && String(id) === requestedUserId)) : null;
@@ -2260,7 +3314,7 @@ export default function RolesPermissionsPage() {
     return () => { active = false; };
   // Role/member changes made by this restoration must not cancel its pending read.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedRoleId, requestedUserId, loading, permissionLoading, allRoles]);
+  }, [requestedRoleId, requestedUserId, loading, permissionLoading, manageableRoles, moduleCatalog]);
 
   const persistPermissions = useCallback(async (target, nextPermissions, previousPermissions = lastSavedPermissions) => {
     const role = target?.role;
@@ -2280,6 +3334,7 @@ export default function RolesPermissionsPage() {
           })
         : await updateRolePermissions(role.id, {
             roleId: role.id,
+            roleCode: role.code,
             permissions: normalized,
           });
       const sameRole = String(selectedRole?.id) === String(role.id);
@@ -2307,9 +3362,15 @@ export default function RolesPermissionsPage() {
     await persistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, permissions, lastSavedPermissions);
   };
 
-  // Always show ALL modules so admins can grant permissions for any module to any role.
-  // Permission data is used only to set toggle states, not to filter module visibility.
-  const visiblePermissionModules = modules;
+  // Derive the displayed rows from the selected role at render time. This also
+  // keeps a member-override URL (for example `userId=866`) scoped to the
+  // Accountant portal rather than falling back to the full admin catalog.
+  const visiblePermissionModules = useMemo(() => {
+    if (!selectedRole) return modules;
+    const code = String(selectedRole.code || "").trim();
+    const roleIdentifier = /^\d+$/.test(code) ? selectedRole.name : (code || selectedRole.name);
+    return getRoleEligibleModules(roleIdentifier, moduleCatalog);
+  }, [moduleCatalog, modules, selectedRole]);
 
   const routeNote = "";
 
@@ -2376,7 +3437,7 @@ export default function RolesPermissionsPage() {
         {!loading && !error && activeTab === "permissions" ? (
           <div className="rbac-grid">
             <RoleList
-              roles={allRoles}
+              roles={manageableRoles}
               selectedRoleId={selectedRole?.id}
               onSelect={selectRole}
               onOpenMembers={openRoleMembers}
@@ -2405,7 +3466,7 @@ export default function RolesPermissionsPage() {
           </div>
         ) : null}
 
-        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
+        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={manageableRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
         {membersDialogOpen ? (
           <RoleMembersDialog
             role={membersRole}

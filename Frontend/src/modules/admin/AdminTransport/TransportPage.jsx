@@ -97,6 +97,27 @@ const currency = new Intl.NumberFormat("en-IN", {
 });
 
 const TABLE_PAGE_SIZE = 5;
+const TRANSPORT_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
+function TransportPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange }) {
+  const [customMode, setCustomMode] = useState(!TRANSPORT_PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const pages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const current = Math.min(page, pages);
+  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav aria-label="Transport pagination" style={navStyle}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
+      <select aria-label="Rows per page" value={customMode || !TRANSPORT_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>{TRANSPORT_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}<option value="custom">Custom</option></select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={current <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: current <= 1 ? 0.48 : 1 }} onClick={() => onPageChange(current - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{current} / {pages}</span>
+    <button type="button" disabled={current >= pages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: current >= pages ? 0.48 : 1 }} onClick={() => onPageChange(current + 1)}>Next</button>
+  </nav>;
+}
 const today = new Date();
 today.setHours(0, 0, 0, 0);
 
@@ -327,12 +348,13 @@ function TableSection({
   exportFilename,
 }) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE);
   const hasRowActions = Boolean(onView || onEdit || onDelete);
   const filterKey = JSON.stringify(filterValues);
   const visibleRows = rows.filter((row) => textMatch(row, query)).filter((row) => (rowFilter ? rowFilter(row) : true));
-  const totalPages = Math.max(1, Math.ceil(visibleRows.length / TABLE_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paginatedRows = visibleRows.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
+  const paginatedRows = visibleRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const outputContext = {
     title,
     subtitle,
@@ -412,7 +434,7 @@ function TableSection({
             </thead>
             <tbody>
               {paginatedRows.length ? paginatedRows.map((row, rowIndex) => (
-                <tr key={`${row.id ?? "transport-row"}-${(currentPage - 1) * TABLE_PAGE_SIZE + rowIndex}`}>
+                <tr key={`${row.id ?? "transport-row"}-${(currentPage - 1) * pageSize + rowIndex}`}>
                   {columns.map((column) => (
                     <td key={column.key} className={column.strong ? "cms-strong" : ""}>
                       {column.badge ? <StatusBadge value={row[column.key]} /> : column.currency ? formatCurrency(row[column.key]) : column.value ? column.value(row) : row[column.key]}
@@ -435,13 +457,7 @@ function TableSection({
           </table>
         </div>
         {visibleRows.length ? (
-          <div className="cms-transport-pagination">
-            <span>Page {currentPage} of {totalPages} - {visibleRows.length} record{visibleRows.length === 1 ? "" : "s"}</span>
-            <div>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
-              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
-            </div>
-          </div>
+          <TransportPagination page={currentPage} totalRows={visibleRows.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
         ) : null}
       </div>
     </div>

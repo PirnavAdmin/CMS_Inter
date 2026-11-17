@@ -51,6 +51,7 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId = null,
             bool? isActive = null,
             int? masterGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -113,6 +114,7 @@ namespace CollegeManagement.API.Repositories
             int boardId,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -142,6 +144,7 @@ namespace CollegeManagement.API.Repositories
 
         public async Task<GroupResponse> CreateAsync(
             CreateGroupRequest request,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             if (request == null)
@@ -176,7 +179,8 @@ namespace CollegeManagement.API.Repositories
                 await SyncGroupProgramsAsync(created.GroupId, programIds, cancellationToken);
             }
 
-            return (await GetByIdAsync(created.GroupId, cancellationToken))!;
+            var fetched = await GetByIdAsync(created.GroupId, cancellationToken);
+            return fetched ?? created;
         }
 
         // =========================================================
@@ -305,6 +309,7 @@ namespace CollegeManagement.API.Repositories
             string groupCode,
             int? boardId = null,
             int? excludeGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -394,6 +399,7 @@ namespace CollegeManagement.API.Repositories
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);

@@ -339,62 +339,50 @@ export default function CollegeSubscriptionsPage() {
 
   const handleAssignSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!assignCollegeId) {
       showToast("Please choose a college to assign.", "warning");
       return;
     }
+    if (!availablePlans.some((plan) => plan.name === selectedNewPlan)) { showToast("Choose a valid subscription plan.", "warning"); return; }
+    if (!["annual", "monthly", "quarterly"].includes(assignCycle)) { showToast("Choose a valid billing cycle.", "warning"); return; }
     setIsSubmitting(true);
-    const ok = await update("Assigned college subscription", null, {
-      module: "Subscriptions",
-      actionType: "Assign",
-      collegeId: assignCollegeId,
-      plan: selectedNewPlan,
-      cycle: assignCycle,
-    });
-    setIsSubmitting(false);
-    if (ok) {
-      showToast(`Assigned ${selectedNewPlan} plan successfully!`, "success");
-      setAssignModal(false);
-      setAssignCollegeId("");
-      await refresh();
-    }
+    try {
+      const ok = await update("Assigned college subscription", null, {
+        module: "Subscriptions", actionType: "Assign", collegeId: assignCollegeId,
+        plan: selectedNewPlan, cycle: assignCycle,
+      });
+      if (ok) { showToast(`Assigned ${selectedNewPlan} plan successfully!`, "success"); setAssignModal(false); setAssignCollegeId(""); await refresh(); }
+      else showToast("Could not assign the subscription. Please try again.", "error");
+    } catch (err) { showToast(err?.response?.data?.message || err?.message || "Could not assign the subscription.", "error"); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleRenewSubmit = async (e) => {
     e.preventDefault();
-    if (!renewModalSub) return;
+    if (isSubmitting || !renewModalSub) return;
+    if (!["30days", "90days", "1year"].includes(renewPeriod)) { showToast("Choose a valid renewal period.", "warning"); return; }
     const daysToAdd = renewPeriod === "30days" ? 30 : renewPeriod === "90days" ? 90 : 365;
     setIsSubmitting(true);
-    const ok = await update("Renewed subscription", null, {
-      module: "Subscriptions",
-      actionType: "Renew",
-      collegeId: renewModalSub.collegeId,
-      extensionDays: daysToAdd,
-    });
-    setIsSubmitting(false);
-    if (ok) {
-      showToast(`Renewed subscription for ${renewModalSub.collegeName}!`, "success");
-      setRenewModalSub(null);
-      await refresh();
-    }
+    try {
+      const ok = await update("Renewed subscription", null, { module: "Subscriptions", actionType: "Renew", collegeId: renewModalSub.collegeId, extensionDays: daysToAdd });
+      if (ok) { showToast(`Renewed subscription for ${renewModalSub.collegeName}!`, "success"); setRenewModalSub(null); await refresh(); }
+      else showToast("Could not renew the subscription. Please try again.", "error");
+    } catch (err) { showToast(err?.response?.data?.message || err?.message || "Could not renew the subscription.", "error"); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleSavePlanChange = async (e) => {
     e.preventDefault();
-    if (!editPlanSub) return;
+    if (isSubmitting || !editPlanSub) return;
+    if (!availablePlans.some((plan) => plan.name === selectedNewPlan)) { showToast("Choose a valid subscription plan.", "warning"); return; }
     setIsSubmitting(true);
-    const ok = await update("Changed college plan", null, {
-      module: "Subscriptions",
-      actionType: "Plan change",
-      collegeId: editPlanSub.collegeId,
-      plan: selectedNewPlan,
-    });
-    setIsSubmitting(false);
-    if (ok) {
-      showToast(`Plan for ${editPlanSub.collegeName} updated to ${selectedNewPlan}!`, "success");
-      setEditPlanSub(null);
-      await refresh();
-    }
+    try {
+      const ok = await update("Changed college plan", null, { module: "Subscriptions", actionType: "Plan change", collegeId: editPlanSub.collegeId, plan: selectedNewPlan });
+      if (ok) { showToast(`Plan for ${editPlanSub.collegeName} updated to ${selectedNewPlan}!`, "success"); setEditPlanSub(null); await refresh(); }
+      else showToast("Could not update the subscription plan. Please try again.", "error");
+    } catch (err) { showToast(err?.response?.data?.message || err?.message || "Could not update the subscription plan.", "error"); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleCancelSubscription = (sub) => {

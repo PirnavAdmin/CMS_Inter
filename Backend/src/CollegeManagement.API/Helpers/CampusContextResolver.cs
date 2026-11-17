@@ -7,17 +7,16 @@ public static class CampusContextResolver
 {
     public static int ResolveAndValidateCampusId(ClaimsPrincipal user, int? requestedCampusId)
     {
-        var isPrivilegedAdmin = user.IsInRole("Super Admin") || 
-                                user.IsInRole("SuperAdmin") || 
-                                user.IsInRole("Admin") || 
-                                user.IsInRole("Administrator") || 
-                                user.IsInRole("Principal") ||
-                                user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") && 
-                                    (c.Value == "Super Admin" || c.Value == "SuperAdmin" || c.Value == "Admin" || c.Value == "Administrator" || c.Value == "Principal"));
+        var isPrivilegedAdmin = user.IsInRole("Super Admin") ||
+                                user.IsInRole("SuperAdmin") ||
+                                user.IsInRole("Admin") ||
+                                user.IsInRole("Administrator") ||
+                                user.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role") &&
+                                    (c.Value == "Super Admin" || c.Value == "SuperAdmin" || c.Value == "Admin" || c.Value == "Administrator"));
 
-        var userCampusClaim = user.Claims.FirstOrDefault(c => 
-            c.Type == "CampusId" || 
-            c.Type == "campus_id" || 
+        var userCampusClaim = user.Claims.FirstOrDefault(c =>
+            c.Type == "CampusId" ||
+            c.Type == "campus_id" ||
             c.Type == "campusId")?.Value;
 
         int userCampusId = int.TryParse(userCampusClaim, out int cid) ? cid : 0;

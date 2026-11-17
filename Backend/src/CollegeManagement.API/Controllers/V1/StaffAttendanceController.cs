@@ -316,7 +316,7 @@ namespace CollegeManagement.API.Controllers.V1
             return basePath + (hasExistingQuery ? "&" : "?") + string.Join("&", queryParts);
         }
 
-        private async Task<int> ResolveStaffIdAsync()
+        private async Task<int?> TryResolveStaffIdAsync()
         {
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId.HasValue && staffId.Value > 0)
@@ -327,7 +327,26 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User);
             if (userId.HasValue && userId.Value > 0)
             {
-                return await _service.ResolveStaffIdByUserIdAsync(userId.Value);
+                try
+                {
+                    var resolved = await _service.ResolveStaffIdByUserIdAsync(userId.Value);
+                    if (resolved > 0) return resolved;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        private async Task<int> ResolveStaffIdAsync()
+        {
+            var staffId = await TryResolveStaffIdAsync();
+            if (staffId.HasValue && staffId.Value > 0)
+            {
+                return staffId.Value;
             }
 
             throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");
@@ -344,8 +363,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyTodayStatus()
         {
-            var staffId = await ResolveStaffIdAsync();
-            var result = await _service.GetMyTodayStatusAsync(staffId, DateTime.Today);
+            var staffId = await TryResolveStaffIdAsync();
+            if (!staffId.HasValue)
+            {
+                return Ok(new { Status = true, Message = "No staff record associated with this account.", Data = new MyAttendanceTodayResponse() });
+            }
+            var result = await _service.GetMyTodayStatusAsync(staffId.Value, DateTime.Today);
             return Ok(new { Status = true, Message = "Today attendance status retrieved successfully.", Data = result });
         }
 
@@ -433,8 +456,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? year = null,
             [FromQuery] int? month = null)
         {
-            var staffId = await ResolveStaffIdAsync();
-            var result = await _service.GetMyAttendanceHistoryAsync(staffId, period, DateTime.Today, year, month);
+            var staffId = await TryResolveStaffIdAsync();
+            if (!staffId.HasValue)
+            {
+                return Ok(new { Status = true, Message = "No staff record associated with this account.", Data = new MyAttendanceHistoryResponse() });
+            }
+            var result = await _service.GetMyAttendanceHistoryAsync(staffId.Value, period, DateTime.Today, year, month);
             return Ok(new { Status = true, Message = "Staff attendance history retrieved successfully.", Data = result });
         }
 
@@ -511,13 +538,24 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? departmentId,
             [FromQuery] int? campusId = null,
             [FromQuery] string? requestType = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? regId = null)
         {
-            var list = await _service.GetRegularizationsAsync(status, departmentId, campusId, requestType, search);
+            var items = (await _service.GetRegularizationsAsync(status, departmentId, campusId, requestType, search)).ToList();
+            if (regId.HasValue && regId.Value > 0 && IsCurrentUserAdmin() && items.All(r => r.RegularizationId != regId.Value))
+            {
+                var targeted = await _service.GetRegularizationByIdAsync(regId.Value);
+                if (targeted != null && (string.IsNullOrWhiteSpace(status) || string.Equals(targeted.Status, status.Trim(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    items.Insert(0, targeted);
+                }
+            }
+
+            IEnumerable<RegularizationItemDto> list = items;
             if (!IsCurrentUserAdmin())
             {
                 var staffId = await ResolveStaffIdAsync();
-                list = list.Where(r => (r.StaffId == staffId) || (r.FacultyId == staffId));
+                list = items.Where(r => (r.StaffId == staffId) || (r.FacultyId == staffId));
             }
             return Ok(new { Status = true, Message = "Regularization requests loaded successfully.", Data = list });
         }
@@ -541,21 +579,25 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     try
                     {
-                        var regs = await _service.GetRegularizationsAsync(null, null);
-                        var target = regs.FirstOrDefault(r => r.RegularizationId == id);
+                        var target = await _service.GetRegularizationByIdAsync(id);
                         var targetStaffId = target?.StaffId ?? target?.FacultyId ?? 0;
                         if (targetStaffId > 0)
                         {
                             var roleName = await _service.ResolveStaffRoleNameAsync(targetStaffId);
                             var staffUrl = BuildStaffAttendanceActionUrl(roleName, id, target?.AttendanceDate);
+                            var isApproved = string.Equals(request.Status, "Approved", StringComparison.OrdinalIgnoreCase);
+                            var decisionTitle = isApproved
+                                ? "Regularization Request Approved"
+                                : "Regularization Request Rejected";
+                            var decisionVerb = isApproved ? "Approved" : "Rejected";
                             var remarksSuffix = string.IsNullOrWhiteSpace(request.AdminRemarks)
                                 ? ""
                                 : $" Remarks: {request.AdminRemarks.Trim()}";
 
                             await _notificationService.SendToStaffAsync(
                                 targetStaffId,
-                                "Attendance Regularization Decision",
-                                $"Your {target?.RequestType ?? "Attendance"} regularization request for {target?.AttendanceDate:yyyy-MM-dd} has been {request.Status}.{remarksSuffix}",
+                                decisionTitle,
+                                $"Your {target?.RequestType ?? "Attendance"} regularization request for {target?.AttendanceDate:dd MMM yyyy} was {decisionVerb} by Admin.{remarksSuffix}",
                                 "Attendance",
                                 id,
                                 staffUrl);

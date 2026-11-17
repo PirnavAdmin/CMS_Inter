@@ -5,6 +5,7 @@ import { STANDARD_CRUD_ACTIONS } from "@/modules/admin/AdminRolesPermissions/rol
 import { Eye, Pencil, Power, ShieldCheck, KeyRound, UserCheck, Plus } from "lucide-react";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import { isValidSuperAdminEmail, isValidContactPhone } from "../superAdminValidation.js";
 import { MODULES } from "../superAdminPreview.js";
 import superAdminApi from "@/api/superAdminApi.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
@@ -366,19 +367,23 @@ function LegacyCollegeAdminsPage() {
   const handleSaveAdmin = async (e) => {
     e.preventDefault();
     setError("");
-    if (!form.name.trim() || !form.email.trim()) {
-      setError("Administrator Name and Email are required.");
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const phone = String(form.phone || "").trim();
+    if (name.length < 2 || name.length > 100 || !isValidSuperAdminEmail(email)) {
+      setError("Enter an administrator name (2–100 characters) and a valid email address.");
       return;
     }
+    if (phone && !isValidContactPhone(phone)) { setError("Enter a valid phone number with 7–15 digits, or leave it blank."); return; }
     if (!form.collegeId) {
       setError("Please select a target college.");
       return;
     }
 
     const payload = {
-      name: form.name.trim(),
-      email: form.email.trim().toLowerCase(),
-      phone: form.phone ? form.phone.trim() : "",
+      name,
+      email: email.toLowerCase(),
+      phone,
       collegeId: Number(form.collegeId),
       password: form.password,
     };

@@ -229,10 +229,12 @@ BEGIN
         COALESCE(MIN(sec.SectionName), 'Section A') AS SectionName,
         COALESCE(MIN(e.ExamName), 'Quarterly Examination') AS ExaminationName,
         COALESCE(MIN(e.ExamPattern), 'REGULAR_ACADEMIC') AS ExamPattern,
+        COALESCE((SELECT es2.ScheduleMode FROM `ExamSchedules` es2 WHERE es2.ExamId = m.ExaminationId AND es2.IsActive = 1 AND (es2.SubjectId = m.SubjectId OR FIND_IN_SET(m.SubjectId, REPLACE(COALESCE(es2.IncludedSubjectIds, ''), ' ', '')) > 0) ORDER BY (es2.SubjectId = m.SubjectId) DESC, es2.ScheduleId DESC LIMIT 1), '') AS ScheduleMode,
+        COALESCE((SELECT es2.ExamMode FROM `ExamSchedules` es2 WHERE es2.ExamId = m.ExaminationId AND es2.IsActive = 1 AND (es2.SubjectId = m.SubjectId OR FIND_IN_SET(m.SubjectId, REPLACE(COALESCE(es2.IncludedSubjectIds, ''), ' ', '')) > 0) ORDER BY (es2.SubjectId = m.SubjectId) DESC, es2.ScheduleId DESC LIMIT 1), '') AS ScheduleExamMode,
         COALESCE(MIN(at.AssessmentTypeName), 'Written') AS ExamType,
         COALESCE(MIN(e.TotalMarks), 600) AS ExamTotalMarks,
         COALESCE(MIN(e.PassPercentage), 35.00) AS ExamPassPercentage,
-        COALESCE(MIN(s.TotalMarks), 100.00) AS SubjectMaxMarks,
+        COALESCE(NULLIF((SELECT es2.MaxMarks FROM `ExamSchedules` es2 WHERE es2.ExamId = m.ExaminationId AND es2.IsActive = 1 AND (es2.SubjectId = m.SubjectId OR FIND_IN_SET(m.SubjectId, REPLACE(COALESCE(es2.IncludedSubjectIds, ''), ' ', '')) > 0) ORDER BY (es2.SubjectId = m.SubjectId) DESC, es2.ScheduleId DESC LIMIT 1), 0), MIN(s.TotalMarks), 100.00) AS SubjectMaxMarks,
         COALESCE(MIN(s.Practical), 0) AS IsPractical,
         COALESCE(MIN(s.SubjectType), 'Theory') AS SubjectType,
         COUNT(m.MarkId) AS TotalStudents,
@@ -377,7 +379,7 @@ CREATE PROCEDURE `sp_GetFacultyEvaluations`(
     IN p_CampusId INT
 )
 BEGIN
-    SELECT 
+    SELECT
         COALESCE(MIN(m.MarkId), 0) AS EvaluationId,
         m.ExaminationId,
         COALESCE(MIN(e.ExamName), CONCAT('Exam #', m.ExaminationId)) AS ExaminationName,
@@ -396,17 +398,152 @@ BEGIN
             WHEN 4 THEN 'REJECTED'
             ELSE 'DRAFT'
         END AS Status,
-        CASE WHEN MIN(e.ExamPattern) LIKE '%OBJECTIVE%' OR MIN(e.ExamPattern) LIKE '%JEE%' OR MIN(e.ExamPattern) LIKE '%NEET%' THEN 'OBJECTIVE' ELSE 'REGULAR' END AS Mode,
-        COALESCE(MIN(s.TotalMarks), 100) AS MaxMarks,
-        COALESCE(MIN(s.InternalMarks), 30) AS InternalMax,
-        COALESCE(MIN(s.PracticalMarks), 0) AS PracticalMax,
-        COALESCE(MIN(s.ExternalMarks), 70) AS TheoryMax,
+        CASE WHEN (
+            EXISTS (
+                SELECT 1 FROM `ExamSchedules` es_obj
+                WHERE es_obj.ExamId = m.ExaminationId
+                  AND es_obj.IsActive = 1
+                  AND (
+                      UPPER(COALESCE(es_obj.ExamMode, '')) = 'OBJECTIVE'
+                      OR UPPER(COALESCE(es_obj.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+                  )
+            )
+            OR (
+                UPPER(COALESCE(MIN(e.ExamPattern), '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(MIN(at.AssessmentTypeName), '')) LIKE '%OBJECTIVE%'
+        ) THEN 'OBJECTIVE' ELSE 'REGULAR' END AS Mode,
+        CASE WHEN (
+            EXISTS (
+                SELECT 1 FROM `ExamSchedules` es_obj
+                WHERE es_obj.ExamId = m.ExaminationId
+                  AND es_obj.IsActive = 1
+                  AND (
+                      UPPER(COALESCE(es_obj.ExamMode, '')) = 'OBJECTIVE'
+                      OR UPPER(COALESCE(es_obj.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+                  )
+            )
+            OR (
+                UPPER(COALESCE(MIN(e.ExamPattern), '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(MIN(at.AssessmentTypeName), '')) LIKE '%OBJECTIVE%'
+        ) THEN COALESCE(
+            (SELECT NULLIF(MAX(es2.MaxMarks), 0) FROM `ExamSchedules` es2 WHERE es2.ExamId = m.ExaminationId AND es2.IsActive = 1 AND (es2.SubjectId = m.SubjectId OR FIND_IN_SET(m.SubjectId, REPLACE(COALESCE(es2.IncludedSubjectIds, ''), ' ', '')) > 0)),
+            (SELECT NULLIF(MAX(es3.MaxMarks), 0) FROM `ExamSchedules` es3 WHERE es3.ExamId = m.ExaminationId AND es3.IsActive = 1),
+            NULLIF(MIN(e.TotalMarks), 0), MIN(s.TotalMarks), 100
+        ) ELSE (
+            CASE WHEN (COALESCE(MIN(s.InternalMarks), 0) + COALESCE(MIN(s.PracticalMarks), 0) + COALESCE(MIN(s.ExternalMarks), 0)) > 0
+                 THEN (COALESCE(MIN(s.InternalMarks), 0) + COALESCE(MIN(s.PracticalMarks), 0) + COALESCE(MIN(s.ExternalMarks), 0))
+                 ELSE COALESCE((SELECT NULLIF(MAX(es2.MaxMarks), 0) FROM `ExamSchedules` es2 WHERE es2.ExamId = m.ExaminationId AND es2.IsActive = 1 AND es2.SubjectId = m.SubjectId), MIN(s.TotalMarks), 100)
+            END
+        ) END AS MaxMarks,
+        CASE WHEN (
+            EXISTS (
+                SELECT 1 FROM `ExamSchedules` es_obj
+                WHERE es_obj.ExamId = m.ExaminationId
+                  AND es_obj.IsActive = 1
+                  AND (
+                      UPPER(COALESCE(es_obj.ExamMode, '')) = 'OBJECTIVE'
+                      OR UPPER(COALESCE(es_obj.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+                  )
+            )
+            OR (
+                UPPER(COALESCE(MIN(e.ExamPattern), '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(MIN(at.AssessmentTypeName), '')) LIKE '%OBJECTIVE%'
+        ) THEN 0 ELSE COALESCE(MIN(s.InternalMarks), 0) END AS InternalMax,
+        CASE WHEN (
+            EXISTS (
+                SELECT 1 FROM `ExamSchedules` es_obj
+                WHERE es_obj.ExamId = m.ExaminationId
+                  AND es_obj.IsActive = 1
+                  AND (
+                      UPPER(COALESCE(es_obj.ExamMode, '')) = 'OBJECTIVE'
+                      OR UPPER(COALESCE(es_obj.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+                  )
+            )
+            OR (
+                UPPER(COALESCE(MIN(e.ExamPattern), '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(MIN(at.AssessmentTypeName), '')) LIKE '%OBJECTIVE%'
+        ) THEN 0 ELSE COALESCE(MIN(s.PracticalMarks), 0) END AS PracticalMax,
+        CASE WHEN (
+            EXISTS (
+                SELECT 1 FROM `ExamSchedules` es_obj
+                WHERE es_obj.ExamId = m.ExaminationId
+                  AND es_obj.IsActive = 1
+                  AND (
+                      UPPER(COALESCE(es_obj.ExamMode, '')) = 'OBJECTIVE'
+                      OR UPPER(COALESCE(es_obj.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+                  )
+            )
+            OR (
+                UPPER(COALESCE(MIN(e.ExamPattern), '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(MIN(e.ExamPattern), '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(MIN(at.AssessmentTypeName), '')) LIKE '%OBJECTIVE%'
+        ) THEN 0 ELSE COALESCE(MIN(s.ExternalMarks), 0) END AS TheoryMax,
         COALESCE(MIN(e.PassPercentage), 35) AS PassPercentage,
         MIN(m.Remarks) AS RejectionReason,
         COALESCE(MAX(m.ResubmissionCount), 0) AS ResubmissionCount,
         1 AS RowVersion
     FROM `Marks` m
     INNER JOIN `Examinations` e ON e.ExamId = m.ExaminationId
+    LEFT JOIN `AssessmentTypes` at ON at.AssessmentTypeId = e.AssessmentTypeId
     LEFT JOIN `Sections` sec ON sec.SectionId = m.SectionId
     LEFT JOIN `Subjects` s ON s.SubjectId = m.SubjectId
     LEFT JOIN `Faculties` f ON f.Id = m.FacultyId
@@ -534,21 +671,48 @@ CREATE PROCEDURE `sp_GetExamFormatAndLimits`(
     IN p_SubjectId INT
 )
 BEGIN
-    SELECT 
+    SELECT
         e.ExamId AS ExaminationId,
         e.ExamPattern,
-        CASE WHEN UPPER(COALESCE(e.ExamPattern, '')) LIKE '%OBJECTIVE%' OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%JEE%' OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%NEET%' OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%PATTERN%' THEN 'Objective' ELSE 'Regular' END AS ExamCategory,
+        CASE WHEN (
+            UPPER(COALESCE(es.ExamMode, '')) = 'OBJECTIVE'
+            OR UPPER(COALESCE(es.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+            OR (
+                UPPER(COALESCE(e.ExamPattern, '')) NOT LIKE '%REGULAR%'
+                AND (
+                    UPPER(COALESCE(e.ExamPattern, '')) LIKE '%OBJECTIVE%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%JEE%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%NEET%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%MAINS%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%ADVANCE%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%EAMCET%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%BITSAT%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%CUET%'
+                    OR UPPER(COALESCE(e.ExamPattern, '')) LIKE '%PATTERN%'
+                )
+            )
+            OR UPPER(COALESCE(at.AssessmentTypeName, '')) LIKE '%OBJECTIVE%'
+        ) THEN 'Objective' ELSE 'Regular' END AS ExamCategory,
         COALESCE(at.AssessmentTypeName, '') AS AssessmentTypeName,
         COALESCE(es.ExamMode, '') AS ScheduleExamMode,
         COALESCE(es.ScheduleMode, '') AS ScheduleMode,
         COALESCE(es.PatternName, '') AS PatternName,
-        COALESCE(es.MaxMarks, s.TotalMarks, 100.00) AS MaxMarks,
-        COALESCE(es.PassingMarks, s.PassingMarks, 35.00) AS PassingMarks
+        COALESCE(NULLIF(es.MaxMarks, 0), NULLIF(e.TotalMarks, 0), s.TotalMarks, 100.00) AS MaxMarks,
+        COALESCE(NULLIF(es.PassingMarks, 0), s.PassingMarks, 35.00) AS PassingMarks,
+        COALESCE(s.InternalMarks, 0) AS InternalMax,
+        COALESCE(s.PracticalMarks, 0) AS PracticalMax,
+        COALESCE(s.ExternalMarks, 0) AS TheoryMax
     FROM `Examinations` e
     LEFT JOIN `AssessmentTypes` at ON at.AssessmentTypeId = e.AssessmentTypeId
-    LEFT JOIN `ExamSchedules` es ON es.ExamId = e.ExamId AND es.IsActive = 1 AND (es.SubjectId = p_SubjectId OR es.IncludedSubjectIds LIKE CONCAT('%', p_SubjectId, '%'))
+    LEFT JOIN `ExamSchedules` es ON es.ExamId = e.ExamId AND es.IsActive = 1
+        AND (
+            es.SubjectId = p_SubjectId
+            OR FIND_IN_SET(p_SubjectId, REPLACE(COALESCE(es.IncludedSubjectIds, ''), ' ', '')) > 0
+            OR UPPER(COALESCE(es.ScheduleMode, '')) IN ('PATTERN_WISE', 'COMBINED_OBJECTIVE', 'COMBINED', 'OBJECTIVE')
+        )
     LEFT JOIN `Subjects` s ON s.SubjectId = p_SubjectId
     WHERE e.ExamId = p_ExaminationId
+    ORDER BY (es.SubjectId = p_SubjectId) DESC, es.ScheduleId DESC
     LIMIT 1;
 END //
 DELIMITER ;

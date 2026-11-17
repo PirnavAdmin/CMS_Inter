@@ -14,7 +14,6 @@ import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { Settings } from "lucide-react";
-import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 
 // Shared by the Student sidebar and its navbar search.
@@ -42,7 +41,6 @@ export const studentMenuGroups = [
 ];
 
 export default function StudentSidebar({ open, collapsed, mobile, onClose, onResizePointerDown, onResizePointerMove, onResizePointerUp, onResizePointerCancel }) {
-  const { canView } = usePermissions();
   const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
 
   return (
@@ -59,8 +57,7 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose, onRes
               if (facilityAccess.type === "hostel") return path === "hostel";
               return false;
             }
-            if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
-            return canView(moduleKey);
+            return true;
           });
 
           if (!visibleLinks.length) return null;

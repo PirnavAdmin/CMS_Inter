@@ -50,6 +50,10 @@ export const superAdminApi = {
     const res = await apiClient.put(`/api/v1/super-admin/college-admins/${encodeURIComponent(id)}`, payload);
     return res.data;
   },
+  resendCollegeAdminCredentials: async (id) => {
+    const res = await apiClient.post(`/api/v1/super-admin/college-admins/${encodeURIComponent(id)}/resend-credentials`);
+    return res.data;
+  },
 
   // 4. Global Users
   getGlobalUsers: async (params = {}) => {

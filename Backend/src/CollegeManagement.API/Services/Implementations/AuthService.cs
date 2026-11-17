@@ -225,14 +225,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!selfHealed)
                     {
-                        await _auditService.LogAsync(
-                            action: "Failed login attempt",
-                            module: "Authentication",
-                            target: normalizedEmail,
-                            severity: "Warning",
-                            status: "Failed",
-                            details: "Invalid password provided during login."
-                        );
+                        _logger.LogWarning("Failed login attempt for {Email}: Invalid password provided.", normalizedEmail);
 
                         return new AuthResult
                         {
@@ -390,11 +383,6 @@ namespace CollegeManagement.API.Services.Implementations
                     resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT PhotoPath FROM admins WHERE Email = @Email AND PhotoPath IS NOT NULL AND PhotoPath != '' LIMIT 1",
                         new { Email = user.Email });
-                    if (string.IsNullOrWhiteSpace(resolvedPhotoPath))
-                    {
-                        resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
-                            "SELECT PhotoPath FROM admins WHERE PhotoPath IS NOT NULL AND PhotoPath != '' ORDER BY id ASC LIMIT 1");
-                    }
                 }
                 if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.StudentId.HasValue && user.StudentId.Value > 0)
                 {
@@ -403,15 +391,23 @@ namespace CollegeManagement.API.Services.Implementations
                         new { Id = user.StudentId.Value });
                 }
 
+                string? collegeName = null;
+                string? collegeLogo = null;
+                if (user.CollegeId.HasValue && user.CollegeId.Value > 0)
+                {
+                    var collegeInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT CollegeName, LogoUrl FROM Colleges WHERE CollegeId = @CollegeId AND IsDeleted = 0 LIMIT 1;",
+                        new { CollegeId = user.CollegeId.Value });
+                    if (collegeInfo != null)
+                    {
+                        collegeName = (string?)collegeInfo.CollegeName;
+                        collegeLogo = (string?)collegeInfo.LogoUrl;
+                    }
+                }
+
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
-                await _auditService.LogAsync(
-                    action: "User logged in",
-                    module: "Authentication",
-                    target: user.Email,
-                    severity: "Info",
-                    status: "Success",
-                    details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
+                _logger.LogInformation("Successful login for {Email} ({Role})", user.Email, user.Role?.RoleName ?? "Unknown");
 
                 return new AuthResult
                 {
@@ -424,6 +420,9 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
+                    CollegeId = user.CollegeId,
+                    CollegeName = collegeName,
+                    CollegeLogo = collegeLogo,
                     Designation = (string?)staffInfo?.Designation ?? user.Designation,
                     DesignationId = staffInfo?.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null,
                     Department = (string?)staffInfo?.Department ?? string.Empty,

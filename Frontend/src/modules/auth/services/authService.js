@@ -452,7 +452,6 @@ export function findParentAccount(input) {
     val === "parent-003" ||
     val === "par-2026-003" ||
     val.includes("parent3") ||
-    val.includes("mahesh") ||
     val === "parent3@cms.com" ||
     val === "mahesh.r@example.com" ||
     digits === "9876543212"
@@ -477,7 +476,6 @@ export function findParentAccount(input) {
     val === "parent-002" ||
     val === "par-2026-002" ||
     val.includes("parent2") ||
-    val.includes("ramesh") ||
     val === "parent2@cms.com" ||
     val === "ramesh.s@example.com" ||
     digits === "9876543211"
@@ -504,15 +502,11 @@ export function findParentAccount(input) {
     val === "par-2026-001" ||
     val === "859" ||
     val.includes("parent") ||
-    val.includes("naveen") ||
-    val.includes("niharika") ||
     val === "parent@cms.com" ||
     val === "parent1@cms.com" ||
     val === "naveenponnapula0@gmail.com" ||
     val === "parent@pirnav.edu.in" ||
     val === "suresh.k@example.com" ||
-    val.includes("suresh") ||
-    val.includes("srinivas") ||
     digits === "8765445678" ||
     digits === "9876543210"
   ) {
@@ -883,6 +877,9 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     subjects: Array.isArray(data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) ? (data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) : [],
     campusId: data.CampusId || data.campusId || payload.CampusId || payload.campusId || (assignedCampusIds[0] || (isTransportManager ? 1 : null)),
     boardId: data.BoardId || data.boardId || payload.BoardId || payload.boardId || (assignedBoardIds[0] || (isTransportManager ? 1 : null)),
+    collegeId: data.CollegeId || data.collegeId || payload.CollegeId || payload.collegeId || data.user?.collegeId || payload.user?.collegeId || null,
+    collegeName: data.CollegeName || data.collegeName || payload.CollegeName || payload.collegeName || data.user?.collegeName || payload.user?.collegeName || "",
+    collegeLogo: data.CollegeLogo || data.collegeLogo || payload.CollegeLogo || payload.collegeLogo || data.user?.collegeLogo || payload.user?.collegeLogo || "",
     isAdmin,
     assignedCampusIds,
     assignedBoardIds,

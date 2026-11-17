@@ -24,6 +24,7 @@ const nonTeachingMenu = [
   {
     section: "OPERATIONS & HELP",
     items: [
+      { to: "/non-teaching-dashboard/enquiries", label: "Front Desk & Enquiries", icon: generatedSidebarIcons.admission },
       { to: "/non-teaching-dashboard/department", label: "Department Portal", icon: generatedSidebarIcons.admission },
       { to: "/non-teaching-dashboard/support", label: "Help & Support", icon: adminIconAssets.notifications },
     ],

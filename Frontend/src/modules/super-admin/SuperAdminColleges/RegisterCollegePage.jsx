@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
+import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword } from "../superAdminValidation.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   getCollegeCodeSeriesSettings,
@@ -8,9 +9,9 @@ import {
   incrementCollegeCodeSequence,
 } from "../superAdminNumberSeries.js";
 import {
-  Check, ChevronRight, ChevronLeft,
+  Check, ChevronRight, ChevronLeft, ArrowLeft,
   Building2, Layers, UserCheck, ShieldCheck,
-  AlertCircle, MapPin, Mail, Phone, Hash, BookOpen,
+  AlertCircle, MapPin, Mail, Phone, Hash,
   User, Lock, Home, Loader2, CheckCircle2, Sparkles,
   GraduationCap, Bed, ClipboardCheck, Bus, Coins, Users,
   Eye, EyeOff, Info, Wand2, Pencil,
@@ -22,17 +23,6 @@ import activateBadgeImg from "@/assets/activate-badge-illustration.png";
 import "./RegisterCollegePage.css";
 
 /* ─── Constants ─── */
-const COLLEGE_TYPES = [
-  "Junior College", "Degree College", "Engineering College",
-  "Medical College", "Pharmacy College", "Law College",
-  "Arts & Science College", "Commerce College", "Polytechnic",
-  "ITI", "Post Graduate College", "Research Institute", "Other",
-];
-
-const POPULAR_COLLEGE_TYPES = [
-  "Junior College", "Degree College", "Engineering College", "Medical College",
-];
-
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
   "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
@@ -42,6 +32,9 @@ const INDIAN_STATES = [
   "West Bengal", "Delhi", "Jammu & Kashmir", "Ladakh", "Puducherry",
   "Chandigarh", "Andaman & Nicobar", "Lakshadweep",
 ];
+
+const isValidEmail = isValidSuperAdminEmail;
+const isValidPhone = isValidIndianMobile;
 
 /* 6 Primary ERP Modules (Image 1 & Image 5 Reference) */
 const ERP_MODULES_CONFIG = [
@@ -198,7 +191,6 @@ export default function RegisterCollegePage() {
     name: "",
     code: "",
     codeAuto: true,
-    collegeType: "",
     address: "",
     pincode: "",
     city: "",
@@ -368,10 +360,9 @@ export default function RegisterCollegePage() {
   const step1Requirements = useMemo(
     () => [
       { label: "College basic details", done: Boolean(profile.name.trim() && profile.code.trim()) },
-      { label: "College type selected", done: Boolean(profile.collegeType) },
       { label: "Location & address details", done: Boolean(profile.address.trim()) },
-      { label: "City, state & pincode", done: Boolean(profile.pincode.length === 6 && profile.city && profile.state) },
-      { label: "Official contact information", done: Boolean(profile.email.trim() && profile.phone.trim()) },
+      { label: "City, state & pincode", done: Boolean(/^\d{6}$/.test(profile.pincode) && profile.city.trim() && profile.state) },
+      { label: "Official contact information", done: Boolean(isValidEmail(profile.email) && isValidPhone(profile.phone)) },
     ],
     [profile]
   );
@@ -383,35 +374,42 @@ export default function RegisterCollegePage() {
 
   /* ── Validation ── */
   const v1 = () => {
-    if (!profile.name.trim()) return "College Name is required.";
+    if (profile.name.trim().length < 2) return "College Name must be at least 2 characters.";
+    if ((data?.colleges || []).some((college) => String(college.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase())) return "A college with this name is already registered.";
     if (!profile.code.trim()) return "Registration Code is required.";
-    if (!profile.collegeType) return "Please select a College Type.";
+    if (!/^[A-Z0-9-]{3,30}$/.test(profile.code.trim().toUpperCase())) return "Registration Code must use 3–30 letters, numbers, or hyphens.";
+    if ((data?.colleges || []).some((college) => String(college.code || "").trim().toUpperCase() === profile.code.trim().toUpperCase())) return "This Registration Code is already in use.";
     if (!profile.address.trim()) return "Address is required.";
-    if (!profile.pincode.trim() || profile.pincode.length !== 6)
+    if (!/^\d{6}$/.test(profile.pincode))
       return "Please enter a valid 6-digit Pincode.";
     if (!profile.city.trim()) return "City is required.";
     if (!profile.state) return "State is required.";
-    if (!profile.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(profile.email))
+    if (!isValidEmail(profile.email))
       return "A valid Official Email is required.";
-    if (!profile.phone.trim()) return "Contact Number is required.";
+    if ((data?.colleges || []).some((college) => String(college.email || "").trim().toLowerCase() === profile.email.trim().toLowerCase())) return "This Official Email is already in use.";
+    if (!isValidPhone(profile.phone)) return "Enter a valid 10-digit Indian mobile number.";
     return null;
   };
 
   const v2 = () => {
     if (planConfig.modules.length === 0) return "Please enable at least one ERP module.";
-    if (!planConfig.accountLimit || planConfig.accountLimit < 1) return "Please specify Max Account Capacity.";
+    if (!Number.isSafeInteger(Number(planConfig.accountLimit)) || Number(planConfig.accountLimit) < 5 || Number(planConfig.accountLimit) > 50000)
+      return "Max Account Capacity must be a whole number between 5 and 50,000.";
     return null;
   };
 
   const v3 = () => {
-    if (!adminConfig.adminName.trim()) return "Admin Full Name is required.";
-    if (!adminConfig.adminEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminConfig.adminEmail))
+    if (adminConfig.adminName.trim().length < 2) return "Admin Full Name must be at least 2 characters.";
+    if (!isValidEmail(adminConfig.adminEmail))
       return "A valid Official Email is required.";
+    if ((data?.users || []).some((user) => String(user.email || "").trim().toLowerCase() === adminConfig.adminEmail.trim().toLowerCase())) return "This admin email is already in use.";
     if (!adminConfig.adminUsername.trim()) return "Username is required.";
     if (adminConfig.adminUsername.trim().length < 3) return "Username must be at least 3 characters.";
-    if (!adminConfig.adminPhone.trim()) return "Mobile Number is required.";
+    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(adminConfig.adminUsername.trim())) return "Username can contain only letters, numbers, dots, underscores, and hyphens.";
+    if (!isValidPhone(adminConfig.adminPhone)) return "Enter a valid 10-digit Indian mobile number.";
     if (!adminConfig.adminPassword) return "Initial Password is required.";
-    if (adminConfig.adminPassword.length < 6) return "Password must be at least 6 characters.";
+    if (!isStrongSuperAdminPassword(adminConfig.adminPassword))
+      return "Password must be at least 8 characters and include uppercase, lowercase, number, and special character.";
     if (adminConfig.adminPassword !== adminConfig.confirmPassword)
       return "Passwords do not match. Please verify Confirm Password.";
     return null;
@@ -431,7 +429,16 @@ export default function RegisterCollegePage() {
   };
 
   const handleSubmit = async () => {
-    setError(""); setSubmitting(true);
+    if (submitting) return;
+    setError("");
+    const validationErrors = [v1(), v2(), v3()];
+    const invalidStep = validationErrors.findIndex(Boolean);
+    if (invalidStep !== -1) {
+      setError(validationErrors[invalidStep]);
+      setStep(invalidStep + 1);
+      return;
+    }
+    setSubmitting(true);
     const payload = {
       name: profile.name.trim(),
       code: profile.code.trim().toUpperCase(),
@@ -441,7 +448,6 @@ export default function RegisterCollegePage() {
       city: profile.city.trim(),
       state: profile.state,
       pincode: profile.pincode.trim(),
-      collegeType: profile.collegeType,
       admin: adminConfig.adminName.trim(),
       adminEmail: adminConfig.adminEmail.trim().toLowerCase(),
       adminUsername: adminConfig.adminUsername.trim(),
@@ -494,6 +500,10 @@ export default function RegisterCollegePage() {
           <p>Add a new college to your organisation in a few simple steps.</p>
         </div>
       </div>
+
+      <button type="button" className="rcf-back-link" onClick={() => navigate("/super-admin/colleges")}>
+        <ArrowLeft size={16} /> Back to Colleges
+      </button>
 
       {/* ── Stepper (Interactive) ── */}
       <div className="rcf-stepper-bar">
@@ -556,6 +566,9 @@ export default function RegisterCollegePage() {
               >
                 <input
                   type="text"
+                  required
+                  minLength={2}
+                  maxLength={120}
                   placeholder="e.g. ABC Degree College"
                   value={profile.name}
                   onChange={(e) => handleCollegeNameChange(e.target.value)}
@@ -578,6 +591,10 @@ export default function RegisterCollegePage() {
               >
                 <input
                   type="text"
+                  required
+                  minLength={3}
+                  maxLength={30}
+                  pattern="[A-Za-z0-9-]{3,30}"
                   placeholder="e.g. ABCDC01"
                   value={profile.code}
                   onChange={(e) => setProfile((p) => ({ ...p, code: e.target.value.toUpperCase(), codeAuto: false }))}
@@ -585,49 +602,13 @@ export default function RegisterCollegePage() {
                 />
               </Field>
 
-              {/* College Type with Quick Click Pills */}
-              <div className="rcf-field rcf-field-full">
-                <div className="rcf-label-row">
-                  <label className="rcf-label">
-                    College Type <span className="rcf-req">*</span>
-                  </label>
-                  {profile.collegeType && (
-                    <span className="rcf-auto-badge rcf-auto-success">
-                      <Check size={10} strokeWidth={3} /> Selected
-                    </span>
-                  )}
-                </div>
-                <div className="rcf-input-row">
-                  <BookOpen size={15} className="rcf-input-icon" />
-                  <select
-                    value={profile.collegeType}
-                    onChange={(e) => pp("collegeType", e.target.value)}
-                  >
-                    <option value="">Select college type...</option>
-                    {COLLEGE_TYPES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="rcf-quick-types-row">
-                  <span className="rcf-quick-types-label">Quick select:</span>
-                  {POPULAR_COLLEGE_TYPES.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={`rcf-type-pill ${profile.collegeType === t ? "is-active" : ""}`}
-                      onClick={() => pp("collegeType", t)}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Address */}
               <Field label="Address" required icon={MapPin} fullWidth>
                 <input
                   type="text"
+                  required
+                  minLength={3}
+                  maxLength={200}
                   placeholder="e.g. Madhapur, Main Campus Road"
                   value={profile.address}
                   onChange={(e) => pp("address", e.target.value)}
@@ -657,6 +638,9 @@ export default function RegisterCollegePage() {
                     type="text"
                     placeholder="e.g. 500081"
                     maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    required
                     value={profile.pincode}
                     onChange={(e) => handlePincodeChange(e.target.value)}
                     className={pincodeStatus === "success" ? "is-valid" : ""}
@@ -686,6 +670,9 @@ export default function RegisterCollegePage() {
               >
                 <input
                   type="text"
+                  required
+                  minLength={2}
+                  maxLength={100}
                   placeholder="e.g. Hyderabad"
                   value={profile.city}
                   onChange={(e) => {
@@ -712,6 +699,7 @@ export default function RegisterCollegePage() {
               >
                 <select
                   value={profile.state}
+                  required
                   onChange={(e) => {
                     pp("state", e.target.value);
                     if (autoFilled.state) setAutoFilled((a) => ({ ...a, state: false }));
@@ -729,6 +717,8 @@ export default function RegisterCollegePage() {
               <Field label="Official Email" required icon={Mail}>
                 <input
                   type="email"
+                  required
+                  maxLength={254}
                   placeholder="info@abcdegree.ac.in"
                   value={profile.email}
                   onChange={(e) => pp("email", e.target.value)}
@@ -740,9 +730,13 @@ export default function RegisterCollegePage() {
               <Field label="Contact Number" required icon={Phone} fullWidth>
                 <input
                   type="tel"
-                  placeholder="+91 98765 43210"
+                  required
+                  maxLength={10}
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  placeholder="9876543210"
                   value={profile.phone}
-                  onChange={(e) => pp("phone", e.target.value)}
+                  onChange={(e) => pp("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
                   autoComplete="off"
                 />
               </Field>
@@ -775,9 +769,6 @@ export default function RegisterCollegePage() {
                 <div className="rcf-live-badges">
                   <span className="rcf-live-badge-code">
                     {profile.code.trim() || "CODE"}
-                  </span>
-                  <span className="rcf-live-badge-type">
-                    {profile.collegeType || "College Type"}
                   </span>
                 </div>
                 <div className="rcf-live-loc-text">
@@ -866,15 +857,18 @@ export default function RegisterCollegePage() {
 
               {/* Max Account Capacity Row */}
               <div className="rcf-capacity-row">
-                <label className="rcf-capacity-label">Max Account Capacity</label>
+                <label className="rcf-capacity-label">Max Account Capacity <span className="rcf-req">*</span></label>
                 <div className="rcf-capacity-input-wrap">
                   <Users size={16} className="rcf-capacity-icon" />
                   <input
                     type="number"
                     min="5"
                     max="50000"
+                    step="1"
+                    required
+                    inputMode="numeric"
                     value={planConfig.accountLimit}
-                    onChange={(e) => setPlanConfig({ ...planConfig, accountLimit: Number(e.target.value) })}
+                    onChange={(e) => setPlanConfig({ ...planConfig, accountLimit: e.target.value === "" ? "" : Number(e.target.value) })}
                     className="rcf-capacity-input"
                   />
                 </div>
@@ -987,6 +981,9 @@ export default function RegisterCollegePage() {
                 <input
                   type="text"
                   name="cms_college_admin_fullname"
+                  required
+                  minLength={2}
+                  maxLength={100}
                   placeholder="e.g. Ramesh Kumar"
                   value={adminConfig.adminName}
                   onChange={(e) => handleAdminNameChange(e.target.value)}
@@ -998,6 +995,8 @@ export default function RegisterCollegePage() {
                 <input
                   type="email"
                   name="cms_college_admin_official_email"
+                  required
+                  maxLength={254}
                   placeholder="e.g. ramesh@abcdegree.ac.in"
                   value={adminConfig.adminEmail}
                   onChange={(e) => setAdminConfig({ ...adminConfig, adminEmail: e.target.value })}
@@ -1021,6 +1020,10 @@ export default function RegisterCollegePage() {
                 <input
                   type="text"
                   name="cms_college_admin_account_user"
+                  required
+                  minLength={3}
+                  maxLength={50}
+                  pattern="[a-zA-Z0-9._-]{3,50}"
                   placeholder="e.g. ramesh.abc"
                   value={adminConfig.adminUsername}
                   onChange={(e) => setAdminConfig({
@@ -1036,9 +1039,13 @@ export default function RegisterCollegePage() {
                 <input
                   type="tel"
                   name="cms_college_admin_phone_number"
-                  placeholder="e.g. +91 98765 43210"
+                  required
+                  maxLength={10}
+                  inputMode="numeric"
+                  pattern="[0-9]{10}"
+                  placeholder="e.g. 9876543210"
                   value={adminConfig.adminPhone}
-                  onChange={(e) => setAdminConfig({ ...adminConfig, adminPhone: e.target.value })}
+                  onChange={(e) => setAdminConfig({ ...adminConfig, adminPhone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
                   autoComplete="off"
                 />
               </Field>
@@ -1062,6 +1069,9 @@ export default function RegisterCollegePage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     name="cms_college_admin_initial_password"
+                    required
+                    minLength={8}
+                    maxLength={128}
                     placeholder="••••••••"
                     value={adminConfig.adminPassword}
                     onChange={(e) => setAdminConfig({ ...adminConfig, adminPassword: e.target.value })}
@@ -1096,6 +1106,9 @@ export default function RegisterCollegePage() {
                   <input
                     type={showConfirmPassword ? "text" : "password"}
                     name="cms_college_admin_confirm_password"
+                    required
+                    minLength={8}
+                    maxLength={128}
                     placeholder="••••••••"
                     value={adminConfig.confirmPassword}
                     onChange={(e) => setAdminConfig({ ...adminConfig, confirmPassword: e.target.value })}
@@ -1214,11 +1227,6 @@ export default function RegisterCollegePage() {
                     <strong className="rcf-rev-val">{profile.code || "—"}</strong>
                   </div>
                   {/* Note: NO Trust / Society per explicit rule */}
-                  <div className="rcf-rev-item">
-                    <span className="rcf-rev-label">College Type</span>
-                    <span className="rcf-rev-colon">:</span>
-                    <strong className="rcf-rev-val">{profile.collegeType || "—"}</strong>
-                  </div>
                   <div className="rcf-rev-item">
                     <span className="rcf-rev-label">Address</span>
                     <span className="rcf-rev-colon">:</span>

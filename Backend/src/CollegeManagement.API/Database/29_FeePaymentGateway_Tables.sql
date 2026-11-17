@@ -148,3 +148,45 @@ CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
     KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
     KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. PaymentDate & ClientIdempotencyKey columns on PaymentGatewayTransactions + PaymentProofAttachments private metadata table
+SET @col_pdate := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'PaymentDate');
+SET @sql_pdate := IF(@col_pdate = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `PaymentDate` DATETIME(6) NULL AFTER `BankName`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_pdate; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @col_cidem := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND COLUMN_NAME = 'ClientIdempotencyKey');
+SET @sql_cidem := IF(@col_cidem = 0, 'ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ClientIdempotencyKey` VARCHAR(128) NULL AFTER `IdempotencyKey`;', 'SELECT 1;');
+PREPARE stmt FROM @sql_cidem; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @idx_cidem := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'PaymentGatewayTransactions' AND INDEX_NAME = 'IX_PaymentGateway_ClientIdempotencyKey');
+SET @sql_idx_cidem := IF(@idx_cidem = 0, 'CREATE INDEX `IX_PaymentGateway_ClientIdempotencyKey` ON `PaymentGatewayTransactions` (`ClientIdempotencyKey`);', 'SELECT 1;');
+PREPARE stmt FROM @sql_idx_cidem; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+CREATE TABLE IF NOT EXISTS `PaymentProofAttachments` (
+    `Id` INT NOT NULL AUTO_INCREMENT,
+    `PaymentGatewayTransactionId` INT NOT NULL,
+    `OrderId` VARCHAR(100) NOT NULL,
+    `StudentId` INT NOT NULL,
+    `StudentFeeId` INT NOT NULL,
+    `CampusId` INT NULL,
+    `OriginalFileName` VARCHAR(255) NOT NULL,
+    `StoredFileName` VARCHAR(255) NOT NULL,
+    `StorageRelativePath` VARCHAR(500) NOT NULL,
+    `ContentType` VARCHAR(100) NOT NULL,
+    `FileSizeBytes` BIGINT NOT NULL,
+    `Sha256Hash` VARCHAR(64) NOT NULL,
+    `UploadedByUserId` INT NULL,
+    `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+    `ActiveTransactionKey` INT NULL,
+    `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (`Id`),
+    UNIQUE KEY `UK_PaymentProof_StoredFileName` (`StoredFileName`),
+    UNIQUE KEY `UK_PaymentProof_ActiveTxn` (`ActiveTransactionKey`),
+    KEY `IX_PaymentProof_TxnActive` (`PaymentGatewayTransactionId`, `IsActive`),
+    KEY `IX_PaymentProof_OrderId` (`OrderId`),
+    KEY `IX_PaymentProof_StudentFeeId` (`StudentFeeId`),
+    KEY `IX_PaymentProof_CampusId` (`CampusId`),
+    CONSTRAINT `FK_PaymentProof_Transaction` FOREIGN KEY (`PaymentGatewayTransactionId`) REFERENCES `PaymentGatewayTransactions` (`Id`) ON DELETE RESTRICT,
+    CONSTRAINT `FK_PaymentProof_Student` FOREIGN KEY (`StudentId`) REFERENCES `Students` (`StudentId`) ON DELETE RESTRICT,
+    CONSTRAINT `FK_PaymentProof_StudentFee` FOREIGN KEY (`StudentFeeId`) REFERENCES `StudentFees` (`StudentFeeId`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

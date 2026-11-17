@@ -37,22 +37,19 @@ function SuperAdminPageBoundary() {
   return <Suspense fallback={<SuperAdminPageFallback/>}><Outlet/></Suspense>;
 }
 
-function PlatformGate() {
+export default function SuperAdminPortalRoutes() {
   const [, setTick] = useState(0);
+  const session = getPlatformSession();
   useEffect(() => {
     const timer = window.setInterval(() => setTick((value) => value + 1), 30000);
     return () => window.clearInterval(timer);
   }, []);
-  const session = getPlatformSession();
   if (!session) return <Navigate to="/login" replace/>;
-  return <SuperAdminProvider session={session}><Outlet/></SuperAdminProvider>;
-}
 
-export default function SuperAdminPortalRoutes() {
-  return <Routes>
+  return <SuperAdminProvider session={session}><Routes>
     <Route path="login" element={<Navigate to="/login" replace/>}/>
     <Route path="preview-login" element={<Navigate to="/login" replace/>}/>
-    <Route element={<PlatformGate/>}><Route element={<SuperAdminLayout/>}>
+    <Route element={<SuperAdminLayout/>}>
       <Route index element={<Navigate to="dashboard" replace/>}/>
       <Route element={<SuperAdminPageBoundary/>}>
         <Route path="dashboard" element={<DashboardPage/>}/>
@@ -86,6 +83,6 @@ export default function SuperAdminPortalRoutes() {
         <Route path="invoices" element={<Navigate to="/super-admin/payments-invoices" replace/>}/>
         <Route path="*" element={<Navigate to="/super-admin/dashboard" replace/>}/>
       </Route>
-    </Route></Route>
-  </Routes>;
+    </Route>
+  </Routes></SuperAdminProvider>;
 }

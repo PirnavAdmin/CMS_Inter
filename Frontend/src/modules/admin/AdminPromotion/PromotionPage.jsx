@@ -48,6 +48,27 @@ const EMPTY_HISTORY_FILTERS = {
 };
 
 const PROMOTION_STUDENT_PAGE_SIZE = 5;
+const PROMOTION_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
+function PromotionPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, disabled = false, label = "Promotion pagination" }) {
+  const [customMode, setCustomMode] = useState(!PROMOTION_PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const pages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const current = Math.min(page, pages);
+  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav aria-label={label} style={navStyle}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
+      <select aria-label="Rows per page" value={customMode || !PROMOTION_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} disabled={disabled} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>{PROMOTION_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}<option value="custom">Custom</option></select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} disabled={disabled} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={disabled || current <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: disabled || current <= 1 ? 0.48 : 1 }} onClick={() => onPageChange(current - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{current} / {pages}</span>
+    <button type="button" disabled={disabled || current >= pages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: disabled || current >= pages ? 0.48 : 1 }} onClick={() => onPageChange(current + 1)}>Next</button>
+  </nav>;
+}
 const preservePreview = (value) => value;
 const loadProgramFeePreviews = async (entries) => Promise.all(entries.map(async (entry) => {
   try {
@@ -233,6 +254,7 @@ export default function PromotionPage({ screen = "promotion" }) {
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsPage, setStudentsPage] = useState(1);
+  const [studentsPageSize, setStudentsPageSize] = useState(PROMOTION_STUDENT_PAGE_SIZE);
   const [studentsTotalCount, setStudentsTotalCount] = useState(0);
   const [studentsTotalPages, setStudentsTotalPages] = useState(1);
   const [localStudentPaging, setLocalStudentPaging] = useState(false);
@@ -596,7 +618,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const academicLevelLabel = useCallback((levelId) => masters.levels.find((level) => level.value === asString(levelId))?.label || asString(levelId), [masters.levels]);
 
-  const eligibleParams = useCallback((pageNumber = studentsPage) => {
+  const eligibleParams = useCallback((pageNumber = studentsPage, requestedPageSize = studentsPageSize) => {
     return compactParams({
       CampusId: numericId(activeCampusId),
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
@@ -612,28 +634,28 @@ export default function PromotionPage({ screen = "promotion" }) {
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
       PageNumber: pageNumber,
-      PageSize: PROMOTION_STUDENT_PAGE_SIZE,
+      PageSize: requestedPageSize,
     });
-  }, [activeCampusId, activeTab, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup, studentsPage]);
+  }, [activeCampusId, activeTab, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup, studentsPage, studentsPageSize]);
 
-  const fetchEligibleStudents = useCallback(async (pageNumber = studentsPage) => {
+  const fetchEligibleStudents = useCallback(async (pageNumber = studentsPage, requestedPageSize = studentsPageSize) => {
     setStudentsLoading(true);
     setError("");
     try {
-      const data = await getEligibleStudents(eligibleParams(pageNumber));
+      const data = await getEligibleStudents(eligibleParams(pageNumber, requestedPageSize));
       const rows = unwrap(data, ["students", "Students", "eligibleStudents", "EligibleStudents"]).map(normalizeStudent).filter((student) => isPresent(student.id))
         .sort((left, right) => asString(left.admissionNo).localeCompare(asString(right.admissionNo), undefined, { numeric: true, sensitivity: "base" })
           || asString(left.id).localeCompare(asString(right.id), undefined, { numeric: true }));
-      const isFullList = rows.length > PROMOTION_STUDENT_PAGE_SIZE;
+      const isFullList = rows.length > requestedPageSize;
       setLocalStudentPaging(isFullList);
       const paging = unwrapObject(data);
       const totalCount = Number(read(paging, "totalCount", "TotalCount", "count", "Count") ?? rows.length) || 0;
-      const totalPages = Math.max(1, Number(read(paging, "totalPages", "TotalPages") ?? Math.ceil(totalCount / PROMOTION_STUDENT_PAGE_SIZE)) || 1);
+      const totalPages = Math.max(1, Number(read(paging, "totalPages", "TotalPages") ?? Math.ceil(totalCount / requestedPageSize)) || 1);
       const resolvedPage = Math.min(totalPages, Math.max(1, Number(read(paging, "pageNumber", "PageNumber") ?? pageNumber) || pageNumber));
       setStudents(rows);
       setStudentsPage(isFullList ? 1 : resolvedPage);
       setStudentsTotalCount(isFullList ? rows.length : totalCount);
-      setStudentsTotalPages(isFullList ? Math.ceil(rows.length / PROMOTION_STUDENT_PAGE_SIZE) : totalPages);
+      setStudentsTotalPages(isFullList ? Math.ceil(rows.length / requestedPageSize) : totalPages);
       setStudentsLoaded(true);
       setSelectedIds([]);
       return rows;
@@ -646,7 +668,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     } finally {
       setStudentsLoading(false);
     }
-  }, [eligibleParams, studentsPage]);
+  }, [eligibleParams, studentsPage, studentsPageSize]);
 
   const loadStudents = async () => {
     if (!validateFields(sourceFields)) {
@@ -670,9 +692,9 @@ export default function PromotionPage({ screen = "promotion" }) {
     return students.filter((student) => {
       const matchesSearch = !query || `${student.name} ${student.admissionNo} ${student.id}`.toLowerCase().includes(query);
       return matchesSearch && (!eligibilityFilter || student.eligibility === eligibilityFilter);
-    }).slice(localStudentPaging ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE : 0,
-      localStudentPaging ? studentsPage * PROMOTION_STUDENT_PAGE_SIZE : PROMOTION_STUDENT_PAGE_SIZE);
-  }, [eligibilityFilter, search, students, localStudentPaging, studentsPage]);
+    }).slice(localStudentPaging ? (studentsPage - 1) * studentsPageSize : 0,
+      localStudentPaging ? studentsPage * studentsPageSize : studentsPageSize);
+  }, [eligibilityFilter, search, students, localStudentPaging, studentsPage, studentsPageSize]);
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedIds.includes(student.id) && isEligible(student)), [selectedIds, students]);
   const feePreviewParams = {
@@ -1227,31 +1249,9 @@ export default function PromotionPage({ screen = "promotion" }) {
                     </tbody>
                     </table>
                   </div>
-                  <footer className="promotion-pagination student-management-pagination">
-                  <span>
-                    Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
-                    {visibleStudents.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + visibleStudents.length, studentsTotalCount) : 0} of {studentsTotalCount} students
-                  </span>
-                  <div className="student-management-pagination-actions">
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === 1}
-                      onClick={() => changeStudentsPage(studentsPage - 1)}
-                    >
-                      Previous
-                    </button>
-                    <span>Page {studentsPage} of {studentsTotalPages}</span>
-                    <button
-                      type="button"
-                      className="cms-btn cms-btn-ghost"
-                      disabled={studentsLoading || studentsPage === studentsTotalPages}
-                      onClick={() => changeStudentsPage(studentsPage + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                  </footer>
+                  <PromotionPagination page={studentsPage} totalRows={studentsTotalCount} pageSize={studentsPageSize} onPageChange={changeStudentsPage} onPageSizeChange={(size) => {
+                    setStudentsPageSize(size); setStudentsPage(1); if (studentsLoaded) fetchEligibleStudents(1, size);
+                  }} disabled={studentsLoading} label="Promotion student pagination" />
                 </>
               ) : (
                 <div className="promotion-empty">Select the source details, then load students.</div>
@@ -1601,6 +1601,7 @@ function CampusTransferScreen({ onSuccess }) {
   const [requestSearch, setRequestSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [requestPage, setRequestPage] = useState(1);
+  const [requestPageSize, setRequestPageSize] = useState(5);
   const [detailRequest, setDetailRequest] = useState(null);
   const [approveRequest, setApproveRequest] = useState(null);
   const transferFeeState = useFeePreview(loadTransferFeePreview, { transferId: approveRequest?.id }, Boolean(approveRequest));
@@ -1714,7 +1715,7 @@ function CampusTransferScreen({ onSuccess }) {
       return matchesQuery && (statusFilter === "All" || request.status === statusFilter);
     });
   }, [directionalRequests, requestSearch, statusFilter]);
-  const pageSize = 5;
+  const pageSize = requestPageSize;
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
   const currentPage = Math.min(requestPage, totalPages);
   const pagedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1899,7 +1900,7 @@ function CampusTransferScreen({ onSuccess }) {
           <div className="cms-table-wrap"><table className="cms-table campus-transfer-request-table"><thead><tr><th>#</th><th>Student Name</th><th>Admission No</th><th>{requestDirection === "sent" ? "To Campus" : "From Campus"}</th><th>{requestDirection === "sent" ? "Requested To" : "Requested By"}</th><th>Request Date</th><th>Effective Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
             {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" className="cms-action-btn campus-transfer-view-action" title="View Details" aria-label="View Details" onClick={() => setDetailRequest(request)}><Eye size={16} aria-hidden="true" /></button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
           </tbody></table></div>
-          <div className="campus-transfer-request-pagination"><span>Showing {filteredRequests.length ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredRequests.length)} of {filteredRequests.length} entries</span><div><button disabled={currentPage === 1} onClick={() => setRequestPage((page) => Math.max(1, page - 1))}>‹</button><span>{currentPage}</span><button disabled={currentPage === totalPages} onClick={() => setRequestPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div>
+          <PromotionPagination page={currentPage} totalRows={filteredRequests.length} pageSize={pageSize} onPageChange={setRequestPage} onPageSizeChange={(size) => { setRequestPageSize(size); setRequestPage(1); }} disabled={loadingRequests} label="Campus transfer pagination" />
         </div>
       )}
       </section>
@@ -1945,10 +1946,11 @@ function TransferPreviewItem({ label, value }) {
 
 function HistoryTable({ rows, onRollback }) {
   const [historyPage, setHistoryPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(rows.length / PROMOTION_STUDENT_PAGE_SIZE));
+  const [historyPageSize, setHistoryPageSize] = useState(PROMOTION_STUDENT_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(rows.length / historyPageSize));
   const currentPage = Math.min(historyPage, totalPages);
-  const start = (currentPage - 1) * PROMOTION_STUDENT_PAGE_SIZE;
-  const pagedRows = rows.slice(start, start + PROMOTION_STUDENT_PAGE_SIZE);
+  const start = (currentPage - 1) * historyPageSize;
+  const pagedRows = rows.slice(start, start + historyPageSize);
   useEffect(() => { setHistoryPage(1); }, [rows]);
   return (
     <>
@@ -2004,14 +2006,7 @@ function HistoryTable({ rows, onRollback }) {
         </tbody>
       </table>
     </div>
-    <div className="promotion-pagination">
-      <span>Showing {rows.length ? start + 1 : 0}-{start + pagedRows.length} of {rows.length} records</span>
-      <div>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === 1} onClick={() => setHistoryPage(currentPage - 1)}>Previous</button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage === totalPages} onClick={() => setHistoryPage(currentPage + 1)}>Next</button>
-      </div>
-    </div>
+    <PromotionPagination page={currentPage} totalRows={rows.length} pageSize={historyPageSize} onPageChange={setHistoryPage} onPageSizeChange={(size) => { setHistoryPageSize(size); setHistoryPage(1); }} label="Promotion history pagination" />
     </>
   );
 }
@@ -2427,6 +2422,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [allocationPage, setAllocationPage] = useState(1);
+  const [allocationPageSize, setAllocationPageSize] = useState(PROMOTION_STUDENT_PAGE_SIZE);
   const [updateFees, setUpdateFees] = useState(true);
 
   const isProgram = activeTab === "program";
@@ -2446,10 +2442,10 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     level: s.level,
   })), [students]);
 
-  const allocationTotalPages = Math.max(1, Math.ceil(rows.length / PROMOTION_STUDENT_PAGE_SIZE));
+  const allocationTotalPages = Math.max(1, Math.ceil(rows.length / allocationPageSize));
   const currentAllocationPage = Math.min(allocationPage, allocationTotalPages);
-  const allocationStart = (currentAllocationPage - 1) * PROMOTION_STUDENT_PAGE_SIZE;
-  const pagedAllocationRows = rows.slice(allocationStart, allocationStart + PROMOTION_STUDENT_PAGE_SIZE);
+  const allocationStart = (currentAllocationPage - 1) * allocationPageSize;
+  const pagedAllocationRows = rows.slice(allocationStart, allocationStart + allocationPageSize);
   useEffect(() => { setAllocationPage(1); }, [activeTab, students]);
 
   const uniqueOptions = (options) => [...new Map(options.map((entry) => [asString(entry.value), entry])).values()];
@@ -2716,14 +2712,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
         </table>
       </div>
 
-      <div className="promotion-pagination">
-        <span>Showing {rows.length ? allocationStart + 1 : 0}-{allocationStart + pagedAllocationRows.length} of {rows.length} students</span>
-        <div>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === 1 || saving} onClick={() => setAllocationPage(currentAllocationPage - 1)}>Previous</button>
-          <span>Page {currentAllocationPage} of {allocationTotalPages}</span>
-          <button type="button" className="cms-btn cms-btn-ghost" disabled={currentAllocationPage === allocationTotalPages || saving} onClick={() => setAllocationPage(currentAllocationPage + 1)}>Next</button>
-        </div>
-      </div>
+      <PromotionPagination page={currentAllocationPage} totalRows={rows.length} pageSize={allocationPageSize} onPageChange={setAllocationPage} onPageSizeChange={(size) => { setAllocationPageSize(size); setAllocationPage(1); }} disabled={saving} label="Promotion allocation pagination" />
 
       {isProgram ? <section className="promotion-fee-panel" aria-label="Program fee adjustment">
         <h3>Program Fee Adjustment</h3>

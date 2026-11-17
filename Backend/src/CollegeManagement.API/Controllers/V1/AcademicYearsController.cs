@@ -1,8 +1,15 @@
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.AcademicYear;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
+using Dapper;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -14,31 +21,88 @@ namespace CollegeManagement.API.Controllers.V1
     public class AcademicYearsController : ControllerBase
     {
         private readonly IAcademicYearService _service;
+        private readonly AppDbContext _db;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public AcademicYearsController(IAcademicYearService service)
+        public AcademicYearsController(
+            IAcademicYearService service,
+            AppDbContext db,
+            IJwtTokenHelper jwtTokenHelper)
         {
             _service = service;
+            _db = db;
+            _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private async Task<HashSet<int>?> GetTenantOwnedCampusIdsAsync()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (!collegeId.HasValue || collegeId.Value <= 1)
+            {
+                return null;
+            }
+
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+
+            var campusIds = await conn.QueryAsync<int>(
+                "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1;",
+                new { CollegeId = collegeId.Value });
+
+            return new HashSet<int>(campusIds);
         }
 
         /// <summary>
         /// Retrieves academic years with search, status filtering, and pagination support.
         /// </summary>
         [HttpGet]
-        [AllowAnonymous]
         public async Task<ActionResult> GetPaged([FromQuery] AcademicYearSearchRequestDto request)
         {
+            var ownedCampuses = await GetTenantOwnedCampusIdsAsync();
+            if (ownedCampuses != null && ownedCampuses.Count == 0)
+            {
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "Academic years retrieved successfully.",
+                    Data = Array.Empty<object>(),
+                    Pagination = new
+                    {
+                        TotalCount = 0,
+                        PageNumber = request.PageNumber,
+                        PageSize = request.PageSize,
+                        TotalPages = 0
+                    }
+                });
+            }
+
             var result = await _service.GetPagedAsync(request);
+            var items = ownedCampuses != null
+                ? result.Items.Where(y => y.CampusId.HasValue && ownedCampuses.Contains(y.CampusId.Value)).ToList()
+                : result.Items;
+            int totalCount = ownedCampuses != null ? items.Count() : result.TotalCount;
+
             return Ok(new
             {
                 Status = true,
                 Message = "Academic years retrieved successfully.",
-                Data = result.Items,
+                Data = items,
                 Pagination = new
                 {
-                    result.TotalCount,
+                    TotalCount = totalCount,
                     result.PageNumber,
                     result.PageSize,
-                    result.TotalPages
+                    TotalPages = request.PageSize > 0 ? (int)Math.Ceiling((double)totalCount / request.PageSize) : 1
                 }
             });
         }
@@ -47,15 +111,29 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all currently active academic years.
         /// </summary>
         [HttpGet("active")]
-        [AllowAnonymous]
         public async Task<ActionResult> GetActive()
         {
+            var ownedCampuses = await GetTenantOwnedCampusIdsAsync();
+            if (ownedCampuses != null && ownedCampuses.Count == 0)
+            {
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "Active academic years retrieved successfully.",
+                    Data = Array.Empty<object>()
+                });
+            }
+
             var result = await _service.GetActiveAsync();
+            var filtered = ownedCampuses != null
+                ? result.Where(y => y.CampusId.HasValue && ownedCampuses.Contains(y.CampusId.Value)).ToList()
+                : result;
+
             return Ok(new
             {
                 Status = true,
                 Message = "Active academic years retrieved successfully.",
-                Data = result
+                Data = filtered
             });
         }
 
@@ -63,11 +141,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves an academic year by its unique identifier.
         /// </summary>
         [HttpGet("{id}")]
-        [AllowAnonymous]
         public async Task<ActionResult> GetById(int id)
         {
+            var ownedCampuses = await GetTenantOwnedCampusIdsAsync();
             var result = await _service.GetByIdAsync(id);
-            if (result == null)
+            if (result == null || (ownedCampuses != null && (!result.CampusId.HasValue || !ownedCampuses.Contains(result.CampusId.Value))))
             {
                 return NotFound(new
                 {

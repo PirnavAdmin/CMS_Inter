@@ -337,10 +337,56 @@ namespace CollegeManagement.API.Services.Implementations
             if (dto == null || dto.StudentMarks == null || !dto.StudentMarks.Any()) return false;
 
             var targetStatus = dto.SubmitForEvaluation ? EvaluationStatus.SUBMITTED : EvaluationStatus.DRAFT;
+            var limits = await _marksRepository.GetExamFormatAndComponentLimitsAsync(dto.ExaminationId, dto.SubjectId);
 
             var itemsToUpsert = dto.StudentMarks.Select(item =>
             {
-                int finalScore = item.IsAbsent ? 0 : (item.TotalMarks > 0 ? (int)item.TotalMarks : (int)(item.InternalMarks + item.PracticalMarks + item.TheoryMarks));
+                if (limits.IsObjective)
+                {
+                    int finalScore = item.IsAbsent ? 0 : (int)Math.Round(item.TotalMarks ?? 0m, MidpointRounding.AwayFromZero);
+                    if (!item.IsAbsent && (finalScore < 0 || finalScore > limits.MaxMarks))
+                    {
+                        throw new ValidationException($"Obtained marks ({finalScore}) must be between 0 and {limits.MaxMarks} for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                    }
+                    return new
+                    {
+                        campusId = 1,
+                        boardId = dto.BoardId,
+                        academicYearId = dto.AcademicYearId,
+                        academicLevelId = dto.AcademicLevelId,
+                        groupId = dto.GroupId,
+                        sectionId = dto.SectionId,
+                        examinationId = dto.ExaminationId,
+                        subjectId = dto.SubjectId,
+                        studentId = item.StudentId,
+                        rollNo = item.RollNo ?? string.Empty,
+                        studentName = item.StudentName ?? string.Empty,
+                        facultyId = dto.FacultyId,
+                        internalMarks = 0,
+                        practicalMarks = 0,
+                        theoryMarks = 0,
+                        totalMarks = finalScore,
+                        passingMarks = (int)Math.Round(limits.PassingMarks),
+                        isAbsent = item.IsAbsent ? 1 : 0,
+                        remarks = item.Remarks ?? string.Empty,
+                        status = (int)targetStatus
+                    };
+                }
+
+                int intMarks = item.IsAbsent ? 0 : (int)Math.Round(item.InternalMarks, MidpointRounding.AwayFromZero);
+                int pracMarks = item.IsAbsent ? 0 : (int)Math.Round(item.PracticalMarks, MidpointRounding.AwayFromZero);
+                int thMarks = item.IsAbsent ? 0 : (int)Math.Round(item.TheoryMarks, MidpointRounding.AwayFromZero);
+                if (!item.IsAbsent && (intMarks < 0 || pracMarks < 0 || thMarks < 0))
+                {
+                    throw new ValidationException($"Marks cannot be negative for {item.StudentName ?? $"Student #{item.StudentId}"}.");
+                }
+                if (!item.IsAbsent && (limits.InternalMax + limits.PracticalMax + limits.TheoryMax) > 0m)
+                {
+                    if (intMarks > limits.InternalMax) throw new ValidationException($"Internal marks ({intMarks}) exceed max ({limits.InternalMax}).");
+                    if (pracMarks > limits.PracticalMax) throw new ValidationException($"Practical marks ({pracMarks}) exceed max ({limits.PracticalMax}).");
+                    if (thMarks > limits.TheoryMax) throw new ValidationException($"Theory marks ({thMarks}) exceed max ({limits.TheoryMax}).");
+                }
+                int finalRegular = item.IsAbsent ? 0 : (intMarks + pracMarks + thMarks);
                 return new
                 {
                     campusId = 1,
@@ -355,11 +401,11 @@ namespace CollegeManagement.API.Services.Implementations
                     rollNo = item.RollNo ?? string.Empty,
                     studentName = item.StudentName ?? string.Empty,
                     facultyId = dto.FacultyId,
-                    internalMarks = (int)item.InternalMarks,
-                    practicalMarks = (int)item.PracticalMarks,
-                    theoryMarks = (int)item.TheoryMarks,
-                    totalMarks = finalScore,
-                    passingMarks = 35,
+                    internalMarks = intMarks,
+                    practicalMarks = pracMarks,
+                    theoryMarks = thMarks,
+                    totalMarks = finalRegular,
+                    passingMarks = (int)Math.Round(limits.PassingMarks),
                     isAbsent = item.IsAbsent ? 1 : 0,
                     remarks = item.Remarks ?? string.Empty,
                     status = (int)targetStatus
@@ -421,31 +467,62 @@ namespace CollegeManagement.API.Services.Implementations
             var (subjectId, sectionId, examinationId) = ParseEvaluationId(evaluationId);
             if (subjectId <= 0 || request?.Students == null || !request.Students.Any()) return false;
 
-            var itemsToUpsert = request.Students.Select(s =>
+            var limits = await _marksRepository.GetExamFormatAndComponentLimitsAsync(examinationId, subjectId);
+            var normalizedStudents = request.Students.Select(s =>
             {
-                int finalScore = s.IsAbsent ? 0 : ((s.TotalMarks.HasValue && s.TotalMarks.Value > 0) ? s.TotalMarks.Value : (s.InternalMarks + s.PracticalMarks + s.TheoryMarks));
-                return new
+                if (limits.IsObjective)
                 {
-                    campusId = 1,
-                    subjectId = subjectId,
-                    sectionId = sectionId,
-                    examinationId = examinationId,
-                    studentId = s.StudentId,
-                    facultyId = facultyId,
-                    internalMarks = s.InternalMarks,
-                    practicalMarks = s.PracticalMarks,
-                    theoryMarks = s.TheoryMarks,
-                    totalMarks = finalScore,
-                    passingMarks = 35,
-                    isAbsent = s.IsAbsent ? 1 : 0,
-                    remarks = s.Remarks ?? string.Empty,
-                    status = (int)EvaluationStatus.DRAFT
+                    int finalScore = s.IsAbsent ? 0 : (s.ObtainedMarks ?? s.TotalMarks ?? (s.InternalMarks + s.PracticalMarks + s.TheoryMarks));
+                    if (!s.IsAbsent && (finalScore < 0 || finalScore > limits.MaxMarks))
+                    {
+                        throw new ValidationException($"Obtained marks ({finalScore}) must be between 0 and {limits.MaxMarks} for student #{s.StudentId}.");
+                    }
+                    return new FacultyStudentMarkInputDto
+                    {
+                        StudentId = s.StudentId,
+                        InternalMarks = 0,
+                        PracticalMarks = 0,
+                        TheoryMarks = 0,
+                        TotalMarks = finalScore,
+                        ObtainedMarks = finalScore,
+                        IsAbsent = s.IsAbsent,
+                        Remarks = s.Remarks ?? string.Empty
+                    };
+                }
+
+                int intM = s.IsAbsent ? 0 : s.InternalMarks;
+                int pracM = s.IsAbsent ? 0 : s.PracticalMarks;
+                int thM = s.IsAbsent ? 0 : s.TheoryMarks;
+                if (!s.IsAbsent && (intM < 0 || pracM < 0 || thM < 0))
+                {
+                    throw new ValidationException($"Marks cannot be negative for student #{s.StudentId}.");
+                }
+                if (!s.IsAbsent && (limits.InternalMax + limits.PracticalMax + limits.TheoryMax) > 0m)
+                {
+                    if (intM > limits.InternalMax) throw new ValidationException($"Internal marks ({intM}) exceed max ({limits.InternalMax}).");
+                    if (pracM > limits.PracticalMax) throw new ValidationException($"Practical marks ({pracM}) exceed max ({limits.PracticalMax}).");
+                    if (thM > limits.TheoryMax) throw new ValidationException($"Theory marks ({thM}) exceed max ({limits.TheoryMax}).");
+                }
+                return new FacultyStudentMarkInputDto
+                {
+                    StudentId = s.StudentId,
+                    InternalMarks = intM,
+                    PracticalMarks = pracM,
+                    TheoryMarks = thM,
+                    TotalMarks = s.IsAbsent ? 0 : (intM + pracM + thM),
+                    IsAbsent = s.IsAbsent,
+                    Remarks = s.Remarks ?? string.Empty
                 };
             }).ToList();
 
-            var json = System.Text.Json.JsonSerializer.Serialize(itemsToUpsert);
-            var count = await _evaluationRepository.BulkUpsertMarksAsync(json, facultyId ?? 0, null);
-            return count >= 0;
+            var normalizedRequest = new SaveFacultyMarksRequestDto
+            {
+                RowVersion = request.RowVersion,
+                EvaluationId = request.EvaluationId,
+                Remarks = request.Remarks,
+                Students = normalizedStudents
+            };
+            return await _evaluationRepository.SaveFacultyDraftMarksAsync(subjectId, sectionId, examinationId, facultyId, normalizedRequest);
         }
 
         public async Task<bool> SubmitFacultyEvaluationAsync(string evaluationId, int? facultyId)

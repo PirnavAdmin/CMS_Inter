@@ -269,6 +269,11 @@
   color: #dc2626;
 }
 
+.sad-kpi-badge.neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
 .sad-kpi-sparkline {
   flex-shrink: 0;
   width: 60px;

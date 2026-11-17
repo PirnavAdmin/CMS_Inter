@@ -58,7 +58,8 @@
 .sa-shell .sa-brand, .sa-shell .sa-topbar { height: var(--sa-header-height); min-height: var(--sa-header-height); max-height: var(--sa-header-height); flex: 0 0 var(--sa-header-height); box-sizing: border-box; }
 .sa-shell .sa-brand { gap: 2px; padding: 4px 12px; }
 .sa-shell .sa-brand img { width: 100%; max-width: 164px; height: calc(var(--sa-header-height) - 22px); max-height: 40px; }
-.sa-shell .sa-brand small { font-size: 6.5px; line-height: 8px; letter-spacing: 1.25px; }
+.sa-shell .sa-brand small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 6.5px; line-height: 8px; letter-spacing: 1.25px; text-transform: uppercase; }
+.sa-shell .sa-platform-label strong { display: block; max-width: min(240px, 28vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sa-shell .sa-topbar { padding: 7px 18px; }
 .sa-shell .sa-topbar-start { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .sa-shell .sa-menu { display: inline-flex; flex: 0 0 auto; }

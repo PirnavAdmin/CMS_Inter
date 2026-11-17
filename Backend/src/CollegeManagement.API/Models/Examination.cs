@@ -66,7 +66,7 @@ namespace CollegeManagement.API.Models
 
         [NotMapped]
         public string ExamCategory =>
-            (!string.IsNullOrEmpty(ExamPattern) && (ExamPattern.ToUpper().Contains("OBJECTIVE") || ExamPattern.ToUpper().Contains("JEE") || ExamPattern.ToUpper().Contains("NEET") || ExamPattern.ToUpper().Contains("PATTERN")))
+            Helpers.ExaminationFormatHelper.IsObjectiveExam(this)
                 ? "Objective"
                 : "Regular";
 

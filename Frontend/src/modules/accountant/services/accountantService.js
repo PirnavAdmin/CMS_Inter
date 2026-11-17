@@ -7,6 +7,7 @@ import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.
 import { readFee, feeStatus, scopedFeeMasters } from "../utils/feeViewData.js";
 import { PAYMENT_METHODS } from "../../../data/feeManagementData.js";
 import { assertFeeDetailIdentity, normalizeFeeDetails } from "@/features/fees/feeDetails.js";
+import { paymentUiState } from "@/modules/admin/AdminFees/services/paymentGatewaySession.js";
 
 // Shared API modules retain their original clients, endpoints and contracts.
 // Payroll: reuse the project API without changing its contract.
@@ -320,8 +321,8 @@ export async function collectStudentPayment(account, draft, authorize) {
   const payload = paymentPayload(account, draft);
   if (!authorize()) throw invalid("Verified Fee Management create permission is required to collect payment.");
   try {
-    const saved = checkedFeeData(await apiClient.post(apiEndpoints.fee.collect, payload));
-    if (!validId(readFee(saved, "feePaymentId")) || Number(readFee(saved, "studentId")) !== payload.studentId || Number(readFee(saved, "studentFeeId")) !== payload.studentFeeId || readFee(saved, "amount") == null || !Number.isFinite(Number(readFee(saved, "amount"))) || Number(readFee(saved, "amount")) <= 0 || String(readFee(saved, "status")).toLowerCase() !== "success") throw invalid("The payment response could not be confirmed.");
+    const saved = checkedFeeData(await apiClient.post(apiEndpoints.fee.collect, payload, { skipNetworkRetry: true, requireRealBackend: true }));
+    if (!validId(readFee(saved, "feePaymentId")) || Number(readFee(saved, "studentId")) !== payload.studentId || Number(readFee(saved, "studentFeeId")) !== payload.studentFeeId || readFee(saved, "amount") == null || !Number.isFinite(Number(readFee(saved, "amount"))) || Number(readFee(saved, "amount")) <= 0 || !["PAYMENT_SUCCESSFUL", "PENDING_VERIFICATION"].includes(paymentUiState(saved))) throw invalid("The payment response could not be confirmed.");
     return saved;
   } catch (error) {
     if (!error.response || error.response.status >= 500) error.feeSaveUncertain = true;

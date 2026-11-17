@@ -37,6 +37,7 @@ public class FeePaymentGatewayController : ControllerBase
     private readonly IFeeReceiptPdfService _receiptPdfService;
     private readonly AppDbContext _dbContext;
     private readonly ICampusAuthorizationService? _campusAuthService;
+    private readonly IPaymentEmailOutboxService? _emailOutboxService;
     private readonly ILogger<FeePaymentGatewayController> _logger;
 
     public FeePaymentGatewayController(
@@ -46,7 +47,8 @@ public class FeePaymentGatewayController : ControllerBase
         IFeeReceiptPdfService receiptPdfService,
         AppDbContext dbContext,
         ILogger<FeePaymentGatewayController> logger,
-        ICampusAuthorizationService? campusAuthService = null)
+        ICampusAuthorizationService? campusAuthService = null,
+        IPaymentEmailOutboxService? emailOutboxService = null)
     {
         _gatewayService = gatewayService;
         _settlementService = settlementService;
@@ -55,14 +57,38 @@ public class FeePaymentGatewayController : ControllerBase
         _dbContext = dbContext;
         _logger = logger;
         _campusAuthService = campusAuthService;
+        _emailOutboxService = emailOutboxService;
     }
 
     private int? GetCurrentUserId()
     {
         var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
             ?? User.FindFirst("UserId")?.Value
-            ?? User.FindFirst("userId")?.Value;
+            ?? User.FindFirst("userId")?.Value
+            ?? User.FindFirst("sub")?.Value;
         return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private async Task<int?> GetAuthenticatedStudentIdAsync()
+    {
+        var studentIdClaim = User.FindFirst("StudentId")?.Value ?? User.FindFirst("studentId")?.Value;
+        if (int.TryParse(studentIdClaim, out var sId) && sId > 0)
+            return sId;
+
+        var userId = GetCurrentUserId();
+        if (userId.HasValue && userId.Value > 0)
+        {
+            var studentId = await _dbContext.Users
+                .AsNoTracking()
+                .Where(u => u.UserId == userId.Value)
+                .Select(u => u.StudentId)
+                .FirstOrDefaultAsync();
+
+            if (studentId.HasValue && studentId.Value > 0)
+                return studentId.Value;
+        }
+
+        return null;
     }
 
     private bool IsPrivilegedStaff()
@@ -74,7 +100,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Prevents Insecure Direct Object Reference (IDOR) when Student or Parent roles access gateway APIs.
-    /// Privileged staff roles are permitted; Students must match their own StudentId claim;
+    /// Privileged staff roles are permitted; Students must match their own StudentId;
     /// Parents must pass sp_CheckParentStudentMapping for the target student.
     /// </summary>
     private async Task<bool> IsAuthorizedForStudentAsync(int targetStudentId)
@@ -85,8 +111,8 @@ public class FeePaymentGatewayController : ControllerBase
         var userRole = User.FindFirstValue(ClaimTypes.Role);
         if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
         {
-            var studentIdClaim = User.FindFirst("StudentId")?.Value ?? User.FindFirst("studentId")?.Value;
-            return int.TryParse(studentIdClaim, out int ownStudentId) && ownStudentId == targetStudentId;
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            return ownStudentId.HasValue && ownStudentId.Value == targetStudentId;
         }
 
         if (string.Equals(userRole, "Parent", StringComparison.OrdinalIgnoreCase))
@@ -109,6 +135,94 @@ public class FeePaymentGatewayController : ControllerBase
         return false;
     }
 
+    /// <summary>
+    /// Returns a sanitized public payment configuration safe for students and parents.
+    /// Redacts Razorpay secret status, webhook secrets, webhook URLs, and internal server endpoints.
+    /// Retains active receiving accounts and public payee details required for UPI QR generation and Razorpay checkout.
+    /// </summary>
+    private static PaymentGatewayConfigDto SanitizeConfigForStudent(PaymentGatewayConfigDto config)
+    {
+        if (config == null) return new PaymentGatewayConfigDto();
+
+        return new PaymentGatewayConfigDto
+        {
+            Id = config.Id,
+            CampusId = config.CampusId,
+
+            // Safe bank details for manual transfer / display
+            BankName = config.BankName,
+            AccountHolderName = config.AccountHolderName,
+            AccountNumber = config.AccountNumber,
+            IfscCode = config.IfscCode,
+            BranchName = config.BranchName,
+            AccountType = config.AccountType,
+
+            // Safe UPI details for display & QR generation
+            PayeeVpa = config.PayeeVpa,
+            PayeeName = config.PayeeName,
+            Currency = config.Currency,
+            Mcc = config.Mcc,
+            EnableCounterUpiQr = config.EnableCounterUpiQr,
+
+            // Public gateway flags & client key ID
+            Provider = config.Provider,
+            IsLiveMode = config.IsLiveMode,
+            RazorpayKeyId = config.RazorpayKeyId,
+            HasRazorpayKeySecret = false, // REDACTED: Never expose secret existence or status to students
+            HasRazorpayWebhookSecret = false, // REDACTED: Never expose secret existence or status to students
+            AutoCapture = config.AutoCapture,
+            EnableRazorpay = config.EnableRazorpay,
+            EnableOfflineUtr = config.EnableOfflineUtr,
+
+            // Safe polling config
+            PollingIntervalMs = config.PollingIntervalMs,
+            MonitoringTimeoutSeconds = config.MonitoringTimeoutSeconds,
+
+            // Client application URL and frontend port for client-side polling / navigation
+            BaseAppUrl = !string.IsNullOrWhiteSpace(config.BaseAppUrl) ? config.BaseAppUrl : "http://localhost:5173",
+            FrontendPort = config.FrontendPort is >= 1 and <= 65535 ? config.FrontendPort : 5173,
+            WebhookUrl = string.Empty,
+
+            UpdatedAt = config.UpdatedAt,
+
+            // Multi-account: only return active accounts, with public fields
+            BankAccounts = config.BankAccounts?
+                .Where(a => a.IsActive)
+                .Select(a => new CampusBankAccountDto
+                {
+                    Id = a.Id,
+                    CampusId = a.CampusId,
+                    BankName = a.BankName,
+                    AccountHolderName = a.AccountHolderName,
+                    AccountNumber = a.AccountNumber,
+                    IfscCode = a.IfscCode,
+                    BranchName = a.BranchName,
+                    AccountType = a.AccountType,
+                    IsActive = a.IsActive,
+                    CreatedAt = a.CreatedAt,
+                    UpdatedAt = a.UpdatedAt
+                })
+                .ToList() ?? new List<CampusBankAccountDto>(),
+            ActiveBankAccountId = config.ActiveBankAccountId
+        };
+    }
+
+    private string GetApiBaseUrl()
+    {
+        try
+        {
+            if (Request != null && Request.Host.HasValue && !string.IsNullOrWhiteSpace(Request.Host.Value))
+            {
+                return $"{Request.Scheme}://{Request.Host}";
+            }
+        }
+        catch
+        {
+            // fallback
+        }
+        return "http://localhost";
+    }
+
     // ========================= ORDER CREATION =========================
 
     /// <summary>
@@ -121,26 +235,59 @@ public class FeePaymentGatewayController : ControllerBase
     [BypassPermission]
     public async Task<IActionResult> CreateOrder([FromBody] CreateGatewayOrderRequest request)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (request == null) return BadRequest(new { success = false, message = "Request body is required." });
 
-        if (!await IsAuthorizedForStudentAsync(request.StudentId))
-            return Forbid();
-
-        var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
-        if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
-            return Forbid();
-
-        if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
-            (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
         {
-            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
-            var targetCampusId = request.CampusId ?? studentCampusId;
-            if (targetCampusId.HasValue)
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
+                return Forbid();
+
+            // Override student ID on the server - do not trust client-supplied ID
+            request.StudentId = ownStudentId.Value;
+            ModelState.Remove(nameof(request.StudentId));
+
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            // Validate that the student fee account belongs to the authenticated student
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (!feeOwnerStudentId.HasValue || feeOwnerStudentId.Value != ownStudentId.Value)
             {
-                var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
-                    targetCampusId,
-                    requireExplicitCampusId: false);
-                if (!ok) return errorResult!;
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "You can only create payment orders for your own fee account."
+                });
+            }
+
+            // Enforce student's enrolled campus
+            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(ownStudentId.Value);
+            request.CampusId = studentCampusId;
+        }
+        else
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            if (!await IsAuthorizedForStudentAsync(request.StudentId))
+                return Forbid();
+
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
+                return Forbid();
+
+            if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
+                (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+            {
+                var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
+                var targetCampusId = request.CampusId ?? studentCampusId;
+                if (targetCampusId.HasValue)
+                {
+                    var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+                        targetCampusId,
+                        requireExplicitCampusId: false);
+                    if (!ok) return errorResult!;
+                }
             }
         }
 
@@ -164,8 +311,17 @@ public class FeePaymentGatewayController : ControllerBase
         var ownerStudentId = await _gatewayService.GetStudentIdForTransactionAsync(request.OrderId)
             ?? await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
 
-        if (!IsPrivilegedStaff() && (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value)))
-            return Forbid();
+        if (!IsPrivilegedStaff())
+        {
+            if (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value))
+                return Forbid();
+        }
+        else if (ownerStudentId.HasValue)
+        {
+            var campusId = await _gatewayService.GetStudentCampusIdAsync(ownerStudentId.Value);
+            var (ok, err) = await EnsureAuthorizedForCampusAsync(campusId);
+            if (!ok) return err!;
+        }
 
         var result = await _gatewayService.VerifyAndSettleAsync(request, GetCurrentUserId());
         return result.Success
@@ -177,8 +333,18 @@ public class FeePaymentGatewayController : ControllerBase
                 status = "Captured",
                 isPaid = true,
                 feePaymentId = result.FeePaymentId,
+                receiptId = result.ReceiptId,
                 receiptNumber = result.ReceiptNumber,
-                amount = result.Amount
+                receiptAvailable = result.ReceiptAvailable,
+                amount = result.Amount,
+                paymentStatus = result.PaymentStatus,
+                verificationStatus = result.VerificationStatus,
+                outstandingBalance = result.OutstandingBalance,
+                paymentDate = result.PaymentDate,
+                emailNotificationStatus = result.EmailNotificationStatus,
+                emailDeliveryStatus = result.EmailDeliveryStatus,
+                emailSentAt = result.EmailSentAt,
+                emailFailureReason = result.EmailFailureReason
             })
             : BadRequest(new { success = false, message = result.ErrorMessage });
     }
@@ -187,7 +353,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Lightweight polling endpoint called every 1200ms by the frontend usePaymentPolling hook.
-    /// Performs throttled active Razorpay sync and enforces Student/Parent ownership to block IDOR.
+    /// Performs throttled active Razorpay sync and enforces Student/Parent ownership &amp; campus authorization.
     /// </summary>
     [HttpGet("status/{studentFeeId:int}")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
@@ -203,6 +369,12 @@ public class FeePaymentGatewayController : ControllerBase
             if (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value))
                 return Forbid();
         }
+        else if (ownerStudentId.HasValue)
+        {
+            var campusId = await _gatewayService.GetStudentCampusIdAsync(ownerStudentId.Value);
+            var (ok, err) = await EnsureAuthorizedForCampusAsync(campusId);
+            if (!ok) return err!;
+        }
 
         var result = await _gatewayService.GetOrderStatusAsync(studentFeeId, orderId);
         return Ok(result);
@@ -211,9 +383,8 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= RAZORPAY WEBHOOK =========================
 
     /// <summary>
-    /// Razorpay webhook listener for payment.captured, order.paid, and qr_code.credited events.
-    /// Anonymous endpoint secured via strict fail-closed HMAC-SHA256 signature verification
-    /// using the database-configured (or appsettings) webhook secret.
+    /// Razorpay webhook listener for payment.captured, order.paid, qr_code.credited, payment.failed, and qr_code.closed events.
+    /// Anonymous endpoint secured via strict fail-closed HMAC-SHA256 signature verification.
     /// </summary>
     [HttpPost("webhook")]
     [AllowAnonymous]
@@ -240,6 +411,8 @@ public class FeePaymentGatewayController : ControllerBase
             string orderId = string.Empty;
             string paymentId = string.Empty;
             string? qrCodeId = null;
+            string? currency = null;
+            string? failureReason = null;
             decimal amount = 0m;
 
             if (payload.TryGetProperty("payment", out var paymentWrapper) &&
@@ -251,6 +424,12 @@ public class FeePaymentGatewayController : ControllerBase
                     paymentId = pProp.GetString() ?? "";
                 if (paymentEntity.TryGetProperty("amount", out var aProp) && aProp.ValueKind == JsonValueKind.Number)
                     amount = aProp.GetInt64() / 100m;
+                if (paymentEntity.TryGetProperty("currency", out var curProp) && curProp.ValueKind == JsonValueKind.String)
+                    currency = curProp.GetString();
+                if (paymentEntity.TryGetProperty("error_description", out var errProp) && errProp.ValueKind == JsonValueKind.String)
+                    failureReason = errProp.GetString();
+                else if (paymentEntity.TryGetProperty("error_reason", out var reasonProp) && reasonProp.ValueKind == JsonValueKind.String)
+                    failureReason = reasonProp.GetString();
             }
 
             if (payload.TryGetProperty("qr_code", out var qrWrapper) &&
@@ -286,7 +465,7 @@ public class FeePaymentGatewayController : ControllerBase
                 eventType, orderId, qrCodeId, paymentId, amount);
 
             var result = await _gatewayService.ProcessWebhookAsync(
-                eventType, orderId, paymentId, amount, qrCodeId);
+                eventType, orderId, paymentId, amount, qrCodeId, currency, failureReason);
 
             return result.Success
                 ? Ok(new { success = true })
@@ -304,35 +483,613 @@ public class FeePaymentGatewayController : ControllerBase
         }
     }
 
-    // ========================= OFFLINE UTR SUBMISSION =========================
+    // ========================= OFFLINE UTR & DIRECT UPI QR VERIFICATION =========================
 
-    /// <summary>Submit an offline bank transfer or direct UPI QR UTR reference for verification.</summary>
+    /// <summary>
+    /// Submit an offline bank transfer or Direct UPI QR UTR reference for verification.
+    /// Supports both multipart/form-data (with optional private JPG/JPEG/PNG/PDF proof up to 5 MB)
+    /// and legacy application/json requests.
+    /// </summary>
     [HttpPost("submit-utr")]
-    public async Task<IActionResult> SubmitUtr([FromBody] SubmitUtrRequest request)
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [BypassPermission]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
+    public async Task<IActionResult> SubmitUtr(CancellationToken cancellationToken = default)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
-        var result = await _settlementService.SubmitUtrAsync(request, GetCurrentUserId());
-        return result.Success
-            ? Ok(new
+        var parseResult = await ParseSubmitUtrPayloadAsync(Request, cancellationToken);
+        if (!parseResult.Success || parseResult.Request == null)
+        {
+            return StatusCode(parseResult.HttpStatusCode, new
             {
-                success = true,
-                transactionId = result.TransactionId,
-                amount = result.Amount,
-                message = "UTR submitted for verification."
-            })
-            : BadRequest(new { success = false, message = result.ErrorMessage });
+                success = false,
+                errorCode = parseResult.ErrorCode,
+                message = parseResult.ErrorMessage,
+                errors = parseResult.ValidationErrors
+            });
+        }
+
+        var request = parseResult.Request;
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
+        {
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit a payment verification for this student."
+                });
+            }
+
+            // Server enforces own student ID - never trust client-supplied ID
+            request.StudentId = ownStudentId.Value;
+
+            // Validate that the fee account belongs to this student
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (!feeOwnerStudentId.HasValue || feeOwnerStudentId.Value != ownStudentId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit payment verification for another student's fee account."
+                });
+            }
+
+            // If order ID was specified, ensure transaction belongs to student
+            if (!string.IsNullOrWhiteSpace(request.OrderId))
+            {
+                var orderStudentId = await _gatewayService.GetStudentIdForTransactionAsync(request.OrderId);
+                if (orderStudentId.HasValue && orderStudentId.Value != ownStudentId.Value)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        errorCode = "STUDENT_ACCESS_DENIED",
+                        message = "You are not authorized to submit payment verification for another student's transaction."
+                    });
+                }
+            }
+
+            // Students do not require staff campus clearance - their identity and fee account ownership authorize them
+        }
+        else
+        {
+            if (!await IsAuthorizedForStudentAsync(request.StudentId))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "You are not authorized to submit a payment verification for this student."
+                });
+            }
+
+            var feeOwnerStudentId = await _gatewayService.GetStudentIdForFeeAsync(request.StudentFeeId);
+            if (feeOwnerStudentId.HasValue && feeOwnerStudentId.Value != request.StudentId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "STUDENT_ACCESS_DENIED",
+                    message = "Fee account does not belong to the specified student."
+                });
+            }
+
+            // Staff campus isolation check
+            var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
+            if (studentCampusId.HasValue && studentCampusId.Value > 0 && IsPrivilegedStaff())
+            {
+                var campusAccess = await EnsureAuthorizedForCampusAsync(studentCampusId.Value);
+                if (!campusAccess.Authorized)
+                {
+                    return campusAccess.ErrorResult!;
+                }
+            }
+        }
+
+        var headerIdempotencyKey =
+            Request.Headers["Idempotency-Key"].FirstOrDefault()
+            ?? Request.Headers["X-Idempotency-Key"].FirstOrDefault();
+
+        var utrService = (IPaymentUtrVerificationService?)HttpContext.RequestServices.GetService(typeof(IPaymentUtrVerificationService));
+        if (utrService == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                errorCode = "SERVICE_UNAVAILABLE",
+                message = "UTR verification service is not registered."
+            });
+        }
+
+        var result = await utrService.SubmitUtrWithProofAsync(
+            request,
+            parseResult.Attachment,
+            parseResult.HasMultipleFiles,
+            headerIdempotencyKey,
+            GetCurrentUserId(),
+            cancellationToken);
+
+        if (!result.Success || result.Data == null)
+        {
+            return StatusCode(result.HttpStatusCode, new
+            {
+                success = false,
+                errorCode = result.ErrorCode ?? "UTR_SUBMISSION_FAILED",
+                message = result.ErrorMessage ?? "Failed to submit UTR for verification.",
+                errors = result.Errors
+            });
+        }
+
+        return Ok(result.Data);
     }
 
     // ========================= UTR VERIFICATION QUEUE =========================
 
     /// <summary>List all pending offline bank transfer and direct UPI QR UTR submissions for admin review.</summary>
     [HttpGet("pending-utrs")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> GetPendingUtrs(
         [FromQuery] int? campusId, [FromQuery] int? academicYearId)
     {
-        var items = await _settlementService.GetPendingUtrsAsync(campusId, academicYearId);
+        var scope = await ResolveUtrCampusScopeAsync(campusId);
+        if (!scope.Authorized)
+        {
+            return scope.ErrorResult!;
+        }
+
+        var items = (await _settlementService.GetPendingUtrsAsync(scope.SingleCampusId, academicYearId)).ToList();
+
+        if (!scope.IsGlobalAdmin && !scope.SingleCampusId.HasValue)
+        {
+            var allowed = scope.AllowedCampusIds.ToHashSet();
+            items = items
+                .Where(item => item.CampusId.HasValue && allowed.Contains(item.CampusId.Value))
+                .ToList();
+        }
+
         return Ok(items);
+    }
+
+    /// <summary>
+    /// Authenticated inline view or file download of a private payment proof attachment,
+    /// restricted by campus isolation and finance/admin authorization roles.
+    /// </summary>
+    [HttpGet("attachments/{attachmentId:int}")]
+    [HttpGet("attachments/{attachmentId:int}/download")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> DownloadPaymentProofAttachment(
+        int attachmentId,
+        [FromQuery] bool download = false,
+        CancellationToken cancellationToken = default)
+    {
+        var utrService = (IPaymentUtrVerificationService?)HttpContext.RequestServices.GetService(typeof(IPaymentUtrVerificationService));
+        var storageService = (IPaymentProofStorageService?)HttpContext.RequestServices.GetService(typeof(IPaymentProofStorageService));
+        if (utrService == null || storageService == null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                errorCode = "SERVICE_UNAVAILABLE",
+                message = "Payment proof storage service is not registered."
+            });
+        }
+
+        var metadata = await utrService.GetAttachmentMetadataAsync(attachmentId, cancellationToken);
+        if (!metadata.Success)
+        {
+            return StatusCode(metadata.HttpStatusCode, new
+            {
+                success = false,
+                errorCode = metadata.ErrorCode ?? "ATTACHMENT_NOT_FOUND",
+                message = metadata.ErrorMessage ?? "Payment proof attachment was not found."
+            });
+        }
+
+        var campusAccess = await EnsureAuthorizedForCampusAsync(metadata.CampusId);
+        if (!campusAccess.Authorized)
+        {
+            return campusAccess.ErrorResult!;
+        }
+
+        var stream = storageService.OpenReadStreamIfValid(metadata.StorageRelativePath, out _);
+        if (stream == null)
+        {
+            return NotFound(new
+            {
+                success = false,
+                errorCode = "ATTACHMENT_FILE_MISSING",
+                message = "The stored payment proof file could not be found."
+            });
+        }
+
+        bool asDownload = download || (Request.Path.Value?.EndsWith("/download", StringComparison.OrdinalIgnoreCase) ?? false);
+        var asciiSafeFileName = BuildHeaderSafeFileName(metadata.FileName);
+
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private";
+        Response.Headers["Pragma"] = "no-cache";
+        Response.Headers["Content-Security-Policy"] = "default-src 'none'; sandbox";
+
+        if (asDownload)
+        {
+            return File(stream, metadata.ContentType, asciiSafeFileName);
+        }
+
+        Response.Headers["Content-Disposition"] = new System.Net.Mime.ContentDisposition
+        {
+            Inline = true,
+            FileName = asciiSafeFileName
+        }.ToString();
+
+        return File(stream, metadata.ContentType);
+    }
+
+    private sealed class SubmitUtrParseResult
+    {
+        public bool Success { get; init; }
+        public int HttpStatusCode { get; init; } = StatusCodes.Status400BadRequest;
+        public string? ErrorCode { get; init; }
+        public string? ErrorMessage { get; init; }
+        public Dictionary<string, string[]>? ValidationErrors { get; init; }
+        public SubmitUtrRequest? Request { get; init; }
+        public IFormFile? Attachment { get; init; }
+        public bool HasMultipleFiles { get; init; }
+    }
+
+    private static async Task<SubmitUtrParseResult> ParseSubmitUtrPayloadAsync(
+        HttpRequest httpRequest,
+        CancellationToken cancellationToken)
+    {
+        SubmitUtrRequest? payload = null;
+        IFormFile? uploadedFile = null;
+        bool hasMultipleFiles = false;
+
+        if (httpRequest.HasFormContentType)
+        {
+            IFormCollection form;
+            try
+            {
+                form = await httpRequest.ReadFormAsync(cancellationToken);
+            }
+            catch (InvalidDataException ex)
+            {
+                return new SubmitUtrParseResult
+                {
+                    Success = false,
+                    HttpStatusCode = StatusCodes.Status400BadRequest,
+                    ErrorCode = "INVALID_MULTIPART_PAYLOAD",
+                    ErrorMessage = $"Invalid multipart/form-data payload: {ex.Message}"
+                };
+            }
+            catch (IOException ex)
+            {
+                return new SubmitUtrParseResult
+                {
+                    Success = false,
+                    HttpStatusCode = StatusCodes.Status413PayloadTooLarge,
+                    ErrorCode = "PAYLOAD_TOO_LARGE",
+                    ErrorMessage = $"Upload stream failed or exceeded maximum limit: {ex.Message}"
+                };
+            }
+
+            if (form.Files.Count > 1)
+            {
+                hasMultipleFiles = true;
+            }
+            else if (form.Files.Count == 1)
+            {
+                uploadedFile = form.Files[0];
+            }
+
+            var errors = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            void AddError(string field, string msg)
+            {
+                if (!errors.TryGetValue(field, out var list))
+                {
+                    list = new List<string>();
+                    errors[field] = list;
+                }
+                list.Add(msg);
+            }
+
+            if (!int.TryParse(form["studentId"].FirstOrDefault(), out int studentId) || studentId <= 0)
+            {
+                var callerStudentClaim = httpRequest.HttpContext?.User?.FindFirst("StudentId")?.Value
+                    ?? httpRequest.HttpContext?.User?.FindFirst("studentId")?.Value;
+                if (int.TryParse(callerStudentClaim, out int sId) && sId > 0)
+                {
+                    studentId = sId;
+                }
+                else
+                {
+                    AddError("studentId", "studentId must be a valid positive integer.");
+                }
+            }
+
+            if (!int.TryParse(form["studentFeeId"].FirstOrDefault(), out int studentFeeId) || studentFeeId <= 0)
+                AddError("studentFeeId", "studentFeeId must be a valid positive integer.");
+
+            if (!decimal.TryParse(
+                    form["amount"].FirstOrDefault(),
+                    System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out decimal amount) || amount <= 0)
+            {
+                AddError("amount", "amount must be a valid decimal greater than 0.");
+            }
+
+            var utrNumber = form["utrNumber"].FirstOrDefault()?.Trim() ?? string.Empty;
+            DateTime? paymentDate = null;
+            var paymentDateRaw = form["paymentDate"].FirstOrDefault()?.Trim();
+            if (!string.IsNullOrWhiteSpace(paymentDateRaw))
+            {
+                if (!DateTime.TryParse(
+                        paymentDateRaw,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.RoundtripKind,
+                        out var parsedDate))
+                {
+                    AddError("paymentDate", "paymentDate must be a valid ISO date or timestamp.");
+                }
+                else
+                {
+                    paymentDate = parsedDate;
+                }
+            }
+
+            List<int>? feeInstallmentIds = null;
+            var installmentRawValues = form["feeInstallmentIds"].Concat(form["feeInstallmentIds[]"]).Where(v => !string.IsNullOrWhiteSpace(v)).ToList();
+            if (installmentRawValues.Count > 0)
+            {
+                feeInstallmentIds = new List<int>();
+                foreach (var rawVal in installmentRawValues)
+                {
+                    var trimmed = rawVal.Trim();
+                    if (trimmed.StartsWith("[", StringComparison.Ordinal))
+                    {
+                        try
+                        {
+                            var parsedList = System.Text.Json.JsonSerializer.Deserialize<List<int>>(trimmed);
+                            if (parsedList != null) feeInstallmentIds.AddRange(parsedList);
+                        }
+                        catch
+                        {
+                            AddError("feeInstallmentIds", "feeInstallmentIds JSON array is invalid.");
+                        }
+                    }
+                    else
+                    {
+                        foreach (var token in trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            if (int.TryParse(token, out int instId) && instId > 0)
+                                feeInstallmentIds.Add(instId);
+                            else
+                                AddError("feeInstallmentIds", $"Invalid installment ID '{token}'.");
+                        }
+                    }
+                }
+            }
+
+            if (errors.Count > 0)
+            {
+                return new SubmitUtrParseResult
+                {
+                    Success = false,
+                    HttpStatusCode = StatusCodes.Status400BadRequest,
+                    ErrorCode = "VALIDATION_ERROR",
+                    ErrorMessage = errors.Values.SelectMany(x => x).First(),
+                    ValidationErrors = errors.ToDictionary(k => k.Key, v => v.Value.ToArray(), StringComparer.OrdinalIgnoreCase)
+                };
+            }
+
+            payload = new SubmitUtrRequest
+            {
+                StudentId = studentId,
+                StudentFeeId = studentFeeId,
+                Amount = amount,
+                UtrNumber = utrNumber,
+                OrderId = form["orderId"].FirstOrDefault()?.Trim(),
+                FeeInstallmentIds = feeInstallmentIds,
+                BankName = form["bankName"].FirstOrDefault()?.Trim(),
+                PaymentDate = paymentDate,
+                Remarks = form["remarks"].FirstOrDefault()?.Trim(),
+                IdempotencyKey = form["idempotencyKey"].FirstOrDefault()?.Trim()
+            };
+        }
+        else
+        {
+            var contentType = (httpRequest.ContentType ?? string.Empty).Split(';')[0].Trim();
+            if (!string.IsNullOrEmpty(contentType) &&
+                !contentType.Equals("application/json", StringComparison.OrdinalIgnoreCase) &&
+                !contentType.EndsWith("+json", StringComparison.OrdinalIgnoreCase))
+            {
+                return new SubmitUtrParseResult
+                {
+                    Success = false,
+                    HttpStatusCode = StatusCodes.Status415UnsupportedMediaType,
+                    ErrorCode = "UNSUPPORTED_CONTENT_TYPE",
+                    ErrorMessage = "Content-Type must be either multipart/form-data or application/json."
+                };
+            }
+
+            try
+            {
+                payload = await System.Text.Json.JsonSerializer.DeserializeAsync<SubmitUtrRequest>(
+                    httpRequest.Body,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                    cancellationToken);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return new SubmitUtrParseResult
+                {
+                    Success = false,
+                    HttpStatusCode = StatusCodes.Status400BadRequest,
+                    ErrorCode = "INVALID_JSON",
+                    ErrorMessage = "Invalid JSON payload."
+                };
+            }
+        }
+
+        if (payload == null)
+        {
+            return new SubmitUtrParseResult
+            {
+                Success = false,
+                HttpStatusCode = StatusCodes.Status400BadRequest,
+                ErrorCode = "EMPTY_REQUEST_BODY",
+                ErrorMessage = "Request payload is required."
+            };
+        }
+
+        if (payload.StudentId <= 0)
+        {
+            var callerStudentClaim = httpRequest.HttpContext?.User?.FindFirst("StudentId")?.Value
+                ?? httpRequest.HttpContext?.User?.FindFirst("studentId")?.Value;
+            if (int.TryParse(callerStudentClaim, out int sId) && sId > 0)
+            {
+                payload.StudentId = sId;
+            }
+        }
+
+        var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(payload);
+        if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(payload, validationContext, validationResults, validateAllProperties: true))
+        {
+            var dict = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            foreach (var group in validationResults
+                .SelectMany(vr => (vr.MemberNames.Any() ? vr.MemberNames : new[] { string.Empty }).Select(m => (Member: m, Msg: vr.ErrorMessage ?? "Invalid value.")))
+                .GroupBy(x => x.Member, StringComparer.OrdinalIgnoreCase))
+            {
+                dict[group.Key] = group.Select(x => x.Msg).Distinct().ToArray();
+            }
+
+            return new SubmitUtrParseResult
+            {
+                Success = false,
+                HttpStatusCode = StatusCodes.Status400BadRequest,
+                ErrorCode = "VALIDATION_ERROR",
+                ErrorMessage = validationResults.First().ErrorMessage ?? "Validation failed.",
+                ValidationErrors = dict
+            };
+        }
+
+        return new SubmitUtrParseResult
+        {
+            Success = true,
+            HttpStatusCode = StatusCodes.Status200OK,
+            Request = payload,
+            Attachment = uploadedFile,
+            HasMultipleFiles = hasMultipleFiles
+        };
+    }
+
+    private async Task<(bool Authorized, bool IsGlobalAdmin, int? SingleCampusId, IReadOnlyList<int> AllowedCampusIds, IActionResult? ErrorResult)> ResolveUtrCampusScopeAsync(int? requestedCampusId)
+    {
+        bool isGlobalAdmin = IsGlobalAdmin();
+        if (isGlobalAdmin)
+        {
+            if (requestedCampusId.HasValue && requestedCampusId.Value <= 0)
+            {
+                return (false, true, null, Array.Empty<int>(), BadRequest(new
+                {
+                    success = false,
+                    errorCode = "INVALID_CAMPUS_ID",
+                    message = "campusId must be a positive integer."
+                }));
+            }
+
+            return (true, true, requestedCampusId, Array.Empty<int>(), null);
+        }
+
+        if (_campusAuthService != null)
+        {
+            var access = await _campusAuthService.ResolveCampusAccessAsync(User, requestedCampusId);
+            if (!access.IsAuthorized)
+            {
+                return (false, false, null, Array.Empty<int>(), StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    errorCode = "CROSS_CAMPUS_FORBIDDEN",
+                    message = access.ErrorMessage ?? "You are not authorized to access records for the requested campus."
+                }));
+            }
+
+            if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+            {
+                return (true, false, access.EffectiveCampusId, access.AuthorizedCampusIds, null);
+            }
+
+            if (access.AuthorizedCampusIds.Count == 1)
+            {
+                return (true, false, access.AuthorizedCampusIds[0], access.AuthorizedCampusIds, null);
+            }
+
+            if (access.AuthorizedCampusIds.Count > 1)
+            {
+                return (true, false, null, access.AuthorizedCampusIds, null);
+            }
+
+            return (true, false, access.EffectiveCampusId, access.AuthorizedCampusIds, null);
+        }
+
+        try
+        {
+            var resolvedCampusId = CampusContextResolver.ResolveAndValidateCampusId(User, requestedCampusId);
+            return (true, false, resolvedCampusId, new[] { resolvedCampusId }, null);
+        }
+        catch (ForbiddenException ex)
+        {
+            return (false, false, null, Array.Empty<int>(), StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                success = false,
+                errorCode = "CROSS_CAMPUS_FORBIDDEN",
+                message = ex.Message
+            }));
+        }
+    }
+
+    private async Task<(bool Authorized, IActionResult? ErrorResult)> EnsureAuthorizedForCampusAsync(int? targetCampusId)
+    {
+        if (IsGlobalAdmin())
+        {
+            return (true, null);
+        }
+
+        if (!targetCampusId.HasValue || targetCampusId.Value <= 0)
+        {
+            return (false, StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                success = false,
+                errorCode = "CROSS_CAMPUS_FORBIDDEN",
+                message = "Target resource campus could not be verified for access control."
+            }));
+        }
+
+        var scope = await ResolveUtrCampusScopeAsync(targetCampusId.Value);
+        return scope.Authorized ? (true, null) : (false, scope.ErrorResult);
+    }
+
+    private static string BuildHeaderSafeFileName(string? fileName)
+    {
+        var baseName = Path.GetFileName(fileName ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(baseName))
+        {
+            return "payment-proof";
+        }
+
+        var chars = baseName
+            .Where(c => c >= 32 && c <= 126 && c != '"' && c != ';' && c != '\\' && c != '/')
+            .ToArray();
+        var clean = new string(chars).Trim();
+        return string.IsNullOrWhiteSpace(clean) ? "payment-proof" : clean;
     }
 
     /// <summary>Approve or reject a pending UTR submission.</summary>
@@ -342,6 +1099,18 @@ public class FeePaymentGatewayController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        var txnInfo = await _dbContext.PaymentGatewayTransactions
+            .AsNoTracking()
+            .Where(t => t.Id == request.TransactionId)
+            .Select(t => new { CampusId = t.CampusId ?? (t.Student != null ? t.Student.CampusId : null) })
+            .FirstOrDefaultAsync();
+
+        if (txnInfo == null)
+            return NotFound(new { success = false, message = "Transaction not found." });
+
+        var (ok, err) = await EnsureAuthorizedForCampusAsync(txnInfo.CampusId);
+        if (!ok) return err!;
+
         var result = await _settlementService.ApproveOrRejectUtrAsync(request, GetCurrentUserId());
         return result.Success
             ? Ok(new
@@ -349,8 +1118,18 @@ public class FeePaymentGatewayController : ControllerBase
                 success = true,
                 transactionId = request.TransactionId,
                 feePaymentId = result.FeePaymentId,
+                receiptId = result.ReceiptId,
                 receiptNumber = result.ReceiptNumber,
-                amount = result.Amount
+                receiptAvailable = result.ReceiptAvailable,
+                amount = result.Amount,
+                paymentStatus = result.PaymentStatus,
+                verificationStatus = result.VerificationStatus,
+                outstandingBalance = result.OutstandingBalance,
+                paymentDate = result.PaymentDate,
+                emailNotificationStatus = result.EmailNotificationStatus,
+                emailDeliveryStatus = result.EmailDeliveryStatus,
+                emailSentAt = result.EmailSentAt,
+                emailFailureReason = result.EmailFailureReason
             })
             : BadRequest(new { success = false, message = result.ErrorMessage });
     }
@@ -358,15 +1137,27 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= PAYMENT REVERSAL & REFUND =========================
 
     /// <summary>
-    /// Reverses a settled payment, restores student account & student profile balances,
+    /// Reverses a settled payment, restores student account &amp; student profile balances,
     /// marks payment and installments reversed, and appends an immutable Reversal entry to PaymentLedgerEntries.
-    /// Strictly restricted to Accounting & Administrative roles.
+    /// Strictly restricted to Accounting &amp; Administrative roles within their authorized campus.
     /// </summary>
     [HttpPost("reverse")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
     public async Task<IActionResult> ReversePayment([FromBody] ReversePaymentRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var txnInfo = await _dbContext.PaymentGatewayTransactions
+            .AsNoTracking()
+            .Where(t => t.Id == request.TransactionId)
+            .Select(t => new { CampusId = t.CampusId ?? (t.Student != null ? t.Student.CampusId : null) })
+            .FirstOrDefaultAsync();
+
+        if (txnInfo == null)
+            return NotFound(new { success = false, message = "Transaction not found." });
+
+        var (ok, err) = await EnsureAuthorizedForCampusAsync(txnInfo.CampusId);
+        if (!ok) return err!;
 
         var result = await _settlementService.ReversePaymentAsync(
             request.TransactionId, request.Reason, GetCurrentUserId());
@@ -380,7 +1171,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Generates and downloads the official QuestPDF fee payment receipt.
-    /// Enforces Student/Parent ownership to prevent IDOR.
+    /// Enforces Student/Parent ownership and campus isolation, and rejects unsettled/reversed payments.
     /// </summary>
     [HttpGet("receipt/{feePaymentId:int}/pdf")]
     [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
@@ -393,28 +1184,230 @@ public class FeePaymentGatewayController : ControllerBase
             if (!ownerStudentId.HasValue || !await IsAuthorizedForStudentAsync(ownerStudentId.Value))
                 return Forbid();
         }
+        else if (ownerStudentId.HasValue)
+        {
+            var campusId = await _gatewayService.GetStudentCampusIdAsync(ownerStudentId.Value);
+            var (ok, err) = await EnsureAuthorizedForCampusAsync(campusId);
+            if (!ok) return err!;
+        }
 
-        var result = await _receiptPdfService.GenerateReceiptPdfAsync(feePaymentId);
-        if (result == null)
-            return NotFound(new { message = "Receipt not found or could not be generated." });
+        try
+        {
+            var result = await _receiptPdfService.GenerateReceiptPdfAsync(feePaymentId);
+            if (result == null)
+                return NotFound(new { message = "Receipt not found or could not be generated." });
 
-        return File(result.Value.Bytes, "application/pdf", result.Value.FileName);
+            return File(result.Value.Bytes, "application/pdf", result.Value.FileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new
+            {
+                success = false,
+                errorCode = "RECEIPT_UNAVAILABLE",
+                message = ex.Message
+            });
+        }
     }
 
     // ========================= AUDIT LEDGER EXPORT =========================
 
     /// <summary>
     /// Exports payment ledger entries from the database as a UTF-8 BOM CSV file.
-    /// Formula injection characters (=, +, -, @, tab, CR) are neutralized for Excel safety.
+    /// Enforces caller campus authorization and neutralizes spreadsheet formula injection.
     /// </summary>
     [HttpGet("export-ledger")]
     public async Task<IActionResult> ExportLedger(
         [FromQuery] int? campusId, [FromQuery] int? academicYearId)
     {
-        var csvBytes = await _ledgerService.GetLedgerCsvBytesAsync(campusId, academicYearId);
+        var scope = await ResolveUtrCampusScopeAsync(campusId);
+        if (!scope.Authorized) return scope.ErrorResult!;
+
+        var effectiveCampusId = scope.SingleCampusId ?? campusId;
+        var csvBytes = await _ledgerService.GetLedgerCsvBytesAsync(effectiveCampusId, academicYearId);
         var fileName = $"Fee_Payments_Ledger_{DateTime.UtcNow:yyyy-MM-dd}.csv";
 
         return File(csvBytes, "text/csv; charset=utf-8", fileName);
+    }
+
+    // ========================= PAYMENT STATUS, EMAIL RETRY & COMMUNICATION TEMPLATES =========================
+
+    [HttpGet("payments/{feePaymentId:int}/status")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [BypassPermission]
+    public async Task<IActionResult> GetPaymentNotificationStatus(int feePaymentId, CancellationToken cancellationToken)
+    {
+        var ownerStudentId = await _gatewayService.GetStudentIdForPaymentAsync(feePaymentId);
+        if (!ownerStudentId.HasValue)
+            return NotFound(new { success = false, message = "Payment not found." });
+
+        if (!IsPrivilegedStaff())
+        {
+            if (!await IsAuthorizedForStudentAsync(ownerStudentId.Value))
+                return Forbid();
+        }
+        else
+        {
+            var campusId = await _gatewayService.GetStudentCampusIdAsync(ownerStudentId.Value);
+            var (ok, err) = await EnsureAuthorizedForCampusAsync(campusId);
+            if (!ok) return err!;
+        }
+
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Notification status service unavailable." });
+
+        var status = await _emailOutboxService.GetPaymentNotificationStatusAsync(feePaymentId, cancellationToken);
+        return status == null ? NotFound(new { success = false, message = "Payment not found." }) : Ok(status);
+    }
+
+    [HttpPost("payments/{feePaymentId:int}/retry-email")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> RetryPaymentEmail(int feePaymentId, CancellationToken cancellationToken)
+    {
+        var ownerStudentId = await _gatewayService.GetStudentIdForPaymentAsync(feePaymentId);
+        if (!ownerStudentId.HasValue)
+            return NotFound(new { success = false, message = "Payment not found." });
+
+        var campusId = await _gatewayService.GetStudentCampusIdAsync(ownerStudentId.Value);
+        var (ok, err) = await EnsureAuthorizedForCampusAsync(campusId);
+        if (!ok) return err!;
+
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Email outbox service unavailable." });
+
+        try
+        {
+            var result = await _emailOutboxService.RetryFailedEmailsAsync(feePaymentId, cancellationToken);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { success = false, message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new { success = false, message = ex.Message });
+        }
+    }
+
+    [HttpGet("communication-settings")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [BypassPermission]
+    public async Task<IActionResult> GetCommunicationSettings([FromQuery] int? campusId, CancellationToken cancellationToken)
+    {
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Communication settings service unavailable." });
+
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(campusId, requireExplicitCampusId: false);
+        if (!ok) return errorResult!;
+
+        var settings = await _emailOutboxService.GetCommunicationSettingsAsync(effectiveCampusId, cancellationToken);
+        return Ok(settings);
+    }
+
+    [HttpPut("communication-settings")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal")]
+    public async Task<IActionResult> UpdateCommunicationSettings(
+        [FromBody] UpdatePaymentCommunicationSettingsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Communication settings service unavailable." });
+
+        bool isGlobalAdmin = IsGlobalAdmin();
+        if (request.SaveAsCollegeDefault)
+        {
+            if (!isGlobalAdmin)
+                return Forbid();
+        }
+        else
+        {
+            var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(request.CampusId, requireExplicitCampusId: true);
+            if (!ok) return errorResult!;
+            request.CampusId = effectiveCampusId;
+        }
+
+        var updated = await _emailOutboxService.UpdateCommunicationSettingsAsync(
+            request, GetCurrentUserId(), isGlobalAdmin, cancellationToken);
+
+        return Ok(new
+        {
+            success = true,
+            message = request.SaveAsCollegeDefault
+                ? "College Default communication templates saved."
+                : "Campus payment communication templates saved.",
+            data = updated
+        });
+    }
+
+    [HttpPost("communication-settings/restore-default")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal")]
+    public async Task<IActionResult> RestoreDefaultCommunicationSettings(
+        [FromQuery] int? campusId,
+        [FromQuery] bool restoreCollegeDefault = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Communication settings service unavailable." });
+
+        bool isGlobalAdmin = IsGlobalAdmin();
+        int? effectiveCampusId = campusId;
+        if (restoreCollegeDefault)
+        {
+            if (!isGlobalAdmin) return Forbid();
+        }
+        else
+        {
+            var (ok, resolvedId, errorResult) = await ResolveConfigCampusAccessAsync(campusId, requireExplicitCampusId: true);
+            if (!ok) return errorResult!;
+            effectiveCampusId = resolvedId;
+        }
+
+        var restored = await _emailOutboxService.RestoreDefaultCommunicationSettingsAsync(
+            effectiveCampusId, restoreCollegeDefault, GetCurrentUserId(), cancellationToken);
+
+        return Ok(new
+        {
+            success = true,
+            message = restoreCollegeDefault ? "College default restored to System Default." : "Campus custom overrides removed; inherited defaults restored.",
+            data = restored
+        });
+    }
+
+    [HttpPost("communication-settings/send-test-email")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> SendTestCommunicationEmail(
+        [FromBody] SendTestPaymentEmailRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (_emailOutboxService == null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { success = false, message = "Email service unavailable." });
+
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(request.CampusId, requireExplicitCampusId: false);
+        if (!ok) return errorResult!;
+        request.CampusId = effectiveCampusId;
+
+        try
+        {
+            var result = await _emailOutboxService.SendTestEmailAsync(request, cancellationToken);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { success = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to dispatch test payment email to {Recipient}", request.TestRecipient);
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                success = false,
+                status = "FAILED",
+                message = "SMTP server rejected or failed to deliver the test email. Please check email server configuration."
+            });
+        }
     }
 
     // ========================= ACCOUNT & GATEWAY CONFIGURATION =========================
@@ -502,19 +1495,124 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>
     /// Gets active payment receiving bank details, UPI VPA, and gateway configuration for the authorized campus.
-    /// Secrets are never returned; only boolean presence flags are exposed.
+    /// Secrets are never returned to students/parents; only safe public details required for checkout are returned.
+    /// Privileged staff roles receive full administrative configuration.
     /// </summary>
     [HttpGet("config")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [BypassPermission]
     public async Task<IActionResult> GetConfig([FromQuery] int? campusId)
     {
-        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+        var userRole = User.FindFirstValue(ClaimTypes.Role);
+        var apiBaseUrl = GetApiBaseUrl();
+
+        // 1. Authenticated Student Flow
+        if (string.Equals(userRole, "Student", StringComparison.OrdinalIgnoreCase))
+        {
+            var ownStudentId = await GetAuthenticatedStudentIdAsync();
+            if (!ownStudentId.HasValue)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Student identity could not be verified."
+                });
+            }
+
+            var enrolledCampusId = await _gatewayService.GetStudentCampusIdAsync(ownStudentId.Value);
+            if (!enrolledCampusId.HasValue || enrolledCampusId.Value <= 0)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Student is not enrolled in a valid campus."
+                });
+            }
+
+            // Deny cross-campus configuration access
+            if (campusId.HasValue && campusId.Value > 0 && campusId.Value != enrolledCampusId.Value)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "You are not authorized to view payment settings for other campuses."
+                });
+            }
+
+            var rawConfig = await _gatewayService.GetConfigAsync(enrolledCampusId.Value, apiBaseUrl);
+            var safeConfig = SanitizeConfigForStudent(rawConfig);
+            return Ok(safeConfig);
+        }
+
+        // 2. Authenticated Parent Flow
+        if (string.Equals(userRole, "Parent", StringComparison.OrdinalIgnoreCase))
+        {
+            var parentUserId = GetCurrentUserId();
+            if (!parentUserId.HasValue)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = "Parent identity could not be verified."
+                });
+            }
+
+            int effectiveCampusId;
+            var conn = _dbContext.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync();
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var hasChildInCampus = await conn.ExecuteScalarAsync<bool>(@"
+                    SELECT EXISTS (
+                        SELECT 1 FROM ParentStudentMappings psm
+                        INNER JOIN Students s ON psm.StudentId = s.StudentId
+                        WHERE psm.ParentUserId = @ParentUserId AND s.CampusId = @CampusId AND s.IsActive = 1
+                    );", new { ParentUserId = parentUserId.Value, CampusId = campusId.Value });
+
+                if (!hasChildInCampus)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "You are not authorized to view payment settings for this campus."
+                    });
+                }
+
+                effectiveCampusId = campusId.Value;
+            }
+            else
+            {
+                var firstCampusId = await conn.ExecuteScalarAsync<int?>(@"
+                    SELECT s.CampusId FROM ParentStudentMappings psm
+                    INNER JOIN Students s ON psm.StudentId = s.StudentId
+                    WHERE psm.ParentUserId = @ParentUserId AND s.IsActive = 1
+                    LIMIT 1;", new { ParentUserId = parentUserId.Value });
+
+                if (!firstCampusId.HasValue)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        success = false,
+                        message = "No enrolled student found for parent account."
+                    });
+                }
+                effectiveCampusId = firstCampusId.Value;
+            }
+
+            var rawConfig = await _gatewayService.GetConfigAsync(effectiveCampusId, apiBaseUrl);
+            var safeConfig = SanitizeConfigForStudent(rawConfig);
+            return Ok(safeConfig);
+        }
+
+        // 3. Privileged Staff & Admin Flow (Preserve existing administrative behavior)
+        var (ok, effectiveStaffCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
             campusId,
             requireExplicitCampusId: true);
         if (!ok) return errorResult!;
 
-        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
-        var config = await _gatewayService.GetConfigAsync(effectiveCampusId, apiBaseUrl);
+        var config = await _gatewayService.GetConfigAsync(effectiveStaffCampusId, apiBaseUrl);
         return Ok(config);
     }
 
@@ -528,6 +1626,16 @@ public class FeePaymentGatewayController : ControllerBase
     {
         if (request == null)
             return BadRequest(new { success = false, message = "Request body is required." });
+        var validationContext = new System.ComponentModel.DataAnnotations.ValidationContext(request);
+        var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+        if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(request, validationContext, validationResults, validateAllProperties: true))
+        {
+            foreach (var vr in validationResults)
+            {
+                var member = vr.MemberNames.FirstOrDefault() ?? string.Empty;
+                ModelState.AddModelError(member, vr.ErrorMessage ?? "Validation error.");
+            }
+        }
 
         if (!ModelState.IsValid)
             return BadRequest(new ValidationProblemDetails(ModelState));
@@ -537,7 +1645,7 @@ public class FeePaymentGatewayController : ControllerBase
             requireExplicitCampusId: true);
         if (!ok) return errorResult!;
 
-        var apiBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var apiBaseUrl = GetApiBaseUrl();
         var result = await _gatewayService.UpdateConfigAsync(request, GetCurrentUserId(), apiBaseUrl);
 
         if (!result.Success)
@@ -562,6 +1670,121 @@ public class FeePaymentGatewayController : ControllerBase
             success = true,
             message = "Payment gateway configuration saved successfully.",
             data = result.Data
+        });
+    }
+
+    // ========================= CAMPUS BANK ACCOUNTS (MULTI-ACCOUNT) =========================
+
+    /// <summary>
+    /// Gets all receiving bank accounts configured for the specified campus.
+    /// </summary>
+    [HttpGet("bank-accounts")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> GetBankAccounts([FromQuery] int campusId)
+    {
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+            campusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var accounts = await _gatewayService.GetBankAccountsAsync(effectiveCampusId!.Value);
+        return Ok(accounts);
+    }
+
+    /// <summary>
+    /// Creates a new receiving bank account for the specified campus.
+    /// </summary>
+    [HttpPost("bank-accounts")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> CreateBankAccount([FromBody] CreateCampusBankAccountRequest request)
+    {
+        if (request == null)
+            return BadRequest(new { success = false, message = "Request body is required." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(new ValidationProblemDetails(ModelState));
+
+        var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
+            request.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        request.CampusId = effectiveCampusId!.Value;
+        var created = await _gatewayService.CreateBankAccountAsync(request, GetCurrentUserId());
+        return StatusCode(StatusCodes.Status201Created, created);
+    }
+
+    /// <summary>
+    /// Updates details of an existing campus bank account.
+    /// </summary>
+    [HttpPut("bank-accounts/{id:int}")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> UpdateBankAccount(int id, [FromBody] UpdateCampusBankAccountRequest request)
+    {
+        if (request == null)
+            return BadRequest(new { success = false, message = "Request body is required." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(new ValidationProblemDetails(ModelState));
+
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var updated = await _gatewayService.UpdateBankAccountAsync(id, request, GetCurrentUserId());
+        return Ok(updated);
+    }
+
+    /// <summary>
+    /// Deletes a campus bank account.
+    /// </summary>
+    [HttpDelete("bank-accounts/{id:int}")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> DeleteBankAccount(int id)
+    {
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var deleted = await _gatewayService.DeleteBankAccountAsync(id, GetCurrentUserId());
+        if (!deleted)
+            return BadRequest(new { success = false, message = "Failed to delete bank account." });
+
+        return Ok(new { success = true, message = "Bank account deleted successfully." });
+    }
+
+    /// <summary>
+    /// Designates a specific bank account as the active receiving account for a campus.
+    /// </summary>
+    [HttpPost("bank-accounts/{id:int}/activate")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    public async Task<IActionResult> ActivateBankAccount(int id)
+    {
+        var existing = await _gatewayService.GetBankAccountByIdAsync(id);
+        if (existing == null)
+            return NotFound(new { success = false, message = $"Bank account {id} not found." });
+
+        var (ok, _, errorResult) = await ResolveConfigCampusAccessAsync(
+            existing.CampusId,
+            requireExplicitCampusId: true);
+        if (!ok) return errorResult!;
+
+        var activated = await _gatewayService.ActivateBankAccountAsync(id, GetCurrentUserId());
+        return Ok(new
+        {
+            success = true,
+            message = "Bank account set as active receiving account.",
+            data = activated
         });
     }
 }

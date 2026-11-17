@@ -19,6 +19,42 @@ import "./AccountantMyAttendance.css";
 import { Skeleton } from "@/shared/components/Ui.jsx";
 import { getApiErrorMessage } from "@/api/apiClient.js";
 import { attendanceService } from "../../../api/attendanceService.js";
+import notificationHubService from "@/services/notificationHubService.js";
+
+const getIstTodayIsoStr = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+
+const resolveRangeForDate = (dateParam) => {
+  const target = String(dateParam || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(target)) return null;
+  const todayIso = getIstTodayIsoStr();
+  const todayUtc = new Date(`${todayIso}T00:00:00Z`);
+  const diffToMon = (todayUtc.getUTCDay() + 6) % 7;
+  const weekStart = new Date(todayUtc);
+  weekStart.setUTCDate(todayUtc.getUTCDate() - diffToMon);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
+  const weekStartIso = weekStart.toISOString().slice(0, 10);
+  const weekEndIso = weekEnd.toISOString().slice(0, 10);
+  if (target >= weekStartIso && target <= weekEndIso) return "week";
+  if (target.slice(0, 7) === todayIso.slice(0, 7)) return "month";
+  return "last_month";
+};
+
+const formatDecisionDate = (raw) => {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  const normalized = s.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+};
+
 
 const parseTimeToMinutes = (timeStr) => {
   if (!timeStr || timeStr === "--") return null;
@@ -83,6 +119,7 @@ const normalizeTodayData = (raw) => {
     regularizationType: raw.regularizationType || raw.RegularizationType || null,
     regularizationReason: raw.regularizationReason || raw.RegularizationReason || null,
     regularizationAdminRemarks: raw.regularizationAdminRemarks || raw.RegularizationAdminRemarks || null,
+    reviewedAt: raw.reviewedAt || raw.ReviewedAt || null,
     markedByAdmin: Boolean(raw.markedByAdmin ?? raw.MarkedByAdmin),
   };
 };
@@ -104,20 +141,19 @@ export default function AccountantMyAttendance() {
   const activeFilterRef = useRef("week");
   const [, setShiftUpdateTick] = useState(0);
 
-  // Periodic ticker to recalculate active shift timer every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setShiftUpdateTick((prev) => prev + 1);
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
   // Filter State: "week" | "last_week" | "month" | "last_month"
   const { params: viewParams, setParam } = useAccountantViewParams();
-  const activeFilter = ["week", "last_week", "month", "last_month"].includes(viewParams.get("range")) ? viewParams.get("range") : "week";
+  const highlightedRegId = viewParams.get("regId") || "";
+  const notifDateParam = viewParams.get("date") || "";
+  const inferredNotifRange = resolveRangeForDate(notifDateParam);
+  const rangeParam = viewParams.get("range");
+  const activeFilter = ["week", "last_week", "month", "last_month"].includes(rangeParam)
+    ? rangeParam
+    : (inferredNotifRange || (highlightedRegId ? "month" : "week"));
   const setActiveFilter = (range) => setParam("range", range);
   activeFilterRef.current = activeFilter;
   const regularizeDate = viewParams.get("regularize");
+  const highlightedRowRef = useRef(null);
   const [historyPeriod, setHistoryPeriod] = useState("");
   const [historyPage, setHistoryPage] = useState(1);
   const [monthlyMetrics, setMonthlyMetrics] = useState({});
@@ -174,6 +210,15 @@ export default function AccountantMyAttendance() {
     requestedOutTime: "",
     reason: "",
   });
+
+  // Periodic ticker runs only during active checked-in shift
+  useEffect(() => {
+    if (todayData.status !== "punched_in") return undefined;
+    const timer = setInterval(() => {
+      setShiftUpdateTick((prev) => prev + 1);
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [todayData.status]);
 
   const regForm = regDraft.rawDate === regularizeDate ? regDraft : {
     rawDate: regularizeDate || "",
@@ -256,6 +301,7 @@ export default function AccountantMyAttendance() {
             regularizationType: l.regularizationType || l.RegularizationType || null,
             regularizationReason: l.regularizationReason || l.RegularizationReason || null,
             regularizationAdminRemarks: l.regularizationAdminRemarks || l.RegularizationAdminRemarks || null,
+            reviewedAt: l.reviewedAt || l.ReviewedAt || null,
             holidayName: l.holidayName || l.HolidayName || null,
           })),
           metrics: normalizeMetrics(rawMetrics),
@@ -279,6 +325,30 @@ export default function AccountantMyAttendance() {
   useEffect(() => {
     fetchTodayStatus();
   }, [fetchTodayStatus]);
+
+  useEffect(() => {
+    const refreshAll = () => {
+      fetchTodayStatus();
+      setMetricsRefresh((c) => c + 1);
+    };
+    window.addEventListener("cms-attendance-resync", refreshAll);
+    window.addEventListener("cms-notifications-resync", refreshAll);
+    const unsubHub = notificationHubService.subscribe((payload) => {
+      const t = String(payload?.type || "").toLowerCase();
+      if (t.includes("attend") || t.includes("regulariz")) refreshAll();
+    });
+    return () => {
+      window.removeEventListener("cms-attendance-resync", refreshAll);
+      window.removeEventListener("cms-notifications-resync", refreshAll);
+      if (typeof unsubHub === "function") unsubHub();
+    };
+  }, [fetchTodayStatus]);
+
+  useEffect(() => {
+    if (highlightedRegId && !loadingHistory && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightedRegId, loadingHistory, historyData.logs]);
 
   // When filter tab changes, load corresponding history
   useEffect(() => {
@@ -517,7 +587,7 @@ export default function AccountantMyAttendance() {
                 {loadingToday ? "Loading..." : todayError || todayData.status === "unavailable" ? "Unavailable" : todayData.markedByAdmin
                   ? "Present | Marked by Admin"
                   : todayData.status === "missed_checkout"
-                  ? "Missed Checkout"
+                  ? (todayData.isLate ? "Late" : "Present")
                   : todayData.status === "punched_in"
                   ? `Checked In (${todayData.inTime || "--"})${todayData.isLate ? " (Late)" : ""}`
                   : todayData.status === "punched_out"
@@ -537,7 +607,13 @@ export default function AccountantMyAttendance() {
               <div className="acct-att-summary-col">
                 <span className="acct-att-metric-col-label">CHECK OUT</span>
                 <span className="acct-att-metric-col-val">
-                  {todayData.outTime || "--:-- --"}
+                  {todayData.status === "missed_checkout" && !todayData.isMissedCheckoutResolved ? (
+                    <span className="acct-att-checkout-missed-pill">Missed Checkout</span>
+                  ) : todayData.isMissedCheckoutResolved ? (
+                    <span className="acct-att-checkout-resolved-pill">{todayData.outTime || "Checkout Regularized"}</span>
+                  ) : (
+                    todayData.outTime || "--:-- --"
+                  )}
                 </span>
               </div>
               <div className="acct-att-summary-col">
@@ -767,17 +843,17 @@ export default function AccountantMyAttendance() {
           </div>
         </div>
 
-        <div className="cms-table-wrap">
+        <div className="cms-table-wrap" role="region" aria-label="Attendance logs" tabIndex={0}>
           <table className="acct-att-attendance-table">
             <thead>
               <tr>
-                <th style={{ width: "16%" }}>DAY</th>
-                <th style={{ width: "22%" }}>SHIFT</th>
-                <th style={{ width: "15%" }}>CHECK IN</th>
-                <th style={{ width: "15%" }}>CHECK OUT</th>
-                <th style={{ width: "12%" }}>HOURS</th>
-                <th style={{ width: "10%", textAlign: "center" }}>STATUS</th>
-                <th style={{ width: "10%", textAlign: "center" }}>ACTION</th>
+                <th scope="col" style={{ width: "16%" }}>DAY</th>
+                <th scope="col" style={{ width: "22%" }}>SHIFT</th>
+                <th scope="col" style={{ width: "15%" }}>CHECK IN</th>
+                <th scope="col" style={{ width: "15%" }}>CHECK OUT</th>
+                <th scope="col" style={{ width: "12%" }}>HOURS</th>
+                <th scope="col" style={{ width: "10%", textAlign: "center" }}>STATUS</th>
+                <th scope="col" style={{ width: "10%", textAlign: "center" }}>ACTION</th>
               </tr>
             </thead>
             <tbody>
@@ -816,10 +892,14 @@ export default function AccountantMyAttendance() {
                     const canReg = log.canRegularize ?? log.CanRegularize;
                     const regState = log.regularizationState || log.RegularizationState;
                     const holidayName = log.holidayName || log.HolidayName;
-                    const isUpcoming = status === "-" || status === "--";
+                    const displayStatus = status === "Missed Checkout" ? "Present" : status;
+                    const isUpcoming = displayStatus === "-" || displayStatus === "--";
+                    const regLower = String(regState || "").toLowerCase();
+                    const isHighlighted = Boolean(highlightedRegId && log.regularizationId && String(log.regularizationId) === String(highlightedRegId));
+                    const decisionDateStr = formatDecisionDate(log.reviewedAt);
 
                     return (
-                      <tr key={id ?? log.rawDate ?? date}>
+                      <tr key={id ?? log.rawDate ?? date} ref={isHighlighted ? highlightedRowRef : undefined} className={isHighlighted ? "acct-att-reg-row-highlight" : undefined}>
                         <td>
                           <div className="acct-att-day-name">{day}</div>
                           <div className="acct-att-day-date">{date}</div>
@@ -833,7 +913,15 @@ export default function AccountantMyAttendance() {
                           </span>
                         </td>
                         <td>
-                          <span className="acct-att-time-text">{outTime}</span>
+                          {log.isMissedCheckout && !log.isMissedCheckoutResolved ? (
+                            <span className="acct-att-checkout-missed-pill">Missed Checkout</span>
+                          ) : log.isMissedCheckoutResolved ? (
+                            <span className="acct-att-checkout-resolved-pill" title="Missed checkout regularized by Admin">
+                              {outTime && outTime !== "--" ? outTime : "Checkout Regularized"}
+                            </span>
+                          ) : (
+                            <span className="acct-att-time-text">{outTime}</span>
+                          )}
                         </td>
                         <td>
                           <span className="acct-att-hours-text">{hours}</span>
@@ -843,12 +931,9 @@ export default function AccountantMyAttendance() {
                             <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>--</span>
                           ) : (
                             <div className="acct-att-status-cell">
-                              <span className={`acct-att-status-badge ${getStatusBadgeClass(status)}`}>
-                                {status}
+                              <span className={`acct-att-status-badge ${getStatusBadgeClass(displayStatus)}`}>
+                                {displayStatus}
                               </span>
-                              {log.isMissedCheckout && !log.isMissedCheckoutResolved && (
-                                <span className="acct-att-holiday-name-subtext" style={{ color: "#c2410c", fontWeight: 600 }}>Missed Checkout</span>
-                              )}
                               {holidayName && (
                                 <span className="acct-att-holiday-name-subtext" title={holidayName}>
                                   {holidayName}
@@ -858,18 +943,24 @@ export default function AccountantMyAttendance() {
                           )}
                         </td>
                         <td style={{ textAlign: "center" }}>
-                          {regState === "pending" || regState === "approved" || regState === "rejected" ? (
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                              <span className={`acct-att-reg-badge ${regState}`} title={log.regularizationReason || ""}>
-                                {regState === "pending" ? "Pending" : regState === "approved" ? "Approved" : "Rejected"}
-                              </span>
+                          {regLower === "pending" ? (
+                            <span className="acct-att-reg-badge pending">Regularization Pending</span>
+                          ) : regLower === "approved" ? (
+                            <span className="acct-att-reg-badge approved">Approved</span>
+                          ) : regLower === "rejected" ? (
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                              <span className="acct-att-reg-badge rejected">Rejected</span>
+                              <span className="acct-att-reg-decision-by rejected">Rejected by Admin</span>
+                              {decisionDateStr && (
+                                <span style={{ fontSize: 10.5, color: "var(--cms-muted, #64748b)" }}>{decisionDateStr}</span>
+                              )}
                               {log.regularizationAdminRemarks && (
-                                <span style={{ fontSize: 10.5, color: "#64748b", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={log.regularizationAdminRemarks}>
-                                  {log.regularizationAdminRemarks}
+                                <span style={{ fontSize: 10.5, color: "#475569", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={log.regularizationAdminRemarks}>
+                                  Remarks: {log.regularizationAdminRemarks}
                                 </span>
                               )}
                             </div>
-                          ) : canReg && log.rawDate ? (
+                          ) : canReg && log.isToday && log.rawDate ? (
                             <button
                               type="button"
                               className="acct-att-btn-regularize"
@@ -927,14 +1018,16 @@ export default function AccountantMyAttendance() {
 
             <form onSubmit={handleSubmitRegularization}>
               <div className="acct-att-reg-modal-body">
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div className="acct-att-reg-form-row">
                   <div className="acct-att-reg-form-group">
-                    <label className="acct-att-reg-label">Attendance Date</label>
-                    <input type="text" className="acct-att-reg-input" value={regForm.displayDate} disabled />
+                    <label htmlFor="acct-reg-date" className="acct-att-reg-label">Attendance Date</label>
+                    <input id="acct-reg-date" name="attendanceDateDisplay" type="text" className="acct-att-reg-input" value={regForm.displayDate} disabled />
                   </div>
                   <div className="acct-att-reg-form-group">
-                    <label className="acct-att-reg-label">Request Type</label>
+                    <label htmlFor="acct-reg-type" className="acct-att-reg-label">Request Type</label>
                     <select
+                      id="acct-reg-type"
+                      name="requestType"
                       className="acct-att-reg-input"
                       value={regForm.requestType || "Late Attendance"}
                       onChange={(e) => setRegForm({ ...regForm, requestType: e.target.value })}
@@ -947,10 +1040,12 @@ export default function AccountantMyAttendance() {
                 </div>
 
                 {(regForm.requestType || "Late Attendance") !== "Missed Checkout" && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="acct-att-reg-form-row">
                     <div className="acct-att-reg-form-group">
-                      <label className="acct-att-reg-label">Requested In-Time</label>
+                      <label htmlFor="acct-reg-in" className="acct-att-reg-label">Requested In-Time</label>
                       <input
+                        id="acct-reg-in"
+                        name="requestedInTime"
                         type="time"
                         className="acct-att-reg-input"
                         value={regForm.requestedInTime}
@@ -958,8 +1053,10 @@ export default function AccountantMyAttendance() {
                       />
                     </div>
                     <div className="acct-att-reg-form-group">
-                      <label className="acct-att-reg-label">Requested Out-Time</label>
+                      <label htmlFor="acct-reg-out" className="acct-att-reg-label">Requested Out-Time</label>
                       <input
+                        id="acct-reg-out"
+                        name="requestedOutTime"
                         type="time"
                         className="acct-att-reg-input"
                         value={regForm.requestedOutTime}
@@ -970,34 +1067,22 @@ export default function AccountantMyAttendance() {
                 )}
 
                 <div className="acct-att-reg-form-group">
-                  <label className="acct-att-reg-label">Reason / Justification *</label>
+                  <label htmlFor="acct-reg-reason" className="acct-att-reg-label">Reason / Justification *</label>
                   <textarea
-                    rows={3}
+                    id="acct-reg-reason"
+                    name="reason"
+                    rows={4}
+                    minLength={5}
                     className="acct-att-reg-textarea"
-                    placeholder="Explain why punch was missed or late (e.g., On official duty, scanner glitch)..."
+                    aria-describedby="acct-reg-reason-hint"
+                    placeholder="Enter your reason for attendance regularization..."
                     value={regForm.reason}
                     onChange={(e) => setRegForm({ ...regForm, reason: e.target.value })}
                     required
                   />
-
-                  {/* Quick Reason Pills */}
-                  <div className="acct-att-reg-quick-pills">
-                    {[
-                      "Biometric Machine Failure",
-                      "Official Exam Duty (OD)",
-                      "Campus Network / Power Issue",
-                      "Permitted Late Arrival",
-                    ].map((pill) => (
-                      <button
-                        key={pill}
-                        type="button"
-                        className="acct-att-reg-quick-pill"
-                        onClick={() => setRegForm((prev) => ({ ...prev, reason: pill }))}
-                      >
-                        + {pill}
-                      </button>
-                    ))}
-                  </div>
+                  <span id="acct-reg-reason-hint" className="acct-att-reg-hint">
+                    Minimum 5 characters required ({regForm.reason.trim().length} entered)
+                  </span>
                 </div>
               </div>
 

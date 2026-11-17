@@ -21,6 +21,9 @@ public interface IPaymentGatewayService
     /// <summary>Processes Razorpay webhook events (payment.captured, order.paid, qr_code.credited).</summary>
     Task<SettlementResult> ProcessWebhookAsync(string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId = null);
 
+    /// <summary>Processes Razorpay webhook events with currency &amp; failure reason validation.</summary>
+    Task<SettlementResult> ProcessWebhookAsync(string eventType, string orderId, string paymentId, decimal amount, string? qrCodeId, string? currency, string? failureReason);
+
     /// <summary>Resolves the active webhook secret (database first, fallback appsettings) without placeholder bypasses.</summary>
     Task<string?> ResolveWebhookSecretAsync(int? campusId = null);
 
@@ -41,4 +44,24 @@ public interface IPaymentGatewayService
 
     /// <summary>Updates payment receiving account and gateway configuration with full validation.</summary>
     Task<UpdateGatewayConfigResult> UpdateConfigAsync(UpdatePaymentGatewayConfigRequest request, int? userId, string? apiBaseUrl = null);
+
+    // ========================= CAMPUS BANK ACCOUNTS (MULTI-ACCOUNT) =========================
+
+    /// <summary>Lists all configured receiving bank accounts for a campus.</summary>
+    Task<List<CampusBankAccountDto>> GetBankAccountsAsync(int campusId);
+
+    /// <summary>Gets a specific campus bank account by its ID.</summary>
+    Task<CampusBankAccountDto?> GetBankAccountByIdAsync(int id);
+
+    /// <summary>Adds a new receiving bank account for a campus.</summary>
+    Task<CampusBankAccountDto> CreateBankAccountAsync(CreateCampusBankAccountRequest request, int? userId);
+
+    /// <summary>Updates details of an existing campus bank account.</summary>
+    Task<CampusBankAccountDto> UpdateBankAccountAsync(int id, UpdateCampusBankAccountRequest request, int? userId);
+
+    /// <summary>Deletes a campus bank account.</summary>
+    Task<bool> DeleteBankAccountAsync(int id, int? userId);
+
+    /// <summary>Designates a specific bank account as the active receiving account for a campus.</summary>
+    Task<CampusBankAccountDto> ActivateBankAccountAsync(int id, int? userId);
 }
