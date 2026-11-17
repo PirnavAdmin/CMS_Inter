@@ -1,6 +1,8 @@
 import { getAuthItem, getAuthUser } from "@/modules/auth/authStorage.js";
 import { ACTIONS, PERMISSION_DEPENDENCIES } from "./rolesPermissions.constants.js";
 
+export { ACTIONS, PERMISSION_DEPENDENCIES };
+
 const normalizeCode = (value = "") =>
   String(value)
     .trim()
@@ -322,10 +324,7 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
   let normMod = normalizeModuleKey(moduleKey);
   const normAct = normalizeActionKey(actionKey);
 
-  // Baseline dashboard and profile view access for any authenticated role
-  if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
-    return true;
-  }
+
 
   // Administrators have full access
   if (hasRole("ADMIN", user)) return true;

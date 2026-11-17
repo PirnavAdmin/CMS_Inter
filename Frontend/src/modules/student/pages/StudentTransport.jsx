@@ -177,7 +177,7 @@ export default function StudentTransport() {
   const status = read(allocation, "status", "Status", "assignmentStatus", "AssignmentStatus") || "Active";
   const details = [
     ["Bus Type", busType || acLabel || "—", Bus],
-    ["Academic Level", read(allocation, "academicLevel", "AcademicLevel", "className", "ClassName") || read(profile, "academicLevel", "AcademicLevel", "className", "ClassName") || "—", UserRound],
+    ["Academic Level", read(profile, "academicLevelName", "AcademicLevelName") || "—", UserRound],
     ["Route", read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber") || "—", MapPin],
     ["Pickup Point", read(allocation, "pickupPointName", "PickupPointName", "pickupName", "PickupName") || read(profile, "pickupPointName", "PickupPointName", "pickupName", "PickupName", "pickupPoint", "PickupPoint") || "—", MapPin],
     ["Pickup Time", pickupTime, Clock3],

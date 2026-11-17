@@ -108,11 +108,7 @@ function normalizeLiveData(sources) {
     actionType: row.actionType ?? row.action ?? "",
     scope: row.scope ?? "Platform"
   }));
-  data.notifications = choose(sources.notifications, bootstrap, "notifications").map((row) => {
-    const readValue = row.isRead ?? row.read ?? row.status;
-    const isRead = readValue === true || readValue === 1 || ["true", "1", "read"].includes(String(readValue ?? "").toLowerCase());
-    return { ...row, id: idOf(row), notificationId: Number(row.notificationId ?? row.id ?? 0), date: row.date ?? row.createdAt ?? "", isRead, read: isRead ? "Read" : "Unread" };
-  });
+  data.notifications = [];
   data.readNotificationIds = data.notifications.filter((row) => row.isRead).map((row) => row.id);
   const rawSubs = list(sources.subscriptions, "subscriptions");
   data.subscriptions = rawSubs.map((row) => {
@@ -184,7 +180,7 @@ export default function SuperAdminProvider({ session, children }) {
       renewals: superAdminApi.getRenewals,
       payments: superAdminApi.getPaymentsAndInvoices,
       modules: superAdminApi.getPlanModuleMatrix,
-      notifications: superAdminApi.getNotifications,
+
       audit: superAdminApi.getAuditLogs,
       settings: superAdminApi.getSettings,
       profile: superAdminApi.getProfile,
