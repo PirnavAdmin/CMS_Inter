@@ -1,6 +1,17 @@
 // Gateway amounts use rupees; only Razorpay Checkout uses currency subunits.
 export const UTR_SUBMITTED_EVENT = "cms-fee-utr-submitted";
 
+// Numeric UPI entry only. Bank/gateway reference formats remain independent.
+export function numericUtrError(value) {
+  const reference = String(value ?? "");
+  if (!reference) return "Please enter the UTR / Transaction ID.";
+  if (!/^[0-9]+$/.test(reference)) return "Only numbers are allowed.";
+  if (reference.length > 16) return "Maximum 16 digits allowed.";
+  if (reference.length < 12) return "UTR must contain 12 or 16 digits.";
+  if (reference.length > 12 && reference.length < 16) return "Enter a complete 16-digit UTR or a valid 12-digit UTR.";
+  return "";
+}
+
 export function paymentProofType(bytes) {
   if ([137, 80, 78, 71, 13, 10, 26, 10].every((value, i) => bytes[i] === value)) return "image/png";
   if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return "image/jpeg";

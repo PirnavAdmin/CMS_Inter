@@ -9,6 +9,7 @@ import { assertFeeDetailIdentity, feeDetailWarnings, normalizeFeeBreakdown, norm
 import {
   collectionPayload,
   directQrUtrPayload,
+  numericUtrError,
   isManualQrOrder,
   UTR_SUBMITTED_EVENT,
   gatewayData,
@@ -538,6 +539,7 @@ await describe("Admin payment gateway", async () => {
       window: { setTimeout, clearTimeout },
       collectionPayload,
       directQrUtrPayload,
+      numericUtrError,
       isManualQrOrder,
       UTR_SUBMITTED_EVENT,
       validatePaymentProof,
@@ -874,6 +876,72 @@ await describe("Admin payment gateway", async () => {
     };
     return { view, state, props, fill, attach };
   }
+  test("numeric UTR validates exact lengths without changing broader bank reference rules", () => {
+    for (const [length, message] of [[11, "UTR must contain 12 or 16 digits."], [12, ""], [13, "Enter a complete 16-digit UTR or a valid 12-digit UTR."], [15, "Enter a complete 16-digit UTR or a valid 12-digit UTR."], [16, ""], [17, "Maximum 16 digits allowed."]]) {
+      assert.equal(numericUtrError("0".repeat(length)), message);
+    }
+    assert.equal(numericUtrError(""), "Please enter the UTR / Transaction ID.");
+    for (const reference of ["12345678901A", " 123456789012", "1234-56789012", "１２３４５６７８９０１２"])
+      assert.equal(numericUtrError(reference), "Only numbers are allowed.");
+    assert.equal(directQrUtrPayload(directOrder, account, utrDraft, "2026-11-09").utrNumber, "UPI-99887766");
+  });
+
+  test("numeric UTR typing and paste preserve zeros, warn at the cap, and focus invalid submissions", async () => {
+    const { view, state, fill } = await qrVerificationFixture();
+    state.footer.onDone(); view.render();
+    const input = () => view.render().find(node => node.props.id === "qr-verification-utrNumber");
+    let focused = 0;
+    input().props.ref.current = { focus() { focused++; } };
+    assert.equal(input().props.type, "text");
+    assert.equal(input().props.inputMode, "numeric");
+    assert.equal(input().props.maxLength, 16);
+    for (const length of [0, 11, 13, 15]) {
+      fill("utrNumber", "0".repeat(length));
+      view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+      assert.equal(input().props["aria-invalid"], true);
+    }
+    assert.equal(focused, 4);
+    assert.equal(state.submissions.length, 0);
+    fill("utrNumber", "001234567890");
+    assert.equal(input().props.value, "001234567890");
+    assert.equal(input().props["aria-invalid"], false);
+    assert.ok(view.render().some(node => node.props.id === "qr-verification-utr-counter" && node.props.children.includes(" — Valid 12-digit UTR")));
+    fill("utrNumber", "0012345678901234");
+    let prevented = 0;
+    input().props.onKeyDown({ key: "5", currentTarget: { value: input().props.value, selectionStart: 16, selectionEnd: 16 }, preventDefault() { prevented++; } });
+    assert.equal(prevented, 1);
+    assert.ok(view.render().some(node => node.props.id === "qr-verification-utrNumber-error" && node.props.children.includes("Maximum 16 digits allowed.")));
+    const paste = (value) => input().props.onPaste({ currentTarget: { value: input().props.value, selectionStart: 0, selectionEnd: input().props.value.length }, clipboardData: { getData: () => value }, preventDefault() { prevented++; } });
+    paste("1".repeat(17));
+    assert.equal(input().props.value, "0012345678901234");
+    paste("ABC123456789012");
+    assert.ok(view.render().some(node => node.props.id === "qr-verification-utrNumber-error" && node.props.children.includes("Only numbers are allowed.")));
+    paste("000000000000");
+    assert.equal(input().props.value, "000000000000");
+    assert.equal(input().props["aria-invalid"], false);
+    paste("0000000000000000");
+    assert.equal(input().props.value, "0000000000000000");
+    assert.equal(input().props["aria-invalid"], false);
+    fill("utrNumber", "1".repeat(17));
+    assert.equal(input().props.value.length, 16);
+    view.unmount();
+  });
+
+  test("12 and 16 digit QR references submit for pending verification without crediting a fee", async () => {
+    for (const reference of ["001234567890", "0012345678901234"]) {
+      const { view, state, fill, attach } = await qrVerificationFixture();
+      state.footer.onDone(); view.render();
+      fill("utrNumber", reference); fill("bankName", "Fixture Bank");
+      await attach();
+      view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
+      await flush();
+      assert.equal(state.submissions.length, 1);
+      assert.equal(state.submissions[0].utrNumber, reference);
+      assert.equal(state.pending, 1);
+      view.unmount();
+    }
+  });
+
   test("Direct UPI QR has no duplicate UTR controls; Done alone opens the proof verification form", async () => {
     const { view, state, fill, attach } = await qrVerificationFixture();
     let tree = view.render();
@@ -940,12 +1008,12 @@ await describe("Admin payment gateway", async () => {
     state.footer.onDone(); let tree = view.render();
     assert.ok(tree.some(node => node.type === "h3" && node.props.children.includes("Submit Payment for Verification")));
     assert.equal(tree.find(node => node.props.id === "qr-verification-amountPaid").props.value, "300");
-    fill("utrNumber", utrDraft.utrNumber); fill("bankName", utrDraft.bankName);
+    fill("utrNumber", "001234567890"); fill("bankName", utrDraft.bankName);
     await attach();
     buttonNamed(view.render(), "Back to QR").props.onClick(); tree = view.render();
     assert.ok(tree.some(node => node.type === "img"));
     state.footer.onDone(); tree = view.render();
-    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, utrDraft.utrNumber);
+    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "001234567890");
     const form = tree.find(node => node.type === "form");
     form.props.onSubmit({ preventDefault() {} }); form.props.onSubmit({ preventDefault() {} });
     assert.equal(state.submissions.length, 1);
@@ -978,7 +1046,7 @@ await describe("Admin payment gateway", async () => {
     assert.equal(pickerOpened, 1);
     assert.ok(tree.indexOf(proof) > tree.findIndex(node => node.props.id === "qr-verification-amountPaid"));
     assert.ok(tree.indexOf(proof) < tree.findIndex(node => node.props.id === "qr-verification-remarks"));
-    fill("utrNumber", utrDraft.utrNumber); fill("bankName", utrDraft.bankName);
+    fill("utrNumber", "001234567890"); fill("bankName", utrDraft.bankName);
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     assert.equal(state.submissions.length, 0);
     assert.equal(view.render().find(node => node.props.id === "qr-verification-proof").props["aria-invalid"], true);
@@ -1000,26 +1068,26 @@ await describe("Admin payment gateway", async () => {
     state.footer.onDone(); view.render();
     const submit = () => view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     submit(); assert.ok(view.render().find(node => node.props.id === "qr-verification-utrNumber").props["aria-invalid"]);
-    fill("utrNumber", "REF-998877"); submit(); assert.ok(view.render().find(node => node.props.id === "qr-verification-bankName").props["aria-invalid"]);
+    fill("utrNumber", "001234998877"); submit(); assert.ok(view.render().find(node => node.props.id === "qr-verification-bankName").props["aria-invalid"]);
     fill("bankName", "Fixture App"); fill("amountPaid", "1"); submit();
     assert.ok(view.render().find(node => node.props.id === "qr-verification-amountPaid").props["aria-invalid"]);
     assert.equal(state.submissions.length, 0); view.unmount();
   });
   test("a duplicate reference is not submitted repeatedly and the form can correct a rejected reference", async () => {
     const { view, state, fill, attach } = await qrVerificationFixture(async () => { throw { response: { status: 400, data: { message: "This UTR has already been submitted or settled." } } }; });
-    state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    state.footer.onDone(); view.render(); fill("utrNumber", "001234998877"); fill("bankName", "Fixture App");
     await attach();
     const submit = () => view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     submit(); await flush(); submit(); await flush();
     assert.equal(state.submissions.length, 1); assert.equal(state.pending, 0);
-    fill("utrNumber", "REF-998878"); submit(); await flush(); assert.equal(state.submissions.length, 2); view.unmount();
+    fill("utrNumber", "001234998878"); submit(); await flush(); assert.equal(state.submissions.length, 2); view.unmount();
   });
   test("uncertain network failures retain details and prevent automatic retries", async () => {
     const { view, state, fill, attach } = await qrVerificationFixture(async () => { throw new Error("Network Error"); });
-    state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    state.footer.onDone(); view.render(); fill("utrNumber", "001234998877"); fill("bankName", "Fixture App");
     await attach();
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }); await flush(); const tree = view.render();
-    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "REF-998877");
+    assert.equal(tree.find(node => node.props.id === "qr-verification-utrNumber").props.value, "001234998877");
     assert.ok(buttonNamed(tree, "Submit for Verification").props.disabled);
     assert.equal(state.pending, 0); assert.equal(state.submissions.length, 1); view.unmount();
   });
@@ -1032,7 +1100,7 @@ await describe("Admin payment gateway", async () => {
   test("gateway permission loss prevents a UTR submission without losing the order", async () => {
     let allowed = true;
     const { view, state, fill, attach } = await qrVerificationFixture(undefined, { authorize: () => allowed });
-    state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    state.footer.onDone(); view.render(); fill("utrNumber", "001234998877"); fill("bankName", "Fixture App");
     await attach();
     allowed = false;
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} }); await flush();
@@ -1041,7 +1109,7 @@ await describe("Admin payment gateway", async () => {
   test("closing the panel aborts an in-flight UTR submission and ignores stale completion", async () => {
     let release, signal;
     const { view, state, fill, attach } = await qrVerificationFixture((payload, currentSignal) => { signal = currentSignal; return new Promise(resolve => { release = resolve; }); });
-    state.footer.onDone(); view.render(); fill("utrNumber", "REF-998877"); fill("bankName", "Fixture App");
+    state.footer.onDone(); view.render(); fill("utrNumber", "001234998877"); fill("bankName", "Fixture App");
     await attach();
     view.render().find(node => node.type === "form").props.onSubmit({ preventDefault() {} });
     view.unmount(); assert.equal(signal.aborted, true); release({ success: true }); await flush(); assert.equal(state.pending, 0);
