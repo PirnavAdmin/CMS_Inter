@@ -1,11 +1,32 @@
 .cms-content:has(.rbac-page) {
   overflow-y: auto;
-  padding-bottom: 24px;
+  padding-top: 10px;
+  padding-bottom: 12px;
+}
+
+.cms-content:has(.rbac-page) > .cms-page-head {
+  flex: 0 0 auto;
+  align-items: center;
+  max-width: 1680px;
+  margin-inline: auto;
+  margin-bottom: 8px;
+}
+
+.cms-content:has(.rbac-page) .cms-page-heading-with-back {
+  flex: 1 1 420px;
+  width: auto;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cms-content:has(.rbac-page) > .cms-page-head p {
+  margin-top: 2px;
+  line-height: 1.35;
 }
 
 .rbac-page {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   max-width: 1680px;
   margin: 0 auto;
@@ -15,24 +36,24 @@
 .rbac-tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--cms-border);
-  overflow-x: auto;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .rbac-tabs button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 38px;
-  padding: 8px 16px;
+  min-height: 32px;
+  padding: 5px 12px;
   border: 1px solid var(--cms-border);
   border-bottom: 3px solid transparent;
   border-radius: 8px 8px 0 0;
   background: var(--cms-surface);
   color: var(--cms-text-secondary, var(--cms-text));
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
@@ -60,9 +81,7 @@
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
-  height: calc(100vh - 210px);
-  max-height: calc(100vh - 210px);
-  min-height: 520px;
+  min-height: 0;
 }
 
 .rbac-panel {
@@ -76,7 +95,7 @@
 .rbac-role-panel,
 .rbac-detail-panel,
 .rbac-assignment-panel {
-  padding: 14px;
+  padding: 12px;
 }
 
 .rbac-role-panel {
@@ -103,6 +122,7 @@
 .rbac-detail-panel {
   display: flex;
   flex-direction: column;
+  container: rbac-permissions / inline-size;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -163,7 +183,9 @@
   max-height: none;
   overflow-y: auto;
   display: grid;
-  gap: 7px;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 6px;
   padding-right: 4px;
   margin-top: 0;
 }
@@ -187,7 +209,7 @@
 .rbac-role-select {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   min-width: 0;
   min-height: 54px;
@@ -236,13 +258,32 @@
 
 .rbac-role-copy {
   display: grid;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
 }
 
 .rbac-role-copy strong {
   font-size: 13px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.rbac-role-flags:empty {
+  display: none;
+}
+
+.rbac-role-flags .rbac-staff-type-badge {
+  margin-left: 0;
+}
+
+.rbac-role-panel .rbac-role-icon {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+}
+
+.rbac-role-item-actions .rbac-user-count {
+  margin-right: 0;
 }
 
 .rbac-role-flags,
@@ -486,17 +527,19 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  flex: 0 0 auto;
+  margin-bottom: 6px;
 }
 
 .rbac-selected-role {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
 .rbac-selected-role p {
-  margin: 5px 0 0;
+  margin: 3px 0 0;
   color: var(--cms-muted);
   font-size: 13px;
   line-height: 1.45;
@@ -543,8 +586,8 @@
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 6px 10px;
   background: color-mix(in srgb, var(--cms-primary-soft) 72%, var(--cms-surface));
   border-bottom: 1px solid var(--cms-border);
 }
@@ -562,7 +605,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -570,6 +613,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .rbac-permission-title-group h3 {
@@ -592,20 +637,22 @@
 }
 
 .rbac-permission-toolbar-bottom {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .rbac-search-wrapper {
-  flex: 0 1 360px;
-  min-width: 180px;
+  min-width: 0;
 }
 
-.rbac-search-wrapper .rbac-search {
+.rbac-permission-toolbar .rbac-search-wrapper .rbac-search {
   width: 100%;
   max-width: none;
+  height: 32px;
+  margin-left: 0;
+  padding: 0 9px;
   background: var(--cms-surface);
 }
 
@@ -697,23 +744,26 @@
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
-  overflow-y: auto;
+  overflow: auto;
+  scrollbar-gutter: stable;
   display: block;
 }
 
 .rbac-matrix-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) repeat(4, 96px);
+  grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(64px, 80px));
+  min-width: 540px;
   align-items: stretch;
   border-bottom: 1px solid var(--cms-border);
 }
 
 .rbac-module-matrix .rbac-matrix-row {
-  grid-template-columns: minmax(240px, 1fr) repeat(5, 96px);
+  grid-template-columns: minmax(200px, 1fr) repeat(5, minmax(64px, 80px));
+  min-width: 600px;
 }
 
 .rbac-matrix-section-row {
-  padding: 9px 18px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--cms-border);
   background: #f6f8ef;
   color: var(--cms-muted);
@@ -742,7 +792,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 12px;
+  padding: 6px;
 }
 
 .rbac-matrix-head > span:first-child {
@@ -752,9 +802,15 @@
 .rbac-module-cell {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 6px 12px;
+}
+
+.rbac-matrix .rbac-module-icon {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
 }
 
 .rbac-module-cell strong {
@@ -764,16 +820,18 @@
 }
 
 .rbac-module-cell small {
+  display: block;
   color: var(--cms-muted);
   font-size: 11px;
+  line-height: 1.25;
 }
 
 .rbac-matrix-action-cell {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60px;
-  padding: 10px;
+  min-height: 46px;
+  padding: 6px 8px;
   border-left: 1px solid var(--cms-border);
 }
 
@@ -974,9 +1032,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 10px;
-  padding: 10px 14px;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 10px;
   border: 1px solid var(--cms-border);
   border-radius: 8px;
   background: var(--cms-surface);
@@ -989,6 +1047,15 @@
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.rbac-savebar .cms-btn {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .rbac-loading-card,
@@ -1526,8 +1593,8 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 4px 10px;
   margin-bottom: 0;
   background: var(--cms-bg);
   border: 0;
@@ -1542,13 +1609,15 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-right: 4px;
+  white-space: nowrap;
 }
 
 .rbac-preset-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 11px;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
   font-size: 12px;
   font-weight: 600;
   border-radius: 6px;
@@ -1557,6 +1626,7 @@
   color: var(--cms-text);
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .rbac-preset-pill:hover:not(:disabled) {
@@ -1620,8 +1690,10 @@
 .rbac-toolbar-filters {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 6px;
+  flex: 0 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
@@ -1669,6 +1741,47 @@
   white-space: nowrap;
   flex-shrink: 0;
   height: 35px;
+}
+
+.rbac-permission-toolbar .rbac-status-filter,
+.rbac-permission-toolbar .rbac-mark-all,
+.rbac-permission-toolbar .rbac-export-btn {
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.rbac-permission-toolbar .rbac-status-filter {
+  min-width: 0;
+  max-width: 180px;
+  flex-shrink: 1;
+}
+
+.rbac-permission-toolbar .rbac-export-btn {
+  margin-left: auto;
+}
+
+/* Fit the toolbar to the actual panel width, including with the sidebar open. */
+@container rbac-permissions (min-width: 640px) {
+  .rbac-presets-bar {
+    flex-wrap: nowrap;
+  }
+  .rbac-preset-pill {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+@container rbac-permissions (max-width: 639px) {
+  .rbac-permission-toolbar-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rbac-toolbar-filters {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
 
 .rbac-btn-add-module,
@@ -2670,31 +2783,73 @@
   color: #fff;
 }
 
-@media (max-width: 1080px) {
-  .cms-content:has(.rbac-page) {
-    overflow-y: auto;
+/* Use the space left by the dashboard heading rather than guessing its height.
+   Only the lists scroll at desktop sizes; outer scrolling remains available
+   when narrow screens or zoom require a stacked layout. */
+@media (min-width: 1181px) and (min-height: 700px) {
+  .cms-content:has(.rbac-page > .rbac-grid) {
+    display: flex;
+    flex-direction: column;
   }
+
+  .rbac-page:has(> .rbac-grid) {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .rbac-tabs {
+    flex: 0 0 auto;
+  }
+
+  .rbac-grid {
+    flex: 1 1 0;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+}
+
+@media (max-width: 1180px), (max-height: 699px) {
   .rbac-grid {
     grid-template-columns: 1fr;
     height: auto;
+    max-height: none;
   }
   .rbac-role-panel,
   .rbac-detail-panel {
     height: auto;
   }
   .rbac-role-list {
-    max-height: 340px;
+    max-height: 280px;
+  }
+  .rbac-permission-wrap {
+    flex: 0 0 auto;
+  }
+  .rbac-matrix {
+    flex: 0 1 auto;
+    max-height: 60dvh;
   }
 }
 
-@media (max-height: 620px) {
-  .cms-content:has(.rbac-page) {
-    overflow-y: auto;
+@media (max-width: 720px) {
+  .rbac-toolbar-filters {
+    flex: 1 1 100%;
+    justify-content: flex-start;
   }
-  .rbac-grid {
-    height: auto;
+  .rbac-status-filter {
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 1;
   }
-  .rbac-role-list {
-    max-height: 300px;
+  .rbac-search-wrapper {
+    flex-basis: 100%;
+  }
+  .rbac-tabs {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .rbac-savebar > div {
+    margin-left: 0;
   }
 }

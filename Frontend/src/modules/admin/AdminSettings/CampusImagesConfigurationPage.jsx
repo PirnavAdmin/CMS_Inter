@@ -61,6 +61,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
   const { selectedCampusId, selectedCampus } = useCampusContext();
   const [images, setImages] = useState({});
   const [headerDraft, setHeaderDraft] = useState(null);
+  const [resetHeaderLogo, setResetHeaderLogo] = useState(false);
   const [headerLoading, setHeaderLoading] = useState(false);
   const [headerError, setHeaderError] = useState("");
   const [headerTextTooSmall, setHeaderTextTooSmall] = useState(false);
@@ -93,6 +94,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     setLoading(true);
     setImages({});
     setHeaderDraft(null);
+    setResetHeaderLogo(false);
     setHeaderLoading(false);
     setHeaderError("");
     headerRequest.current += 1;
@@ -147,6 +149,17 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     else { setError(""); setMessage(""); }
     try {
       const src = await readCampusImageFile(file, { allowSvg: slot === "dashboardLogo" });
+      if (slot === "dashboardLogo") {
+        if (scope.current !== campus || uploadSequence.current[slot] !== sequence) return;
+        setResetHeaderLogo(false);
+        setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: src } : previous);
+        if (!getAuthToken()) throw new Error("Sign in before uploading a dashboard logo.");
+        const uploadedUrl = await landingPageApi.uploadImage(file, slot);
+        if (!uploadedUrl || /^(data:|blob:)/i.test(uploadedUrl)) throw new Error("The logo upload did not return a persistent image URL. Please upload again.");
+        if (scope.current === campus && uploadSequence.current[slot] === sequence)
+          setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: uploadedUrl } : previous);
+        return;
+      }
       let finalSrc = src;
       try {
         if (getAuthToken()) {
@@ -246,6 +259,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
     setHeaderLoading(true);
     setError("");
     setHeaderError("");
+    setResetHeaderLogo(false);
     try {
       const saved = await readCampusImages(selectedCampusId);
       if (scope.current === activeScope && headerRequest.current === request)
@@ -281,6 +295,17 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
   }, [headerDraft, cancelHeader]);
   const saveHeader = async () => {
     if (saveLock.current || uploading || !headerDraft || !selectedCampusId) return;
+    // The repository's current backend has no resetDashboardLogo contract.
+    // Do not send a reset that it would silently ignore or partially save.
+    if (resetHeaderLogo) {
+      setHeaderError("Restore Default cannot be saved yet: the backend must support resetDashboardLogo. Your draft has been kept; no settings were saved.");
+      return;
+    }
+    if (!getAuthToken()) { setHeaderError("Sign in before saving header configuration."); return; }
+    if (/^(data:|blob:)/i.test(headerDraft.dashboardLogo || "")) {
+      setHeaderError("This logo is only a local preview. Upload it successfully before saving.");
+      return;
+    }
     if (!headerDraft.dashboardTitle.trim()) { setHeaderError("Enter the First Line Text before saving."); return; }
     const activeScope = pageScope;
     const campus = selectedCampusId;
@@ -294,18 +319,19 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       const next = { ...latest, ...brand };
       if (logo) next.dashboardLogo = logo;
       else delete next.dashboardLogo;
-      await saveCampusImages(campus, next);
+      const savedConfiguration = await saveCampusImages(campus, next, { requirePersisted: true });
       if (scope.current === activeScope) {
-        setText((previous) => ({ ...previous, ...brand }));
+        setText((previous) => ({ ...previous, ...getHeaderBrand(savedConfiguration) }));
         setImages((previous) => {
           const saved = { ...previous };
-          if (logo) saved.dashboardLogo = logo;
+          if (savedConfiguration.dashboardLogo) saved.dashboardLogo = savedConfiguration.dashboardLogo;
           else delete saved.dashboardLogo;
           return saved;
         });
         setHeaderDraft(null);
         headerRequest.current += 1;
-        setMessage("Header configuration saved in this browser.");
+        setResetHeaderLogo(false);
+        setMessage("Header configuration saved successfully.");
         queueMicrotask(() => configureButton.current?.focus());
       }
     } catch (failure) {
@@ -359,7 +385,10 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
                     title={isHeader && isHeaderLogoDefault(cardText) && !uploading ? "Already using the default logo and logo size." : undefined}
                     onClick={() => {
                       uploadSequence.current[slot] = (uploadSequence.current[slot] || 0) + 1;
-                      if (isHeader) setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: headerDefaults.dashboardLogo, dashboardLogoSize: headerDefaults.dashboardLogoSize } : previous);
+                      if (isHeader) {
+                        setResetHeaderLogo(true);
+                        setHeaderDraft((previous) => previous ? { ...previous, dashboardLogo: headerDefaults.dashboardLogo, dashboardLogoSize: headerDefaults.dashboardLogoSize } : previous);
+                      }
                       else setImages((previous) => {
                         const next = { ...previous };
                         delete next[slot];

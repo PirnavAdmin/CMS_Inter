@@ -223,11 +223,22 @@ function examCellShieldPlugin(apiBaseUrl) {
 
           // Handle uploaded files (photos/avatars): fallback cleanly to 200 SVG avatar if upstream is 404
           if (isUploads) {
+            // College branding must fail as an image, never as a valid profile avatar.
+            // Keep the existing fallback for unrelated profile-photo uploads.
+            const isBrandingUpload = /^\/uploads\/landing\//i.test(urlStr)
+              || /[?&]branding=dashboard-v2(?:&|$)/.test(urlStr);
             if (upstreamRes && upstreamRes.status >= 200 && upstreamRes.status < 400) {
               const arrayBuf = await upstreamRes.arrayBuffer();
               const contentType = upstreamRes.headers.get("content-type") || "image/jpeg";
               res.writeHead(upstreamRes.status, { "Content-Type": contentType });
               return res.end(Buffer.from(arrayBuf));
+            }
+            if (isBrandingUpload) {
+              res.writeHead(upstreamRes?.status >= 400 ? upstreamRes.status : 502, {
+                "Content-Type": "text/plain",
+                "Cache-Control": "no-store",
+              });
+              return res.end("Branding image is unavailable.");
             }
             res.writeHead(200, {
               "Content-Type": "image/svg+xml",
