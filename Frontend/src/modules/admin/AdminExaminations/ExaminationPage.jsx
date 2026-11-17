@@ -41,7 +41,6 @@ import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLa
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../../../shared/components/Ui.jsx";
 import "./ExaminationPage.css";
-import { enrichExaminations } from "@/modules/exam-cell/services/examCellMasterData.js";
 
 const PAGE_SIZE = 5;
 
@@ -3762,8 +3761,7 @@ export default function ExaminationPage() {
         }
       }
 
-      const enrichedRaw = enrichExaminations(raw);
-      const normalized = enrichedRaw.map((record) => normalizeExamRecord(record));
+      const normalized = raw.map((record) => normalizeExamRecord(record));
 
       const effCampusStr = effCampus ? normalizeId(effCampus) : "";
       const effBoardStr = effBoard ? normalizeId(effBoard) : "";

@@ -8,12 +8,10 @@ import {
   Clock,
   AlertCircle,
   XCircle,
-  RotateCw,
   Building2,
   CreditCard,
   QrCode,
   Landmark,
-  MoreHorizontal,
   ChevronDown,
   X,
   Printer,
@@ -24,6 +22,7 @@ import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import "./PaymentsInvoicesPage.css";
+import { downloadBillingDocument, printBillingDocument } from "./billingDocument.js";
 
 // SVG Illustration for Invoices tab (Invoice document + Rupee + Coins)
 function InvoicesHeaderIllustration() {
@@ -99,6 +98,15 @@ export default function PaymentsInvoicesPage() {
   // Modal States
   const [viewingInvoice, setViewingInvoice] = useState(null);
   const [viewingPayment, setViewingPayment] = useState(null);
+  const [documentBusy, setDocumentBusy] = useState(false);
+  const [documentError, setDocumentError] = useState("");
+  const downloadDocument = async (record, kind) => {
+    if (documentBusy) return;
+    setDocumentBusy(true); setDocumentError("");
+    try { await downloadBillingDocument(record, kind); }
+    catch { setDocumentError("The document could not be downloaded. Please try again."); }
+    finally { setDocumentBusy(false); }
+  };
 
   // College List from DB / Context
   const collegesList = useMemo(() => {
@@ -615,24 +623,6 @@ export default function PaymentsInvoicesPage() {
                             >
                               <Eye size={13} />
                             </button>
-                            <button
-                              type="button"
-                              className="pip-action-icon-btn"
-                              title="Download PDF"
-                              onClick={() => {
-                                setViewingInvoice(row);
-                              }}
-                            >
-                              <Download size={13} />
-                            </button>
-                            <button
-                              type="button"
-                              className="pip-action-icon-btn"
-                              title="More Options"
-                              onClick={() => setViewingInvoice(row)}
-                            >
-                              <MoreHorizontal size={13} />
-                            </button>
                           </div>
                         </td>
                       </tr>
@@ -717,33 +707,6 @@ export default function PaymentsInvoicesPage() {
                             >
                               <Eye size={13} />
                             </button>
-                            <button
-                              type="button"
-                              className="pip-action-icon-btn"
-                              title="Download Receipt"
-                              onClick={() => setViewingPayment(row)}
-                            >
-                              <Download size={13} />
-                            </button>
-                            {row.status === "Failed" ? (
-                              <button
-                                type="button"
-                                className="pip-action-icon-btn"
-                                title="Retry Transaction"
-                                onClick={() => alert(`Retry initiated for transaction ${row.txnId}`)}
-                              >
-                                <RotateCw size={13} />
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="pip-action-icon-btn"
-                                title="Transaction Details"
-                                onClick={() => setViewingPayment(row)}
-                              >
-                                <MoreHorizontal size={13} />
-                              </button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -836,11 +799,12 @@ export default function PaymentsInvoicesPage() {
               </div>
             </div>
 
+            {documentError && <p role="alert">{documentError}</p>}
             <div className="pip-modal-footer">
               <button
                 type="button"
                 className="pip-btn-reset"
-                onClick={() => window.print()}
+                onClick={() => printBillingDocument(viewingInvoice, "invoice")}
               >
                 <Printer size={13} />
                 <span>Print</span>
@@ -848,10 +812,7 @@ export default function PaymentsInvoicesPage() {
               <button
                 type="button"
                 className="pip-btn-export"
-                onClick={() => {
-                  alert(`Invoice ${viewingInvoice.invoiceNo} downloaded successfully.`);
-                  setViewingInvoice(null);
-                }}
+                onClick={() => downloadDocument(viewingInvoice, "invoice")} disabled={documentBusy}
               >
                 <Download size={13} />
                 <span>Download Invoice PDF</span>
@@ -919,14 +880,12 @@ export default function PaymentsInvoicesPage() {
               </div>
             </div>
 
+            {documentError && <p role="alert">{documentError}</p>}
             <div className="pip-modal-footer">
-              <button
+              <button type="button" className="pip-btn-reset" onClick={() => printBillingDocument(viewingPayment, "receipt")}><Printer size={13} /><span>Print</span></button>              <button
                 type="button"
                 className="pip-btn-export"
-                onClick={() => {
-                  alert(`Receipt ${viewingPayment.txnId} downloaded successfully.`);
-                  setViewingPayment(null);
-                }}
+                onClick={() => downloadDocument(viewingPayment, "receipt")} disabled={documentBusy}
               >
                 <Download size={13} />
                 <span>Download Receipt</span>

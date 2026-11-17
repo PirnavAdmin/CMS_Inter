@@ -89,7 +89,7 @@ function AccessPageContent({ section = "users" }) {
           <span className="sa-eyebrow">Platform Access Control</span>
           <h1>
             <span className="sa-page-title-icon">
-              <ThreeDIcon name={accessModule ? "roles-permissions" : "total-students"} size={27}/>
+              <ThreeDIcon name={section === "modules" ? "subjects" : accessModule ? "roles-permissions" : "total-students"} size={27}/>
             </span>
             {title}
           </h1>
