@@ -362,7 +362,7 @@ export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULE
   }
   const keys = ROLE_SIDEBAR_MODULE_KEYS[normalizeRoleCode(roleCode)];
   if (keys === null) return catalog;
-  if (!keys) return [];
+  if (!keys) return catalog;
   const order = new Map(keys.map((key, index) => [key, index]));
   return catalog
     .filter((module) => order.has(module.id))
