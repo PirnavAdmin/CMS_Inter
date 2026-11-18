@@ -582,25 +582,56 @@ namespace CollegeManagement.API.Services.Implementations
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
-            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
-            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
-            staff.IsDriver = isDriverRole;
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
-            {
-                staff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
-            }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
-            {
-                staff.DrivingLicenseNumber = licVal.ToString()?.Trim();
-            }
+            // Transport Driver Conditional Logic:
+            // Driver's License Number and Expiry Date apply ONLY when Department is Transport AND Designation is Driver
+            bool isTransportDept = (dto.Department?.IndexOf("transport", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                  (dto.DepartmentId.HasValue && dto.DepartmentId.Value == 79);
+            bool isDriverDesignation = (dto.Designation?.IndexOf("driver", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                      string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+            bool isDriver = isTransportDept && isDriverDesignation;
 
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            staff.IsDriver = isDriver;
+            if (isDriver)
             {
-                staff.DrivingLicenseExpiryDate = expParsed;
+                string? dlNumber = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                    ? dto.DrivingLicenseNumber.Trim()
+                    : (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null
+                        ? licVal.ToString()?.Trim()
+                        : null);
+
+                if (!string.IsNullOrWhiteSpace(dlNumber))
+                {
+                    // Check Uniqueness
+                    var existingWithDl = await _staffRepository.GetByDrivingLicenseAsync(dlNumber);
+                    if (existingWithDl != null)
+                    {
+                        var staffFullName = $"{existingWithDl.FirstName} {existingWithDl.LastName}".Trim();
+                        throw new ValidationException($"Driving License Number already registered to another staff member: {existingWithDl.EmployeeId} ({staffFullName})");
+                    }
+                    staff.DrivingLicenseNumber = dlNumber;
+                }
+                else
+                {
+                    staff.DrivingLicenseNumber = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+                {
+                    staff.DrivingLicenseExpiryDate = expParsed;
+                }
+                else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+                {
+                    staff.DrivingLicenseExpiryDate = expParsed2;
+                }
+                else
+                {
+                    staff.DrivingLicenseExpiryDate = null;
+                }
             }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            else
             {
-                staff.DrivingLicenseExpiryDate = expParsed2;
+                staff.DrivingLicenseNumber = null;
+                staff.DrivingLicenseExpiryDate = null;
             }
 
             // ==================================================================================
@@ -1020,23 +1051,58 @@ namespace CollegeManagement.API.Services.Implementations
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
 
-            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
-            {
-                existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
-            }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
-            {
-                existingStaff.DrivingLicenseNumber = licVal.ToString()?.Trim();
-            }
+            // Transport Driver Conditional Logic (Update):
+            var effectiveDept = dto.Department ?? existingStaff.Department;
+            var effectiveDesig = dto.Designation ?? existingStaff.Designation;
+            bool isUpdTransport = (effectiveDept?.IndexOf("transport", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                  (dto.DepartmentId.HasValue && dto.DepartmentId.Value == 79) ||
+                                  (existingStaff.DepartmentId.HasValue && existingStaff.DepartmentId.Value == 79);
+            bool isUpdDriver = (effectiveDesig?.IndexOf("driver", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                               string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+            bool isDriverFinal = isUpdTransport && isUpdDriver;
 
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            existingStaff.IsDriver = isDriverFinal;
+            if (isDriverFinal)
             {
-                existingStaff.DrivingLicenseExpiryDate = expParsed;
+                string? dlNumber = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                    ? dto.DrivingLicenseNumber.Trim()
+                    : (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null
+                        ? licVal.ToString()?.Trim()
+                        : null);
+
+                if (!string.IsNullOrWhiteSpace(dlNumber))
+                {
+                    // Check Uniqueness excluding self
+                    var existingWithDl = await _staffRepository.GetByDrivingLicenseAsync(dlNumber, existingStaff.Id);
+                    if (existingWithDl != null)
+                    {
+                        var staffFullName = $"{existingWithDl.FirstName} {existingWithDl.LastName}".Trim();
+                        throw new ValidationException($"Driving License Number already registered to another staff member: {existingWithDl.EmployeeId} ({staffFullName})");
+                    }
+                    existingStaff.DrivingLicenseNumber = dlNumber;
+                }
+                else
+                {
+                    existingStaff.DrivingLicenseNumber = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+                {
+                    existingStaff.DrivingLicenseExpiryDate = expParsed;
+                }
+                else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+                {
+                    existingStaff.DrivingLicenseExpiryDate = expParsed2;
+                }
+                else
+                {
+                    existingStaff.DrivingLicenseExpiryDate = null;
+                }
             }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            else
             {
-                existingStaff.DrivingLicenseExpiryDate = expParsed2;
+                existingStaff.DrivingLicenseNumber = null;
+                existingStaff.DrivingLicenseExpiryDate = null;
             }
 
             // Role resolution & validation for update
@@ -1403,11 +1469,13 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            var percentage = CalculateCompletionPercentage(staff);
-            if (percentage < 50)
+            var missingFields = GetMissingMandatoryFields(staff);
+            if (missingFields.Count > 0)
             {
-                throw new ValidationException($"Profile completion must be at least 50% to submit. Current completion is {percentage}%.");
+                throw new ValidationException($"All mandatory profile fields must be completed before submission. Missing fields: {string.Join(", ", missingFields)}");
             }
+
+            var percentage = CalculateCompletionPercentage(staff);
 
             // Offer letter generation & email dispatch is strictly one-time per staff member.
             // Subsequent profile updates after onboarding completion preserve Completed/Approved status without regenerating or re-sending.
@@ -2441,14 +2509,42 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var profile = await GetStaffProfileFullAsync(id);
             var staff = await _staffRepository.GetByIdAsync(id);
+
+            // 1. Check if permanent file already exists on server disk
+            string? existingPath = staff?.OfferLetterPath;
+            if (!string.IsNullOrWhiteSpace(existingPath))
+            {
+                var checkStorageRoot = _configuration?["OfferLetterStorage:StorageRoot"]
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "PrivateStorage", "OfferLetters");
+                var candidatePerm = Path.Combine(checkStorageRoot, existingPath.TrimStart('/', '\\'));
+                var checkWebRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var candidateWeb = Path.Combine(checkWebRoot, existingPath.TrimStart('/', '\\'));
+
+                if (File.Exists(candidatePerm))
+                {
+                    var fileBytes = await File.ReadAllBytesAsync(candidatePerm);
+                    return (fileBytes, "application/pdf", Path.GetFileName(candidatePerm));
+                }
+                if (File.Exists(candidateWeb))
+                {
+                    var fileBytes = await File.ReadAllBytesAsync(candidateWeb);
+                    return (fileBytes, "application/pdf", Path.GetFileName(candidateWeb));
+                }
+            }
+
             if (staff != null)
             {
                 await EnsureStaffPayrollStructureProvisionedAsync(staff);
             }
             var payroll = await GetStaffPayrollDetailsAsync(id);
 
-            var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
-            string offerNo = numRes?.GeneratedNumber ?? $"PC-OL/{DateTime.UtcNow.Year}/{profile.EmployeeId}";
+            // 2. Reuse already allocated OfferLetterNumber, or generate atomically only if not yet assigned
+            string offerNo = staff?.OfferLetterNumber ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(offerNo))
+            {
+                var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
+                offerNo = numRes?.GeneratedNumber ?? $"PC-OL/{DateTime.UtcNow.Year}/{profile.EmployeeId}";
+            }
 
             string staffFullName = string.IsNullOrWhiteSpace(profile.MiddleName)
                 ? $"{profile.FirstName} {profile.LastName}".Trim()
@@ -2654,27 +2750,35 @@ namespace CollegeManagement.API.Services.Implementations
             var doc = new CollegeManagement.API.Services.Exports.StaffOfferLetterDocument(model);
             byte[] bytes = doc.GeneratePdf();
 
-            // Persist generated Offer Letter PDF to local storage (under uploads/offer-letters/)
-            // and save the local path in database, identical to staff photo storage
-            var rootPath = _environment.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            var uploadDir = Path.Combine(rootPath, "uploads", "offer-letters");
-            if (!Directory.Exists(uploadDir))
-            {
-                Directory.CreateDirectory(uploadDir);
-            }
+            // Persist generated Offer Letter PDF to server permanent storage
+            var storageRoot = _configuration?["OfferLetterStorage:StorageRoot"]
+                ?? Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "PrivateStorage", "OfferLetters");
+            var now = DateTime.UtcNow;
+            var relativeFolder = Path.Combine("offer-letters", now.ToString("yyyy"), now.ToString("MM"));
+            var permFolder = Path.Combine(storageRoot, relativeFolder);
+            if (!Directory.Exists(permFolder)) Directory.CreateDirectory(permFolder);
 
             var safeEmpId = string.Concat((profile.EmployeeId ?? $"staff_{id}").Split(Path.GetInvalidFileNameChars()));
             var fileName = $"OfferLetter_{safeEmpId}_{id}.pdf";
-            var physicalPath = Path.Combine(uploadDir, fileName);
+            var permPhysicalPath = Path.Combine(permFolder, fileName);
+            var relativePath = Path.Combine(relativeFolder, fileName).Replace('\\', '/');
+
+            // Also mirror to webroot for public download compatibility
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var webFolder = Path.Combine(webRoot, "uploads", "offer-letters");
+            if (!Directory.Exists(webFolder)) Directory.CreateDirectory(webFolder);
+            var webPhysicalPath = Path.Combine(webFolder, fileName);
 
             try
             {
-                await File.WriteAllBytesAsync(physicalPath, bytes);
-                var relativePath = $"/uploads/offer-letters/{fileName}";
-                await _staffRepository.UpdateOfferLetterPathAsync(id, relativePath);
+                await File.WriteAllBytesAsync(permPhysicalPath, bytes);
+                try { File.Copy(permPhysicalPath, webPhysicalPath, overwrite: true); } catch { }
+
+                await _staffRepository.UpdateOfferLetterInfoAsync(id, relativePath, offerNo);
                 if (staff != null)
                 {
                     staff.OfferLetterPath = relativePath;
+                    staff.OfferLetterNumber = offerNo;
                 }
             }
             catch (Exception ex)
@@ -3698,76 +3802,57 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
-        private static int CalculateCompletionPercentage(Staff staff)
+        public static List<string> GetMissingMandatoryFields(Staff staff)
         {
-            int score = 0;
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(staff.FirstName)) missing.Add("First Name");
+            if (string.IsNullOrWhiteSpace(staff.LastName)) missing.Add("Last Name");
+            if (string.IsNullOrWhiteSpace(staff.Gender)) missing.Add("Gender");
+            if (staff.DateOfBirth == default || staff.DateOfBirth == DateTime.MinValue || staff.DateOfBirth.Year < 1920)
+                missing.Add("Date of Birth");
+            if (string.IsNullOrWhiteSpace(staff.Mobile)) missing.Add("Mobile Number");
+            if (string.IsNullOrWhiteSpace(staff.Email)) missing.Add("Email Address");
+            if (string.IsNullOrWhiteSpace(staff.Aadhaar) && string.IsNullOrWhiteSpace(staff.PanNumber) && string.IsNullOrWhiteSpace(staff.FatherOrHusbandName))
+                missing.Add("Aadhaar / National ID");
 
-            // 1. Basic & Personal Details (20%)
-            if (!string.IsNullOrWhiteSpace(staff.FirstName) && !string.IsNullOrWhiteSpace(staff.LastName) && !string.IsNullOrWhiteSpace(staff.Gender) && staff.DateOfBirth > DateTime.MinValue)
-            {
-                score += 15;
-            }
-            if (!string.IsNullOrWhiteSpace(staff.Aadhaar) || !string.IsNullOrWhiteSpace(staff.PanNumber) || !string.IsNullOrWhiteSpace(staff.FatherOrHusbandName))
-            {
-                score += 5;
-            }
+            if (string.IsNullOrWhiteSpace(staff.CurrentAddress) && string.IsNullOrWhiteSpace(staff.PermanentAddress))
+                missing.Add("Address (Current / House / Street)");
+            if (string.IsNullOrWhiteSpace(staff.City)) missing.Add("City");
+            if (string.IsNullOrWhiteSpace(staff.State)) missing.Add("State");
+            if (string.IsNullOrWhiteSpace(staff.Pincode)) missing.Add("Pincode");
 
-            // 2. Contact & Address (15%)
-            if (!string.IsNullOrWhiteSpace(staff.CurrentAddress) || !string.IsNullOrWhiteSpace(staff.PermanentAddress))
-            {
-                score += 8;
-            }
-            if (!string.IsNullOrWhiteSpace(staff.City) && !string.IsNullOrWhiteSpace(staff.State) && !string.IsNullOrWhiteSpace(staff.Pincode))
-            {
-                score += 7;
-            }
-
-            // 3. Educational Qualifications (15%)
             var edu = DeserializeList<StaffEducationItem>(staff.EducationJson);
-            if (edu.Count > 0 || !string.IsNullOrWhiteSpace(staff.Qualification))
-            {
-                score += 15;
-            }
+            if (edu.Count == 0 && string.IsNullOrWhiteSpace(staff.Qualification))
+                missing.Add("Educational Qualifications");
 
-            // 4. Experience (10%)
-            var exp = DeserializeList<StaffExperienceItem>(staff.ExperienceJson);
-            if (exp.Count > 0 || staff.Experience > 0)
-            {
-                score += 10;
-            }
-            else
-            {
-                score += 10; // Treat 0 exp as Fresher filled
-            }
+            var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
+            if (bank == null || string.IsNullOrWhiteSpace(bank.AccountNumber) || string.IsNullOrWhiteSpace(bank.IfscCode))
+                missing.Add("Bank Details (Account Number & IFSC)");
 
-            // 5. Documents Upload (15%)
+            var emergency = DeserializeObject<StaffEmergencyContact>(staff.EmergencyContactJson);
+            if (emergency == null || string.IsNullOrWhiteSpace(emergency.ContactName) || string.IsNullOrWhiteSpace(emergency.Mobile))
+                missing.Add("Emergency Contact");
+
             var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson)
                 .Where(d => d != null && (!string.IsNullOrWhiteSpace(d.type) || !string.IsNullOrWhiteSpace(d.name) || !string.IsNullOrWhiteSpace(d.url)))
                 .ToList();
-            if (docs.Count >= 2)
-            {
-                score += 15;
-            }
-            else if (docs.Count == 1)
-            {
-                score += 8;
-            }
+            if (docs.Count == 0 && string.IsNullOrWhiteSpace(staff.PhotoPath))
+                missing.Add("Identity Document / Photo");
 
-            // 6. Bank Details (15%)
-            var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
-            if (bank != null && !string.IsNullOrWhiteSpace(bank.AccountNumber) && !string.IsNullOrWhiteSpace(bank.IfscCode))
-            {
-                score += 15;
-            }
+            if (staff.IsDriver && string.IsNullOrWhiteSpace(staff.DrivingLicenseNumber))
+                missing.Add("Driving License Number");
 
-            // 7. Emergency Contact (10%)
-            var emergency = DeserializeObject<StaffEmergencyContact>(staff.EmergencyContactJson);
-            if (emergency != null && !string.IsNullOrWhiteSpace(emergency.ContactName) && !string.IsNullOrWhiteSpace(emergency.Mobile))
-            {
-                score += 10;
-            }
+            return missing;
+        }
 
-            return Math.Min(100, Math.Max(30, score));
+        private static int CalculateCompletionPercentage(Staff staff)
+        {
+            var missing = GetMissingMandatoryFields(staff);
+            const int totalChecklist = 13;
+            int completed = Math.Max(0, totalChecklist - missing.Count);
+            if (missing.Count == 0) return 100;
+            int pct = (int)Math.Round((double)completed / totalChecklist * 100.0);
+            return Math.Min(95, Math.Max(10, pct));
         }
 
         public async Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id)

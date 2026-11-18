@@ -31,6 +31,9 @@ import {
 import { useFaculty } from "../FacultyContext.jsx";
 import {
   calculateStaffProfileCompletion,
+  getMissingMandatoryFields,
+  isAllMandatoryFieldsComplete,
+  MANDATORY_PROFILE_FIELDS,
   isStaffPortalUnlocked,
   FACULTY_INDIAN_BANKS,
   getBankFieldConstraints,
@@ -1510,13 +1513,14 @@ export default function FacultyProfile() {
   };
 
   const handleFinalProfileSave = async () => {
-    // 50% Minimum Completion Requirement
-    if (profileCompletion < 50) {
+    // Mandatory Profile Fields Requirement (Replaces deprecated 50% gate)
+    const missingMandatory = getMissingMandatoryFields(profileData);
+    if (missingMandatory.length > 0) {
       setShowIncompleteModal(true);
       notify(
-        `Minimum 50% profile completion required for final submission. Current completion: ${profileCompletion}%.`,
+        `All mandatory profile fields must be completed before submission (${missingMandatory.length} remaining).`,
         "error",
-        "Submission Incomplete"
+        "Mandatory Fields Incomplete"
       );
       return;
     }
@@ -4340,132 +4344,179 @@ export default function FacultyProfile() {
         </div>
       )}
 
-      {/* Profile Incomplete (Under 50%) Guidance Modal */}
-      {showIncompleteModal && (
-        <div
-          className="sp-modal-overlay"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 99999,
-            padding: "20px"
-          }}
-          onClick={() => setShowIncompleteModal(false)}
-        >
+      {/* Mandatory Profile Fields Guidance Modal */}
+      {showIncompleteModal && (() => {
+        const missing = getMissingMandatoryFields(profileData);
+        const totalMandatory = MANDATORY_PROFILE_FIELDS.length;
+        const completedCount = Math.max(0, totalMandatory - missing.length);
+
+        return (
           <div
+            className="sp-modal-overlay"
             style={{
-              background: "#ffffff",
-              borderRadius: "16px",
-              padding: "32px 28px",
-              maxWidth: "460px",
-              width: "100%",
-              textAlign: "center",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-              animation: "fadeIn 0.2s ease-out"
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(15, 23, 42, 0.6)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 99999,
+              padding: "20px"
             }}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setShowIncompleteModal(false)}
           >
             <div
               style={{
-                width: "56px",
-                height: "56px",
-                borderRadius: "50%",
-                background: "#fef3c7",
-                color: "#d97706",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                margin: "0 auto 16px"
+                background: "#ffffff",
+                borderRadius: "16px",
+                padding: "28px 24px",
+                maxWidth: "500px",
+                width: "100%",
+                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                animation: "fadeIn 0.2s ease-out"
               }}
+              onClick={(e) => e.stopPropagation()}
             >
-              <AlertTriangle size={28} strokeWidth={2.2} />
-            </div>
-
-            <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>
-              Submission Incomplete
-            </h3>
-
-            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "#64748b", lineHeight: 1.5 }}>
-              Institutional onboarding bylaws require a minimum of <strong>50% profile completion</strong> before official submission and Offer Letter generation.
-            </p>
-
-            {/* Visual Progress Bar Card */}
-            <div
-              style={{
-                background: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: "10px",
-                padding: "16px",
-                marginBottom: "22px",
-                textAlign: "left"
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>Current Progress</span>
-                <span style={{
-                  fontSize: "13px",
-                  fontWeight: 800,
-                  color: profileCompletion >= 50 ? "var(--cms-primary, #355e3b)" : "#d97706"
-                }}>
-                  {profileCompletion}% / 50%
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden", position: "relative" }}>
-                <div
-                  style={{
-                    width: `${Math.min(profileCompletion, 100)}%`,
-                    height: "100%",
-                    background: profileCompletion >= 50 ? "var(--cms-primary, #355e3b)" : "#f59e0b",
-                    borderRadius: "4px",
-                    transition: "width 0.3s ease"
-                  }}
-                />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#94a3b8", marginTop: "4px" }}>
-                <span>0%</span>
-                <span style={{ fontWeight: 700, color: "#d97706" }}>▲ 50% Required</span>
-                <span>100%</span>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                type="button"
-                className="cms-btn cms-btn-ghost"
-                style={{ flex: 1, padding: "10px", fontSize: "13px" }}
-                onClick={() => setShowIncompleteModal(false)}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary"
+              <div
                 style={{
-                  flex: 2,
-                  padding: "10px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  borderRadius: "8px"
-                }}
-                onClick={() => {
-                  setShowIncompleteModal(false);
-                  setProfileStep(2); // Jump to Bank Details
+                  width: "56px",
+                  height: "56px",
+                  borderRadius: "50%",
+                  background: "#fef3c7",
+                  color: "#d97706",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px"
                 }}
               >
-                Complete Details &rarr;
-              </button>
+                <AlertTriangle size={28} strokeWidth={2.2} />
+              </div>
+
+              <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: 800, color: "#0f172a", textAlign: "center" }}>
+                Mandatory Fields Required
+              </h3>
+
+              <p style={{ margin: "0 0 16px", fontSize: "13px", color: "#64748b", lineHeight: 1.5, textAlign: "center" }}>
+                Institutional onboarding policy requires all mandatory profile fields to be completed before official submission, Offer Letter generation, and portal activation.
+              </p>
+
+              {/* Progress Summary */}
+              <div
+                style={{
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "10px",
+                  padding: "14px 16px",
+                  marginBottom: "16px"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>Mandatory Fields Progress</span>
+                  <span style={{ fontSize: "12px", fontWeight: 800, color: missing.length === 0 ? "var(--cms-primary, #355e3b)" : "#d97706" }}>
+                    {completedCount} / {totalMandatory} Completed ({profileCompletion}%)
+                  </span>
+                </div>
+                <div style={{ width: "100%", height: "8px", background: "#e2e8f0", borderRadius: "4px", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${Math.min(profileCompletion, 100)}%`,
+                      height: "100%",
+                      background: missing.length === 0 ? "var(--cms-primary, #355e3b)" : "#f59e0b",
+                      borderRadius: "4px",
+                      transition: "width 0.3s ease"
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Missing Fields Checklist */}
+              {missing.length > 0 && (
+                <div style={{ marginBottom: "20px", maxHeight: "190px", overflowY: "auto", border: "1px solid #f1f5f9", borderRadius: "8px", padding: "8px 12px", background: "#fff" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: "6px", letterSpacing: "0.5px" }}>
+                    Remaining Required Fields ({missing.length}):
+                  </div>
+                  <div style={{ display: "grid", gap: "6px" }}>
+                    {missing.map((item) => (
+                      <div
+                        key={item.key}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          fontSize: "12px",
+                          padding: "6px 10px",
+                          background: "#fffbeb",
+                          borderRadius: "6px",
+                          border: "1px solid #fef3c7"
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, color: "#92400e" }}>
+                          • {item.label}
+                        </span>
+                        <button
+                          type="button"
+                          className="cms-btn"
+                          style={{
+                            fontSize: "11px",
+                            padding: "2px 8px",
+                            height: "auto",
+                            background: "var(--cms-primary, #355e3b)",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: "pointer"
+                          }}
+                          onClick={() => {
+                            setShowIncompleteModal(false);
+                            setProfileStep(item.step);
+                          }}
+                        >
+                          Step {item.step} &rarr;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ flex: 1, padding: "10px", fontSize: "13px" }}
+                  onClick={() => setShowIncompleteModal(false)}
+                >
+                  Close
+                </button>
+                {missing.length > 0 && (
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    style={{
+                      flex: 2,
+                      padding: "10px",
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      borderRadius: "8px"
+                    }}
+                    onClick={() => {
+                      setShowIncompleteModal(false);
+                      setProfileStep(missing[0].step);
+                    }}
+                  >
+                    Go to Step {missing[0].step} &rarr;
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
 </div>
   );

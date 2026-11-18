@@ -157,6 +157,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_Date", dateVal, DbType.Date);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
@@ -201,7 +202,20 @@ public class DashboardRepository : IDashboardRepository
                         FROM `Staff` st
                         WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
                           AND (st.Status = 'Active' OR st.Status IS NULL)
-                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR st.CampusId = @p_CampusId)
+                          AND (
+                              @p_CampusId IS NULL 
+                              OR @p_CampusId = 0 
+                              OR (st.CampusId = @p_CampusId AND NOT EXISTS (
+                                  SELECT 1 FROM StaffCampusAssignments sca_out 
+                                  WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = @p_CampusId AND sca_out.Status = 'TransferredOut'
+                              ))
+                              OR EXISTS (
+                                  SELECT 1 FROM StaffCampusAssignments sca 
+                                  WHERE sca.StaffId = st.Id AND sca.CampusId = @p_CampusId 
+                                    AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                                    AND (sca.Status = 'Active' OR sca.Status IS NULL)
+                              )
+                          )
                           AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR st.BoardId = @p_BoardId OR st.BoardId IS NULL);",
                         new { p_CampusId = campusId, p_BoardId = boardId });
 
@@ -499,6 +513,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", null, DbType.Int32);
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_Date", dateVal, DbType.Date);
         parameters.Add("p_StaffType", staffType ?? "all", DbType.String);
         parameters.Add("p_CampusId", campusId, DbType.Int32);
 

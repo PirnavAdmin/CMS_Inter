@@ -18,7 +18,10 @@ CREATE TABLE IF NOT EXISTS `Enquiries` (
     `AssignedToStaffId` INT NULL,
     `AssignedToStaffName` VARCHAR(150) NULL,
     `HandledByStaffId` INT NULL,
+    `HandledByUserId` INT NULL,
     `HandledByStaffName` VARCHAR(150) NULL,
+    `HandledByRole` VARCHAR(50) NULL,
+    `ClaimedAt` DATETIME NULL,
     `ResponseNotes` TEXT NULL,
     `ContactMethodUsed` VARCHAR(50) NULL, -- 'Phone', 'Email', 'In-Person', 'WhatsApp'
     `ContactedAt` DATETIME NULL,
@@ -28,7 +31,26 @@ CREATE TABLE IF NOT EXISTS `Enquiries` (
     PRIMARY KEY (`Id`),
     KEY `IX_Enquiries_CampusId` (`CampusId`),
     KEY `IX_Enquiries_Status` (`Status`),
+    KEY `IX_Enquiries_HandledByUserId` (`HandledByUserId`),
     KEY `IX_Enquiries_CreatedAt` (`CreatedAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 1b. Create EnquiryActivities Table (Audit Trail)
+CREATE TABLE IF NOT EXISTS `EnquiryActivities` (
+    `Id` INT NOT NULL AUTO_INCREMENT,
+    `EnquiryId` INT NOT NULL,
+    `Action` VARCHAR(50) NOT NULL,
+    `PreviousStatus` VARCHAR(50) NULL,
+    `NewStatus` VARCHAR(50) NULL,
+    `PerformedByUserId` INT NULL,
+    `PerformedByName` VARCHAR(150) NOT NULL,
+    `PerformedByRole` VARCHAR(50) NOT NULL,
+    `ContactMethod` VARCHAR(50) NULL,
+    `Notes` TEXT NULL,
+    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`Id`),
+    KEY `IX_EnquiryActivities_EnquiryId` (`EnquiryId`),
+    KEY `IX_EnquiryActivities_CreatedAt` (`CreatedAt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Create LandingContactConfig Table

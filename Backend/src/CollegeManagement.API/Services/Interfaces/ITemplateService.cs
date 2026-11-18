@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Settings;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Services.Interfaces
 {
@@ -13,8 +14,11 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default);
         Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, int? campusId = null, CancellationToken ct = default);
         Task<TemplateResponseDto?> UpdateTemplateAsync(int id, UpdateTemplateDto dto, int? campusId = null, CancellationToken ct = default);
+        Task<TemplateResponseDto?> DuplicateTemplateAsync(int id, int? campusId = null, CancellationToken ct = default);
+        Task<bool> SetDefaultTemplateAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<bool> DeleteTemplateAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<bool> ToggleTemplateActiveAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<RenderedTemplateResponseDto> RenderTemplateAsync(RenderCertificateTemplateRequestDto request, int? campusId = null, CancellationToken ct = default);
+        Task<(string Url, string RelativePath)> SaveTemplateLogoAsync(IFormFile file, CancellationToken ct = default);
     }
 }

@@ -56,6 +56,18 @@ export const enquiryApi = {
     return res.data?.data ?? res.data;
   },
 
+  // Atomically take charge of an enquiry
+  takeCharge: async (id, payload = {}, signal) => {
+    const res = await apiClient.post(apiEndpoints.enquiries.takeCharge(id), payload, { signal });
+    return res.data;
+  },
+
+  // Get full historical audit trail of an enquiry
+  getHistory: async (id, signal) => {
+    const res = await apiClient.get(apiEndpoints.enquiries.history(id), { signal });
+    return res.data?.data ?? [];
+  },
+
   // Update status and response notes
   updateStatus: async (id, payload, signal) => {
     const res = await apiClient.put(apiEndpoints.enquiries.updateStatus(id), payload, { signal });

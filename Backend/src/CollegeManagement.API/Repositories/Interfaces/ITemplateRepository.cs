@@ -15,6 +15,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, int? campusId = null, CancellationToken ct = default);
         Task<Template> CreateAsync(Template template, CancellationToken ct = default);
         Task<Template?> UpdateAsync(int id, Template template, int? campusId = null, CancellationToken ct = default);
+        Task<Template?> DuplicateAsync(int id, int? campusId = null, CancellationToken ct = default);
+        Task<Template?> SetDefaultAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<bool> DeleteAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<bool> ToggleActiveAsync(int id, int? campusId = null, CancellationToken ct = default);
         Task<StudentTemplateLookupDto?> GetStudentPreviewDetailsAsync(int? studentId, string? admissionNo, CancellationToken ct = default);

@@ -613,7 +613,13 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                 <h3 className="ns-card-title">{series.name || series.seriesName}</h3>
 
                 <div className="ns-card-example-box">
-                  <span className="ns-card-example-lbl">Current / Next Example:</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span className="ns-card-example-lbl" style={{ margin: 0 }}>Last Issued:</span>
+                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#475569', background: 'rgba(0,0,0,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
+                      {series.currentSequence > 0 ? `#${series.currentSequence}` : '0 (None)'}
+                    </span>
+                  </div>
+                  <span className="ns-card-example-lbl" style={{ marginTop: '4px', display: 'block' }}>Next to Allocate (Preview):</span>
                                       <div className="ns-card-example-val">
                       {loading ? (
                         <Skeleton style={{ height: '20px', width: '70%', borderRadius: '6px' }} />

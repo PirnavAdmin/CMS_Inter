@@ -508,8 +508,8 @@ const normalizeCertificate = (raw) => {
     issuedBy: pick(raw, ["issuedBy", "IssuedBy"]) || "",
     isActive: pick(raw, ["isActive", "IsActive"]),
     signature: getSignatureValue(raw) || getBackendPrincipalSignatureUrl(),
-    feeClearanceStatus: pick(raw, ["feeClearanceStatus", "FeeClearanceStatus"]) || "Cleared",
     feeDueAmount: Number(pick(raw, ["feeDueAmount", "FeeDueAmount"])) || 0,
+    feeClearanceStatus: pick(raw, ["feeClearanceStatus", "FeeClearanceStatus"]) || (Number(pick(raw, ["feeDueAmount", "FeeDueAmount"])) > 0 ? "Dues Pending" : "Cleared"),
     feeClearedBy: pick(raw, ["feeClearedBy", "FeeClearedBy"]) || "",
     feeClearedAt: maybeIsoDate(pick(raw, ["feeClearedAt", "FeeClearedAt"])) || "",
     feeExemptionReason: pick(raw, ["feeExemptionReason", "FeeExemptionReason"]) || "",
@@ -1780,14 +1780,44 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
   const detailsRequestRef = useRef(0);
   const filtersReadyRef = useRef(false);
 
+  const [activeTemplatesList, setActiveTemplatesList] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    const loadActiveTemplates = async () => {
+      try {
+        const res = await apiClient.get(apiEndpoints.certificates.activeTemplates);
+        if (active && Array.isArray(res?.data) && res.data.length > 0) {
+          setActiveTemplatesList(res.data);
+          return;
+        }
+      } catch {
+        // Fallback to storage
+      }
+      try {
+        const stored = getStoredCertificateTemplates();
+        if (active && Array.isArray(stored) && stored.length > 0) {
+          setActiveTemplatesList(stored);
+        }
+      } catch { }
+    };
+    loadActiveTemplates();
+    return () => { active = false; };
+  }, []);
+
   const availableCertificateTypes = useMemo(() => {
-    return [
+    const defaults = [
       "Bonafide Certificate",
       "Study Certificate",
       "Conduct Certificate",
       "Transfer Certificate",
     ];
-  }, []);
+    if (!Array.isArray(activeTemplatesList) || activeTemplatesList.length === 0) return defaults;
+    const dynamicTypes = activeTemplatesList
+      .map((t) => t.title || t.name || t.certificateType || t.templateName)
+      .filter((title) => Boolean(title) && !String(title).toLowerCase().includes("upload") && !String(title).toLowerCase().includes("card"));
+    return Array.from(new Set([...dynamicTypes, ...defaults])).filter(Boolean);
+  }, [activeTemplatesList]);
 
   const formFields = useMemo(
     () => baseFormFields.map((field) => {
@@ -1850,7 +1880,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current) return false;
-      const fallbackList = mockCertificates.map(normalizeCertificate);
+      const fallbackList = [];
       let filtered = fallbackList;
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -1893,7 +1923,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : [];
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -2069,7 +2099,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
           const sRes = await apiClient.get(CERTIFICATE_API.studentsDropdown, { skipGlobalLoader: true });
           raw = sRes?.data;
         } catch {
-          raw = studentRows.length ? studentRows : mockStudents;
+          raw = studentRows.length ? studentRows : [];
         }
       }
       const rawBulkList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);
@@ -2081,11 +2111,11 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         return true;
       });
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(mapped.length ? mapped : (studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord)));
+        setBulkStudentRows(mapped.length ? mapped : (studentRows.length ? studentRows : []));
       }
     } catch (error) {
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord));
+        setBulkStudentRows(studentRows.length ? studentRows : []);
       }
     } finally {
       if (requestId === bulkStudentRequestRef.current) setLoadingBulkStudents(false);
@@ -2136,7 +2166,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
   useEffect(() => {
     const statusParam = searchParams?.get("status");
     const tabParam = searchParams?.get("tab");
-    const reqIdParam = searchParams?.get("requestId") || searchParams?.get("id");
+    const reqIdParam = searchParams?.get("requestId") || searchParams?.get("certificateId") || searchParams?.get("id");
     const admNoParam = searchParams?.get("admissionNo");
     if (tabParam === "actions" || tabParam === "review" || statusParam === "Requested" || reqIdParam) {
       setActiveTab("actions");
@@ -2563,14 +2593,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         return next;
       });
 
-      try {
-        const storedMock = localStorage.getItem("cms_mock_store_certificates");
-        const list = storedMock ? JSON.parse(storedMock) : [];
-        list.unshift(createdCertificate);
-        localStorage.setItem("cms_mock_store_certificates", JSON.stringify(list));
-      } catch {
-        // Ignore mock storage error
-      }
+      // Live certificate created and tracked
 
       setWorkflowStats((prev) => ({
         ...prev,
@@ -2879,14 +2902,10 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     if (!selected) return;
     if (!canMoveTo(row.status, selected.nextStatus)) return;
 
-    if ((action === "approve" || action === "issue") && row.feeClearanceStatus === "Dues Pending" && Number(row.feeDueAmount) > 0) {
-      const proceed = await confirm({
-        title: "Fee Due Clearance Notice",
-        message: `Student "${row.student || row.admissionNo}" has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}.\n\nDo you want to proceed with certificate ${action.toUpperCase()} under Principal Permission / Administrative Override?`,
-        confirmLabel: `Proceed & ${action.charAt(0).toUpperCase() + action.slice(1)}`,
-        cancelLabel: "Cancel & Inspect Dues",
-      });
-      if (!proceed) {
+    if ((action === "approve" || action === "issue") && (row.feeClearanceStatus === "Dues Pending" || Number(row.feeDueAmount) > 0)) {
+      const isPermitted = row.feeClearanceStatus === "Principal Permitted" || Boolean(row.feeExemptionReason);
+      if (!isPermitted) {
+        setToast(`Cannot ${action} certificate for "${row.student || row.admissionNo}". Student has pending fee dues of ₹${Number(row.feeDueAmount).toLocaleString('en-IN')}. Principal Permission or fee clearance is required.`);
         openFeeInspector(row);
         return;
       }
@@ -2903,8 +2922,10 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
           const url = typeof selected.endpoint === "function" ? selected.endpoint(actionId, issuer) : selected.endpoint(actionId);
           await apiClient.patch(url, null, requestConfig);
           await verifyPersistedCertificateType(actionId, row.type);
-        } catch {
-          // Graceful fallback to local update
+        } catch (apiErr) {
+          const errMsg = getFriendlyErrorMessage(apiErr, `Failed to ${action} certificate.`);
+          setToast(errMsg);
+          return;
         }
       }
 
@@ -4128,9 +4149,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                   </div>
                 ) : null}
               </div>
-              <button type="button" className="cms-btn cms-btn-primary" onClick={() => setActiveTab("generate")}>
-                <FaPlus size={13} aria-hidden="true" /> New Request
-              </button>
+
             </div>
           </div>
           {showRecordFilters ? (

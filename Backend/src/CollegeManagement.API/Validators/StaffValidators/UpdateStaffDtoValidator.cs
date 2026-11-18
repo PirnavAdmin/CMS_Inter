@@ -47,15 +47,19 @@ namespace CollegeManagement.API.Validators.StaffValidators
                     .MaximumLength(150);
             });
 
-            RuleFor(x => x.DrivingLicenseNumber)
-                .Must(dl =>
-                {
-                    if (string.IsNullOrWhiteSpace(dl)) return true;
-                    var clean = Regex.Replace(dl.ToUpperInvariant(), @"[-/\s]", "");
-                    return clean.Length >= 15 && clean.Length <= 16 &&
-                           Regex.IsMatch(clean, @"^[A-Z]{2}[0-9]{2}(19|20)\d{2}\d{7}$|^[A-Z]{2}[0-9]{13,14}$");
-                })
-                .WithMessage("Driving License number must be a valid 15-16 character Indian DL (e.g. AP0920210001234).");
+            When(x => ((x.Department != null && x.Department.IndexOf("transport", StringComparison.OrdinalIgnoreCase) >= 0) || (x.DepartmentId.HasValue && x.DepartmentId.Value == 79)) &&
+                      ((x.Designation != null && x.Designation.IndexOf("driver", StringComparison.OrdinalIgnoreCase) >= 0) || string.Equals(x.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)), () =>
+            {
+                RuleFor(x => x.DrivingLicenseNumber)
+                    .NotEmpty().WithMessage("Driving License number is required for Transport Drivers.")
+                    .Must(dl =>
+                    {
+                        if (string.IsNullOrWhiteSpace(dl)) return false;
+                        var clean = Regex.Replace(dl.ToUpperInvariant(), @"[-/\s]", "");
+                        return clean.Length >= 8 && clean.Length <= 20;
+                    })
+                    .WithMessage("Driving License number must be a valid format (e.g. AP0920210001234).");
+            });
 
             When(x => string.Equals(x.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
                       string.Equals(x.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||

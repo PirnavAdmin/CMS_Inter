@@ -382,6 +382,7 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICertificateExportService, CertificateExportService>();
+builder.Services.AddScoped<ICertificateDocumentStorageService, CertificateDocumentStorageService>();
 
 // Hostel Services
 builder.Services.AddScoped<IHostelBlockService, HostelBlockService>();

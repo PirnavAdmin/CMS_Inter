@@ -84,30 +84,43 @@ namespace CollegeManagement.API.Services.Implementations
             return await _enquiryRepo.GetStatsAsync(campusId);
         }
 
-        public async Task<bool> UpdateStatusAsync(int id, UpdateEnquiryStatusRequest request)
+        public async Task<TakeChargeResultDto> TakeChargeAsync(int id, int? userId, int? staffId, string staffName, string role)
+        {
+            if (string.IsNullOrWhiteSpace(staffName))
+                staffName = "Staff Member";
+            if (string.IsNullOrWhiteSpace(role))
+                role = "Staff";
+
+            return await _enquiryRepo.TakeChargeAsync(id, userId, staffId, staffName, role);
+        }
+
+        public async Task<bool> UpdateStatusAsync(int id, UpdateEnquiryStatusRequest request, int? callerUserId = null, string? callerStaffName = null, string? callerRole = null)
         {
             if (string.IsNullOrWhiteSpace(request.Status))
                 throw new ArgumentException("Status is required.");
 
             // Concurrency & Ownership Enforcement:
-            // If another staff/role has already taken charge, prevent accidental overwrite by a different staff member
             var existing = await _enquiryRepo.GetEnquiryByIdAsync(id);
-            if (existing != null && !string.IsNullOrWhiteSpace(existing.HandledByStaffName))
-            {
-                bool isSameStaff = string.Equals(existing.HandledByStaffName?.Trim(), request.HandledByStaffName?.Trim(), StringComparison.OrdinalIgnoreCase);
-                bool isAdminCaller = !string.IsNullOrWhiteSpace(request.HandledByRole) && request.HandledByRole.Contains("Admin", StringComparison.OrdinalIgnoreCase);
+            if (existing == null) return false;
 
-                // If a different staff member tries to take charge of an already claimed lead,
-                // preserve the original handler who took charge.
-                if (!isSameStaff && !isAdminCaller)
+            if (existing.HandledByUserId.HasValue || !string.IsNullOrWhiteSpace(existing.HandledByStaffName))
+            {
+                bool isSameUser = callerUserId.HasValue && existing.HandledByUserId.HasValue && callerUserId.Value == existing.HandledByUserId.Value;
+                bool isSameStaffName = !string.IsNullOrWhiteSpace(callerStaffName) && string.Equals(existing.HandledByStaffName?.Trim(), callerStaffName.Trim(), StringComparison.OrdinalIgnoreCase);
+                bool isAdminCaller = !string.IsNullOrWhiteSpace(callerRole) && callerRole.Contains("Admin", StringComparison.OrdinalIgnoreCase);
+
+                if (!isSameUser && !isSameStaffName && !isAdminCaller)
                 {
-                    request.HandledByStaffName = existing.HandledByStaffName;
-                    request.HandledByRole = existing.HandledByRole;
-                    request.HandledByStaffId = existing.HandledByStaffId;
+                    throw new UnauthorizedAccessException($"Only the assigned owner ({existing.HandledByRole}: {existing.HandledByStaffName}) or an Administrator can update the status of this enquiry.");
                 }
             }
 
-            return await _enquiryRepo.UpdateStatusAsync(id, request);
+            return await _enquiryRepo.UpdateStatusAsync(id, request, callerUserId, callerStaffName, callerRole);
+        }
+
+        public async Task<List<EnquiryActivityDto>> GetActivitiesAsync(int enquiryId)
+        {
+            return await _enquiryRepo.GetActivitiesAsync(enquiryId);
         }
 
         public async Task<LandingContactConfigDto> GetLandingContactConfigAsync(int? campusId = null)

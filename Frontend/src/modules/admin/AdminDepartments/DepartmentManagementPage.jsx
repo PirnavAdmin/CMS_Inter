@@ -1504,13 +1504,7 @@ export default function DepartmentManagementPage() {
           </article>
         </section>
 
-        <aside className="master-note">
-          <Info />
-          <span>
-            Departments and Designations created here are retrieved live from the backend server API
-            and available across the Staff Management module.
-          </span>
-        </aside>
+
       </main>
 
       {/* DEPARTMENT DELETE CONFIRM DIALOG (DELETE /api/v1/departments/{id}) */}

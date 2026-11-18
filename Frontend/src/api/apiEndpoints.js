@@ -680,6 +680,9 @@ export const apiEndpoints = {
     delete: (id) => `/api/v1/settings/templates/${id}`,
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
+    uploadLogo: "/api/v1/settings/templates/upload-logo",
+    duplicate: (id) => `/api/v1/settings/templates/${id}/duplicate`,
+    setDefault: (id) => `/api/v1/settings/templates/${id}/set-default`,
   },
   landingPage: {
     getConfig: "/api/v1/landing-page/config",
@@ -928,6 +931,8 @@ export const apiEndpoints = {
     list: "/api/v1/enquiries",
     stats: "/api/v1/enquiries/stats",
     byId: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}`,
+    takeCharge: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/take-charge`,
+    history: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/history`,
     updateStatus: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/status`,
     contactConfig: "/api/v1/enquiries/contact-config",
   },

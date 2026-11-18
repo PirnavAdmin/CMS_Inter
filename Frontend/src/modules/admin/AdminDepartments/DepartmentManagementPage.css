@@ -688,10 +688,12 @@
   white-space: nowrap !important;
 }
 .master-table-wrap .department-table {
-  min-width: 450px;
+  min-width: 100%;
+  width: 100%;
 }
 .master-table-wrap .designation-table {
-  min-width: 560px;
+  min-width: 100%;
+  width: 100%;
 }
 .master-row-actions .master-icon-button {
   flex: 0 0 24px;

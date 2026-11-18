@@ -791,16 +791,17 @@ const nonTeachingSteps = [
 ];
 
 export const getNonTeachingStepFields = (stepIndex, values = {}) => {
-  const isTransport =
-    String(values?.department || "").trim().toLowerCase().includes("transport") ||
-    String(values?.designation || "").trim().toLowerCase().includes("driver");
+  const dept = String(values?.department || "").trim().toLowerCase();
+  const desig = String(values?.designation || "").trim().toLowerCase();
+  const isTransport = dept.includes("transport");
+  const isDriver = isTransport && desig.includes("driver");
 
   if (stepIndex === 2) {
     const base = [
       ["department", "Department", "search-select", nonTeachingDepartments, true],
       ["designation", "Designation", "search-select", nonTeachingDesignations, true],
     ];
-    if (isTransport) {
+    if (isDriver) {
       base.push(
         ["drivingLicenseNumber", "Driver's License Number", "text", [], true],
         ["drivingLicenseExpiryDate", "License Expiry Date", "date", [], true]
@@ -823,10 +824,8 @@ export const getNonTeachingStepFields = (stepIndex, values = {}) => {
       ["resume", "Resume (PDF)", "file", [], false],
       ["bankProof", "Bank Passbook / Cancelled Cheque (PDF)", "file", [], false],
     ];
-    if (isTransport) {
+    if (isDriver) {
       docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], true]);
-    } else {
-      docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], false]);
     }
     docs.push(["otherDocuments", "Other Documents (PDF)", "file", [], false]);
     return docs;
@@ -3929,6 +3928,10 @@ function StaffList({ records = [], setRecords, forced }) {
     setPage(1);
   }, [forced]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQ, departmentFilter, designationFilter, staffTypeFilter, tab]);
+
   // GET /api/v1/staff Live Fetch
   useEffect(() => {
     let isMounted = true;
@@ -5313,7 +5316,7 @@ function StaffList({ records = [], setRecords, forced }) {
             <div className="staff-pagination-controls">
               <button
                 type="button"
-                disabled={page === 1}
+                disabled={page <= 1}
                 onClick={() => setPage(1)}
                 title="First Page"
                 className="staff-page-nav-btn"
@@ -5322,40 +5325,24 @@ function StaffList({ records = [], setRecords, forced }) {
               </button>
               <button
                 type="button"
-                disabled={page === 1}
+                disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 title="Previous Page"
                 className="staff-page-nav-btn"
               >
                 Prev
               </button>
-              {(() => {
-                const totalPages = Math.max(1, Math.ceil(totalRowsCount / size));
-                const pageNumbers = [];
-                const maxButtons = 5;
-                let startPage = Math.max(1, page - 2);
-                let endPage = Math.min(totalPages, startPage + maxButtons - 1);
-                if (endPage - startPage < maxButtons - 1) {
-                  startPage = Math.max(1, endPage - maxButtons + 1);
-                }
-                for (let i = startPage; i <= endPage; i++) {
-                  pageNumbers.push(i);
-                }
-                return pageNumbers.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPage(p)}
-                    className={`staff-page-number-btn ${page === p ? "is-active" : ""}`}
-                  >
-                    {p}
-                  </button>
-                ));
-              })()}
               <button
                 type="button"
-                disabled={page * size >= totalRowsCount}
-                onClick={() => setPage((p) => p + 1)}
+                className="staff-page-number-btn is-active"
+                disabled
+              >
+                {page}
+              </button>
+              <button
+                type="button"
+                disabled={page >= Math.max(1, Math.ceil(totalRowsCount / size))}
+                onClick={() => setPage((p) => Math.min(Math.max(1, Math.ceil(totalRowsCount / size)), p + 1))}
                 title="Next Page"
                 className="staff-page-nav-btn"
               >
@@ -5363,7 +5350,7 @@ function StaffList({ records = [], setRecords, forced }) {
               </button>
               <button
                 type="button"
-                disabled={page * size >= totalRowsCount}
+                disabled={page >= Math.max(1, Math.ceil(totalRowsCount / size))}
                 onClick={() => setPage(Math.max(1, Math.ceil(totalRowsCount / size)))}
                 title="Last Page"
                 className="staff-page-nav-btn"
@@ -5484,22 +5471,17 @@ function TeachingForm({ records, setRecords, existing }) {
     Number(values.roleId) === 15 ||
     Number(values.roleId) === 2;
 
-  const [isGlobalStaff, setIsGlobalStaff] = useState(() => {
+  const [employmentScope, setEmploymentScope] = useState(() => {
     if (existing) {
-      return (
-        (Array.isArray(existing.assignedCampusIds) && existing.assignedCampusIds.length > 1) ||
-        (Array.isArray(existing.assignedCampuses) && existing.assignedCampuses.length > 1) ||
-        Boolean(existing.campusBoardAssignmentsJson)
-      );
+      if (existing.campusId === null || existing.isGlobal || existing.scope === "Global") return "global";
+      if ((Array.isArray(existing.assignedCampusIds) && existing.assignedCampusIds.length > 1) ||
+          (Array.isArray(existing.assignedCampuses) && existing.assignedCampuses.length > 1) ||
+          Boolean(existing.campusBoardAssignmentsJson)) return "multi";
+      return "single";
     }
-    return isPrincipal;
+    return "single";
   });
-
-  useEffect(() => {
-    if (isPrincipal && !isGlobalStaff) {
-      setIsGlobalStaff(true);
-    }
-  }, [isPrincipal]);
+  const isGlobalStaff = employmentScope === "multi" || employmentScope === "global";
 
   useEffect(() => {
     if (!existing) {
@@ -5748,54 +5730,81 @@ function TeachingForm({ records, setRecords, existing }) {
                     <div style={{
                       gridColumn: "1 / -1",
                       margin: "8px 0 16px",
-                      padding: "14px 18px",
-                      background: (isGlobalStaff || isPrincipal) ? "#f0fdf4" : "#f8fafc",
-                      border: (isGlobalStaff || isPrincipal) ? "1.5px solid #86efac" : "1px solid #e2e8f0",
-                      borderRadius: "8px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "14px"
+                      padding: "16px 20px",
+                      background: "#f8fafc",
+                      border: "1.5px solid #cbd5e1",
+                      borderRadius: "10px",
                     }}>
-                      <div>
-                        <div style={{ fontWeight: "700", fontSize: "14px", color: (isGlobalStaff || isPrincipal) ? "#166534" : "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span>🌐 Employment Scope: Global / Multi-Campus Teaching Staff</span>
-                          {(isGlobalStaff || isPrincipal) && (
-                            <span style={{ fontSize: "11px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", padding: "1px 8px", borderRadius: "10px", fontWeight: "700" }}>
-                              Multi-Campus Active
-                            </span>
-                          )}
+                      <div style={{ marginBottom: "12px" }}>
+                        <div style={{ fontWeight: "700", fontSize: "14px", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span>🌐 Employment Scope</span>
+                          <span style={{ fontSize: "11px", background: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd", padding: "1px 8px", borderRadius: "10px", fontWeight: "700", textTransform: "capitalize" }}>
+                            {employmentScope === "multi" ? "Multi-Campus" : employmentScope === "global" ? "Global (All Campuses)" : "Single Campus"}
+                          </span>
                         </div>
-                        <div style={{ fontSize: "12px", color: (isGlobalStaff || isPrincipal) ? "#15803d" : "#64748b", marginTop: "3px" }}>
-                          Enable this option to assign this teaching staff member across multiple campuses and boards simultaneously.
+                        <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
+                          Select the operational scope for this staff member (applies uniformly to Principal, Dean, Faculty, and Admin roles).
                         </div>
                       </div>
-                      <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: isPrincipal ? "not-allowed" : "pointer", userSelect: "none" }}>
-                        <input
-                          type="checkbox"
-                          checked={isGlobalStaff || isPrincipal}
-                          disabled={isPrincipal}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setIsGlobalStaff(checked);
-                            if (!checked) {
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", alignItems: "center" }}>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", fontWeight: employmentScope === "single" ? "700" : "500", color: "#1e293b" }}>
+                          <input
+                            type="radio"
+                            name="teachingEmploymentScope"
+                            value="single"
+                            checked={employmentScope === "single"}
+                            onChange={() => {
+                              setEmploymentScope("single");
                               setValues((v) => ({
                                 ...v,
                                 assignedCampusIds: v.campusId ? [Number(v.campusId)] : (activeCampusId ? [Number(activeCampusId)] : []),
                                 assignedCampuses: v.campusName ? [v.campusName] : (activeCampusName ? [activeCampusName] : []),
                                 campusBoardAssignmentsJson: "",
                               }));
-                            }
-                          }}
-                          style={{ width: "18px", height: "18px", accentColor: "#16a34a", cursor: isPrincipal ? "not-allowed" : "pointer" }}
-                        />
-                        <span style={{ fontSize: "13px", fontWeight: "700", color: "#1e293b" }}>
-                          {isPrincipal ? "Mandatory for Principal" : "Assign Multiple Campuses"}
-                        </span>
-                      </label>
+                            }}
+                            style={{ width: "16px", height: "16px", accentColor: "var(--cms-primary, #6F8400)" }}
+                          />
+                          Single Campus
+                        </label>
+
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", fontWeight: employmentScope === "multi" ? "700" : "500", color: "#1e293b" }}>
+                          <input
+                            type="radio"
+                            name="teachingEmploymentScope"
+                            value="multi"
+                            checked={employmentScope === "multi"}
+                            onChange={() => setEmploymentScope("multi")}
+                            style={{ width: "16px", height: "16px", accentColor: "var(--cms-primary, #6F8400)" }}
+                          />
+                          Multi-Campus
+                        </label>
+
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "13px", fontWeight: employmentScope === "global" ? "700" : "500", color: "#1e293b" }}>
+                          <input
+                            type="radio"
+                            name="teachingEmploymentScope"
+                            value="global"
+                            checked={employmentScope === "global"}
+                            onChange={() => {
+                              setEmploymentScope("global");
+                              const allIds = (campuses || []).map((c) => Number(c.campusId ?? c.id)).filter(Boolean);
+                              const allNames = (campuses || []).map((c) => c.name ?? c.campusName).filter(Boolean);
+                              setValues((v) => ({
+                                ...v,
+                                campusId: null,
+                                assignedCampusIds: allIds,
+                                assignedCampuses: allNames,
+                              }));
+                            }}
+                            style={{ width: "16px", height: "16px", accentColor: "var(--cms-primary, #6F8400)" }}
+                          />
+                          Global (All Campuses)
+                        </label>
+                      </div>
                     </div>
 
-                    {(isGlobalStaff || isPrincipal) ? (
+                    {employmentScope === "multi" ? (
                       <PrincipalCampusBoardAssignment
                         values={values}
                         setValues={setValues}
@@ -5990,11 +5999,19 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
-    const isTransport =
-      String(values?.department || "").trim().toLowerCase().includes("transport") ||
-      String(values?.designation || "").trim().toLowerCase().includes("driver");
+    const deptVal = String(values?.department || "").trim().toLowerCase();
+    const desigVal = String(values?.designation || "").trim().toLowerCase();
+    const isDriver = deptVal.includes("transport") && desigVal.includes("driver");
 
-    if (isTransport && values.drivingLicenseNumber && values._dlPdfRawText) {
+    // If not a driver in transport, clear any stale driving license fields
+    if (!isDriver) {
+      delete values.drivingLicenseNumber;
+      delete values.drivingLicenseExpiryDate;
+      delete values.drivingLicence;
+      delete values._dlPdfRawText;
+    }
+
+    if (isDriver && values.drivingLicenseNumber && values._dlPdfRawText) {
       const cleanDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
       const rawText = String(values._dlPdfRawText).toUpperCase();
       const cleanPdfText = rawText.replace(/[^A-Z0-9]/g, "");
@@ -6019,7 +6036,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     }
 
     // â”€â”€ Duplicate Driving License Number check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if (isTransport && values.drivingLicenseNumber) {
+    if (isDriver && values.drivingLicenseNumber) {
       const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
       const currentId = existing?.id || existing?.employeeId || null;
       const duplicate = (Array.isArray(records) ? records : []).find((r) => {

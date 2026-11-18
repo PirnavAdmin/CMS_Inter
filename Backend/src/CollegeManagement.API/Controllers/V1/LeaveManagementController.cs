@@ -127,18 +127,41 @@ namespace CollegeManagement.API.Controllers.V1
         /// Approves or rejects a staff leave request.
         /// </summary>
         [HttpPost("leave/{leaveRequestId}/action")]
-        [Authorize(Roles = "Admin,Super Admin,Principal,HOD")]
+        [Authorize]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ActionStaffLeave(int leaveRequestId, [FromBody] StaffLeaveActionRequest request)
         {
             var userId = GetCurrentUserId();
+            var isPrivileged = IsCurrentUserAdmin() || User.IsInRole("HOD");
+
+            if (!isPrivileged)
+            {
+                var callerStaffId = _jwtTokenHelper.GetStaffId(User) ?? await ResolveStaffIdAsync();
+                var leaveDetails = await _service.GetStaffLeaveDetailsAsync(leaveRequestId);
+                if (leaveDetails == null)
+                {
+                    return NotFound(new { Status = false, Message = $"Staff leave request with ID {leaveRequestId} not found." });
+                }
+
+                if (leaveDetails.StaffId != callerStaffId)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "You are not authorized to modify another staff member's leave request." });
+                }
+
+                if (request.Status != CollegeManagement.API.Enums.LeaveStatus.Cancelled && request.Status != CollegeManagement.API.Enums.LeaveStatus.Rejected)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Status = false, Message = "Staff members can only cancel their own pending leave requests." });
+                }
+            }
+
             var result = await _service.ActionStaffLeaveRequestAsync(leaveRequestId, request, userId);
             try
             {
-                var approverName = User.Identity?.Name ?? "Admin";
+                var approverName = User.Identity?.Name ?? (isPrivileged ? "Admin" : "Staff");
                 if (result != null && result.StaffId > 0)
                 {
                     if (_notificationService != null) await _notificationService.SendToStaffAsync(result.StaffId, $"Leave Application {request.Status}", $"Your leave request has been {request.Status.ToString().ToUpper()} by {approverName}. {(string.IsNullOrWhiteSpace(request.RejectionReason) ? "" : $"Reason: {request.RejectionReason}")}", "Leave", leaveRequestId, $"/faculty-dashboard/leave?leaveId={leaveRequestId}");

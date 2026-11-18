@@ -325,7 +325,7 @@ public class CertificatesController : ControllerBase
                 var studentName = !string.IsNullOrWhiteSpace(result.StudentName) ? result.StudentName : request.AdmissionNo;
                 var notifTitle = "New Certificate Request";
                 var notifMessage = $"{studentName} ({request.AdmissionNo}) submitted a request for {request.CertificateType}.";
-                var actionUrl = $"/dashboard/certificates?certificateId={result.CertificateId}";
+                var actionUrl = $"/dashboard/certificates?tab=actions&requestId={result.CertificateId}&status=Requested";
 
                 await _notificationService.SendToRolesAsync(new[] { "Admin", "Super Admin", "Principal", "Exam Cell" }, result.CampusId, notifTitle, notifMessage, "Certificate", result.CertificateId, actionUrl);
 
@@ -445,37 +445,44 @@ public class CertificatesController : ControllerBase
         if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
 
         var issuer = issuedBy ?? GetCurrentUserName("Principal");
-        var success = await _service.MoveStatusAsync(id, "Issued", issuer, ct);
-        if (!success) return NotFound(new { message = "Certificate not found" });
-
         try
         {
-            var cert = await _service.GetByIdAsync(id, ct);
-            if (cert != null)
+            var success = await _service.MoveStatusAsync(id, "Issued", issuer, ct);
+            if (!success) return NotFound(new { message = "Certificate not found" });
+
+            try
             {
-                if (cert.StudentId > 0)
+                var cert = await _service.GetByIdAsync(id, ct);
+                if (cert != null)
                 {
-                    await _notificationService.SendToStudentAsync(
-                        cert.StudentId,
+                    if (cert.StudentId > 0)
+                    {
+                        await _notificationService.SendToStudentAsync(
+                            cert.StudentId,
+                            "Certificate Ready for Download",
+                            $"Your {cert.CertificateType} certificate (#{id}) has been ISSUED and is ready for download.",
+                            "Certificates",
+                            id,
+                            $"/student-dashboard/certificates?certificateId={id}");
+                    }
+                    await _notificationService.SendToRolesAsync(
+                        new[] { "Parent" },
+                        cert.CampusId,
                         "Certificate Ready for Download",
-                        $"Your {cert.CertificateType} certificate (#{id}) has been ISSUED and is ready for download.",
+                        $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been issued and is available for download.",
                         "Certificates",
                         id,
-                        $"/student-dashboard/certificates?certificateId={id}");
+                        $"/parent-dashboard/documents?certificateId={id}");
                 }
-                await _notificationService.SendToRolesAsync(
-                    new[] { "Parent" },
-                    cert.CampusId,
-                    "Certificate Ready for Download",
-                    $"Certificate ({cert.CertificateType}) for {cert.StudentName ?? "your ward"} has been issued and is available for download.",
-                    "Certificates",
-                    id,
-                    $"/parent-dashboard/documents?certificateId={id}");
             }
-        }
-        catch { }
+            catch { }
 
-        return Ok(new { success = true, message = "Certificate issued successfully" });
+            return Ok(new { success = true, message = "Certificate issued successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     // =========================================================
@@ -694,16 +701,44 @@ public class CertificatesController : ControllerBase
     {
         if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
 
-        var preview = await _service.GetPreviewAsync(id, ct);
-        if (preview == null)
+        try
         {
-            var certificate = await _service.GetByIdAsync(id, ct);
-            if (certificate == null) return NotFound(new { message = "Certificate not found" });
-            preview = _exportService.BuildPreviewFallback(certificate);
+            var (bytes, fileName, contentType) = await _service.GetOrGenerateDocumentAsync(id, ct);
+            return File(bytes, contentType, fileName);
         }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = $"Certificate #{id} not found." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error retrieving certificate file: {ex.Message}" });
+        }
+    }
 
-        var bytes = _exportService.GenerateCertificatePdf(preview);
-        return File(bytes, "application/pdf", $"{preview.CertificateNumber}.pdf");
+    // =========================================================
+    // 16.1. PREVIEW STORED CERTIFICATE DOCUMENT (Inline Streaming)
+    // GET /api/v1/certificates/preview-file/{id}
+    // =========================================================
+    [HttpGet("preview-file/{id:int}")]
+    public async Task<IActionResult> PreviewFile(int id, CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+
+        try
+        {
+            var (bytes, fileName, contentType) = await _service.GetOrGenerateDocumentAsync(id, ct);
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{fileName}\"";
+            return File(bytes, contentType);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = $"Certificate #{id} not found." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error previewing certificate file: {ex.Message}" });
+        }
     }
 
     // =========================================================
