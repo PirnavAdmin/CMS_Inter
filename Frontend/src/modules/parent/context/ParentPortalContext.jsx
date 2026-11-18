@@ -397,8 +397,8 @@ export const transformStudentData = (raw, feeData, attendanceData, currentAcadem
     : (attendanceRate >= 85 ? "Excellent" : (attendanceRate >= 75 ? "Good" : (attendanceRate >= 65 ? "Satisfactory" : (attendanceRate > 0 ? "Needs Improvement" : "—"))));
 
   // Fee calculation from feeData or raw student fields
-  const receiptsApprovedTotal = (feeData?.paymentHistory || []).filter((p) => { const st = String(p.approvalStatus || p.paymentStatus || p.status || "").toLowerCase(); return !st.includes("reject") && !st.includes("fail") && !st.includes("cancel"); }).reduce((sum, p) => sum + (Number(p.paidAmount ?? p.amount) || 0), 0);
-  const fallbackPaid = (String(id) === "863" || String(id) === "860") ? 70000 : 0;
+  const receiptsApprovedTotal = (feeData?.paymentHistory || []).filter((p) => { const st = String(p.approvalStatus || p.paymentStatus || p.status || "").toLowerCase(); return !st.includes("reject") && !st.includes("fail") && !st.includes("cancel") && !st.includes("pending"); }).reduce((sum, p) => sum + (Number(p.paidAmount ?? p.amount) || 0), 0);
+  const fallbackPaid = Number(raw?.feePaid ?? raw?.fees?.paid ?? 0);
   const feePaid = Math.max(Number(feeData?.totalPaid ?? raw.feePaid ?? fallbackPaid), receiptsApprovedTotal);
   const feeTotal = Math.max(Number(feeData?.totalPayable ?? feeData?.scheduledFees ?? feeData?.originalFee ?? feeData?.totalFee ?? raw.feeAmount ?? 70000), feePaid);
   const feePending = Math.max(0, feeTotal - feePaid);
@@ -507,7 +507,7 @@ export const transformFeeData = (feeData, childRecord) => {
   }));
 
   const studentIdStr = String(childRecord?.id || childRecord?.studentId || feeData?.studentId || "");
-  const fallbackPaid = (studentIdStr === "863" || studentIdStr === "860") ? 70000 : 0;
+  const fallbackPaid = Number(childRecord?.fees?.paid ?? childRecord?.feePaid ?? 0);
   const approvedReceiptsTotal = receipts
     .filter((r) => !/reject|fail|cancel|pending/i.test(r.status || ""))
     .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -829,6 +829,36 @@ export function ParentPortalProvider({ children }) {
       if (typeof window !== "undefined" && window.refreshActiveChild === refreshActiveChild) {
         delete window.refreshActiveChild;
       }
+    };
+  }, [refreshActiveChild]);
+
+  // Real-time synchronization of fee approval / rejection events from Admin/Accountant
+  useEffect(() => {
+    let bc;
+    try {
+      bc = new BroadcastChannel("cms-fee-events");
+      bc.onmessage = (event) => {
+        const { type } = event?.data || {};
+        if (type === "UTR_APPROVED" || type === "UTR_REJECTED" || type === "PAYMENT_SETTLED") {
+          refreshActiveChild();
+        }
+      };
+    } catch {}
+
+    const handleSync = () => {
+      refreshActiveChild();
+    };
+    window.addEventListener("cms-fee-utr-approved", handleSync);
+    window.addEventListener("cms-fee-utr-rejected", handleSync);
+    window.addEventListener("cms-fee-utr-submitted", handleSync);
+    window.addEventListener("storage", handleSync);
+
+    return () => {
+      try { bc?.close(); } catch {}
+      window.removeEventListener("cms-fee-utr-approved", handleSync);
+      window.removeEventListener("cms-fee-utr-rejected", handleSync);
+      window.removeEventListener("cms-fee-utr-submitted", handleSync);
+      window.removeEventListener("storage", handleSync);
     };
   }, [refreshActiveChild]);
   // 1. Fetch children enrolled under parent from GET /api/v1/students/my-children
