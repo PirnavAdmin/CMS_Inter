@@ -9,7 +9,7 @@ import {
 } from "./rolesPermissions.constants.js";
 import { normalizeModuleKey, normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
+import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, RECEPTIONIST_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -133,7 +133,10 @@ const normalizeUserAssignment = (user = {}) => {
     department: user.department || "",
     designation: user.designation || "",
     roleCodes: roleCodes.map(normalizeRoleCode).filter(Boolean),
-    status: user.status || "Active",
+    isActive: user.isActive !== undefined && user.isActive !== null
+      ? Boolean(user.isActive)
+      : String(user.status || "Active").trim().toLowerCase() !== "inactive",
+    status: user.status || (user.isActive === false ? "Inactive" : "Active"),
   };
 };
 
@@ -376,6 +379,17 @@ export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULE
       name: item.label,
     }));
   }
+  const normalizedRole = normalizeRoleCode(roleCode);
+  if (
+    normalizedRole === "RECEPTIONIST" ||
+    normalizedRole === "NON_TEACHING" ||
+    normalizedRole === "NON_TEACHING_STAFF"
+  ) {
+    return RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
   const keys = ROLE_SIDEBAR_MODULE_KEYS[normalizeRoleCode(roleCode)];
   if (keys === null) return catalog;
   if (!keys) return catalog;
@@ -595,6 +609,7 @@ export async function getUserRoleAssignments(params = {}) {
   const search = String(params.search || "").trim().toLowerCase();
   const roleCode = params.roleCode ? normalizeRoleCode(params.roleCode) : null;
   const userType = String(params.userType || "").trim().toLowerCase();
+  const statusParam = String(params.status || "").trim().toLowerCase();
   const page = Number(params.page || 1);
   const pageSize = Number(params.pageSize || 8);
 
@@ -603,7 +618,8 @@ export async function getUserRoleAssignments(params = {}) {
       .some((value) => String(value || "").toLowerCase().includes(search));
     const matchesRole = !roleCode || (user.roleCodes || []).includes(roleCode);
     const matchesUserType = !userType || String(user.userType || "").toLowerCase() === userType;
-    return matchesSearch && matchesRole && matchesUserType;
+    const matchesStatus = !statusParam || statusParam === "all" || String(user.status || "Active").toLowerCase() === statusParam;
+    return matchesSearch && matchesRole && matchesUserType && matchesStatus;
   });
   const start = (page - 1) * pageSize;
   return apiResult({
@@ -637,6 +653,27 @@ export async function removeRoleFromUser(userId, roleCode) {
     return apiResult({ userId, roleCode }, "api");
   } catch (err) {
     console.error("removeRoleFromUser failed:", err);
+    throw err;
+  }
+}
+
+export async function updateUserStatus(userId, isActive, reason = "") {
+  try {
+    const response = await apiClient.patch(apiEndpoints.roles.updateUserStatus(userId), {
+      isActive: Boolean(isActive),
+      reason,
+    });
+    notifyRolesUpdated();
+    return apiResult(
+      response?.data?.data || {
+        userId,
+        isActive: Boolean(isActive),
+        status: isActive ? "Active" : "Inactive",
+      },
+      "api",
+    );
+  } catch (err) {
+    console.error("updateUserStatus failed:", err);
     throw err;
   }
 }

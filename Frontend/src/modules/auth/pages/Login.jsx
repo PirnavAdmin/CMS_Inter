@@ -61,6 +61,27 @@ export default function Login() {
   const safetyTimeoutRef = useRef(null);
 
   useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const isDeactivatedReason = params.get("reason") === "deactivated";
+      const storedDeactivatedMsg =
+        window.sessionStorage.getItem("cms_account_deactivated_msg") ||
+        window.localStorage.getItem("cms_account_deactivated_msg");
+
+      if (isDeactivatedReason || storedDeactivatedMsg) {
+        setError(
+          storedDeactivatedMsg ||
+            "Your account has been deactivated by an administrator. Please contact support."
+        );
+        window.sessionStorage.removeItem("cms_account_deactivated_msg");
+        window.localStorage.removeItem("cms_account_deactivated_msg");
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
     };

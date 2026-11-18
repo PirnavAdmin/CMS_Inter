@@ -113,6 +113,27 @@ const MODULE_ALIASES = Object.freeze({
   "inventory-my-payslips": "payroll",
   "inventory-notifications": "dashboard",
   "inventory-settings": "settings",
+  // Receptionist / Non-Teaching aliases
+  "receptionist-dashboard": "dashboard",
+  "receptionist-profile": "profile",
+  "receptionist-my-attendance": "staff-attendance",
+  "receptionist-leave-management": "staff-leave-management",
+  "receptionist-my-tasks": "dashboard",
+  "receptionist-payslips": "payroll",
+  "receptionist-announcements": "reports-analytics",
+  "receptionist-enquiries": "enquiry-management",
+  "receptionist-department-portal": "department-designation",
+  "receptionist-help-support": "settings",
+  "non-teaching-dashboard": "dashboard",
+  "non-teaching-profile": "profile",
+  "non-teaching-my-attendance": "staff-attendance",
+  "non-teaching-leave-management": "staff-leave-management",
+  "non-teaching-my-tasks": "dashboard",
+  "non-teaching-payslips": "payroll",
+  "non-teaching-announcements": "reports-analytics",
+  "non-teaching-enquiries": "enquiry-management",
+  "non-teaching-department-portal": "department-designation",
+  "non-teaching-help-support": "settings",
 });
 
 export const normalizeModuleKey = (value = "") => {
@@ -324,6 +345,10 @@ export const toPermissionMap = (permissions = []) => {
     map["driver-dashboard"] = map["dashboard"];
     map["accountant-dashboard"] = map["dashboard"];
     map["exam-cell-dashboard"] = map["dashboard"];
+    map["receptionist-dashboard"] = map["dashboard"];
+    map["receptionist-my-tasks"] = map["dashboard"];
+    map["non-teaching-dashboard"] = map["dashboard"];
+    map["non-teaching-my-tasks"] = map["dashboard"];
   }
 
   // Attendance
@@ -344,6 +369,8 @@ export const toPermissionMap = (permissions = []) => {
     map["parent-announcements-events"] = map["reports-analytics"];
     map["driver-trip-reports"] = map["reports-analytics"];
     map["accountant-financial-reports"] = map["reports-analytics"];
+    map["receptionist-announcements"] = map["reports-analytics"];
+    map["non-teaching-announcements"] = map["reports-analytics"];
   }
 
   // Settings
@@ -354,6 +381,8 @@ export const toPermissionMap = (permissions = []) => {
     map["driver-settings"] = map["settings"];
     map["accountant-settings"] = map["settings"];
     map["exam-cell-settings"] = map["settings"];
+    map["receptionist-help-support"] = map["settings"];
+    map["non-teaching-help-support"] = map["settings"];
   }
 
   // Profile
@@ -364,6 +393,8 @@ export const toPermissionMap = (permissions = []) => {
     map["accountant-profile"] = map["profile"];
     map["inventory-profile"] = map["profile"];
     map["exam-cell-profile"] = map["profile"];
+    map["receptionist-profile"] = map["profile"];
+    map["non-teaching-profile"] = map["profile"];
   }
 
   // Staff Attendance
@@ -372,6 +403,8 @@ export const toPermissionMap = (permissions = []) => {
     map["driver-my-attendance"] = map["staff-attendance"];
     map["accountant-my-attendance"] = map["staff-attendance"];
     map["exam-cell-my-attendance"] = map["staff-attendance"];
+    map["receptionist-my-attendance"] = map["staff-attendance"];
+    map["non-teaching-my-attendance"] = map["staff-attendance"];
   }
 
   // Staff Leave Management
@@ -380,6 +413,8 @@ export const toPermissionMap = (permissions = []) => {
     map["inventory-leave-management"] = map["staff-leave-management"];
     map["driver-leave-management"] = map["staff-leave-management"];
     map["accountant-staff-leave"] = map["staff-leave-management"];
+    map["receptionist-leave-management"] = map["staff-leave-management"];
+    map["non-teaching-leave-management"] = map["staff-leave-management"];
   }
 
   // Holiday Management
@@ -402,6 +437,8 @@ export const toPermissionMap = (permissions = []) => {
     map["driver-my-payslips"] = map["payroll"];
     map["accountant-payroll"] = map["payroll"];
     map["accountant-attendance-impact"] = map["payroll"];
+    map["receptionist-payslips"] = map["payroll"];
+    map["non-teaching-payslips"] = map["payroll"];
   }
 
   // Promotion
@@ -434,6 +471,12 @@ export const toPermissionMap = (permissions = []) => {
   }
   if (map["enquiry-management"]) {
     map["enquiries"] = map["enquiry-management"];
+    map["receptionist-enquiries"] = map["enquiry-management"];
+    map["non-teaching-enquiries"] = map["enquiry-management"];
+  }
+  if (map["department-designation"]) {
+    map["receptionist-department-portal"] = map["department-designation"];
+    map["non-teaching-department-portal"] = map["department-designation"];
   }
 
   // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly

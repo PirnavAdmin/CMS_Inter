@@ -9,7 +9,11 @@ using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -19,17 +23,29 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IPermissionRepository _permissionRepository;
         private readonly IUserRepository _userRepository;
         private readonly AppDbContext _context;
+        private readonly IMemoryCache _memoryCache;
+        private readonly IHubContext<NotificationHub> _notificationHubContext;
+        private readonly IAuditLoggingService _auditLoggingService;
+        private readonly ILogger<RoleManagementService> _logger;
 
         public RoleManagementService(
             IRoleRepository roleRepository,
             IPermissionRepository permissionRepository,
             IUserRepository userRepository,
-            AppDbContext context)
+            AppDbContext context,
+            IMemoryCache memoryCache,
+            IHubContext<NotificationHub> notificationHubContext,
+            IAuditLoggingService auditLoggingService,
+            ILogger<RoleManagementService> logger)
         {
             _roleRepository = roleRepository;
             _permissionRepository = permissionRepository;
             _userRepository = userRepository;
             _context = context;
+            _memoryCache = memoryCache;
+            _notificationHubContext = notificationHubContext;
+            _auditLoggingService = auditLoggingService;
+            _logger = logger;
         }
 
         public async Task<List<RoleResponse>> GetAllRolesAsync(string? staffType = null, bool includeInactive = false)
@@ -722,6 +738,92 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return await _permissionRepository.GetRoleModulesAsync(roleId);
+        }
+
+        public async Task<UpdateUserStatusResponse> UpdateUserStatusAsync(int userId, bool isActive, int? actingUserId, bool actingIsSuperAdmin, string? reason = null)
+        {
+            var target = await _permissionRepository.GetUserStatusInfoAsync(userId);
+            if (target == null)
+            {
+                throw new KeyNotFoundException($"User with ID {userId} was not found.");
+            }
+
+            if (!isActive)
+            {
+                if (actingUserId.HasValue && actingUserId.Value == userId)
+                {
+                    throw new InvalidOperationException("You cannot deactivate your own account.");
+                }
+
+                if (target.RoleId == 1 || string.Equals(target.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new UnauthorizedAccessException("Super Admin accounts cannot be deactivated.");
+                }
+
+                if (target.RoleId == 2 || string.Equals(target.RoleName, "Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!actingIsSuperAdmin)
+                    {
+                        throw new UnauthorizedAccessException("Only a Super Admin can deactivate an Admin account.");
+                    }
+
+                    if (await _permissionRepository.CountOtherActiveAdminsAsync(userId) == 0)
+                    {
+                        throw new InvalidOperationException("Cannot deactivate the last remaining active Admin account.");
+                    }
+                }
+            }
+
+            await _permissionRepository.UpdateUserActiveStatusAsync(userId, isActive);
+
+            var updatedAt = DateTime.UtcNow;
+            _memoryCache.Set($"user_active_status:{userId}", isActive, TimeSpan.FromSeconds(60));
+
+            if (!isActive)
+            {
+                try
+                {
+                    await _notificationHubContext.Clients.Group($"User_{userId}").SendAsync("AccountDeactivated", new
+                    {
+                        userId,
+                        message = "Your account has been deactivated by an administrator.",
+                        reason,
+                        deactivatedAt = updatedAt
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to broadcast AccountDeactivated SignalR event for user {UserId}.", userId);
+                }
+            }
+
+            try
+            {
+                var action = isActive ? "ActivateUser" : "DeactivateUser";
+                var details = string.IsNullOrWhiteSpace(reason)
+                    ? $"User '{target.FullName}' ({target.Email}, ID={userId}, Role={target.RoleName}) was {(isActive ? "activated" : "deactivated")}."
+                    : $"User '{target.FullName}' ({target.Email}, ID={userId}, Role={target.RoleName}) was {(isActive ? "activated" : "deactivated")}. Reason: {reason}";
+
+                await _auditLoggingService.LogAsync(
+                    action: action,
+                    module: "Roles & Permissions",
+                    target: $"User:{userId}",
+                    severity: isActive ? "Info" : "Warning",
+                    status: "Success",
+                    details: details);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to log audit entry for user status change on user {UserId}.", userId);
+            }
+
+            return new UpdateUserStatusResponse
+            {
+                UserId = userId,
+                IsActive = isActive,
+                Status = isActive ? "Active" : "Inactive",
+                UpdatedAt = updatedAt
+            };
         }
 
         public async Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request)

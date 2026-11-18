@@ -428,6 +428,58 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Activates or deactivates a user account with role guardrails and instant session revocation.
+        /// </summary>
+        [HttpPatch("users/{userId:int}/status")]
+        [HttpPut("users/{userId:int}/status")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> UpdateUserStatus(int userId, [FromBody] UpdateUserStatusRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest(new { success = false, message = "Request body is required." });
+            }
+
+            try
+            {
+                int? actingUserId = GetCurrentUserId();
+                bool actingIsSuperAdmin = User.IsInRole("Super Admin")
+                    || User.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role")
+                        && string.Equals(c.Value, "Super Admin", StringComparison.OrdinalIgnoreCase));
+
+                var result = await _roleManagementService.UpdateUserStatusAsync(
+                    userId,
+                    request.IsActive,
+                    actingUserId,
+                    actingIsSuperAdmin,
+                    request.Reason);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = request.IsActive ? "User activated successfully." : "User deactivated successfully.",
+                    data = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Returns effective permissions for the currently authenticated user (for UI permission guards).
         /// Accessible by any authenticated role (including Principal, Faculty, Student, Parent, etc.).
         /// </summary>

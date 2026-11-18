@@ -208,6 +208,20 @@ export const INVENTORY_MANAGER_SIDEBAR_NAVIGATION = Object.freeze([
   { id: "inventory-settings", permissionKey: "settings", label: "Settings", section: "Inventory Portal", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
 ]);
 
+// Canonical Receptionist / Non-Teaching Staff portal navigation matching NonTeachingLayout.
+export const RECEPTIONIST_SIDEBAR_NAVIGATION = Object.freeze([
+  { id: "receptionist-dashboard", permissionKey: "dashboard", label: "Dashboard", route: "/non-teaching-dashboard", section: "Staff Overview", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-profile", permissionKey: "profile", label: "My Profile", route: "/non-teaching-dashboard/profile", section: "Staff Overview", legacyPermissionKeys: ["profile", "my-profile"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
+  { id: "receptionist-my-attendance", permissionKey: "staff-attendance", screenKey: "my-attendance", label: "My Attendance", route: "/non-teaching-dashboard/attendance", section: "My Workplace", legacyPermissionKeys: ["staff-attendance"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE] },
+  { id: "receptionist-leave-management", permissionKey: "staff-leave-management", screenKey: "staff-leave", label: "Leave Management", route: "/non-teaching-dashboard/leave", section: "My Workplace", legacyPermissionKeys: ["staff-leave-management"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "receptionist-my-tasks", permissionKey: "dashboard", label: "My Tasks", route: "/non-teaching-dashboard/tasks", section: "My Workplace", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
+  { id: "receptionist-payslips", permissionKey: "payroll", label: "Salary & Payslips", route: "/non-teaching-dashboard/payslip", section: "My Workplace", legacyPermissionKeys: ["payroll"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-announcements", permissionKey: "reports-analytics", label: "Announcements", route: "/non-teaching-dashboard/announcements", section: "My Workplace", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-enquiries", permissionKey: "enquiry-management", label: "Front Desk & Enquiries", route: "/non-teaching-dashboard/enquiries", section: "Operations & Help", legacyPermissionKeys: ["enquiry-management", "enquiries"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "receptionist-department-portal", permissionKey: "department-designation", label: "Department Portal", route: "/non-teaching-dashboard/department", section: "Operations & Help", legacyPermissionKeys: ["department-designation"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-help-support", permissionKey: "settings", label: "Help & Support", route: "/non-teaching-dashboard/support", section: "Operations & Help", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW] },
+]);
+
 // Permission-matrix catalog selection for every role supported by the CMS.
 // `null` means the role uses the complete main dashboard menu; an empty list
 // means that role has no configurable dashboard navigation.
@@ -229,5 +243,8 @@ export const ROLE_SIDEBAR_MODULE_KEYS = Object.freeze({
   TRANSPORT_MANAGER: TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
   LAB_ASSISTANT: ["dashboard", "inventory-management", "profile", "staff-attendance", "staff-leave-management", "holiday-management", "settings"],
   INVENTORY_MANAGER: INVENTORY_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
+  RECEPTIONIST: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
+  NON_TEACHING: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
+  NON_TEACHING_STAFF: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
   UNASSIGNED: [],
 });

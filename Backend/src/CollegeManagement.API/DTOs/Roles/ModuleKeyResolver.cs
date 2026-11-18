@@ -156,7 +156,29 @@ namespace CollegeManagement.API.DTOs.Roles
             { "exam-cell-profile", "My Profile" },
             { "inventory-profile", "My Profile" },
             { "warden-profile", "My Profile" },
-            { "parent-profile", "My Profile" }
+            { "parent-profile", "My Profile" },
+
+            // Receptionist & Non-Teaching Portal Aliases
+            { "receptionist-dashboard", "Dashboard" },
+            { "receptionist-my-tasks", "Dashboard" },
+            { "non-teaching-dashboard", "Dashboard" },
+            { "non-teaching-tasks", "Dashboard" },
+            { "receptionist-profile", "My Profile" },
+            { "non-teaching-profile", "My Profile" },
+            { "receptionist-my-attendance", "Staff Attendance" },
+            { "non-teaching-attendance", "Staff Attendance" },
+            { "receptionist-leave-management", "Staff Leave Management" },
+            { "non-teaching-leave", "Staff Leave Management" },
+            { "receptionist-payslips", "Payroll" },
+            { "non-teaching-payslip", "Payroll" },
+            { "receptionist-announcements", "Reports & Analytics" },
+            { "non-teaching-announcements", "Reports & Analytics" },
+            { "receptionist-enquiries", "Enquiry Management" },
+            { "non-teaching-enquiries", "Enquiry Management" },
+            { "receptionist-department-portal", "Department & Designation" },
+            { "non-teaching-department", "Department & Designation" },
+            { "receptionist-help-support", "Settings" },
+            { "non-teaching-support", "Settings" }
         };
 
         public static string ResolveToSubModule(string? moduleId)

@@ -30,8 +30,10 @@ import {
   ShieldCheck,
   Sliders,
   Sparkles,
+  UserCheck,
   UserMinus,
   UserPlus,
+  UserX,
   Users,
   X,
   XCircle,
@@ -67,6 +69,7 @@ import {
   removeRoleFromUser,
   updateRolePermissions,
   updateUserPermissions,
+  updateUserStatus,
 } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
 import {
   normalizeModuleKey,
@@ -78,6 +81,7 @@ import {
 } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import "./RolesPermissionsPage.css";
 
 const parseNumericId = (val) => {
@@ -2111,10 +2115,26 @@ function PermissionStateMark({ enabled, label }) {
   );
 }
 
-function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, error, onBack, onRetry }) {
+function UserRoleDetailsPanel({
+  user,
+  permissions,
+  roles,
+  modules,
+  loading,
+  error,
+  onBack,
+  onRetry,
+  onToggleUserStatus,
+  canToggleStatus = true,
+  toggleDisabledReason = "",
+  savingStatus = false,
+}) {
   const roleNameByCode = useMemo(() => new Map(roles.map((role) => [normalizeRoleCode(role.code || role.name), role.name])), [roles]);
   const roleCodes = user?.roleCodes || [];
   const assignedRoleCode = roleCodes[0] || "";
+  const isUserAccountActive = user?.isActive !== undefined && user?.isActive !== null
+    ? Boolean(user.isActive)
+    : String(user?.status || "Active").trim().toLowerCase() !== "inactive";
   const permissionMap = useMemo(() => new Map((permissions || []).map((row) => [row.module, row.actions || []])), [permissions]);
 
   return (
@@ -2127,6 +2147,23 @@ function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, erro
           <h3>User Role Details</h3>
           <p>{user?.name || "Selected user"}</p>
         </div>
+        {!loading && !error && user && onToggleUserStatus ? (
+          <button
+            type="button"
+            className={`cms-btn ${isUserAccountActive ? "cms-btn-danger" : "cms-btn-primary"}`}
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "6px" }}
+            disabled={!canToggleStatus || savingStatus}
+            title={!canToggleStatus && toggleDisabledReason ? toggleDisabledReason : (isUserAccountActive ? "Deactivate this user account" : "Activate this user account")}
+            onClick={() => onToggleUserStatus(user)}
+          >
+            {isUserAccountActive ? <UserX size={15} aria-hidden="true" /> : <UserCheck size={15} aria-hidden="true" />}
+            <span>
+              {savingStatus
+                ? (isUserAccountActive ? "Deactivating..." : "Activating...")
+                : (isUserAccountActive ? "Deactivate User" : "Activate User")}
+            </span>
+          </button>
+        ) : null}
       </div>
 
       {loading ? <div className="rbac-loading-card"><SkeletonPage variant="form" rows={5} /></div> : null}
@@ -2634,6 +2671,8 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
   const [activeMenu, setActiveMenu] = useState(null);
   const [assignMenuOpen, setAssignMenuOpen] = useState(false);
   const [removalCandidate, setRemovalCandidate] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusCandidate, setStatusCandidate] = useState(null);
   const [detailsView, setDetailsView] = useState({
     open: false,
     loading: false,
@@ -2643,24 +2682,97 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
   });
   const menuRef = useRef(null);
 
+  const currentUser = useMemo(() => getAuthUser(), []);
+  const currentUserIds = useMemo(() => {
+    const ids = [currentUser?.userId, currentUser?.id]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== "")
+      .map((v) => String(v).trim());
+    return new Set(ids);
+  }, [currentUser]);
+  const isCurrentSuperAdmin = useMemo(() => {
+    const candidates = [
+      currentUser?.role,
+      currentUser?.roleCode,
+      currentUser?.roleName,
+      ...(Array.isArray(currentUser?.roles) ? currentUser.roles : []),
+      ...(Array.isArray(currentUser?.roleCodes) ? currentUser.roleCodes : []),
+    ];
+    return candidates.some((r) => normalizeRoleCode(typeof r === "object" ? r?.code || r?.name : r) === "SUPER_ADMIN");
+  }, [currentUser]);
+
+  const isUserActive = useCallback((user) => {
+    if (!user) return true;
+    if (typeof user.isActive === "boolean") return user.isActive;
+    return String(user.status || "Active").trim().toLowerCase() !== "inactive";
+  }, []);
+
+  const getStatusActionState = useCallback((user) => {
+    if (!user) {
+      return {
+        isActive: true,
+        isSelf: false,
+        isSuperAdminTarget: false,
+        isAdminTargetBlocked: false,
+        disabled: true,
+        reason: "",
+      };
+    }
+    const active = isUserActive(user);
+    const targetIds = [user.id, user.userId]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== "")
+      .map((v) => String(v).trim());
+    const isSelf = targetIds.some((id) => currentUserIds.has(id));
+    const targetRoleCodes = (user.roleCodes || []).map(normalizeRoleCode);
+    const isSuperAdminTarget = targetRoleCodes.includes("SUPER_ADMIN");
+    const isAdminTargetBlocked = targetRoleCodes.includes("ADMIN") && !isCurrentSuperAdmin;
+    const isSaving = savingUserId === user.id;
+
+    let reason = "";
+    if (isSaving) reason = "Updating user status...";
+    else if (isSelf) reason = "You cannot deactivate your own account.";
+    else if (isSuperAdminTarget) reason = "Super Admin accounts cannot be deactivated.";
+    else if (isAdminTargetBlocked) reason = "Only a Super Admin can deactivate an Admin account.";
+
+    return {
+      isActive: active,
+      isSelf,
+      isSuperAdminTarget,
+      isAdminTargetBlocked,
+      disabled: isSaving || isSelf || isSuperAdminTarget || isAdminTargetBlocked,
+      reason,
+    };
+  }, [currentUserIds, isCurrentSuperAdmin, isUserActive, savingUserId]);
+
   const loadAssignments = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await getUserRoleAssignments({ search: query, page, pageSize: PAGE_SIZE, ...contextFilters });
+      const response = await getUserRoleAssignments({
+        search: query,
+        page,
+        pageSize: PAGE_SIZE,
+        ...(statusFilter !== "all" ? { status: statusFilter } : {}),
+        ...contextFilters,
+      });
       setResult(response.data);
     } catch (err) {
       setError(err?.message || "Unable to load user role assignments.");
     } finally {
       setLoading(false);
     }
-  }, [page, query, contextFilters]);
+  }, [page, query, statusFilter, contextFilters]);
 
   useEffect(() => {
     loadAssignments();
   }, [loadAssignments]);
 
   const totalPages = Math.max(1, Math.ceil((result.total || 0) / PAGE_SIZE));
+  const displayedItems = useMemo(() => {
+    const items = Array.isArray(result.items) ? result.items : [];
+    if (statusFilter === "all") return items;
+    const wantActive = statusFilter === "active";
+    return items.filter((user) => isUserActive(user) === wantActive);
+  }, [isUserActive, result.items, statusFilter]);
   const roleNameByCode = useMemo(() => new Map(roles.map((role) => [normalizeRoleCode(role.code || role.name), role.name])), [roles]);
   const assignableRoles = useMemo(
     () => roles.filter((role) => !ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(role.code || role.name))),
@@ -2753,6 +2865,60 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     setRemovalCandidate(null);
   };
 
+  const requestToggleUserStatus = (user) => {
+    const statusState = getStatusActionState(user);
+    if (statusState.disabled) {
+      if (statusState.reason) {
+        setToast({ type: "error", message: statusState.reason });
+      }
+      closeActionMenu();
+      return;
+    }
+    setStatusCandidate({ user, nextIsActive: !statusState.isActive });
+    closeActionMenu();
+  };
+
+  const confirmToggleUserStatus = async () => {
+    if (!statusCandidate) return;
+    const { user, nextIsActive } = statusCandidate;
+    setSavingUserId(user.id);
+    try {
+      const response = await updateUserStatus(user.id, nextIsActive);
+      const nextStatus = response?.data?.status || (nextIsActive ? "Active" : "Inactive");
+      setResult((prev) => ({
+        ...prev,
+        items: (prev.items || []).map((item) =>
+          String(item.id) === String(user.id)
+            ? { ...item, isActive: nextIsActive, status: nextStatus }
+            : item,
+        ),
+      }));
+      setDetailsView((prev) => (
+        prev.open && prev.user && String(prev.user.id) === String(user.id)
+          ? { ...prev, user: { ...prev.user, isActive: nextIsActive, status: nextStatus } }
+          : prev
+      ));
+      setStatusCandidate(null);
+      setToast({
+        type: "success",
+        message: nextIsActive
+          ? `${user.name || "User"} has been activated.`
+          : `${user.name || "User"} has been deactivated and signed out.`,
+      });
+      await onRoleAssignmentsChanged?.();
+    } catch (err) {
+      const serverMessage =
+        err?.response?.data?.message ||
+        err?.response?.data?.Message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        `Unable to ${nextIsActive ? "activate" : "deactivate"} user.`;
+      setToast({ type: "error", message: serverMessage });
+    } finally {
+      setSavingUserId("");
+    }
+  };
+
   const assignRole = async (user, roleCode, roleId = null) => {
     if (!roleCode) return;
     if ((user.roleCodes || []).some((code) => normalizeRoleCode(code) === normalizeRoleCode(roleCode))) {
@@ -2820,7 +2986,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     if (!activeMenu) return null;
     const menuWidth = 214;
     const submenuWidth = 260;
-    const menuHeight = 130;
+    const menuHeight = 178;
     const assignItemOffset = 6;
     const gap = 8;
     const margin = 10;
@@ -2867,6 +3033,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     };
     const currentRoleCode = (activeMenu.user.roleCodes || [])[0];
     const removeDisabled = !currentRoleCode || ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(currentRoleCode)) || savingUserId === activeMenu.user.id;
+    const statusAction = getStatusActionState(activeMenu.user);
 
     return createPortal(
       <div className="rbac-action-layer" ref={menuRef}>
@@ -2906,6 +3073,28 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
             <Eye size={16} aria-hidden="true" />
             <span>View Details</span>
           </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`rbac-action-menu-item ${statusAction.isActive ? "is-danger" : ""}`}
+            disabled={statusAction.disabled}
+            title={statusAction.reason || (statusAction.isActive ? "Deactivate user account" : "Activate user account")}
+            onMouseEnter={() => setAssignMenuOpen(false)}
+            onFocus={() => setAssignMenuOpen(false)}
+            onClick={() => requestToggleUserStatus(activeMenu.user)}
+          >
+            {statusAction.isActive ? (
+              <>
+                <UserX size={16} aria-hidden="true" />
+                <span>Deactivate User</span>
+              </>
+            ) : (
+              <>
+                <UserCheck size={16} aria-hidden="true" />
+                <span>Activate User</span>
+              </>
+            )}
+          </button>
         </div>
 
         {assignMenuOpen ? (
@@ -2943,6 +3132,8 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
     );
   };
 
+  const detailsStatusAction = getStatusActionState(detailsView.user);
+
   return (
     <section className="rbac-panel rbac-assignment-panel">
       {detailsView.open ? (
@@ -2955,10 +3146,61 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
           error={detailsView.error}
           onBack={closeUserDetails}
           onRetry={() => detailsView.user && openUserDetails(detailsView.user)}
+          onToggleUserStatus={requestToggleUserStatus}
+          canToggleStatus={!detailsStatusAction.disabled}
+          toggleDisabledReason={detailsStatusAction.reason}
+          savingStatus={Boolean(detailsView.user && savingUserId === detailsView.user.id)}
         />
       ) : (
         <>
       <div className="rbac-assignment-toolbar">
+        <div
+          className="rbac-status-filter-pills"
+          role="group"
+          aria-label="Filter users by account status"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "4px",
+            padding: "3px",
+            borderRadius: "8px",
+            border: "1px solid var(--cms-border)",
+            background: "var(--cms-surface)",
+            flexShrink: 0,
+          }}
+        >
+          {[
+            { value: "all", label: "All" },
+            { value: "active", label: "Active" },
+            { value: "inactive", label: "Inactive" },
+          ].map((option) => {
+            const isSelected = statusFilter === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => {
+                  setStatusFilter(option.value);
+                  setPage(1);
+                }}
+                style={{
+                  border: 0,
+                  borderRadius: "6px",
+                  padding: "5px 11px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  background: isSelected ? "var(--cms-primary)" : "transparent",
+                  color: isSelected ? "#ffffff" : "var(--cms-text-secondary, var(--cms-text))",
+                  transition: "background 0.15s ease, color 0.15s ease",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
         <SearchBox
           value={query}
           onChange={(value) => {
@@ -2980,7 +3222,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
         />
       ) : null}
       {!loading && !error ? (
-        result.items.length ? (
+        displayedItems.length ? (
           <>
             <div className="rbac-user-table">
               <div className="rbac-user-row rbac-user-head">
@@ -2992,7 +3234,7 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
                 <span>Status</span>
                 <span>Actions</span>
               </div>
-              {result.items.map((user) => (
+              {displayedItems.map((user) => (
                 <div className="rbac-user-row" key={user.id}>
                   <strong className="rbac-user-name"><span>{initials(user.name)}</span>{user.name}</strong>
                   <span>{user.userId || "Not provided"}</span>
@@ -3049,6 +3291,22 @@ function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsC
           message={`${removalCandidate.user.name} currently has ${roleNameByCode.get(normalizeRoleCode(removalCandidate.roleCode)) || removalCandidate.roleCode}. This role will be removed from the user.`}
           onCancel={() => setRemovalCandidate(null)}
           onConfirm={confirmRemoveRole}
+        />
+      ) : null}
+      {statusCandidate ? (
+        <ConfirmDialog
+          title={statusCandidate.nextIsActive ? "Activate User" : "Deactivate User"}
+          danger={!statusCandidate.nextIsActive}
+          loading={savingUserId === statusCandidate.user.id}
+          confirmLabel={statusCandidate.nextIsActive ? "Activate User" : "Deactivate User"}
+          loadingLabel={statusCandidate.nextIsActive ? "Activating..." : "Deactivating..."}
+          message={
+            statusCandidate.nextIsActive
+              ? `Activate ${statusCandidate.user.name || "this user"}? They will immediately regain portal access with their assigned role.`
+              : `Deactivate ${statusCandidate.user.name || "this user"}? They will be immediately signed out and blocked from logging in until reactivated. Their assigned role and historical records will be preserved.`
+          }
+          onCancel={() => setStatusCandidate(null)}
+          onConfirm={confirmToggleUserStatus}
         />
       ) : null}
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />

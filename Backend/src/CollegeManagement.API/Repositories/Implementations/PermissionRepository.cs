@@ -378,6 +378,51 @@ namespace CollegeManagement.API.Repositories.Implementations
             return true;
         }
 
+        public async Task<UserStatusInfoDto?> GetUserStatusInfoAsync(int userId)
+        {
+            var conn = await GetOpenConnectionAsync();
+            const string sql = @"
+                SELECT u.UserId,
+                       COALESCE(u.FullName, '') AS FullName,
+                       COALESCE(u.Email, '') AS Email,
+                       u.RoleId,
+                       COALESCE(r.RoleName, '') AS RoleName,
+                       u.IsActive
+                FROM Users u
+                LEFT JOIN Roles r ON r.RoleId = u.RoleId
+                WHERE u.UserId = @UserId
+                LIMIT 1;";
+
+            return await conn.QueryFirstOrDefaultAsync<UserStatusInfoDto>(sql, new { UserId = userId });
+        }
+
+        public async Task<int> CountOtherActiveAdminsAsync(int excludeUserId)
+        {
+            var conn = await GetOpenConnectionAsync();
+            const string sql = @"
+                SELECT COUNT(*)
+                FROM Users u
+                INNER JOIN Roles r ON r.RoleId = u.RoleId
+                WHERE (u.RoleId = 2 OR LOWER(r.RoleName) = 'admin')
+                  AND u.IsActive = 1
+                  AND u.UserId != @ExcludeUserId;";
+
+            return await conn.ExecuteScalarAsync<int>(sql, new { ExcludeUserId = excludeUserId });
+        }
+
+        public async Task<bool> UpdateUserActiveStatusAsync(int userId, bool isActive)
+        {
+            var conn = await GetOpenConnectionAsync();
+            const string sql = @"
+                UPDATE Users
+                SET IsActive = @IsActive,
+                    UpdatedAt = UTC_TIMESTAMP()
+                WHERE UserId = @UserId;";
+
+            var affected = await conn.ExecuteAsync(sql, new { UserId = userId, IsActive = isActive ? 1 : 0 });
+            return affected > 0;
+        }
+
         public async Task<bool> HasModulePermissionAsync(int userId, string moduleIdentifier, string action)
         {
             var conn = await GetOpenConnectionAsync();

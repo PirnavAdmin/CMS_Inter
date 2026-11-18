@@ -889,6 +889,7 @@ export const apiEndpoints = {
     userPermissions: (userId) => `/api/v1/roles/users/${userId}/permissions`,
     userOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides`,
     resetUserOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides/reset`,
+    updateUserStatus: (userId) => `/api/v1/roles/users/${userId}/status`,
     userAssignments: "/api/v1/roles/user-assignments",
     assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
